@@ -19,7 +19,10 @@ object VesqenRadii {
 
 object VesqenMotion {
     const val PressedMillis = 120
+    const val ModeChangeMillis = 160
     const val StateChangeMillis = 180
     const val PlayerExpandMillis = 240
+    const val PlayerCollapseMillis = 180
+    const val TrackChangeMillis = 220
     const val ReducedMotionMillis = 80
 }

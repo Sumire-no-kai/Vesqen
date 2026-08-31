@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -32,13 +33,16 @@ import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode
 import io.github.sumirenokai.vesqen.ui.LibraryUiState
 import io.github.sumirenokai.vesqen.ui.MusicAccess
 import io.github.sumirenokai.vesqen.ui.VesqenAppContent
 import io.github.sumirenokai.vesqen.ui.VesqenUiState
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
+import kotlin.math.abs
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -186,6 +190,128 @@ class VesqenAppTest {
     }
 
     @Test
+    fun one_repeat_control_cycles_off_all_one_and_back_with_its_state_exposed() {
+        composeRule.setContent {
+            VesqenTheme {
+                val repeatMode = remember { androidx.compose.runtime.mutableStateOf(PlaybackRepeatMode.OFF) }
+                val track = sampleTracks.first()
+                VesqenAppContent(
+                    state = grantedState(
+                        tracks = sampleTracks,
+                        playback = PlaybackSnapshot(
+                            isControllerReady = true,
+                            trackId = track.id,
+                            title = track.title,
+                            artist = track.artist,
+                            album = track.album,
+                            durationMs = track.durationMs,
+                            repeatMode = repeatMode.value,
+                        ),
+                    ),
+                    onRequestMusicAccess = {},
+                    onOpenAppSettings = {},
+                    onOpenNotificationSettings = {},
+                    onRescan = {},
+                    onTrackSelected = {},
+                    onPrevious = {},
+                    onPlayPause = {},
+                    onNext = {},
+                    onSeek = {},
+                    onToggleShuffle = {},
+                    onCycleRepeatMode = {
+                        repeatMode.value = when (repeatMode.value) {
+                            PlaybackRepeatMode.OFF -> PlaybackRepeatMode.ALL
+                            PlaybackRepeatMode.ALL -> PlaybackRepeatMode.ONE
+                            PlaybackRepeatMode.ONE -> PlaybackRepeatMode.OFF
+                        }
+                    },
+                    onRefreshConnectedOutputs = {},
+                    motionPolicy = VesqenMotionPolicy(reduceMotion = true),
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onAllNodesWithTag("vesqen.now.repeat").assertCountEquals(1)
+        composeRule.onNodeWithTag("vesqen.now.repeat").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                context.getString(R.string.repeat_off),
+            ),
+        )
+
+        composeRule.onNodeWithTag("vesqen.now.repeat").performClick()
+        composeRule.onNodeWithTag("vesqen.now.repeat").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                context.getString(R.string.repeat_all),
+            ),
+        )
+        composeRule.onNodeWithTag("vesqen.now.repeat").performClick()
+        composeRule.onNodeWithTag("vesqen.now.repeat").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                context.getString(R.string.repeat_one),
+            ),
+        )
+        composeRule.onNodeWithTag("vesqen.now.repeat").performClick()
+        composeRule.onNodeWithTag("vesqen.now.repeat").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                context.getString(R.string.repeat_off),
+            ),
+        )
+    }
+
+    @Test
+    fun track_skip_keeps_the_focused_transport_stable_while_track_identity_changes() {
+        composeRule.setContent {
+            VesqenTheme {
+                val trackIndex = remember { androidx.compose.runtime.mutableStateOf(0) }
+                val track = sampleTracks[trackIndex.value]
+                VesqenAppContent(
+                    state = grantedState(
+                        tracks = sampleTracks,
+                        playback = PlaybackSnapshot(
+                            isControllerReady = true,
+                            trackId = track.id,
+                            title = track.title,
+                            artist = track.artist,
+                            album = track.album,
+                            durationMs = track.durationMs,
+                            hasPrevious = trackIndex.value > 0,
+                            hasNext = trackIndex.value < sampleTracks.lastIndex,
+                        ),
+                    ),
+                    onRequestMusicAccess = {},
+                    onOpenAppSettings = {},
+                    onOpenNotificationSettings = {},
+                    onRescan = {},
+                    onTrackSelected = {},
+                    onPrevious = { trackIndex.value = (trackIndex.value - 1).coerceAtLeast(0) },
+                    onPlayPause = {},
+                    onNext = { trackIndex.value = (trackIndex.value + 1).coerceAtMost(sampleTracks.lastIndex) },
+                    onSeek = {},
+                    onToggleShuffle = {},
+                    onCycleRepeatMode = {},
+                    onRefreshConnectedOutputs = {},
+                    motionPolicy = VesqenMotionPolicy(reduceMotion = true),
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithText("Dawn Signal").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.next").performClick()
+        composeRule.onNodeWithText("Long Light").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.artwork-stage").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.transport-dock").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.play-pause").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
+    }
+
+    @Test
     fun android_back_returns_from_now_and_contextual_chain_without_exiting_the_app() {
         render(
             state = grantedState(
@@ -306,6 +432,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.player-page").assert(
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
         )
+        assertFocusedNowControlsAreFullyVisible()
         composeRule.onNodeWithTag("vesqen.now.info-pager").performTouchInput { swipeLeft() }
         composeRule.onNodeWithTag("vesqen.now.info.chain").assertIsDisplayed()
     }
@@ -380,6 +507,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.player-page").assert(
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
         )
+        assertFocusedNowControlsAreFullyVisible()
     }
 
     @Test
@@ -415,6 +543,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.player-page").assert(
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
         )
+        assertFocusedNowControlsAreFullyVisible()
     }
 
     @Test
@@ -474,6 +603,81 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.shuffle").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.repeat").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.info").assertIsDisplayed()
+        assertFocusedNowControlsAreFullyVisible()
+    }
+
+    private fun assertFocusedNowControlsAreFullyVisible() {
+        assertNodesAreFullyVisibleIn(
+            containerTag = "vesqen.now.focus-surface",
+            tags = arrayOf("vesqen.now.back"),
+        )
+        assertNodesAreFullyVisibleIn(
+            containerTag = "vesqen.now.player-page",
+            tags = arrayOf(
+                "vesqen.now.title",
+                "vesqen.now.progress",
+                "vesqen.now.previous",
+                "vesqen.now.play-pause",
+                "vesqen.now.next",
+                "vesqen.now.shuffle",
+                "vesqen.now.repeat",
+                "vesqen.now.info",
+            ),
+        )
+
+        val title = composeRule.onNodeWithTag("vesqen.now.title").fetchSemanticsNode()
+        val primaryTransport = composeRule.onNodeWithTag("vesqen.now.play-pause").fetchSemanticsNode()
+        assertTrue(
+            "Now title must remain a single transport-row height",
+            title.size.height <= primaryTransport.size.height,
+        )
+    }
+
+    private fun assertNodesAreFullyVisibleIn(
+        containerTag: String,
+        tags: Array<String>,
+    ) {
+        val containerBounds = composeRule.onNodeWithTag(containerTag).fetchSemanticsNode().boundsInRoot
+        val minimumTouchTargetPx = with(composeRule.density) { 48.dp.toPx() }
+        val epsilon = 1f
+        val touchTargetTags = setOf(
+            "vesqen.now.back",
+            "vesqen.now.progress",
+            "vesqen.now.previous",
+            "vesqen.now.play-pause",
+            "vesqen.now.next",
+            "vesqen.now.shuffle",
+            "vesqen.now.repeat",
+            "vesqen.now.info",
+        )
+
+        tags.forEach { tag ->
+            val node = composeRule.onNodeWithTag(tag).fetchSemanticsNode()
+            val visibleBounds = node.boundsInRoot
+            assertTrue(
+                "$tag must not be vertically clipped",
+                abs(visibleBounds.height - node.size.height) <= epsilon,
+            )
+            assertTrue(
+                "$tag must not be horizontally clipped",
+                abs(visibleBounds.width - node.size.width) <= epsilon,
+            )
+            assertTrue(
+                "$tag must remain inside its Now container",
+                visibleBounds.left >= containerBounds.left - epsilon &&
+                    visibleBounds.top >= containerBounds.top - epsilon &&
+                    visibleBounds.right <= containerBounds.right + epsilon &&
+                    visibleBounds.bottom <= containerBounds.bottom + epsilon,
+            )
+            if (tag in touchTargetTags) {
+                val touchBounds = node.touchBoundsInRoot
+                assertTrue(
+                    "$tag must preserve the 48dp minimum touch target",
+                    touchBounds.width + epsilon >= minimumTouchTargetPx &&
+                        touchBounds.height + epsilon >= minimumTouchTargetPx,
+                )
+            }
+        }
     }
 
     private fun render(
