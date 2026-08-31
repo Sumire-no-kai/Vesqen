@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -76,6 +77,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -99,6 +102,7 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.view.WindowCompat
+import kotlinx.coroutines.delay
 
 private val TrackTransitionEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 private val FocusedPlayerDockShape = RoundedCornerShape(
@@ -157,6 +161,42 @@ fun NowScreen(
         album = snapshot.album,
         artworkTrack = artworkTrack,
     )
+    val playbackOrderMode = snapshot.playbackOrderMode
+    val playbackOrderState = stringResource(
+        when (playbackOrderMode) {
+            PlaybackOrderMode.SEQUENTIAL -> R.string.playback_order_sequential
+            PlaybackOrderMode.SHUFFLE -> R.string.playback_order_shuffle
+            PlaybackOrderMode.REPEAT_ALL -> R.string.playback_order_repeat_all
+            PlaybackOrderMode.REPEAT_ONE -> R.string.playback_order_repeat_one
+            PlaybackOrderMode.SHUFFLE_REPEAT_ALL -> R.string.playback_order_shuffle_repeat_all
+            PlaybackOrderMode.SHUFFLE_REPEAT_ONE -> R.string.playback_order_shuffle_repeat_one
+        },
+    )
+    val playbackOrderFeedbackText = stringResource(
+        R.string.playback_order_changed,
+        playbackOrderState,
+    )
+    var requestedPlaybackOrderMode by remember { mutableStateOf<PlaybackOrderMode?>(null) }
+    var playbackOrderFeedback by remember { mutableStateOf<String?>(null) }
+
+    // Controller updates are asynchronous. Announce the applied state only after Media3 has
+    // returned a different mode, rather than predicting that a request will succeed.
+    LaunchedEffect(playbackOrderMode, requestedPlaybackOrderMode) {
+        val requestedMode = requestedPlaybackOrderMode
+        if (requestedMode != null && requestedMode != playbackOrderMode) {
+            playbackOrderFeedback = playbackOrderFeedbackText
+            requestedPlaybackOrderMode = null
+        }
+    }
+    LaunchedEffect(playbackOrderFeedback) {
+        val feedback = playbackOrderFeedback ?: return@LaunchedEffect
+        delay(1_500)
+        if (playbackOrderFeedback == feedback) playbackOrderFeedback = null
+    }
+    val requestPlaybackOrder = {
+        requestedPlaybackOrderMode = playbackOrderMode
+        onCyclePlaybackOrder()
+    }
 
     LaunchedEffect(currentTrack) {
         if (currentTrack == null) showDetails = false
@@ -232,7 +272,7 @@ fun NowScreen(
                         isExtremeText = isExtremeText,
                         isTallScreen = isTallScreen,
                         onOpenChain = onOpenChain,
-                        onCyclePlaybackOrder = onCyclePlaybackOrder,
+                        onCyclePlaybackOrder = requestPlaybackOrder,
                         onPrevious = requestPrevious,
                         onPlayPause = onPlayPause,
                         onNext = requestNext,
@@ -249,6 +289,14 @@ fun NowScreen(
                         modifier = Modifier.weight(1f),
                     )
                 }
+                PlaybackOrderFeedback(
+                    text = playbackOrderFeedback,
+                    motionPolicy = motionPolicy,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .padding(top = if (isUltraCompact) 56.dp else 72.dp),
+                )
             }
         }
 
@@ -942,6 +990,73 @@ private fun NowInfoFooter(
                         .size(48.dp),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PlaybackOrderFeedback(
+    text: String?,
+    motionPolicy: VesqenMotionPolicy,
+    modifier: Modifier = Modifier,
+) {
+    AnimatedVisibility(
+        visible = text != null,
+        modifier = modifier,
+        enter = if (motionPolicy.reduceMotion) {
+            fadeIn(animationSpec = tween(motionPolicy.modeChangeMillis))
+        } else {
+            fadeIn(
+                animationSpec = tween(
+                    motionPolicy.modeChangeMillis,
+                    easing = TrackTransitionEasing,
+                ),
+            ) + scaleIn(
+                initialScale = .96f,
+                animationSpec = tween(
+                    motionPolicy.modeChangeMillis,
+                    easing = TrackTransitionEasing,
+                ),
+            )
+        },
+        exit = if (motionPolicy.reduceMotion) {
+            fadeOut(animationSpec = tween(motionPolicy.modeChangeMillis))
+        } else {
+            fadeOut(
+                animationSpec = tween(
+                    motionPolicy.modeChangeMillis * 3 / 4,
+                    easing = TrackTransitionEasing,
+                ),
+            ) + scaleOut(
+                targetScale = .96f,
+                animationSpec = tween(
+                    motionPolicy.modeChangeMillis,
+                    easing = TrackTransitionEasing,
+                ),
+            )
+        },
+        label = "vesqen.playback-order.feedback",
+    ) {
+        Surface(
+            modifier = Modifier
+                .widthIn(max = 280.dp)
+                .testTag("vesqen.now.playback-order-feedback")
+                .semantics { liveRegion = LiveRegionMode.Polite },
+            shape = RoundedCornerShape(VesqenRadii.control),
+            color = FocusedPlayerMaterial.Raised,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            tonalElevation = 0.dp,
+            shadowElevation = 4.dp,
+        ) {
+            Text(
+                text = text.orEmpty(),
+                modifier = Modifier.padding(
+                    horizontal = VesqenSpacing.sm,
+                    vertical = VesqenSpacing.xxs,
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

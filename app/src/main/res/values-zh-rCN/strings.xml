@@ -39,6 +39,7 @@
     <string name="playback_order_repeat_one">单曲循环</string>
     <string name="playback_order_shuffle_repeat_all">随机播放与列表循环</string>
     <string name="playback_order_shuffle_repeat_one">随机播放与单曲循环</string>
+    <string name="playback_order_changed">播放顺序：%1$s</string>
     <string name="playback_position">%1$s / %2$s</string>
     <string name="destination_library">曲库</string>
     <string name="destination_now">正在播放</string>

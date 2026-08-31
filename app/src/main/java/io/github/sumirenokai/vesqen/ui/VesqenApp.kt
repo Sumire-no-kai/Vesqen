@@ -19,11 +19,12 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Scaffold
@@ -35,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -47,6 +49,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.components.MiniPlayer
+import io.github.sumirenokai.vesqen.ui.components.MiniPlayerHeight
+import io.github.sumirenokai.vesqen.ui.navigation.CompactNavigationBarContentHeight
 import io.github.sumirenokai.vesqen.ui.navigation.VesqenDestination
 import io.github.sumirenokai.vesqen.ui.navigation.VesqenNavigation
 import io.github.sumirenokai.vesqen.ui.navigation.VesqenNavigationState
@@ -54,6 +58,7 @@ import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
 import io.github.sumirenokai.vesqen.ui.screens.LibraryScreen
 import io.github.sumirenokai.vesqen.ui.screens.NowScreen
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
+import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -285,6 +290,16 @@ private fun VesqenDestinationFrame(
     val usesFocusedPlayerInsets = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
     val showMiniPlayer = state.playback.hasActiveTrack && destination != VesqenDestination.NOW
     val showCompactNavigation = showNavigation && destination != VesqenDestination.NOW
+    val miniPlayerContentClearance = if (showMiniPlayer) {
+        MiniPlayerHeight + VesqenSpacing.xxs
+    } else {
+        0.dp
+    }
+    val miniPlayerBottomPadding = if (showCompactNavigation) {
+        CompactNavigationBarContentHeight + VesqenSpacing.xxs
+    } else {
+        VesqenSpacing.md
+    }
     val currentTrack = state.playback.trackId?.takeIf {
         state.library.musicAccess == MusicAccess.GRANTED
     }?.let { id ->
@@ -298,26 +313,15 @@ private fun VesqenDestinationFrame(
     } else {
         null
     }
-    Scaffold(
-        modifier = modifier,
-        contentWindowInsets = if (usesFocusedPlayerInsets) {
-            WindowInsets(0, 0, 0, 0)
-        } else {
-            ScaffoldDefaults.contentWindowInsets
-        },
-        bottomBar = {
-            Column {
-                if (showMiniPlayer) {
-                    MiniPlayer(
-                        snapshot = state.playback,
-                        currentTrack = artworkTrack,
-                        onOpenNow = { onDestinationSelected(VesqenDestination.NOW) },
-                        onPrevious = onPrevious,
-                        onPlayPause = onPlayPause,
-                        onNext = onNext,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
-                }
+    Box(modifier = modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            contentWindowInsets = if (usesFocusedPlayerInsets) {
+                WindowInsets(0, 0, 0, 0)
+            } else {
+                ScaffoldDefaults.contentWindowInsets
+            },
+            bottomBar = {
                 if (showCompactNavigation) {
                     VesqenNavigation(
                         selectedDestination = destination,
@@ -325,138 +329,158 @@ private fun VesqenDestinationFrame(
                         useNavigationRail = false,
                     )
                 }
-            }
-        },
-    ) { innerPadding ->
-        AnimatedContent(
-            targetState = destination,
-            modifier = Modifier.fillMaxSize(),
-            transitionSpec = {
-                val opensFocusedPlayer = targetState == VesqenDestination.NOW &&
-                    initialState != VesqenDestination.NOW
-                val closesFocusedPlayer = initialState == VesqenDestination.NOW &&
-                    targetState != VesqenDestination.NOW
-                when {
-                    motionPolicy.reduceMotion -> {
-                        fadeIn(animationSpec = tween(motionPolicy.stateChangeMillis)) togetherWith
-                            fadeOut(animationSpec = tween(motionPolicy.stateChangeMillis))
-                    }
-
-                    opensFocusedPlayer -> {
-                        (fadeIn(
-                            animationSpec = tween(
-                                motionPolicy.playerExpandMillis,
-                                easing = FocusedPlayerEasing,
-                            ),
-                        ) + slideInVertically(
-                            animationSpec = tween(
-                                motionPolicy.playerExpandMillis,
-                                easing = FocusedPlayerEasing,
-                            ),
-                            initialOffsetY = { height -> height / 10 },
-                        ) + scaleIn(
-                            initialScale = .985f,
-                            animationSpec = tween(
-                                motionPolicy.playerExpandMillis,
-                                easing = FocusedPlayerEasing,
-                            ),
-                        )) togetherWith
-                            (fadeOut(
-                                animationSpec = tween(
-                                    motionPolicy.playerCollapseMillis,
-                                    easing = FocusedPlayerEasing,
-                                ),
-                            ) + scaleOut(
-                                targetScale = .99f,
-                                animationSpec = tween(
-                                    motionPolicy.playerCollapseMillis,
-                                    easing = FocusedPlayerEasing,
-                                ),
-                            ))
-                    }
-
-                    closesFocusedPlayer -> {
-                        fadeIn(
-                            animationSpec = tween(
-                                motionPolicy.stateChangeMillis,
-                                easing = FocusedPlayerEasing,
-                            ),
-                        ) togetherWith
-                            (fadeOut(
-                                animationSpec = tween(
-                                    motionPolicy.playerCollapseMillis,
-                                    easing = FocusedPlayerEasing,
-                                ),
-                            ) + slideOutVertically(
-                                animationSpec = tween(
-                                    motionPolicy.playerCollapseMillis,
-                                    easing = FocusedPlayerEasing,
-                                ),
-                                targetOffsetY = { height -> height / 12 },
-                            ) + scaleOut(
-                                targetScale = .985f,
-                                animationSpec = tween(
-                                    motionPolicy.playerCollapseMillis,
-                                    easing = FocusedPlayerEasing,
-                                ),
-                            ))
-                    }
-
-                    else -> {
-                        val duration = motionPolicy.stateChangeMillis
-                    (fadeIn(animationSpec = tween(duration)) +
-                        scaleIn(initialScale = .98f, animationSpec = tween(duration))) togetherWith
-                        (fadeOut(animationSpec = tween(duration / 2)) +
-                            scaleOut(targetScale = .98f, animationSpec = tween(duration / 2)))
-                    }
-                }
             },
-            label = "vesqen-destination",
-        ) { activeDestination ->
-            // During destination transitions keep the outgoing focused player edge-to-edge until
-            // it fades out. Applying the incoming Library padding here would flash a white inset.
-            val destinationModifier = if (
-                activeDestination == VesqenDestination.NOW && state.playback.hasActiveTrack
-            ) {
-                Modifier
-            } else {
-                Modifier.padding(innerPadding)
-            }
-            when (activeDestination) {
-                VesqenDestination.LIBRARY -> LibraryScreen(
-                    state = state.library,
-                    playback = state.playback,
-                    onRequestMusicAccess = onRequestMusicAccess,
-                    onOpenAppSettings = onOpenAppSettings,
-                    onOpenNotificationSettings = onOpenNotificationSettings,
-                    onRescan = onRescan,
-                    onTrackSelected = onTrackSelected,
-                    modifier = destinationModifier,
-                )
+        ) { innerPadding ->
+            AnimatedContent(
+                targetState = destination,
+                modifier = Modifier.fillMaxSize(),
+                transitionSpec = {
+                    val opensFocusedPlayer = targetState == VesqenDestination.NOW &&
+                        initialState != VesqenDestination.NOW
+                    val closesFocusedPlayer = initialState == VesqenDestination.NOW &&
+                        targetState != VesqenDestination.NOW
+                    when {
+                        motionPolicy.reduceMotion -> {
+                            fadeIn(animationSpec = tween(motionPolicy.stateChangeMillis)) togetherWith
+                                fadeOut(animationSpec = tween(motionPolicy.stateChangeMillis))
+                        }
 
-                VesqenDestination.NOW -> NowScreen(
-                    snapshot = state.playback,
-                    currentTrack = currentTrack,
-                    artworkTrack = artworkTrack,
-                    onBackToLibrary = onNavigateBack,
-                    onOpenChain = onOpenChainFromNow,
-                    onCyclePlaybackOrder = onCyclePlaybackOrder,
-                    onPrevious = onPrevious,
-                    onPlayPause = onPlayPause,
-                    onNext = onNext,
-                    onSeek = onSeek,
-                    onPlayTrack = onTrackSelected,
-                    motionPolicy = motionPolicy,
-                    modifier = destinationModifier,
-                )
+                        opensFocusedPlayer -> {
+                            (fadeIn(
+                                animationSpec = tween(
+                                    motionPolicy.playerExpandMillis,
+                                    easing = FocusedPlayerEasing,
+                                ),
+                            ) + slideInVertically(
+                                animationSpec = tween(
+                                    motionPolicy.playerExpandMillis,
+                                    easing = FocusedPlayerEasing,
+                                ),
+                                initialOffsetY = { height -> height / 10 },
+                            ) + scaleIn(
+                                initialScale = .985f,
+                                animationSpec = tween(
+                                    motionPolicy.playerExpandMillis,
+                                    easing = FocusedPlayerEasing,
+                                ),
+                            )) togetherWith
+                                (fadeOut(
+                                    animationSpec = tween(
+                                        motionPolicy.playerCollapseMillis,
+                                        easing = FocusedPlayerEasing,
+                                    ),
+                                ) + scaleOut(
+                                    targetScale = .99f,
+                                    animationSpec = tween(
+                                        motionPolicy.playerCollapseMillis,
+                                        easing = FocusedPlayerEasing,
+                                    ),
+                                ))
+                        }
 
-                VesqenDestination.CHAIN -> ChainScreen(
-                    library = state.library,
-                    snapshot = state.playback,
-                    onBackToLibrary = onNavigateBack,
-                    modifier = destinationModifier,
-                )
+                        closesFocusedPlayer -> {
+                            fadeIn(
+                                animationSpec = tween(
+                                    motionPolicy.stateChangeMillis,
+                                    easing = FocusedPlayerEasing,
+                                ),
+                            ) togetherWith
+                                (fadeOut(
+                                    animationSpec = tween(
+                                        motionPolicy.playerCollapseMillis,
+                                        easing = FocusedPlayerEasing,
+                                    ),
+                                ) + slideOutVertically(
+                                    animationSpec = tween(
+                                        motionPolicy.playerCollapseMillis,
+                                        easing = FocusedPlayerEasing,
+                                    ),
+                                    targetOffsetY = { height -> height / 12 },
+                                ) + scaleOut(
+                                    targetScale = .985f,
+                                    animationSpec = tween(
+                                        motionPolicy.playerCollapseMillis,
+                                        easing = FocusedPlayerEasing,
+                                    ),
+                                ))
+                        }
+
+                        else -> {
+                            val duration = motionPolicy.stateChangeMillis
+                            (fadeIn(animationSpec = tween(duration)) +
+                                scaleIn(initialScale = .98f, animationSpec = tween(duration))) togetherWith
+                                (fadeOut(animationSpec = tween(duration / 2)) +
+                                    scaleOut(targetScale = .98f, animationSpec = tween(duration / 2)))
+                        }
+                    }
+                },
+                label = "vesqen-destination",
+            ) { activeDestination ->
+                // During destination transitions keep the outgoing focused player edge-to-edge until
+                // it fades out. Applying the incoming Library padding here would flash a white inset.
+                val destinationModifier = if (
+                    activeDestination == VesqenDestination.NOW && state.playback.hasActiveTrack
+                ) {
+                    Modifier
+                } else {
+                    Modifier
+                        .padding(innerPadding)
+                        .padding(bottom = miniPlayerContentClearance)
+                }
+                when (activeDestination) {
+                    VesqenDestination.LIBRARY -> LibraryScreen(
+                        state = state.library,
+                        playback = state.playback,
+                        onRequestMusicAccess = onRequestMusicAccess,
+                        onOpenAppSettings = onOpenAppSettings,
+                        onOpenNotificationSettings = onOpenNotificationSettings,
+                        onRescan = onRescan,
+                        onTrackSelected = onTrackSelected,
+                        modifier = destinationModifier,
+                    )
+
+                    VesqenDestination.NOW -> NowScreen(
+                        snapshot = state.playback,
+                        currentTrack = currentTrack,
+                        artworkTrack = artworkTrack,
+                        onBackToLibrary = onNavigateBack,
+                        onOpenChain = onOpenChainFromNow,
+                        onCyclePlaybackOrder = onCyclePlaybackOrder,
+                        onPrevious = onPrevious,
+                        onPlayPause = onPlayPause,
+                        onNext = onNext,
+                        onSeek = onSeek,
+                        onPlayTrack = onTrackSelected,
+                        motionPolicy = motionPolicy,
+                        modifier = destinationModifier,
+                    )
+
+                    VesqenDestination.CHAIN -> ChainScreen(
+                        library = state.library,
+                        snapshot = state.playback,
+                        onBackToLibrary = onNavigateBack,
+                        modifier = destinationModifier,
+                    )
+                }
             }
+        }
+        if (showMiniPlayer) {
+            MiniPlayer(
+                snapshot = state.playback,
+                currentTrack = artworkTrack,
+                onOpenNow = { onDestinationSelected(VesqenDestination.NOW) },
+                onPrevious = onPrevious,
+                onPlayPause = onPlayPause,
+                onNext = onNext,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(
+                        start = VesqenSpacing.md,
+                        end = VesqenSpacing.md,
+                        bottom = miniPlayerBottomPadding,
+                    ),
+            )
         }
     }
 }
