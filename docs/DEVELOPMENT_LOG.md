@@ -224,7 +224,8 @@ M1-A 只实现本地媒体库到系统混音播放的最小闭环：
 
 | 决策/问题 | 处理与理由 |
 | --- | --- |
-| 深色焦点页的前景色错误 | 在嵌套深色主题内使用 `Surface(color = MidnightViolet, contentColor = onSurface)`，而非仅绘制自定义背景。这样返回、标题、上下曲和 `i` 显式获得高对比前景；播放器同时接管深色状态栏/导航栏图标外观，并在退出时恢复外层外观。 |
+| 深色焦点页的前景色与系统栏错误 | 在嵌套深色主题内使用 `Surface(color = MidnightViolet, contentColor = onSurface)`，而非仅绘制自定义背景。这样返回、标题、上下曲和 `i` 显式获得高对比前景；播放器将状态栏背景设为 Midnight Violet、导航栏回退色设为 transport dock 的 `surfaceContainer`，关闭 API 29+ 的自动 contrast scrim，并保存/恢复原有颜色、contrast 与图标外观。系统图标和手势横条仍保持浅色，因为公开 API 不能自定义其品牌色且深色背景上必须可读。 |
+| 底部导航与运输台断色 | 原先把 `navigationBarsPadding()` 放在 dock 外层，透明导航栏下露出了上半页 Midnight Violet。改为让 dock 的 `Surface` 延伸到窗口底部，仅让其内容避开导航手势区；这样 Android 15+ 的 edge-to-edge 透明导航栏也会直接显示运输台色。 |
 | 宽屏焦点页的系统栏分裂 | 有活动播放时，Now 让顶层导航（包括宽屏 rail）让位并覆盖整个窗口。否则透明状态栏会同时跨越浅 rail 与深播放器，单一图标策略必然有一侧不可读；回到顶层目的地后 rail 与原系统栏策略恢复。 |
 | 画面过空 | 改为“封面舞台 + 一个不透明底部运输台”。封面保留低强度氛围层和简洁边框；标题、状态、进度与控制被一个有意的底部表面锚定，避免用装饰卡片或硬线条填空。 |
 | 上下曲层级 | `上一首 / 播放暂停 / 下一首` 改为居中的三枚主运输控制，正常窗口为 56 / 72 / 56 dp；随机、循环、分页点和圆形 `i` 转入 48 dp 次级底栏，保留所有功能但不与主控竞争。 |
@@ -237,8 +238,9 @@ M1-A 只实现本地媒体库到系统混音播放的最小闭环：
 | --- | --- | --- |
 | Kotlin 与 Compose 测试源码编译 | `./gradlew.bat :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin --stacktrace` | **已通过**：新增浅色宿主、320×480/2× 字号、360×533/2× 字号、360×640、640×320 横屏、无纵向 scroll 语义、Now 三键回调与真实宽屏 rail 让位用例均可编译。 |
 | 本地质量门禁 | `./gradlew.bat testDebugUnitTest lintDebug assembleDebug :app:compileDebugAndroidTestKotlin --stacktrace` | **已通过**：6 个 JVM suite、13 个测试，0 failures、0 errors、0 skipped；lint 无错误；Debug APK 与 Android 测试源码均可组装/编译。 |
-| 最终 APK 部署一致性 | Android 15 物理设备 | **已通过**：本地 Debug APK SHA-256 `D6227A37AD46F9DA8CE2764C62C0A958F4496426431580D901E3EDA110CFDCD5` 与设备已安装 `base.apk` 一致；应用更新后曲库可读。 |
-| 真机手动焦点页回归 | Android 15 浅色系统、真实本地媒体 | **已通过（UI/交互范围）**：最新 APK 启动后进入 Now；真实封面、深色系统栏、封面舞台、运输台和高对比上下曲已进行屏幕核查；纵向上滑后主控边界不变；下一首实际切换、上一首恢复原曲，播放/暂停可往返切换，Android Back 返回曲库；未见应用 `FATAL EXCEPTION`。临时截图和设备 UI XML 均已删除。 |
+| 播放页修复 APK 部署一致性 | Android 15 物理设备 | **已通过**：播放器布局修复的本地 Debug APK SHA-256 `D6227A37AD46F9DA8CE2764C62C0A958F4496426431580D901E3EDA110CFDCD5` 与设备已安装 `base.apk` 一致；应用更新后曲库可读。 |
+| 播放页真机手动回归 | Android 15 浅色系统、真实本地媒体 | **已通过（UI/交互范围）**：该布局修复 APK 启动后进入 Now；真实封面、深色系统栏、封面舞台、运输台和高对比上下曲已进行屏幕核查；纵向上滑后主控边界不变；下一首实际切换、上一首恢复原曲，播放/暂停可往返切换，Android Back 返回曲库；未见应用 `FATAL EXCEPTION`。临时截图和设备 UI XML 均已删除。 |
+| 系统栏衔接修复部署 | 最新本地 Debug APK SHA-256 `6F0D46266FB7E75B9A1F3158C95476A68BE761D6ADD16EB97554AEBFA378AA08` | **待真机复验 / 不计为通过**：本地构建、lint 与测试门禁通过；设备安装器要求所有者在屏幕上确认更新，自动输入未能代替该受保护操作。因此不能把该 APK 宣称为已部署或已视觉验收。 |
 | Compose 仪器测试执行 | `:app:connectedDebugAndroidTest` 与直接安装测试 APK | **未执行 / 不计为通过**：Gradle 仅生成测试 APK，未产生运行结果；设备对第三方测试 APK 强制要求所有者指纹验证。未绕过或关闭该保护。该尝试清除了目标应用但没有安装测试包，已立即重装上述精确 Debug APK、复核哈希并恢复原有运行时权限。 |
 
 ### 后续验证

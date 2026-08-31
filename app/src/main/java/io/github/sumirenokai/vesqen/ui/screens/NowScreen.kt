@@ -3,6 +3,7 @@ package io.github.sumirenokai.vesqen.ui.screens
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -77,7 +78,7 @@ import io.github.sumirenokai.vesqen.ui.theme.MidnightViolet
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.view.WindowCompat
 
 @Composable
@@ -240,20 +241,56 @@ private fun FullPlayerBackdrop(artworkTrack: AudioTrack?) {
  * light system-bar icons over its Midnight Violet backdrop.
  */
 @Composable
+@Suppress("DEPRECATION") // API 35+ draws edge-to-edge from the focus surface; older APIs need this fallback.
 private fun FullPlayerSystemBars() {
     val view = LocalView.current
-    val restoreLightAppearance = !isSystemInDarkTheme()
+    val navigationBarColor = MaterialTheme.colorScheme.surfaceContainer.toArgb()
 
-    DisposableEffect(view, restoreLightAppearance) {
-        val controller = view.context.findActivity()?.window?.let { window ->
-            WindowCompat.getInsetsController(window, view)
+    DisposableEffect(view, navigationBarColor) {
+        val window = view.context.findActivity()?.window
+        val controller = window?.let { activityWindow ->
+            WindowCompat.getInsetsController(activityWindow, view)
+        }
+        val previousStatusBarColor = window?.statusBarColor
+        val previousNavigationBarColor = window?.navigationBarColor
+        val previousLightStatusBars = controller?.isAppearanceLightStatusBars
+        val previousLightNavigationBars = controller?.isAppearanceLightNavigationBars
+        val previousStatusBarContrast = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window?.isStatusBarContrastEnforced
+        } else {
+            null
+        }
+        val previousNavigationBarContrast = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window?.isNavigationBarContrastEnforced
+        } else {
+            null
+        }
+
+        // Do not leave system-bar surfaces to the outer light activity theme or an OEM contrast
+        // scrim. The status bar belongs to the Midnight artwork field and the navigation bar to
+        // the dock beneath it; light system glyphs remain accessible on both dark surfaces.
+        window?.statusBarColor = MidnightViolet.toArgb()
+        window?.navigationBarColor = navigationBarColor
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window?.isStatusBarContrastEnforced = false
+            window?.isNavigationBarContrastEnforced = false
         }
         controller?.isAppearanceLightStatusBars = false
         controller?.isAppearanceLightNavigationBars = false
 
         onDispose {
-            controller?.isAppearanceLightStatusBars = restoreLightAppearance
-            controller?.isAppearanceLightNavigationBars = restoreLightAppearance
+            window?.let { activityWindow ->
+                previousStatusBarColor?.let { activityWindow.statusBarColor = it }
+                previousNavigationBarColor?.let { activityWindow.navigationBarColor = it }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    previousStatusBarContrast?.let { activityWindow.isStatusBarContrastEnforced = it }
+                    previousNavigationBarContrast?.let { activityWindow.isNavigationBarContrastEnforced = it }
+                }
+            }
+            controller?.let { systemBars ->
+                previousLightStatusBars?.let { systemBars.isAppearanceLightStatusBars = it }
+                previousLightNavigationBars?.let { systemBars.isAppearanceLightNavigationBars = it }
+            }
         }
     }
 }
@@ -318,8 +355,7 @@ private fun NowPlayerPage(
             canOpenDetails = canOpenDetails,
             selectedInfoPage = selectedInfoPage,
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding(),
+                .align(Alignment.BottomCenter),
         )
     }
 }
@@ -392,12 +428,14 @@ private fun NowTransportDock(
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Column(
-            modifier = Modifier.padding(
-                start = VesqenSpacing.lg,
-                top = verticalPadding,
-                end = VesqenSpacing.lg,
-                bottom = VesqenSpacing.xs,
-            ),
+            modifier = Modifier
+                .navigationBarsPadding()
+                .padding(
+                    start = VesqenSpacing.lg,
+                    top = verticalPadding,
+                    end = VesqenSpacing.lg,
+                    bottom = VesqenSpacing.xs,
+                ),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(sectionSpacing),
         ) {
