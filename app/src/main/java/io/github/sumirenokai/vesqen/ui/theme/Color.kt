@@ -15,10 +15,26 @@ internal val InkDark = Color(0xFF1B1C18)
 internal val InkLight = Color(0xFFE7E8E1)
 internal val MutedDark = Color(0xFFC8C9BE)
 internal val MutedLight = Color(0xFF5E6056)
-internal val MidnightViolet = Color(0xFF1E1B2B)
 internal val WarningAmberBright = Color(0xFFF2C36B)
 internal val WarningAmberDeep = Color(0xFF7A4F00)
 internal val VesqenError = Color(0xFFBA1A1A)
+
+/**
+ * A separate material ladder for the protected full player. These are deliberately near-neutral:
+ * the listener sees one midnight instrument, while Signal Moss remains the scarce action signal.
+ */
+internal object FocusedPlayerMaterial {
+    val Canvas = Color(0xFF101415)
+    val Dock = Color(0xFF191F20)
+    val Raised = Color(0xFF202728)
+    val ArtworkFrame = Color(0xFF252C2D)
+    val AmbientLiftShadow = Color(0x38000000)
+    val SpotLiftShadow = Color(0x4D000000)
+    const val ArtworkReflectionAlpha = .22f
+    const val CanvasScrimAlpha = .82f
+    val VisibleArtworkReflection: Float
+        get() = ArtworkReflectionAlpha * (1f - CanvasScrimAlpha)
+}
 
 // Tonal steps used by Material surfaces. They stay neutral so Signal Moss remains scarce.
 internal val FrostLowest = Color(0xFFFFFFFF)

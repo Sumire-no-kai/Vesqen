@@ -10,3 +10,6 @@
 .cxx
 gradle/gradle-daemon-jvm.properties
 *.hprof
+# Impeccable critique artifacts are local; the checked-in design baseline remains source of truth.
+.impeccable/*
+!.impeccable/design.json

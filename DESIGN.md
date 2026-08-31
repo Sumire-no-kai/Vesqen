@@ -14,7 +14,10 @@ colors:
   ink-light: "#E7E8E1"
   muted-dark: "#C8C9BE"
   muted-light: "#5E6056"
-  midnight-violet: "#1E1B2B"
+  now-canvas: "#101415"
+  now-dock: "#191F20"
+  now-raised: "#202728"
+  now-artwork-frame: "#252C2D"
   warning-amber-bright: "#F2C36B"
   warning-amber-deep: "#7A4F00"
   error: "#BA1A1A"
@@ -168,7 +171,7 @@ components:
 
 **Creative North Star: "The Quiet Signal"**
 
-Vesqen should feel like a listening instrument used in a dim train carriage, a quiet study, or a softly lit room: the screen recedes until a meaningful state changes. The dark experience is the primary expression, while the light experience is a complete daylight counterpart—not a separate brand. Album artwork may cast a restrained ambient tint on the full player, but navigation, text, and evidence labels remain stable and legible.
+Vesqen should feel like a listening instrument used in a dim train carriage, a quiet study, or a softly lit room: the screen recedes until a meaningful state changes. The dark experience is the primary expression, while the light experience is a complete daylight counterpart—not a separate brand. The protected full player uses a single Nocturne Graphite material ladder; album artwork may cast one restrained reflection into it, but navigation, text, and evidence labels remain stable and legible.
 
 The information architecture is fixed around three destinations: **Library**, **Now**, and **Chain**. Library is the beginner's starting point, Now is the focused playback surface, and Chain progressively exposes output and evidence. Technical density belongs behind explicit disclosure, not in the track list.
 
@@ -186,7 +189,7 @@ The information architecture is fixed around three destinations: **Library**, **
 
 ## Colors
 
-Signal Moss is an olive-yellow-green derived from the brand mark rather than streaming-service green. Carbon neutrals carry the dark theme; true white and Frost Surface carry the light theme. Midnight Violet is atmospheric material for the full player only, never a second action color.
+Signal Moss is an olive-yellow-green derived from the brand mark rather than streaming-service green. Carbon neutrals carry the dark theme; true white and Frost Surface carry the light theme. The full player has its own near-neutral Nocturne Graphite ladder so it reads as one listening instrument rather than a second colored theme.
 
 ### Primary
 
@@ -204,9 +207,17 @@ Signal Moss is an olive-yellow-green derived from the brand mark rather than str
 - **Ink Dark / Ink Light:** Primary readable text for the corresponding theme.
 - **Muted Light / Muted Dark:** Secondary text; both remain readable rather than decorative gray.
 
+### Focused Player Material
+
+- **Now Canvas (`#101415`):** Protected near-neutral midnight field for the full player and its status bar.
+- **Now Dock (`#191F20`):** Fully opaque smoked-graphite transport surface and navigation-bar continuation.
+- **Now Raised (`#202728`) / Artwork Frame (`#252C2D`):** One-step material lift for the factual route chip, session surface, and framed cover stage.
+- **Artwork reflection:** A real cover may enter at 22% behind an 82% Canvas scrim, yielding a capped 3.96% low-frequency reflection. Missing or unreadable artwork remains neutral; Twin Paths never becomes a false full-screen light source.
+
+These values are material roles, never success, selection, proof, or a second action color. Midnight Violet is retired from visible Now surfaces.
+
 ### Supporting
 
-- **Midnight Violet:** A full-player ambient color that may be mixed from artwork; it never communicates success, selection, or proof.
 - **Warning Amber Bright / Deep:** Fixed warning roles for dark/light themes. Amber communicates attention or a recoverable limitation, never active or verified playback.
 - **Error:** Destructive and failure state only. It never appears as decoration or brand expression.
 
@@ -260,7 +271,7 @@ Translucency is purposeful. The full player may use a protected, low-frequency a
 ### Shadow Vocabulary
 
 - **Ambient Low:** A compact soft shadow for menus and the mini-player; never paired with a decorative border.
-- **Player Lift:** A wider low-opacity shadow reserved for the expanded player and bottom sheets.
+- **Player Lift:** A wider low-opacity shadow reserved for the expanded player and bottom sheets. On Now it is one 20 dp ambient/spot lift between Canvas and Dock, never a divider, border, glow, or second shadow.
 - **Focus Halo:** A moss-tinted focus indication around keyboard- or accessibility-focused controls, paired with a shape/state change where color alone is insufficient.
 
 **The No-Line Rule.** Separate list items with rhythm, alignment, and surface tone. Hard dividers are limited to dense technical tables where row tracking genuinely requires them.
@@ -299,8 +310,8 @@ Translucency is purposeful. The full player may use a protected, low-frequency a
 - **Control hierarchy:** Previous / play-pause / next form the large centered primary transport group. Shuffle, repeat, page dots, and the circled information action live in the dock's secondary footer, so transport never competes with modes or metadata. The mini-player never repeats the route chip.
 - **Mode controls:** Repeat is one familiar 48dp control that cycles `Off → All → One → Off`; `One` uses the standard repeat-with-`1` glyph, never a second single-track button. Muted gray communicates Off and Signal Moss communicates either active repeat mode. Shuffle follows the same muted/active semantics. Each mode transition changes tint and icon/scale over 160ms and exposes its exact state to TalkBack.
 - **Motion:** Opening Now follows the mini-player's 240ms shared-axis path; returning uses a 180ms inverse path. A user-initiated previous/next change moves only artwork and track identity 220ms in the corresponding horizontal direction while the transport dock remains spatially stable. Reduced motion replaces these movements with the 80ms crossfade fallback.
-- **Atmosphere:** Artwork may tint a blurred background behind a stable dark scrim. The focused surface explicitly supplies its light foreground tokens; controls retain semantic colors and do not sample arbitrary artwork colors.
-- **Focus mode:** Now is a full-height, edge-to-edge Midnight Violet listening surface rather than a squeezed destination panel. Top-level navigation yields its space to the focused player (including the wide-window rail): the status bar continues the Midnight artwork field and the navigation bar continues the transport dock, with platform contrast scrims disabled. Light system glyphs remain legible and all prior system-bar state restores on exit. Toolbar Back and Android Back return to the originating destination, while the factual route chip remains the deliberate path to Chain.
+- **Atmosphere:** Artwork may cast a 3.96% low-frequency reflection behind a stable 82% Nocturne Canvas scrim. The focused surface explicitly supplies fixed light foreground tokens; controls and `SYSTEM MIXED` retain their semantic colors and never sample arbitrary artwork colors. Missing/unreadable artwork has an opaque neutral fallback with no false reflection.
+- **Focus mode:** Now is a full-height, edge-to-edge Nocturne Graphite listening surface rather than a squeezed destination panel. Top-level navigation yields its space to the focused player (including the wide-window rail): the status bar continues the Canvas and the navigation bar continues the opaque Dock, with platform contrast scrims disabled. One Player Lift—not a hard line—separates the Dock from the field. Light system glyphs remain legible and all prior system-bar state restores on exit. Toolbar Back and Android Back return to the originating destination, while the factual route chip remains the deliberate path to Chain.
 - **Responsive behavior:** The player is never vertically scrollable. Track and header titles remain one line; an overlong track title may marquee horizontally. Artwork, gaps, and secondary metadata contract as height or font scale decreases, but the scrubber, three primary transport controls, mode controls, and information action remain reachable.
 - **Progressive session information:** Horizontal paging may reveal only live facts the current player exposes (play state, elapsed/remaining time, queue position, and output declaration). The circled information action opens track metadata; it does not invent codec, sample-rate, PCM, or proof telemetry.
 - **Details:** Overflow opens an inline sheet for track details; Chain remains the authoritative path for route and proof data.

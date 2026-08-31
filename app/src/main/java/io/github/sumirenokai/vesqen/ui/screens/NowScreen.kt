@@ -67,6 +67,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
@@ -89,7 +90,7 @@ import io.github.sumirenokai.vesqen.ui.components.PlaybackControls
 import io.github.sumirenokai.vesqen.ui.components.TrackDetailsSheet
 import io.github.sumirenokai.vesqen.ui.components.VesqenEmptyState
 import io.github.sumirenokai.vesqen.ui.formatDuration
-import io.github.sumirenokai.vesqen.ui.theme.MidnightViolet
+import io.github.sumirenokai.vesqen.ui.theme.FocusedPlayerMaterial
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
@@ -98,6 +99,10 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.core.view.WindowCompat
 
 private val TrackTransitionEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
+private val FocusedPlayerDockShape = RoundedCornerShape(
+    topStart = VesqenRadii.surface,
+    topEnd = VesqenRadii.surface,
+)
 
 private enum class TrackTransitionDirection {
     FORWARD,
@@ -166,8 +171,8 @@ fun NowScreen(
             modifier = modifier
                 .fillMaxSize()
                 .testTag("vesqen.now.focus-surface"),
-            color = MidnightViolet,
-            contentColor = MaterialTheme.colorScheme.onBackground,
+            color = FocusedPlayerMaterial.Canvas,
+            contentColor = MaterialTheme.colorScheme.onSurface,
         ) {
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                 val configuration = LocalConfiguration.current
@@ -193,7 +198,10 @@ fun NowScreen(
                     (maxWidth - 72.dp).coerceAtLeast(96.dp),
                 )
 
-                FullPlayerBackdrop(artworkTrack = artworkTrack)
+                FullPlayerBackdrop(
+                    artworkTrack = artworkTrack,
+                    motionPolicy = motionPolicy,
+                )
                 Column(modifier = Modifier.fillMaxSize()) {
                     NowHeader(
                         onBack = onBackToLibrary,
@@ -261,42 +269,81 @@ fun NowScreen(
 }
 
 @Composable
-private fun FullPlayerBackdrop(artworkTrack: AudioTrack?) {
+private fun FullPlayerBackdrop(
+    artworkTrack: AudioTrack?,
+    motionPolicy: VesqenMotionPolicy,
+) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MidnightViolet),
+            .background(FocusedPlayerMaterial.Canvas)
+            .testTag("vesqen.now.backdrop"),
     ) {
-        // The visible player remains fully legible. Only real album artwork may add a low-key
-        // ambient layer; the opaque scrim is the cross-version contrast fallback.
-        if (!artworkTrack?.albumArtworkUri.isNullOrBlank()) {
-            AlbumArtwork(
-                track = artworkTrack,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .blur(28.dp)
-                    .alpha(.10f),
-                emphasized = true,
-            )
+        // Real artwork may cast one restrained reflection only where platform blur is real.
+        // On API 26–30, render the opaque Canvas fallback rather than an unblurred cover at low
+        // opacity: a vague photo is not the same as a controlled light source.
+        AnimatedContent(
+            targetState = artworkTrack,
+            modifier = Modifier.fillMaxSize(),
+            transitionSpec = { artworkReflectionTransition(motionPolicy) },
+            label = "vesqen.now.artwork-reflection",
+        ) { reflectionTrack ->
+            if (
+                isArtworkReflectionSupported(Build.VERSION.SDK_INT) &&
+                !reflectionTrack?.contentUri.isNullOrBlank()
+            ) {
+                AlbumArtwork(
+                    track = reflectionTrack,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .blur(36.dp)
+                        .alpha(FocusedPlayerMaterial.ArtworkReflectionAlpha),
+                    emphasized = true,
+                    fallbackContainerColor = FocusedPlayerMaterial.Canvas,
+                    showFallback = false,
+                    // The tag deliberately belongs to the loaded Image, not its neutral
+                    // container. A URI that cannot produce a bitmap must not claim a reflection.
+                    loadedArtworkModifier = Modifier.testTag("vesqen.now.artwork-reflection"),
+                )
+            }
         }
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MidnightViolet.copy(alpha = .88f)),
+                .background(FocusedPlayerMaterial.Canvas.copy(alpha = FocusedPlayerMaterial.CanvasScrimAlpha))
+                .testTag("vesqen.now.backdrop.opaque-fallback"),
         )
     }
 }
 
+internal fun isArtworkReflectionSupported(sdkInt: Int): Boolean =
+    sdkInt >= Build.VERSION_CODES.S
+
+private fun androidx.compose.animation.AnimatedContentTransitionScope<AudioTrack?>.artworkReflectionTransition(
+    motionPolicy: VesqenMotionPolicy,
+) = fadeIn(
+    animationSpec = tween(motionPolicy.trackChangeMillis, easing = TrackTransitionEasing),
+) togetherWith fadeOut(
+    animationSpec = tween(
+        durationMillis = if (motionPolicy.reduceMotion) {
+            motionPolicy.trackChangeMillis
+        } else {
+            motionPolicy.trackChangeMillis * 3 / 4
+        },
+        easing = TrackTransitionEasing,
+    ),
+)
+
 /**
  * The focused player deliberately owns the window edge-to-edge while it is visible. The
  * surrounding app can still follow the system theme, but this protected listening surface needs
- * light system-bar icons over its Midnight Violet backdrop.
+ * light system-bar icons over its midnight-graphite material.
  */
 @Composable
 @Suppress("DEPRECATION") // API 35+ draws edge-to-edge from the focus surface; older APIs need this fallback.
 private fun FullPlayerSystemBars() {
     val view = LocalView.current
-    val navigationBarColor = MaterialTheme.colorScheme.surfaceContainer.toArgb()
+    val navigationBarColor = FocusedPlayerMaterial.Dock.toArgb()
 
     DisposableEffect(view, navigationBarColor) {
         val window = view.context.findActivity()?.window
@@ -319,9 +366,9 @@ private fun FullPlayerSystemBars() {
         }
 
         // Do not leave system-bar surfaces to the outer light activity theme or an OEM contrast
-        // scrim. The status bar belongs to the Midnight artwork field and the navigation bar to
+        // scrim. The status bar belongs to the midnight artwork field and the navigation bar to
         // the dock beneath it; light system glyphs remain accessible on both dark surfaces.
-        window?.statusBarColor = MidnightViolet.toArgb()
+        window?.statusBarColor = FocusedPlayerMaterial.Canvas.toArgb()
         window?.navigationBarColor = navigationBarColor
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window?.isStatusBarContrastEnforced = false
@@ -478,7 +525,7 @@ private fun PlayerArtworkStage(
             .size(artworkSize + framePadding * 2)
             .testTag("vesqen.now.artwork-stage"),
         shape = RoundedCornerShape(VesqenRadii.surface),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = FocusedPlayerMaterial.ArtworkFrame,
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         AlbumArtwork(
@@ -488,6 +535,7 @@ private fun PlayerArtworkStage(
                 .padding(framePadding)
                 .testTag("vesqen.now.artwork"),
             emphasized = true,
+            fallbackContainerColor = FocusedPlayerMaterial.Raised,
         )
     }
 }
@@ -527,12 +575,16 @@ private fun NowTransportDock(
     Surface(
         modifier = modifier
             .fillMaxWidth()
+            .shadow(
+                elevation = 20.dp,
+                shape = FocusedPlayerDockShape,
+                clip = false,
+                ambientColor = FocusedPlayerMaterial.AmbientLiftShadow,
+                spotColor = FocusedPlayerMaterial.SpotLiftShadow,
+            )
             .testTag("vesqen.now.transport-dock"),
-        shape = RoundedCornerShape(
-            topStart = VesqenRadii.surface,
-            topEnd = VesqenRadii.surface,
-        ),
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = FocusedPlayerDockShape,
+        color = FocusedPlayerMaterial.Dock,
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Column(
@@ -567,6 +619,8 @@ private fun NowTransportDock(
                     declaration = snapshot.declaration,
                     onClick = onOpenChain,
                     modifier = Modifier.testTag("vesqen.now.open-chain"),
+                    containerColor = FocusedPlayerMaterial.Raised,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             PlaybackProgress(snapshot = snapshot, onSeek = onSeek)
@@ -613,19 +667,18 @@ private fun NowSessionPage(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .clipToBounds()
-            .navigationBarsPadding()
-            .padding(horizontal = if (isUltraCompact) VesqenSpacing.md else VesqenSpacing.lg),
+            .clipToBounds(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.weight(1f))
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(horizontal = if (isUltraCompact) VesqenSpacing.md else VesqenSpacing.lg)
                 .widthIn(max = 360.dp)
                 .testTag("vesqen.now.info.session"),
             shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.surface),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .96f),
+            color = FocusedPlayerMaterial.Raised,
             contentColor = MaterialTheme.colorScheme.onSurface,
         ) {
             Column(
@@ -668,20 +721,40 @@ private fun NowSessionPage(
                     declaration = snapshot.declaration,
                     onClick = onOpenChain,
                     modifier = Modifier.testTag("vesqen.now.info.chain"),
+                    containerColor = FocusedPlayerMaterial.Raised,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
         Spacer(Modifier.weight(1f))
-        NowInfoFooter(
-            snapshot = snapshot,
-            selectedPage = selectedInfoPage,
-            onToggleShuffle = onToggleShuffle,
-            onCycleRepeatMode = onCycleRepeatMode,
-            onOpenDetails = onOpenDetails,
-            canOpenDetails = canOpenDetails,
-            compact = isUltraCompact,
-            motionPolicy = motionPolicy,
-        )
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(
+                    elevation = 20.dp,
+                    shape = FocusedPlayerDockShape,
+                    clip = false,
+                    ambientColor = FocusedPlayerMaterial.AmbientLiftShadow,
+                    spotColor = FocusedPlayerMaterial.SpotLiftShadow,
+                )
+                .testTag("vesqen.now.info-footer-dock"),
+            shape = FocusedPlayerDockShape,
+            color = FocusedPlayerMaterial.Dock,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ) {
+            Box(modifier = Modifier.navigationBarsPadding()) {
+                NowInfoFooter(
+                    snapshot = snapshot,
+                    selectedPage = selectedInfoPage,
+                    onToggleShuffle = onToggleShuffle,
+                    onCycleRepeatMode = onCycleRepeatMode,
+                    onOpenDetails = onOpenDetails,
+                    canOpenDetails = canOpenDetails,
+                    compact = isUltraCompact,
+                    motionPolicy = motionPolicy,
+                )
+            }
+        }
     }
 }
 

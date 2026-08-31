@@ -280,3 +280,36 @@ M1-A 只实现本地媒体库到系统混音播放的最小闭环：
 1. 设备所有者完成当前系统更新确认后，先比对新 APK 与设备安装包哈希，再做上述真机手动回归。
 2. 获得通过的本地与真机证据后，创建行为变更 PR、等待 CI，并按既定 Git workflow 合并。
 3. 从更新后的 `master` 新开独立分支，仅重做 Now 页的背景、控制台材质与受控光影；不在这一条行为分支掺入主题色改动。
+
+## 2026-08-31 · Now 夜间石墨材质与受控封面反光
+
+### 触发与范围
+
+在播放模式与动效分支合并后，用户要求不再保留“墨绿色与蓝黑色/紫色割裂”的焦点页，而是在不复制其他播放器品牌、也不扩大 M1 音频能力的前提下，重做 Now 的背景、运输台材质与光影。本轮位于 `codex/rework-now-materials`，只影响有活动播放时的全屏 Now 与其信息页；曲库、mini-player、输出事实语义和播放控制行为保持不变。
+
+### 设计与实现决策
+
+| 决策/问题 | 处理与理由 |
+| --- | --- |
+| 焦点页是否继续使用可感知的紫色/绿色分区 | 不继续。Now 采用专属的 **Nocturne Graphite / 夜间石墨** 中性材质阶梯：Canvas `#101415`、Dock `#191F20`、Raised `#202728`、Artwork Frame `#252C2D`。Signal Moss 继续只表示可操作的激活/正向状态，而不是铺满背景或运输台。 |
+| 封面氛围是否做成大面积渐变或“假封面” | 不做。只有真实 bitmap 加载后才显示 36 dp 模糊的封面反光；其 alpha 为 22%，再经 82% Canvas scrim，最终可见量严格为 3.96%。无封面、不可读 URI、加载失败或 API 26–30 时均保持纯不透明 Canvas，不把 Twin Paths 占位或未模糊图片伪装成光源。 |
+| 旧 Android 上的 `blur` | Compose 的平台 blur 在 Android 12（API 31）以下不保证真实效果。反光明确以 API 31 为门槛，较低版本直接使用不改变布局的 Canvas 回退；新增 JVM 边界用例锁定 API 30/31 行为。 |
+| 如何界定运输台而不回到硬线条 | 使用一个 20 dp 的 ambient + spot **Player Lift** 阴影作为唯一边界。Dock 不加 divider、border、glow、渐变或第二层阴影；导航手势 inset 放在全宽 Dock 内，避免高版本 edge-to-edge 下出现底部断色。 |
+| 封面舞台和背景异步加载不一致 | 背景与舞台复用同一安全 `AlbumArtworkLoader` 路径（专辑 URI 失败后可回退媒体 item thumbnail）。反光测试标记只附在成功加载的 `Image`，而不是其中性的加载容器，因此不可读 URI 不会声称存在反光。 |
+| 可读性是否由视觉印象决定 | 不依赖主观判断。固定前景在 Canvas/Dock/Raised 上分别计算对比度：Ink Light/Canvas 15.03:1、Ink Light/Dock 13.53:1、Muted/Raised 9.08:1、Moss/Dock 10.37:1；这些均高于 WCAG AA 门槛。 |
+| 规范是否会与实现再次漂移 | 同步更新 `Color.kt`、`DESIGN.md`、`docs/brand/VISUAL_IDENTITY.md`、PRD 及机器可读的 `.impeccable/design.json`；本地 Impeccable 检查对 `NowScreen.kt` 没有额外发现。 |
+
+### 验证记录
+
+| 检查 | 环境/命令 | 结果 |
+| --- | --- | --- |
+| JVM 单元测试、lint、Android 测试源码编译 | `./gradlew.bat testDebugUnitTest lintDebug :app:compileDebugAndroidTestKotlin --rerun-tasks --stacktrace` | **已通过**：7 个 JVM suite、16 个测试、0 failures、0 errors；Android Compose 测试源码可编译。Lint 保留 13 条既有项目提醒，但本轮修改的 `NowScreen`、`AlbumArtwork` 和 `OutputStatusChip` 为 0 条结果。 |
+| 常规 APK 输出目录 | `./gradlew.bat assembleDebug` | **外部文件占用 / 非代码失败**：Windows 持续占用旧的 `app/build/outputs/apk/debug/app-debug.apk`，Gradle 无法删除它。未猜测或终止 ADB、IDE、系统扫描或用户进程。 |
+| 隔离 APK 组装 | `./gradlew.bat -I C:/tmp/vesqen-isolated-build.init.gradle.kts assembleDebug` | **已通过**：仅将本轮输出重定向到临时目录；未修改项目的正式 Gradle 配置，成功生成新的 Debug APK。 |
+| 真机截图/手动视觉回归 | Android 15 物理设备 | **待验证 / 不计为通过**：检查时设备前台正在运行用户的其他工作，因此未覆盖安装、未拉起 Vesqen、未截屏，也未运行 Compose runner。真机将重点核查真实封面、无封面回退、Canvas/Dock 系统栏衔接和轻主题宿主进入/退出 Now。 |
+
+### 后续步骤
+
+1. 在设备空闲且由所有者确认后，安装隔离构建的 APK，核查上述 Now 视觉场景并在查看后删除临时截图/UI XML。
+2. 设备级截图确认前不合并本分支；截图通过后创建 PR、等待 CI，再按 Git workflow 合并。
+3. 继续将 `SYSTEM MIXED` 限定为 M1 事实声明，不由新的光影或封面呈现推导 direct、独占、无损或 bit-perfect 结论。

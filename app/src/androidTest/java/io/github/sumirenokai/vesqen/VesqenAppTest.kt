@@ -606,6 +606,68 @@ class VesqenAppTest {
         assertFocusedNowControlsAreFullyVisible()
     }
 
+    @Test
+    fun focused_now_keeps_an_opaque_material_fallback_without_artwork_at_320dp_with_large_text() {
+        render(
+            state = grantedState(
+                tracks = sampleTracks,
+                playback = PlaybackSnapshot(
+                    isControllerReady = true,
+                    trackId = 1,
+                    title = "Dawn Signal",
+                    artist = "Mori",
+                    durationMs = 245_000,
+                    hasPrevious = true,
+                    hasNext = true,
+                ),
+            ),
+            containerWidth = 320.dp,
+            containerHeight = 480.dp,
+            fontScale = 2f,
+            darkTheme = false,
+        )
+
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.backdrop").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.backdrop.opaque-fallback").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.artwork-stage").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("vesqen.album-artwork.fallback").assertCountEquals(1)
+        composeRule.onAllNodesWithTag("vesqen.now.artwork-reflection").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.now.player-page").assert(
+            SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
+        )
+        assertFocusedNowControlsAreFullyVisible()
+    }
+
+    @Test
+    fun focused_now_never_invents_a_reflection_for_an_unreadable_artwork_uri() {
+        val trackWithUnreadableArtwork = sampleTracks.first().copy(
+            contentUri = "content://io.github.sumirenokai.vesqen.test/missing-audio",
+            albumArtworkUri = "content://io.github.sumirenokai.vesqen.test/missing-artwork",
+            artworkRevision = 1L,
+        )
+        render(
+            state = grantedState(
+                tracks = listOf(trackWithUnreadableArtwork),
+                playback = PlaybackSnapshot(
+                    isControllerReady = true,
+                    trackId = trackWithUnreadableArtwork.id,
+                    title = trackWithUnreadableArtwork.title,
+                    artist = trackWithUnreadableArtwork.artist,
+                    album = trackWithUnreadableArtwork.album,
+                    durationMs = trackWithUnreadableArtwork.durationMs,
+                ),
+            ),
+            motionPolicy = VesqenMotionPolicy(reduceMotion = false),
+        )
+
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.backdrop").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.backdrop.opaque-fallback").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("vesqen.now.artwork-reflection").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.now.transport-dock").assertIsDisplayed()
+    }
+
     private fun assertFocusedNowControlsAreFullyVisible() {
         assertNodesAreFullyVisibleIn(
             containerTag = "vesqen.now.focus-surface",
@@ -691,6 +753,7 @@ class VesqenAppTest {
         containerHeight: Dp = 720.dp,
         fontScale: Float? = null,
         darkTheme: Boolean = true,
+        motionPolicy: VesqenMotionPolicy = VesqenMotionPolicy(reduceMotion = true),
     ) {
         composeRule.setContent {
             VesqenTheme(darkTheme = darkTheme) {
@@ -709,7 +772,7 @@ class VesqenAppTest {
                         onToggleShuffle = onToggleShuffle,
                         onCycleRepeatMode = onCycleRepeatMode,
                         onRefreshConnectedOutputs = {},
-                        motionPolicy = VesqenMotionPolicy(reduceMotion = true),
+                        motionPolicy = motionPolicy,
                     )
                 }
                 val renderWithinSize: @Composable () -> Unit = {

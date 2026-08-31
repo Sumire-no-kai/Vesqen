@@ -68,8 +68,12 @@ Signal Moss 是品牌锚点，但单色媒介中几何识别优先于颜色。�
 | Frost Surface | `#F6F7F2` | 浅色次级表面 |
 | Ink Dark | `#1B1C18` | 浅色主题主文字 |
 | Ink Light | `#E7E8E1` | 深色主题主文字 |
+| Now Canvas | `#101415` | Now 专注页与状态栏的近中性夜间石墨画布 |
+| Now Dock | `#191F20` | Now 不透明运输台与导航栏延续面 |
+| Now Raised | `#202728` | Now 的 route chip、会话面与一级抬升材质 |
+| Now Artwork Frame | `#252C2D` | Now 封面舞台边框材质 |
 
-辅助色 Midnight Violet `#1E1B2B` 只用于完整播放页的氛围，不是第二主色；Warning Amber Bright `#F2C36B` / Deep `#7A4F00` 用于深浅主题的可恢复提醒；Error `#BA1A1A` 只用于错误和破坏性操作。
+Now 使用「夜间石墨 / Nocturne Graphite」专属材质阶梯，而不是 Midnight Violet 上域与橄榄 Carbon 底座的两套皮肤。真实封面最多以 `22% × (1 − 82%) = 3.96%` 的低频反光进入 Now Canvas；无封面或读取失败时保持纯中性，不把 Twin Paths 占位放大成伪光。Warning Amber Bright `#F2C36B` / Deep `#7A4F00` 用于深浅主题的可恢复提醒；Error `#BA1A1A` 只用于错误和破坏性操作。
 
 ### 4.2 Signal Budget
 
@@ -91,6 +95,10 @@ Signal Moss 是品牌锚点，但单色媒介中几何识别优先于颜色。�
 | Ink Dark / Signal Moss Bright | 10.64:1 |
 | Pure White / Warning Amber Deep | 7.13:1 |
 | Ink Dark / Warning Amber Bright | 10.44:1 |
+| Ink Light / Now Canvas | 15.03:1 |
+| Ink Light / Now Dock | 13.53:1 |
+| Muted Dark / Now Raised | 9.08:1 |
+| Signal Moss Bright / Now Dock | 10.37:1 |
 
 上述组合满足 WCAG 2.2 AA 普通文本目标；实际界面仍需按最终字号、透明度和背景重新验证。
 
@@ -98,7 +106,7 @@ Signal Moss 是品牌锚点，但单色媒介中几何识别优先于颜色。�
 
 | 状态 | 颜色 | 颜色之外的必要提示 |
 | --- | --- | --- |
-| `SYSTEM MIXED` | 深色用 Carbon Elevated + Muted Dark；浅色用 Frost + Muted Light | 路由图标和完整状态文字 |
+| `SYSTEM MIXED` | 常规深色用 Carbon Elevated + Muted Dark；Now 用 Now Raised + Muted Dark；浅色用 Frost + Muted Light | 路由图标和完整状态文字 |
 | `DIRECT SUPPORTED` | 与中性状态相同，不做成功色 | `DIRECT` 文字；不得显示勾选或验证徽章 |
 | `BIT-PERFECT AVAILABLE` | Moss 描边，不使用实心 Moss 背景 | 空心圆可用性图标和 `AVAILABLE` 文字 |
 | `BIT-PERFECT ACTIVE` | 深色用 Moss Bright 实心；浅色用 Moss Deep 实心 | 实心活动点和 `ACTIVE` 文字 |
@@ -122,7 +130,7 @@ Signal Moss 是品牌锚点，但单色媒介中几何识别优先于颜色。�
 
 - **A / Library Dark**：品牌的深色主表达，也是默认展示基准。
 - **B / Library Light**：A 的完整浅色主题，对应层级、组件、导航和交互完全一致。
-- **C / Now Playing**：A/B 系统中的完整播放页，可随系统主题显示深色或浅色；专辑色只形成受控氛围层。
+- **C / Now Playing**：A/B 系统中的受保护深色专注页。它不改变导航语义或交互架构，但以 Nocturne Graphite 覆盖全窗口；专辑色只形成受控、低频的反光层。
 
 顶层导航的稳定语义 ID 固定为 `Library / Now / Chain`；界面文案需要本地化，英文显示上述名称，简体中文显示 `曲库 / 正在播放 / 链路`：
 
@@ -137,8 +145,10 @@ Signal Moss 是品牌锚点，但单色媒介中几何识别优先于颜色。�
 - 专辑封面圆角 10 dp；控件 12 dp；独立表面 16 dp；只有短状态 chip 使用胶囊形。
 - 默认通过色阶、留白和对齐分层，不以硬分割线和卡片网格分层。
 - mini-player、菜单和底部浮层可使用小范围柔和阴影；普通曲目行无边框、无阴影。
-- 完整播放页可使用专辑封面低频模糊光，但必须叠加稳定遮罩保护文字和控制器。
-- 不支持、性能不足或开启减少透明度时，使用 Carbon Elevated 或 Frost Surface 的不透明回退，布局和可操作性保持不变。
+- 完整播放页的 Now Canvas、Now Dock、Now Raised 与 Now Artwork Frame 是一条连续的石墨材质阶梯；不保留可见紫色上域、绿色/荧光底座或装饰渐变。
+- 真实封面可在 36 dp 模糊后以 22% 输入到 82% Canvas 遮罩后方，最终贡献固定为约 3.96%；文字、状态 chip、控制器和系统图标始终使用固定语义色，不从封面取色。
+- Now Dock 为完全不透明的 `#191F20`，通过单一 20 dp Player Lift 与 Canvas 分离；不使用亮分割线、描边、玻璃卡、第二阴影或霓虹光晕。
+- 不支持、性能不足、减少透明度或无可读封面时，Now 保持完全不透明的 Canvas/Raised 回退，布局和可操作性保持不变。
 
 ## 8. 动效
 
