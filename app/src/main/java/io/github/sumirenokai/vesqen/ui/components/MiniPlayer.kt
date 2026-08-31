@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -29,12 +30,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 
 @Composable
 fun MiniPlayer(
     snapshot: PlaybackSnapshot,
+    currentTrack: AudioTrack?,
     onOpenNow: () -> Unit,
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
@@ -46,7 +49,7 @@ fun MiniPlayer(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 72.dp)
+            .height(72.dp)
             .testTag("vesqen.mini-player"),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.surface),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -64,7 +67,7 @@ fun MiniPlayer(
                     .clickable(onClick = onOpenNow),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AlbumArtwork(modifier = Modifier.size(48.dp))
+                AlbumArtwork(track = currentTrack, modifier = Modifier.size(48.dp))
                 Spacer(Modifier.width(8.dp))
                 Column(
                     modifier = Modifier.weight(1f),

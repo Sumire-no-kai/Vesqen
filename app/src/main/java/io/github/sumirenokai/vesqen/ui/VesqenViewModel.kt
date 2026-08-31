@@ -7,12 +7,14 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.library.AlbumArtworkLoader
 import io.github.sumirenokai.vesqen.library.MediaStoreAudioRepository
 import io.github.sumirenokai.vesqen.playback.PlaybackController
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicLong
 
 enum class MusicAccess {
     NEEDS_PERMISSION,
@@ -37,6 +39,7 @@ data class VesqenUiState(
 class VesqenViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = MediaStoreAudioRepository(application.contentResolver)
     private val connectedOutputs = ConnectedAudioOutputs(application)
+    private val libraryRefreshEpoch = AtomicLong()
     private var playbackController: PlaybackController? = null
 
     var uiState by mutableStateOf(VesqenUiState())
@@ -59,15 +62,27 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         notificationsGranted: Boolean,
         markDeniedWhenMissing: Boolean,
     ) {
+        if (!musicGranted) {
+            libraryRefreshEpoch.incrementAndGet()
+            AlbumArtworkLoader.clearMemoryCache()
+        }
         updateLibrary {
-            it.copy(
-            musicAccess = when {
+            val updatedMusicAccess = when {
                 musicGranted -> MusicAccess.GRANTED
-                markDeniedWhenMissing -> MusicAccess.DENIED
+                // A permission can be revoked while the process is alive. Do not retain a stale
+                // GRANTED state (or its cached artwork) when the lifecycle refresh observes it.
+                markDeniedWhenMissing || it.musicAccess == MusicAccess.GRANTED -> MusicAccess.DENIED
                 else -> it.musicAccess
-            },
-            notificationsAllowed = notificationsGranted,
-            connectedOutputs = connectedOutputs.read(),
+            }
+            it.copy(
+                musicAccess = updatedMusicAccess,
+                notificationsAllowed = notificationsGranted,
+                connectedOutputs = connectedOutputs.read(),
+                // The old MediaStore rows can no longer safely provide metadata or artwork after
+                // revocation. Clear them so AlbumArtwork's produceState receives a null track.
+                tracks = if (updatedMusicAccess == MusicAccess.GRANTED) it.tracks else emptyList(),
+                isLoading = if (updatedMusicAccess == MusicAccess.GRANTED) it.isLoading else false,
+                loadingFailed = if (updatedMusicAccess == MusicAccess.GRANTED) it.loadingFailed else false,
             )
         }
         if (musicGranted) refreshLibrary()
@@ -75,12 +90,20 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     fun refreshLibrary() {
         if (uiState.library.musicAccess != MusicAccess.GRANTED) return
+        val requestEpoch = libraryRefreshEpoch.incrementAndGet()
+        AlbumArtworkLoader.clearMemoryCache()
         updateLibrary {
             it.copy(isLoading = true, loadingFailed = false, connectedOutputs = connectedOutputs.read())
         }
         viewModelScope.launch {
             val result = runCatching {
                 withContext(Dispatchers.IO) { repository.loadTracks() }
+            }
+            if (
+                libraryRefreshEpoch.get() != requestEpoch ||
+                uiState.library.musicAccess != MusicAccess.GRANTED
+            ) {
+                return@launch
             }
             updateLibrary {
                 it.copy(
@@ -103,6 +126,10 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     fun skipToNext() = playbackController?.skipToNext()
 
     fun seekTo(positionMs: Long) = playbackController?.seekTo(positionMs)
+
+    fun toggleShuffle() = playbackController?.toggleShuffle()
+
+    fun cycleRepeatMode() = playbackController?.cycleRepeatMode()
 
     fun refreshPlaybackPosition() = playbackController?.refreshPosition()
 

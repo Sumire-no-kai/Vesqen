@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -17,11 +18,13 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -39,9 +42,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.components.MiniPlayer
 import io.github.sumirenokai.vesqen.ui.navigation.VesqenDestination
 import io.github.sumirenokai.vesqen.ui.navigation.VesqenNavigation
+import io.github.sumirenokai.vesqen.ui.navigation.VesqenNavigationState
 import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
 import io.github.sumirenokai.vesqen.ui.screens.LibraryScreen
 import io.github.sumirenokai.vesqen.ui.screens.NowScreen
@@ -129,6 +134,8 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
         onPlayPause = viewModel::togglePlayback,
         onNext = viewModel::skipToNext,
         onSeek = viewModel::seekTo,
+        onToggleShuffle = viewModel::toggleShuffle,
+        onCycleRepeatMode = viewModel::cycleRepeatMode,
         onRefreshConnectedOutputs = viewModel::refreshConnectedOutputs,
     )
 }
@@ -149,14 +156,46 @@ fun VesqenAppContent(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onSeek: (Long) -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeatMode: () -> Unit,
     onRefreshConnectedOutputs: () -> Unit,
     modifier: Modifier = Modifier,
     motionPolicy: VesqenMotionPolicy? = null,
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     var destinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
-    val destination = VesqenDestination.valueOf(destinationName)
-    val useNavigationRail = LocalConfiguration.current.screenWidthDp >= 600
+    var returnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
+    val navigationState = VesqenNavigationState(
+        destination = VesqenDestination.valueOf(destinationName),
+        returnDestination = VesqenDestination.valueOf(returnDestinationName),
+    )
+    val destination = navigationState.destination
+    val hasFocusedPlayer = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
+    // A protected Now surface owns the whole window. Keeping a light navigation rail beside it
+    // would split the transparent status bar between incompatible backgrounds and make one set of
+    // system icons unreadable. Back remains the deliberate route to the stable top-level shell.
+    val useNavigationRail = LocalConfiguration.current.screenWidthDp >= 600 && !hasFocusedPlayer
+
+    fun applyNavigation(updated: VesqenNavigationState) {
+        destinationName = updated.destination.name
+        returnDestinationName = updated.returnDestination.name
+    }
+
+    fun selectTopLevel(destination: VesqenDestination) {
+        applyNavigation(navigationState.selectTopLevel(destination))
+    }
+
+    fun openChainFromNow() {
+        applyNavigation(navigationState.openChainFromNow())
+    }
+
+    fun navigateBack() {
+        applyNavigation(navigationState.back())
+    }
+
+    BackHandler(enabled = destination != VesqenDestination.LIBRARY) {
+        navigateBack()
+    }
 
     LaunchedEffect(destination) {
         if (destination == VesqenDestination.CHAIN && state.playback.hasActiveTrack) {
@@ -168,7 +207,7 @@ fun VesqenAppContent(
         Row(modifier = modifier.fillMaxSize()) {
             VesqenNavigation(
                 selectedDestination = destination,
-                onDestinationSelected = { destinationName = it.name },
+                onDestinationSelected = ::selectTopLevel,
                 useNavigationRail = true,
                 modifier = Modifier
                     .fillMaxHeight()
@@ -179,7 +218,9 @@ fun VesqenAppContent(
                 destination = destination,
                 showNavigation = false,
                 motionPolicy = appliedMotionPolicy,
-                onDestinationSelected = { destinationName = it.name },
+                onDestinationSelected = ::selectTopLevel,
+                onOpenChainFromNow = ::openChainFromNow,
+                onNavigateBack = ::navigateBack,
                 onRequestMusicAccess = onRequestMusicAccess,
                 onOpenAppSettings = onOpenAppSettings,
                 onOpenNotificationSettings = onOpenNotificationSettings,
@@ -189,6 +230,8 @@ fun VesqenAppContent(
                 onPlayPause = onPlayPause,
                 onNext = onNext,
                 onSeek = onSeek,
+                onToggleShuffle = onToggleShuffle,
+                onCycleRepeatMode = onCycleRepeatMode,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -198,7 +241,9 @@ fun VesqenAppContent(
             destination = destination,
             showNavigation = true,
             motionPolicy = appliedMotionPolicy,
-            onDestinationSelected = { destinationName = it.name },
+            onDestinationSelected = ::selectTopLevel,
+            onOpenChainFromNow = ::openChainFromNow,
+            onNavigateBack = ::navigateBack,
             onRequestMusicAccess = onRequestMusicAccess,
             onOpenAppSettings = onOpenAppSettings,
             onOpenNotificationSettings = onOpenNotificationSettings,
@@ -208,6 +253,8 @@ fun VesqenAppContent(
             onPlayPause = onPlayPause,
             onNext = onNext,
             onSeek = onSeek,
+            onToggleShuffle = onToggleShuffle,
+            onCycleRepeatMode = onCycleRepeatMode,
             modifier = modifier,
         )
     }
@@ -220,6 +267,8 @@ private fun VesqenDestinationFrame(
     showNavigation: Boolean,
     motionPolicy: VesqenMotionPolicy,
     onDestinationSelected: (VesqenDestination) -> Unit,
+    onOpenChainFromNow: () -> Unit,
+    onNavigateBack: () -> Unit,
     onRequestMusicAccess: () -> Unit,
     onOpenAppSettings: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
@@ -229,16 +278,39 @@ private fun VesqenDestinationFrame(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onSeek: (Long) -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeatMode: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val usesFocusedPlayerInsets = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
     val showMiniPlayer = state.playback.hasActiveTrack && destination != VesqenDestination.NOW
+    val showCompactNavigation = showNavigation && destination != VesqenDestination.NOW
+    val currentTrack = state.playback.trackId?.takeIf {
+        state.library.musicAccess == MusicAccess.GRANTED
+    }?.let { id ->
+        state.library.tracks.firstOrNull { it.id == id }
+    }
+    // The controller can reconnect before a freshly-scanned library has been delivered. Retain
+    // Media3's opaque metadata in that brief state so the mini and focus player do not regress to
+    // a branded placeholder merely because the UI map is still empty.
+    val artworkTrack = if (state.library.musicAccess == MusicAccess.GRANTED) {
+        currentTrack ?: state.playback.toArtworkTrackOrNull()
+    } else {
+        null
+    }
     Scaffold(
         modifier = modifier,
+        contentWindowInsets = if (usesFocusedPlayerInsets) {
+            WindowInsets(0, 0, 0, 0)
+        } else {
+            ScaffoldDefaults.contentWindowInsets
+        },
         bottomBar = {
             Column {
                 if (showMiniPlayer) {
                     MiniPlayer(
                         snapshot = state.playback,
+                        currentTrack = artworkTrack,
                         onOpenNow = { onDestinationSelected(VesqenDestination.NOW) },
                         onPrevious = onPrevious,
                         onPlayPause = onPlayPause,
@@ -246,7 +318,7 @@ private fun VesqenDestinationFrame(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }
-                if (showNavigation) {
+                if (showCompactNavigation) {
                     VesqenNavigation(
                         selectedDestination = destination,
                         onDestinationSelected = onDestinationSelected,
@@ -256,14 +328,9 @@ private fun VesqenDestinationFrame(
             }
         },
     ) { innerPadding ->
-        val currentTrack = state.playback.trackId?.let { id ->
-            state.library.tracks.firstOrNull { it.id == id }
-        }
         AnimatedContent(
             targetState = destination,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
+            modifier = Modifier.fillMaxSize(),
             transitionSpec = {
                 val duration = if (
                     targetState == VesqenDestination.NOW && initialState != VesqenDestination.NOW
@@ -284,6 +351,15 @@ private fun VesqenDestinationFrame(
             },
             label = "vesqen-destination",
         ) { activeDestination ->
+            // During destination transitions keep the outgoing focused player edge-to-edge until
+            // it fades out. Applying the incoming Library padding here would flash a white inset.
+            val destinationModifier = if (
+                activeDestination == VesqenDestination.NOW && state.playback.hasActiveTrack
+            ) {
+                Modifier
+            } else {
+                Modifier.padding(innerPadding)
+            }
             when (activeDestination) {
                 VesqenDestination.LIBRARY -> LibraryScreen(
                     state = state.library,
@@ -293,26 +369,46 @@ private fun VesqenDestinationFrame(
                     onOpenNotificationSettings = onOpenNotificationSettings,
                     onRescan = onRescan,
                     onTrackSelected = onTrackSelected,
+                    modifier = destinationModifier,
                 )
 
                 VesqenDestination.NOW -> NowScreen(
                     snapshot = state.playback,
                     currentTrack = currentTrack,
-                    onBackToLibrary = { onDestinationSelected(VesqenDestination.LIBRARY) },
-                    onOpenChain = { onDestinationSelected(VesqenDestination.CHAIN) },
+                    artworkTrack = artworkTrack,
+                    onBackToLibrary = onNavigateBack,
+                    onOpenChain = onOpenChainFromNow,
+                    onToggleShuffle = onToggleShuffle,
                     onPrevious = onPrevious,
                     onPlayPause = onPlayPause,
                     onNext = onNext,
+                    onCycleRepeatMode = onCycleRepeatMode,
                     onSeek = onSeek,
                     onPlayTrack = onTrackSelected,
+                    modifier = destinationModifier,
                 )
 
                 VesqenDestination.CHAIN -> ChainScreen(
                     library = state.library,
                     snapshot = state.playback,
-                    onBackToLibrary = { onDestinationSelected(VesqenDestination.LIBRARY) },
+                    onBackToLibrary = onNavigateBack,
+                    modifier = destinationModifier,
                 )
             }
         }
     }
+}
+
+private fun PlaybackSnapshot.toArtworkTrackOrNull(): AudioTrack? {
+    val sourceUri = mediaUri.takeIf(String::isNotBlank) ?: return null
+    return AudioTrack(
+        id = trackId ?: return null,
+        contentUri = sourceUri,
+        title = title,
+        artist = artist,
+        album = album,
+        durationMs = durationMs,
+        albumArtworkUri = albumArtworkUri,
+        artworkRevision = artworkRevision,
+    )
 }

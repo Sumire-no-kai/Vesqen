@@ -49,7 +49,7 @@ fun TrackRow(
             .clickable(onClick = onPlay),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AlbumArtwork(modifier = Modifier.size(48.dp))
+        AlbumArtwork(track = track, modifier = Modifier.size(48.dp))
         Spacer(Modifier.width(12.dp))
         Column(
             modifier = Modifier.weight(1f),

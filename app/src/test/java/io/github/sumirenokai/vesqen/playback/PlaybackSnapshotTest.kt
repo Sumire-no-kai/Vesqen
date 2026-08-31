@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen.playback
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class PlaybackSnapshotTest {
@@ -19,5 +20,17 @@ class PlaybackSnapshotTest {
     fun `active track is identified by stable MediaStore id rather than title`() {
         assertEquals(false, PlaybackSnapshot(title = "A title is not a session").hasActiveTrack)
         assertEquals(true, PlaybackSnapshot(trackId = 42, title = "").hasActiveTrack)
+    }
+
+    @Test
+    fun `queue position is only exposed when Media3 reports a queue`() {
+        assertNull(PlaybackSnapshot(queueIndex = 3, queueSize = 0).queuePosition)
+        assertEquals(2, PlaybackSnapshot(queueIndex = 8, queueSize = 2).queuePosition)
+    }
+
+    @Test
+    fun `repeat state remains explicit rather than inferred from shuffle`() {
+        assertEquals(PlaybackRepeatMode.OFF, PlaybackSnapshot(shuffleEnabled = true).repeatMode)
+        assertEquals(PlaybackRepeatMode.ONE, PlaybackSnapshot(repeatMode = PlaybackRepeatMode.ONE).repeatMode)
     }
 }

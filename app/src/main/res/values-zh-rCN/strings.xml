@@ -25,6 +25,13 @@
     <string name="play">播放</string>
     <string name="pause">暂停</string>
     <string name="next">下一首</string>
+    <string name="shuffle">随机播放</string>
+    <string name="shuffle_on">随机播放已开启</string>
+    <string name="shuffle_off">随机播放已关闭</string>
+    <string name="repeat">循环</string>
+    <string name="repeat_off">循环关闭</string>
+    <string name="repeat_all">列表循环</string>
+    <string name="repeat_one">单曲循环</string>
     <string name="playback_position">%1$s / %2$s</string>
     <string name="destination_library">曲库</string>
     <string name="destination_now">正在播放</string>
@@ -42,6 +49,7 @@
     <string name="track_row_description">%1$s，%2$s</string>
     <string name="more_track_actions">%1$s 的更多操作</string>
     <string name="track_details">曲目详情</string>
+    <string name="track_information">曲目信息</string>
     <string name="close">关闭</string>
     <string name="detail_title">标题</string>
     <string name="detail_artist">艺术家</string>
@@ -55,6 +63,11 @@
     <string name="now_empty_body">从曲库选择曲目后，这里会显示完整播放页。</string>
     <string name="playback_controls_connecting">正在准备播放控制…</string>
     <string name="playback_progress">播放进度</string>
+    <string name="playback_session">播放会话</string>
+    <string name="playback_state">状态</string>
+    <string name="remaining_time">剩余时间</string>
+    <string name="queue">队列</string>
+    <string name="queue_position">第 %1$d / %2$d 首</string>
     <string name="chain_empty_title">播放链路会显示在这里</string>
     <string name="chain_empty_body">从曲库开始播放一首曲目后，再回来查看当前播放声明。</string>
     <string name="chain_system_mixed_title">由 Android 管理的播放</string>
