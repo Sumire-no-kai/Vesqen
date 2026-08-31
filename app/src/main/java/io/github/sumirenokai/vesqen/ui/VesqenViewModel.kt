@@ -29,16 +29,18 @@ data class LibraryUiState(
     val loadingFailed: Boolean = false,
 )
 
+data class VesqenUiState(
+    val library: LibraryUiState = LibraryUiState(),
+    val playback: PlaybackSnapshot = PlaybackSnapshot(),
+)
+
 class VesqenViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = MediaStoreAudioRepository(application.contentResolver)
     private val connectedOutputs = ConnectedAudioOutputs(application)
     private var playbackController: PlaybackController? = null
 
-    var uiState by mutableStateOf(LibraryUiState())
+    var uiState by mutableStateOf(VesqenUiState())
         private set
-
-    val playbackSnapshot: PlaybackSnapshot
-        get() = playbackController?.snapshot ?: PlaybackSnapshot()
 
     fun initialisePermissions(musicGranted: Boolean, notificationsGranted: Boolean) {
         applyPermissions(musicGranted, notificationsGranted, markDeniedWhenMissing = false)
@@ -49,7 +51,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun updateNotificationPermission(notificationsGranted: Boolean) {
-        uiState = uiState.copy(notificationsAllowed = notificationsGranted)
+        updateLibrary { it.copy(notificationsAllowed = notificationsGranted) }
     }
 
     private fun applyPermissions(
@@ -57,35 +59,41 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         notificationsGranted: Boolean,
         markDeniedWhenMissing: Boolean,
     ) {
-        uiState = uiState.copy(
+        updateLibrary {
+            it.copy(
             musicAccess = when {
                 musicGranted -> MusicAccess.GRANTED
                 markDeniedWhenMissing -> MusicAccess.DENIED
-                else -> uiState.musicAccess
+                else -> it.musicAccess
             },
             notificationsAllowed = notificationsGranted,
             connectedOutputs = connectedOutputs.read(),
-        )
+            )
+        }
         if (musicGranted) refreshLibrary()
     }
 
     fun refreshLibrary() {
-        if (uiState.musicAccess != MusicAccess.GRANTED) return
-        uiState = uiState.copy(isLoading = true, loadingFailed = false, connectedOutputs = connectedOutputs.read())
+        if (uiState.library.musicAccess != MusicAccess.GRANTED) return
+        updateLibrary {
+            it.copy(isLoading = true, loadingFailed = false, connectedOutputs = connectedOutputs.read())
+        }
         viewModelScope.launch {
             val result = runCatching {
                 withContext(Dispatchers.IO) { repository.loadTracks() }
             }
-            uiState = uiState.copy(
-                isLoading = false,
-                tracks = result.getOrDefault(emptyList()),
-                loadingFailed = result.isFailure,
-            )
+            updateLibrary {
+                it.copy(
+                    isLoading = false,
+                    tracks = result.getOrDefault(emptyList()),
+                    loadingFailed = result.isFailure,
+                )
+            }
         }
     }
 
     fun play(track: AudioTrack) {
-        playbackController().playQueue(uiState.tracks, uiState.tracks.indexOf(track))
+        playbackController().playQueue(uiState.library.tracks, uiState.library.tracks.indexOf(track))
     }
 
     fun togglePlayback() = playbackController?.togglePlayback()
@@ -98,12 +106,23 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     fun refreshPlaybackPosition() = playbackController?.refreshPosition()
 
+    fun refreshConnectedOutputs() {
+        updateLibrary { it.copy(connectedOutputs = connectedOutputs.read()) }
+    }
+
     override fun onCleared() {
         playbackController?.release()
         super.onCleared()
     }
 
-    private fun playbackController(): PlaybackController = playbackController ?: PlaybackController(getApplication()).also {
-        playbackController = it
+    private fun playbackController(): PlaybackController = playbackController ?: PlaybackController(
+        context = getApplication(),
+        onSnapshotChanged = { snapshot -> uiState = uiState.copy(playback = snapshot) },
+    ).also { controller ->
+        playbackController = controller
+    }
+
+    private inline fun updateLibrary(transform: (LibraryUiState) -> LibraryUiState) {
+        uiState = uiState.copy(library = transform(uiState.library))
     }
 }
