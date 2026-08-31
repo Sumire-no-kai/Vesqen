@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -39,9 +40,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.components.MiniPlayer
 import io.github.sumirenokai.vesqen.ui.navigation.VesqenDestination
 import io.github.sumirenokai.vesqen.ui.navigation.VesqenNavigation
+import io.github.sumirenokai.vesqen.ui.navigation.VesqenNavigationState
 import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
 import io.github.sumirenokai.vesqen.ui.screens.LibraryScreen
 import io.github.sumirenokai.vesqen.ui.screens.NowScreen
@@ -129,6 +132,8 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
         onPlayPause = viewModel::togglePlayback,
         onNext = viewModel::skipToNext,
         onSeek = viewModel::seekTo,
+        onToggleShuffle = viewModel::toggleShuffle,
+        onCycleRepeatMode = viewModel::cycleRepeatMode,
         onRefreshConnectedOutputs = viewModel::refreshConnectedOutputs,
     )
 }
@@ -149,14 +154,42 @@ fun VesqenAppContent(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onSeek: (Long) -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeatMode: () -> Unit,
     onRefreshConnectedOutputs: () -> Unit,
     modifier: Modifier = Modifier,
     motionPolicy: VesqenMotionPolicy? = null,
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     var destinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
-    val destination = VesqenDestination.valueOf(destinationName)
+    var returnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
+    val navigationState = VesqenNavigationState(
+        destination = VesqenDestination.valueOf(destinationName),
+        returnDestination = VesqenDestination.valueOf(returnDestinationName),
+    )
+    val destination = navigationState.destination
     val useNavigationRail = LocalConfiguration.current.screenWidthDp >= 600
+
+    fun applyNavigation(updated: VesqenNavigationState) {
+        destinationName = updated.destination.name
+        returnDestinationName = updated.returnDestination.name
+    }
+
+    fun selectTopLevel(destination: VesqenDestination) {
+        applyNavigation(navigationState.selectTopLevel(destination))
+    }
+
+    fun openChainFromNow() {
+        applyNavigation(navigationState.openChainFromNow())
+    }
+
+    fun navigateBack() {
+        applyNavigation(navigationState.back())
+    }
+
+    BackHandler(enabled = destination != VesqenDestination.LIBRARY) {
+        navigateBack()
+    }
 
     LaunchedEffect(destination) {
         if (destination == VesqenDestination.CHAIN && state.playback.hasActiveTrack) {
@@ -168,7 +201,7 @@ fun VesqenAppContent(
         Row(modifier = modifier.fillMaxSize()) {
             VesqenNavigation(
                 selectedDestination = destination,
-                onDestinationSelected = { destinationName = it.name },
+                onDestinationSelected = ::selectTopLevel,
                 useNavigationRail = true,
                 modifier = Modifier
                     .fillMaxHeight()
@@ -179,7 +212,9 @@ fun VesqenAppContent(
                 destination = destination,
                 showNavigation = false,
                 motionPolicy = appliedMotionPolicy,
-                onDestinationSelected = { destinationName = it.name },
+                onDestinationSelected = ::selectTopLevel,
+                onOpenChainFromNow = ::openChainFromNow,
+                onNavigateBack = ::navigateBack,
                 onRequestMusicAccess = onRequestMusicAccess,
                 onOpenAppSettings = onOpenAppSettings,
                 onOpenNotificationSettings = onOpenNotificationSettings,
@@ -189,6 +224,8 @@ fun VesqenAppContent(
                 onPlayPause = onPlayPause,
                 onNext = onNext,
                 onSeek = onSeek,
+                onToggleShuffle = onToggleShuffle,
+                onCycleRepeatMode = onCycleRepeatMode,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -198,7 +235,9 @@ fun VesqenAppContent(
             destination = destination,
             showNavigation = true,
             motionPolicy = appliedMotionPolicy,
-            onDestinationSelected = { destinationName = it.name },
+            onDestinationSelected = ::selectTopLevel,
+            onOpenChainFromNow = ::openChainFromNow,
+            onNavigateBack = ::navigateBack,
             onRequestMusicAccess = onRequestMusicAccess,
             onOpenAppSettings = onOpenAppSettings,
             onOpenNotificationSettings = onOpenNotificationSettings,
@@ -208,6 +247,8 @@ fun VesqenAppContent(
             onPlayPause = onPlayPause,
             onNext = onNext,
             onSeek = onSeek,
+            onToggleShuffle = onToggleShuffle,
+            onCycleRepeatMode = onCycleRepeatMode,
             modifier = modifier,
         )
     }
@@ -220,6 +261,8 @@ private fun VesqenDestinationFrame(
     showNavigation: Boolean,
     motionPolicy: VesqenMotionPolicy,
     onDestinationSelected: (VesqenDestination) -> Unit,
+    onOpenChainFromNow: () -> Unit,
+    onNavigateBack: () -> Unit,
     onRequestMusicAccess: () -> Unit,
     onOpenAppSettings: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
@@ -229,9 +272,25 @@ private fun VesqenDestinationFrame(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onSeek: (Long) -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeatMode: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val showMiniPlayer = state.playback.hasActiveTrack && destination != VesqenDestination.NOW
+    val showCompactNavigation = showNavigation && destination != VesqenDestination.NOW
+    val currentTrack = state.playback.trackId?.takeIf {
+        state.library.musicAccess == MusicAccess.GRANTED
+    }?.let { id ->
+        state.library.tracks.firstOrNull { it.id == id }
+    }
+    // The controller can reconnect before a freshly-scanned library has been delivered. Retain
+    // Media3's opaque metadata in that brief state so the mini and focus player do not regress to
+    // a branded placeholder merely because the UI map is still empty.
+    val artworkTrack = if (state.library.musicAccess == MusicAccess.GRANTED) {
+        currentTrack ?: state.playback.toArtworkTrackOrNull()
+    } else {
+        null
+    }
     Scaffold(
         modifier = modifier,
         bottomBar = {
@@ -239,6 +298,7 @@ private fun VesqenDestinationFrame(
                 if (showMiniPlayer) {
                     MiniPlayer(
                         snapshot = state.playback,
+                        currentTrack = artworkTrack,
                         onOpenNow = { onDestinationSelected(VesqenDestination.NOW) },
                         onPrevious = onPrevious,
                         onPlayPause = onPlayPause,
@@ -246,7 +306,7 @@ private fun VesqenDestinationFrame(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }
-                if (showNavigation) {
+                if (showCompactNavigation) {
                     VesqenNavigation(
                         selectedDestination = destination,
                         onDestinationSelected = onDestinationSelected,
@@ -256,9 +316,6 @@ private fun VesqenDestinationFrame(
             }
         },
     ) { innerPadding ->
-        val currentTrack = state.playback.trackId?.let { id ->
-            state.library.tracks.firstOrNull { it.id == id }
-        }
         AnimatedContent(
             targetState = destination,
             modifier = Modifier
@@ -298,11 +355,14 @@ private fun VesqenDestinationFrame(
                 VesqenDestination.NOW -> NowScreen(
                     snapshot = state.playback,
                     currentTrack = currentTrack,
-                    onBackToLibrary = { onDestinationSelected(VesqenDestination.LIBRARY) },
-                    onOpenChain = { onDestinationSelected(VesqenDestination.CHAIN) },
+                    artworkTrack = artworkTrack,
+                    onBackToLibrary = onNavigateBack,
+                    onOpenChain = onOpenChainFromNow,
+                    onToggleShuffle = onToggleShuffle,
                     onPrevious = onPrevious,
                     onPlayPause = onPlayPause,
                     onNext = onNext,
+                    onCycleRepeatMode = onCycleRepeatMode,
                     onSeek = onSeek,
                     onPlayTrack = onTrackSelected,
                 )
@@ -310,9 +370,23 @@ private fun VesqenDestinationFrame(
                 VesqenDestination.CHAIN -> ChainScreen(
                     library = state.library,
                     snapshot = state.playback,
-                    onBackToLibrary = { onDestinationSelected(VesqenDestination.LIBRARY) },
+                    onBackToLibrary = onNavigateBack,
                 )
             }
         }
     }
+}
+
+private fun PlaybackSnapshot.toArtworkTrackOrNull(): AudioTrack? {
+    val sourceUri = mediaUri.takeIf(String::isNotBlank) ?: return null
+    return AudioTrack(
+        id = trackId ?: return null,
+        contentUri = sourceUri,
+        title = title,
+        artist = artist,
+        album = album,
+        durationMs = durationMs,
+        albumArtworkUri = albumArtworkUri,
+        artworkRevision = artworkRevision,
+    )
 }

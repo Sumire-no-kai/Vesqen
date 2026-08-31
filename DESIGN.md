@@ -297,6 +297,8 @@ Translucency is purposeful. The full player may use a protected, low-frequency a
 
 - **Structure:** Large artwork, expanded title/artist, factual route chip, scrubber, primary playback controls, and overflow.
 - **Atmosphere:** Artwork may tint a blurred background behind a stable dark scrim. Controls retain semantic colors and do not sample arbitrary artwork colors.
+- **Focus mode:** On compact windows, Now is a full-height listening surface rather than a squeezed destination panel. Bottom navigation yields its space to the player; toolbar Back and Android Back return to the originating destination, while the factual route chip remains the deliberate path to Chain.
+- **Progressive session information:** Horizontal paging may reveal only live facts the current player exposes (play state, elapsed/remaining time, queue position, and output declaration). The circled information action opens track metadata; it does not invent codec, sample-rate, PCM, or proof telemetry.
 - **Details:** Overflow opens an inline sheet for track details; Chain remains the authoritative path for route and proof data.
 
 ### Navigation

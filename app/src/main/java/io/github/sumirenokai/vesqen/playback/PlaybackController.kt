@@ -2,6 +2,7 @@ package io.github.sumirenokai.vesqen.playback
 
 import android.content.ComponentName
 import android.content.Context
+import android.net.Uri
 import androidx.core.content.ContextCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -107,6 +108,24 @@ class PlaybackController(
         controller?.seekTo(positionMs.coerceAtLeast(0))
     }
 
+    fun toggleShuffle() {
+        controller?.let { activeController ->
+            activeController.shuffleModeEnabled = !activeController.shuffleModeEnabled
+            publish(activeController)
+        }
+    }
+
+    fun cycleRepeatMode() {
+        controller?.let { activeController ->
+            activeController.repeatMode = when (activeController.repeatMode) {
+                Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                else -> Player.REPEAT_MODE_OFF
+            }
+            publish(activeController)
+        }
+    }
+
     fun refreshPosition() {
         controller?.let(::publish)
     }
@@ -126,6 +145,9 @@ class PlaybackController(
             isControllerReady = true,
             isPlaying = player.isPlaying,
             trackId = item?.mediaId?.toLongOrNull(),
+            mediaUri = track?.contentUri ?: item?.localConfiguration?.uri?.toString().orEmpty(),
+            albumArtworkUri = track?.albumArtworkUri ?: metadata?.artworkUri?.toString(),
+            artworkRevision = track?.artworkRevision ?: 0,
             title = track?.title ?: metadata?.title?.toString().orEmpty(),
             artist = track?.artist ?: metadata?.artist?.toString().orEmpty(),
             album = track?.album ?: metadata?.albumTitle?.toString().orEmpty(),
@@ -133,6 +155,10 @@ class PlaybackController(
             positionMs = player.currentPosition.coerceAtLeast(0),
             hasPrevious = player.hasPreviousMediaItem(),
             hasNext = player.hasNextMediaItem(),
+            shuffleEnabled = player.shuffleModeEnabled,
+            repeatMode = player.repeatMode.toPlaybackRepeatMode(),
+            queueIndex = player.currentMediaItemIndex.coerceAtLeast(0),
+            queueSize = player.mediaItemCount,
             ),
         )
     }
@@ -142,17 +168,24 @@ class PlaybackController(
         onSnapshotChanged(updated)
     }
 
-    private fun AudioTrack.toMediaItem(): MediaItem = MediaItem.Builder()
-        .setMediaId(id.toString())
-        .setUri(contentUri)
-        .setMediaMetadata(
-            MediaMetadata.Builder()
-                .setTitle(title)
-                .setArtist(artist)
-                .setAlbumTitle(album)
-                .build(),
-        )
-        .build()
+    private fun AudioTrack.toMediaItem(): MediaItem {
+        val metadata = MediaMetadata.Builder()
+            .setTitle(title)
+            .setArtist(artist)
+            .setAlbumTitle(album)
+        albumArtworkUri?.takeIf(String::isNotBlank)?.let { metadata.setArtworkUri(Uri.parse(it)) }
+        return MediaItem.Builder()
+            .setMediaId(id.toString())
+            .setUri(contentUri)
+            .setMediaMetadata(metadata.build())
+            .build()
+    }
+
+    private fun Int.toPlaybackRepeatMode(): PlaybackRepeatMode = when (this) {
+        Player.REPEAT_MODE_ALL -> PlaybackRepeatMode.ALL
+        Player.REPEAT_MODE_ONE -> PlaybackRepeatMode.ONE
+        else -> PlaybackRepeatMode.OFF
+    }
 
     private data class PendingQueue(
         val tracks: List<AudioTrack>,

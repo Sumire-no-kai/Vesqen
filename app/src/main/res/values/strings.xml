@@ -25,6 +25,13 @@
     <string name="play">Play</string>
     <string name="pause">Pause</string>
     <string name="next">Next</string>
+    <string name="shuffle">Shuffle</string>
+    <string name="shuffle_on">Shuffle on</string>
+    <string name="shuffle_off">Shuffle off</string>
+    <string name="repeat">Repeat</string>
+    <string name="repeat_off">Repeat off</string>
+    <string name="repeat_all">Repeat all</string>
+    <string name="repeat_one">Repeat one</string>
     <string name="playback_position">%1$s of %2$s</string>
     <string name="destination_library">Library</string>
     <string name="destination_now">Now</string>
@@ -42,6 +49,7 @@
     <string name="track_row_description">%1$s by %2$s</string>
     <string name="more_track_actions">More actions for %1$s</string>
     <string name="track_details">Track details</string>
+    <string name="track_information">Track information</string>
     <string name="close">Close</string>
     <string name="detail_title">Title</string>
     <string name="detail_artist">Artist</string>
@@ -55,6 +63,11 @@
     <string name="now_empty_body">Your full player appears after you choose a track from Library.</string>
     <string name="playback_controls_connecting">Preparing playback controls…</string>
     <string name="playback_progress">Playback progress</string>
+    <string name="playback_session">Playback session</string>
+    <string name="playback_state">State</string>
+    <string name="remaining_time">Remaining</string>
+    <string name="queue">Queue</string>
+    <string name="queue_position">%1$d of %2$d</string>
     <string name="chain_empty_title">Playback evidence appears here</string>
     <string name="chain_empty_body">Start a track from Library, then return to inspect the current playback declaration.</string>
     <string name="chain_system_mixed_title">Android-managed playback</string>

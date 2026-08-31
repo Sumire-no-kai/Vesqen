@@ -164,3 +164,50 @@ M1-A 只实现本地媒体库到系统混音播放的最小闭环：
 1. 在干净 Android 模拟器或另一台设备重新获得 Compose runner 的非空完成报告，并覆盖有真实本地媒体时的 mini-player、Now、详情与 Chain 状态；若继续使用本 vivo，需由设备所有者明确确认“未知来源”安装提示后再诊断，期间不并发使用 UI 自动化工具。
 2. 在深色系统、字体缩放、TalkBack、减少动效以及宽窗口上补充设备级截图/自动化证据。
 3. 后续 M 阶段接入可审计的输出链路数据前，继续只显示 `SYSTEM MIXED`，不扩展为 direct、独占或 bit-perfect 声称。
+
+## 2026-08-31 · 播放器焦点页与真实封面修复
+
+### 触发与范围
+
+本轮工作位于 `codex/refine-player-experience`，由真实 Android 15 设备上的播放状态复现触发。复现确认了以下体验问题：本机曲目明明存在系统可显示的封面，但 Vesqen 始终绘制品牌占位；旧安装包的 mini-player 将 `SYSTEM MIXED` 挤成两行；Now 使用可纵向滚动的列表并保留底部导航，进度轨道过重；随机、循环、信息入口与会话信息层缺失；系统 Back 未被单 Activity 拦截而直接回到桌面。
+
+本轮只修复这些 M1 体验/元数据路径，不扩大为输出证明、音频格式遥测、直接输出或 bit-perfect 工作。
+
+### 实现记录
+
+| 项目 | 结果 |
+| --- | --- |
+| 真实封面 | `AudioTrack` 与 MediaStore 查询补充 `ALBUM_ID`、provider-owned album artwork URI、修改时间与扫描 revision。`AlbumArtworkLoader` 在 IO 线程使用 Android 10+ `ContentResolver.loadThumbnail()`，先查专辑 collection、再安全地尝试具体媒体 item；只用 `content://` URI、16 MiB 进程内缓存，不复制用户封面到磁盘。Media3 控制器重连但曲库尚未回填时，快照也会把 source/artwork URI 回传给 mini-player 和 Now。无法读取时才显示 Twin Paths 中性占位，播放不会因此失败。 |
+| 封面兼容性与缓存决策 | 不使用 Android 10+ 已弃用的 `ALBUM_ART` 文件路径；同一扫描内 album provider 缩略图按 artwork URI/尺寸/revision 共享，媒体 item 缩略图则按曲目 URI/修改时间/尺寸隔离。相同 key 的并发请求会合并，失败结果短暂负缓存。重扫或撤销音乐权限会提升 cache epoch、清空缓存和进行中的 key；旧任务允许自然结束但不能写回新一代缓存。撤权同时清除 Library 里的旧媒体行，`AlbumArtwork` 在新请求前同步置空 state；异步曲库扫描也有 refresh epoch，过期或撤权后的结果不能重新写回曲库。M1 不调用 `MediaMetadataRetriever.embeddedPicture`：该 API 会在应用检查大小前分配完整 APIC byte array；低版本/异常媒体的有界内嵌封面解析留给具备专门格式测试的后续工作。 |
+| mini-player | 固定为 72 dp 单行：真实封面、标题/艺术家、上一首、播放/暂停、下一首。`SYSTEM MIXED` 不再属于 mini-player，且新增 320 dp 宽回归用例避免状态文案重新挤占标题空间。 |
+| Now 焦点页 | 删除 `LazyColumn`，紧凑窗口隐藏底部导航，改为无纵向滚动的约束式全高播放页。曲名固定为较小的单行；超长名称使用横向跑马灯而不换行。短屏/大字体按层级缩小封面和间距；极端字体缩放会把次要 artist/route chip 留在横向会话页，优先保证进度、五键控制和 `i` 入口始终可见。它采用正式设计板 C 的受保护 Midnight Violet 焦点面、真实封面低强度氛围、4 dp 可视进度轨道/12 dp thumb/48 dp 触控区与五键控制布局。 |
+| 播放能力 | `PlaybackSnapshot` 与 `PlaybackController` 现在传递 Media3 的随机、循环（关闭/列表/单曲）和队列位置状态；随机、循环按钮调用真实 Media3 setter，不是仅改变图标。 |
+| 信息层 | 底部圆形 `i` 打开曲目详情；Now 可左右滑至播放会话页，显示真实的播放状态、已播放/剩余时间、队列位置及 `SYSTEM MIXED` → Chain 入口。不会补写当前实现没有的 PCM、码率、采样率、直出或 bit-perfect 数据。 |
+| Android Back | 新增纯 `VesqenNavigationState`：mini-player → Now 的 Back 返回 Library；Now 内进入 Chain 的 Back 先回 Now，再回 Library；Library 才交给系统退出。Now 详情打开时 Back 先关闭详情。工具栏 Back 与系统 Back 共用同一状态机。 |
+
+### 设计与缺陷决策
+
+| 决策/问题 | 处理与理由 |
+| --- | --- |
+| 正式 C 版与浅色曲库如何一致 | Library 仍可有深浅两套完整主题；有活动曲目的 Now 作为受保护的深色听音焦点面，直接对齐正式视觉板 C。该空间例外已同步到 PRD 和 `DESIGN.md`，不新增顶层目的地，返回后恢复稳定导航。 |
+| 是否用纵向滚动容纳短屏内容 | 不使用。标题永远单行，长标题横向跑马灯；封面、间距和极端字体缩放下的次要信息会按可用高度收缩或移入已有横向会话页，避免“播放器页面上下还有空白可滑”的行为。 |
+| 第一次封面组件编译 | Compose 的委托状态不能被 smart-cast；已将状态读取为局部不可变 bitmap 再渲染，随后重新编译通过。 |
+| 提交前封面审查 | 将“重新扫描后仍命中旧图”、同一专辑列表行重复解码、权限撤销后 Compose 保留旧 bitmap、清理前任务回写、旧扫描结果在撤权后写回，以及 Media3 重连时退回占位列为 P1，并在提交前直接修复。审查还确认 `embeddedPicture` 的后置 byte 限制不能阻止前置分配，故 M1 直接禁用该不安全回退而非留下错误的“已防护”结论。 |
+| 真机更新安装 | 设备 Package Installer 再次要求所有者勾选“未知来源”风险确认才可继续。没有勾选、没有绕过，也已关闭安装器；因此新 APK 的真机视觉/手势结果仍待所有者明确确认安装后复验。 |
+| 实机复现复核 | 再次启动当前已安装包并执行实际向上滑动，确认它仍是旧版：mini-player 仍有两行 `SYSTEM MIXED`，Now 仍为大号双行标题和纵向可滑白色页面。此证据不能代表新源码已部署，恰好说明必须先由设备所有者完成系统安装确认后再验收。 |
+| 诊断截图 | 已查看旧版 Library、mini-player 和 Now 的真实截图，用于确认问题；首次三张 `C:\tmp` PNG、设备临时 UI XML，以及本次四张可视化目录临时 PNG 均已删除，未进入仓库。 |
+
+### 验证记录
+
+| 检查 | 环境/命令 | 结果 |
+| --- | --- | --- |
+| JVM 回归测试 | `./gradlew.bat :app:testDebugUnitTest --rerun-tasks --stacktrace` | **已通过**：6 个 suite、13 个测试，0 failures、0 errors。覆盖新增封面缓存 key、队列位置/循环状态和 Back 状态机。 |
+| 完整本地质量门禁 | `./gradlew.bat testDebugUnitTest lintDebug assembleDebug :app:compileDebugAndroidTestKotlin --stacktrace` | **已通过**：Debug APK 可组装、lint 无错误、JVM 测试任务通过；Compose UI 回归源码可编译，覆盖 mini 无 `SYSTEM MIXED`、320 dp 行高、横滑信息、详情、扩展控制，以及 480 dp 高/2×字体下长标题单行和基础控制可见性。 |
+| 新 APK 真机 UI/手势 | Android 15 物理设备 | **待验证 / 未绕过系统安全确认**：APK 已构建，但安装被设备所有者确认步骤拦截。旧安装包只用于问题复现，不能替代新版验证。 |
+| Compose 仪器测试执行 | `connectedDebugAndroidTest` | **待验证**：此前 UTP 安装阶段没有取得有效完成报告；本轮因同一设备安装确认门槛未重复运行，不把测试源码可编译误报为已执行。 |
+
+### 后续验证
+
+1. 由设备所有者确认测试 APK 安装后，复验真实 MediaStore 封面在 Library / mini-player / Now 的三处一致性，随机/循环状态、横滑会话页、工具栏 Back 与系统手势 Back。
+2. 在模拟器或另一台设备取得 Compose runner 的非空完成报告，覆盖新增 320 dp 断言与 horizontal pager 手势。
+3. 在深色/浅色 Library、字体缩放、TalkBack、减少动效和宽窗口中补齐设备级视觉验证；Now 的深色焦点面与可访问的可读性回退必须同时检查。

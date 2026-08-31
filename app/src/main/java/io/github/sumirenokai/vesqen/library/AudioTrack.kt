@@ -11,6 +11,17 @@ data class AudioTrack(
     val artist: String,
     val album: String,
     val durationMs: Long,
+    /**
+     * MediaStore album identity and its provider-owned artwork URI. Neither value is a filesystem
+     * path; callers must treat the URI as temporary MediaStore access rather than a persistable
+     * grant.
+     */
+    val albumId: Long? = null,
+    val albumArtworkUri: String? = null,
+    /** MediaStore modification time, used only to invalidate in-memory artwork thumbnails. */
+    val dateModifiedSeconds: Long = 0,
+    /** In-process scan revision so an explicit rescan can refresh provider artwork. */
+    val artworkRevision: Long = 0,
 ) {
     fun displaySubtitle(): String =
         listOf(artist, album)
