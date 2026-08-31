@@ -270,9 +270,10 @@ M1-A 只实现本地媒体库到系统混音播放的最小闭环：
 
 | 检查 | 环境/命令 | 结果 |
 | --- | --- | --- |
-| 本地质量门禁 | `./gradlew.bat testDebugUnitTest lintDebug assembleDebug :app:compileDebugAndroidTestKotlin --stacktrace`；随后 `:app:testDebugUnitTest --rerun-tasks` | **已通过**：Debug APK 组装、lint 与 Android Compose 测试源码编译均成功；新鲜 JVM 回归为 6 个 suite、13 个测试、0 failures、0 errors。新增用例覆盖一个循环控件的三态轮换/无障碍状态，以及切歌后封面舞台与运输控制保持可达。 |
-| 真机安装一致性 | Android 15 物理设备 | **待用户确认 / 不计为通过**：正常 `adb install -r` 已唤起系统 Package Installer 的更新确认页；设备已安装包的 SHA-256 仍是上一版，故不能把当前源码写作已部署，也没有绕过确认页。 |
-| 真机交互与动效核查 | Android 15 物理设备、真实本地媒体 | **待验证**：将在设备所有者完成正常更新确认后，逐项检查 Off/All/One、随机状态、上一首/下一首定向过渡、进入/返回，以及退出后系统栏恢复。核查截图与设备临时 UI 文件仍按既定规则查看后删除。 |
+| 本地质量门禁 | `./gradlew.bat testDebugUnitTest lintDebug assembleDebug :app:compileDebugAndroidTestKotlin --stacktrace`；随后 `:app:testDebugUnitTest --rerun-tasks` 与 `:app:compileDebugAndroidTestKotlin` | **已通过**：Debug APK 组装、lint 与 Android Compose 测试源码编译均成功；新鲜 JVM 回归为 6 个 suite、13 个测试、0 failures、0 errors。新增用例覆盖一个循环控件的三态轮换/无障碍状态、切歌后封面舞台与运输控制保持可达，以及 320×480 dp/2× 字号、360×533 dp/2× 字号、640×320 dp 下未裁切的原始 bounds 与 48 dp 触控范围。 |
+| 真机安装一致性 | Android 15 物理设备 | **已通过**：设备所有者完成系统更新确认后，本地 Debug APK 与设备已安装包的 SHA-256 一致；应用可读取真实本地媒体。未绕过 Package Installer 的安全确认。 |
+| 真机交互与动效核查 | Android 15 物理设备、真实本地媒体 | **已通过（UI/交互范围）**：单一循环入口依次呈现关闭→列表循环→单曲循环→关闭，随机反馈可开关并复原；上一首/下一首实际改变当前曲目身份而运输控制保持位置；受控页内纵向手势不移动播放器几何；系统 Back 与工具栏 Back 都回到曲库；crash buffer 为空。截图和设备 UI XML 均在查看后删除。动效时长由代码和测试策略约束，未将人工观察写作精确时序测量。 |
+| Compose 仪器测试执行 | `./gradlew.bat connectedDebugAndroidTest --console=plain --stacktrace` | **未获得有效完成报告 / 不计为通过**：测试部署后只记录到首个用例启动，设备前台随后切换为另一项正在运行的工作，未生成通过或失败结果；没有 Vesqen crash 记录。只终止了本轮已确认挂起的两个本机 Gradle 测试进程，未干预设备上的其他任务。后续应在空闲设备或模拟器重跑。 |
 
 ### 后续步骤
 

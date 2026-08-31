@@ -40,7 +40,9 @@ import io.github.sumirenokai.vesqen.ui.VesqenAppContent
 import io.github.sumirenokai.vesqen.ui.VesqenUiState
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
+import kotlin.math.abs
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -430,6 +432,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.player-page").assert(
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
         )
+        assertFocusedNowControlsAreFullyVisible()
         composeRule.onNodeWithTag("vesqen.now.info-pager").performTouchInput { swipeLeft() }
         composeRule.onNodeWithTag("vesqen.now.info.chain").assertIsDisplayed()
     }
@@ -504,6 +507,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.player-page").assert(
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
         )
+        assertFocusedNowControlsAreFullyVisible()
     }
 
     @Test
@@ -539,6 +543,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.player-page").assert(
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
         )
+        assertFocusedNowControlsAreFullyVisible()
     }
 
     @Test
@@ -598,6 +603,81 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.shuffle").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.repeat").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.info").assertIsDisplayed()
+        assertFocusedNowControlsAreFullyVisible()
+    }
+
+    private fun assertFocusedNowControlsAreFullyVisible() {
+        assertNodesAreFullyVisibleIn(
+            containerTag = "vesqen.now.focus-surface",
+            tags = arrayOf("vesqen.now.back"),
+        )
+        assertNodesAreFullyVisibleIn(
+            containerTag = "vesqen.now.player-page",
+            tags = arrayOf(
+                "vesqen.now.title",
+                "vesqen.now.progress",
+                "vesqen.now.previous",
+                "vesqen.now.play-pause",
+                "vesqen.now.next",
+                "vesqen.now.shuffle",
+                "vesqen.now.repeat",
+                "vesqen.now.info",
+            ),
+        )
+
+        val title = composeRule.onNodeWithTag("vesqen.now.title").fetchSemanticsNode()
+        val primaryTransport = composeRule.onNodeWithTag("vesqen.now.play-pause").fetchSemanticsNode()
+        assertTrue(
+            "Now title must remain a single transport-row height",
+            title.size.height <= primaryTransport.size.height,
+        )
+    }
+
+    private fun assertNodesAreFullyVisibleIn(
+        containerTag: String,
+        tags: Array<String>,
+    ) {
+        val containerBounds = composeRule.onNodeWithTag(containerTag).fetchSemanticsNode().boundsInRoot
+        val minimumTouchTargetPx = with(composeRule.density) { 48.dp.toPx() }
+        val epsilon = 1f
+        val touchTargetTags = setOf(
+            "vesqen.now.back",
+            "vesqen.now.progress",
+            "vesqen.now.previous",
+            "vesqen.now.play-pause",
+            "vesqen.now.next",
+            "vesqen.now.shuffle",
+            "vesqen.now.repeat",
+            "vesqen.now.info",
+        )
+
+        tags.forEach { tag ->
+            val node = composeRule.onNodeWithTag(tag).fetchSemanticsNode()
+            val visibleBounds = node.boundsInRoot
+            assertTrue(
+                "$tag must not be vertically clipped",
+                abs(visibleBounds.height - node.size.height) <= epsilon,
+            )
+            assertTrue(
+                "$tag must not be horizontally clipped",
+                abs(visibleBounds.width - node.size.width) <= epsilon,
+            )
+            assertTrue(
+                "$tag must remain inside its Now container",
+                visibleBounds.left >= containerBounds.left - epsilon &&
+                    visibleBounds.top >= containerBounds.top - epsilon &&
+                    visibleBounds.right <= containerBounds.right + epsilon &&
+                    visibleBounds.bottom <= containerBounds.bottom + epsilon,
+            )
+            if (tag in touchTargetTags) {
+                val touchBounds = node.touchBoundsInRoot
+                assertTrue(
+                    "$tag must preserve the 48dp minimum touch target",
+                    touchBounds.width + epsilon >= minimumTouchTargetPx &&
+                        touchBounds.height + epsilon >= minimumTouchTargetPx,
+                )
+            }
+        }
     }
 
     private fun render(
