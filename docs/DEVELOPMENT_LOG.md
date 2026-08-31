@@ -240,7 +240,7 @@ M1-A 只实现本地媒体库到系统混音播放的最小闭环：
 | 本地质量门禁 | `./gradlew.bat testDebugUnitTest lintDebug assembleDebug :app:compileDebugAndroidTestKotlin --stacktrace` | **已通过**：6 个 JVM suite、13 个测试，0 failures、0 errors、0 skipped；lint 无错误；Debug APK 与 Android 测试源码均可组装/编译。 |
 | 播放页修复 APK 部署一致性 | Android 15 物理设备 | **已通过**：播放器布局修复的本地 Debug APK SHA-256 `D6227A37AD46F9DA8CE2764C62C0A958F4496426431580D901E3EDA110CFDCD5` 与设备已安装 `base.apk` 一致；应用更新后曲库可读。 |
 | 播放页真机手动回归 | Android 15 浅色系统、真实本地媒体 | **已通过（UI/交互范围）**：该布局修复 APK 启动后进入 Now；真实封面、深色系统栏、封面舞台、运输台和高对比上下曲已进行屏幕核查；纵向上滑后主控边界不变；下一首实际切换、上一首恢复原曲，播放/暂停可往返切换，Android Back 返回曲库；未见应用 `FATAL EXCEPTION`。临时截图和设备 UI XML 均已删除。 |
-| 系统栏衔接修复部署 | 最新本地 Debug APK SHA-256 `6F0D46266FB7E75B9A1F3158C95476A68BE761D6ADD16EB97554AEBFA378AA08` | **待真机复验 / 不计为通过**：本地构建、lint 与测试门禁通过；设备安装器要求所有者在屏幕上确认更新，自动输入未能代替该受保护操作。因此不能把该 APK 宣称为已部署或已视觉验收。 |
+| 系统栏衔接修复部署 | Android 15 物理设备、最新本地 Debug APK SHA-256 `6F0D46266FB7E75B9A1F3158C95476A68BE761D6ADD16EB97554AEBFA378AA08` | **已通过（手势导航）**：设备已安装的 `base.apk` 与本地 APK 哈希一致；进入 Now 后人工核查状态栏延续 Midnight Violet 场景、底部手势导航区延续 transport dock 的 `surfaceContainer`，未见自动 contrast scrim 或紫色断层。临时截图和设备 UI XML 已删除。三键导航未验证，未更改设备系统设置。 |
 | Compose 仪器测试执行 | `:app:connectedDebugAndroidTest` 与直接安装测试 APK | **未执行 / 不计为通过**：Gradle 仅生成测试 APK，未产生运行结果；设备对第三方测试 APK 强制要求所有者指纹验证。未绕过或关闭该保护。该尝试清除了目标应用但没有安装测试包，已立即重装上述精确 Debug APK、复核哈希并恢复原有运行时权限。 |
 
 ### 后续验证
