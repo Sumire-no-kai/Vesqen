@@ -64,6 +64,9 @@
     <string name="playback_controls_connecting">Preparing playback controls…</string>
     <string name="playback_progress">Playback progress</string>
     <string name="playback_session">Playback session</string>
+    <string name="album_artwork">Album artwork</string>
+    <string name="show_playback_session">Show playback session</string>
+    <string name="show_album_artwork">Show album artwork</string>
     <string name="playback_state">State</string>
     <string name="remaining_time">Remaining</string>
     <string name="queue">Queue</string>

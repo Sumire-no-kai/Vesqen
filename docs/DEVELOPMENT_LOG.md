@@ -313,3 +313,41 @@ M1-A 只实现本地媒体库到系统混音播放的最小闭环：
 1. 在设备空闲且由所有者确认后，安装隔离构建的 APK，核查上述 Now 视觉场景并在查看后删除临时截图/UI XML。
 2. 设备级截图确认前不合并本分支；截图通过后创建 PR、等待 CI，再按 Git workflow 合并。
 3. 继续将 `SYSTEM MIXED` 限定为 M1 事实声明，不由新的光影或封面呈现推导 direct、独占、无损或 bit-perfect 结论。
+
+## 2026-08-31 · Now 固定骨架与会话原位过渡
+
+### 触发与范围
+
+真机反馈指出原来的 Now 会在左右滑动时像相册一样拖动整张页面：封面、信息页和底部运输台一起离开/进入，既破坏了播放器的空间连续性，也让原本应该始终可用的主控制显得不稳定。本轮仍在 `codex/rework-now-materials`，重做 Now 内部会话信息的交互层级，并同时修复真机复现的上一首/下一首可见却不可执行问题；不改变 M1 的事实声明边界，也不把会话升级为新的顶层目的地。
+
+### 设计与实现决策
+
+| 决策/问题 | 处理与理由 |
+| --- | --- |
+| 为什么不能仅调 Pager 的动画参数 | 根因是 `HorizontalPager` 承载了两张各自拥有 dock 的完整页面；即使减慢或淡化位移，用户仍会感到整页像照片一样被替换。直接删除 Pager 与 page state。 |
+| 上一首/下一首为什么会显示可点却不切歌 | 真机复现表明 timeline 的 `hasPrevious/hasNext` 不等于当前 MediaSession 已授权专用上一/下一首命令。执行路线改为：优先使用 shuffle-aware 的相邻 index + `seekToDefaultPosition`；专用命令可用时再回退；两者均不可执行时以 `canSkipPrevious/canSkipNext` 禁用 mini-player 与 Now 控件，避免假可用状态。该选择以纯函数单元测试和真机来回切歌回归保护。 |
+| 哪些元素必须固定 | Nocturne Canvas/封面反光、系统栏、Now 页头与 Back、一个运输台、曲目身份、route chip、进度、上一首/播放暂停/下一首、随机、循环和 `i` 始终留在同一空间位置。 |
+| 会话信息如何可发现 | 原分页点替换为 dock 中央明确可点的“播放会话 / 专辑封面”入口；`i` 继续只打开曲目详情，职责不混淆。TalkBack 同时得到动作描述与当前状态。 |
+| 如何避免生硬切屏 | 仅上部固定尺寸的 focus stage 在封面与会话事实卡间使用 `AnimatedContent` 的受控淡入淡出与 0.985 微缩放；不使用 horizontal slide、整页拖动或布局重排。减少动效时退化为现有的短交叉淡入淡出。 |
+| 切歌时为什么仍需要局部方向动效 | 会话开关只以 focus content 为 target，不能因此丢失上一首/下一首的封面过渡。Artwork 分支内部继续以 track presentation 为 target，保留 220 ms、受固定 stage 裁切的定向淡入/微缩放；身份和运输台不横移。 |
+| 返回行为 | Android Back 的优先级为：曲目详情 → 已展开的播放会话 → 既有的 Now 返回来源逻辑。因此查看会话不会让一次返回直接离开播放器。 |
+| 小屏/大字体 | 会话卡与封面共享同一个上部 stage；紧凑状态省略标题和剩余时间，极端字号再把会话卡收敛为状态与队列，进度仍由固定运输台提供，避免在 112 dp stage 中裁切或滚动。此时 route chip 改为 footer 内唯一的 48 dp AccountTree → Chain 入口；窄宽 footer 的随机/会话/循环/详情则改为四颗均分的 48 dp 图标，消除中间文字按钮与右侧控件重叠。 |
+| 规范一致性 | `DESIGN.md` 和 PRD 已将“横向分页/横向切换”改为“明确会话入口 + 原位内容过渡”，避免未来实现重新引入照片式分页。 |
+
+### 验证记录
+
+| 检查 | 环境/命令 | 结果 |
+| --- | --- | --- |
+| Kotlin 与 Android Compose 测试源码编译 | `./gradlew.bat :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin --stacktrace` | **已通过**。 |
+| JVM 回归 | `./gradlew.bat testDebugUnitTest --rerun-tasks` | **已通过**：8 个 suite、20 个测试、0 failures、0 errors；包括相邻曲目执行路线的纯函数覆盖。 |
+| Lint 与 Android UI 测试编译 | `./gradlew.bat testDebugUnitTest lintDebug :app:compileDebugAndroidTestKotlin --rerun-tasks --stacktrace` | **已通过**：最终工作树的 lint 为 0 errors、13 条既有 warnings；Android Compose 测试源码可编译。 |
+| Compose UI 回归覆盖 | `VesqenAppTest` 源码 | **已编译**：会话显式入口、左滑不切换会话、切换前后固定壳层 bounds 相同、无 horizontal scroll 语义、Android Back 先收起会话，以及 320 dp/2×字号下会话卡、footer 触控边界和极端字号 Chain 入口均有源码回归。有效 runner 报告仍待空闲设备或模拟器。 |
+| Impeccable 静态复核 | `detect.mjs --json NowScreen.kt` | **无命中**；该结果只辅助代码审查，不能替代实机动效与视觉验收。 |
+| 真机安装与视觉回归 | Android 15 物理设备、真实本地媒体 | **已通过（普通字体/实际交互范围）**：最终隔离 Debug APK 与设备安装包一致。横向滑动不会打开会话；明确入口才会原位打开会话，header、进度与固定运输台控件 bounds 在前后相同，footer 无重叠，UI tree 无横向 scroll 节点。Android Back 先收起会话，再从 Now 回曲库；上一首/下一首实际改变并复原曲目；正常 route chip 仍能进入 Chain；本轮 crash buffer 无应用记录。临时截图与 UI XML 将在记录后删除。 |
+| Compose 仪器测试执行 | `connectedDebugAndroidTest` | **仍待有效 runner 报告 / 不计为通过**：本轮未在用户设备上重新部署测试 APK，以免打断设备当前的手动验收；源码编译、JVM 回归和手动真机检查不能替代该门禁。 |
+
+### 后续步骤
+
+1. 由设备所有者在最终包上确认 Now 的视觉与交互感受；确认前不创建或合并 PR。
+2. 获得独立的空闲设备/模拟器窗口后，重跑 `connectedDebugAndroidTest` 并取得完整 runner 报告；不要把当前的手动验收替代为仪器测试通过。
+3. 继续将 `SYSTEM MIXED` 限定为 M1 事实声明，不由新的光影或封面呈现推导 direct、独占、无损或 bit-perfect 结论。

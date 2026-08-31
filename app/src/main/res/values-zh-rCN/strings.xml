@@ -64,6 +64,9 @@
     <string name="playback_controls_connecting">正在准备播放控制…</string>
     <string name="playback_progress">播放进度</string>
     <string name="playback_session">播放会话</string>
+    <string name="album_artwork">专辑封面</string>
+    <string name="show_playback_session">查看播放会话</string>
+    <string name="show_album_artwork">查看专辑封面</string>
     <string name="playback_state">状态</string>
     <string name="remaining_time">剩余时间</string>
     <string name="queue">队列</string>

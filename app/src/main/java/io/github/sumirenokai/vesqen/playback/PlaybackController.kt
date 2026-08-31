@@ -94,13 +94,23 @@ class PlaybackController(
 
     fun skipToPrevious() {
         controller?.let { activeController ->
-            if (activeController.hasPreviousMediaItem()) activeController.seekToPreviousMediaItem()
+            activeController.seekToNeighbor(
+                hasNeighbor = activeController.hasPreviousMediaItem(),
+                neighborIndex = activeController.previousMediaItemIndex,
+                dedicatedCommand = Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
+                seekDedicated = Player::seekToPreviousMediaItem,
+            )
         }
     }
 
     fun skipToNext() {
         controller?.let { activeController ->
-            if (activeController.hasNextMediaItem()) activeController.seekToNextMediaItem()
+            activeController.seekToNeighbor(
+                hasNeighbor = activeController.hasNextMediaItem(),
+                neighborIndex = activeController.nextMediaItemIndex,
+                dedicatedCommand = Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+                seekDedicated = Player::seekToNextMediaItem,
+            )
         }
     }
 
@@ -155,6 +165,16 @@ class PlaybackController(
             positionMs = player.currentPosition.coerceAtLeast(0),
             hasPrevious = player.hasPreviousMediaItem(),
             hasNext = player.hasNextMediaItem(),
+            canSkipPrevious = player.canSeekToNeighbor(
+                hasNeighbor = player.hasPreviousMediaItem(),
+                neighborIndex = player.previousMediaItemIndex,
+                dedicatedCommand = Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
+            ),
+            canSkipNext = player.canSeekToNeighbor(
+                hasNeighbor = player.hasNextMediaItem(),
+                neighborIndex = player.nextMediaItemIndex,
+                dedicatedCommand = Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+            ),
             shuffleEnabled = player.shuffleModeEnabled,
             repeatMode = player.repeatMode.toPlaybackRepeatMode(),
             queueIndex = player.currentMediaItemIndex.coerceAtLeast(0),
@@ -187,8 +207,62 @@ class PlaybackController(
         else -> PlaybackRepeatMode.OFF
     }
 
+    private fun Player.seekToNeighbor(
+        hasNeighbor: Boolean,
+        neighborIndex: Int,
+        dedicatedCommand: Int,
+        seekDedicated: Player.() -> Unit,
+    ) {
+        when (
+            selectNeighborSeekRoute(
+                hasNeighbor = hasNeighbor,
+                neighborIndex = neighborIndex,
+                canSeekToMediaItem = isCommandAvailable(Player.COMMAND_SEEK_TO_MEDIA_ITEM),
+                canUseDedicatedCommand = isCommandAvailable(dedicatedCommand),
+            )
+        ) {
+            NeighborSeekRoute.BY_INDEX -> seekToDefaultPosition(neighborIndex)
+            NeighborSeekRoute.DEDICATED -> seekDedicated()
+            NeighborSeekRoute.UNAVAILABLE -> Unit
+        }
+    }
+
+    private fun Player.canSeekToNeighbor(
+        hasNeighbor: Boolean,
+        neighborIndex: Int,
+        dedicatedCommand: Int,
+    ): Boolean = selectNeighborSeekRoute(
+        hasNeighbor = hasNeighbor,
+        neighborIndex = neighborIndex,
+        canSeekToMediaItem = isCommandAvailable(Player.COMMAND_SEEK_TO_MEDIA_ITEM),
+        canUseDedicatedCommand = isCommandAvailable(dedicatedCommand),
+    ) != NeighborSeekRoute.UNAVAILABLE
+
     private data class PendingQueue(
         val tracks: List<AudioTrack>,
         val startIndex: Int,
     )
+}
+
+/**
+ * Chooses a transport route that can be both represented by a MediaSession and executed by its
+ * controller. Indexed seeking is preferred: it preserves Media3's shuffle-aware neighbour index
+ * while avoiding a session that exposes a timeline but declines the dedicated previous/next
+ * command.
+ */
+internal fun selectNeighborSeekRoute(
+    hasNeighbor: Boolean,
+    neighborIndex: Int,
+    canSeekToMediaItem: Boolean,
+    canUseDedicatedCommand: Boolean,
+): NeighborSeekRoute = when {
+    hasNeighbor && neighborIndex != C.INDEX_UNSET && canSeekToMediaItem -> NeighborSeekRoute.BY_INDEX
+    hasNeighbor && canUseDedicatedCommand -> NeighborSeekRoute.DEDICATED
+    else -> NeighborSeekRoute.UNAVAILABLE
+}
+
+internal enum class NeighborSeekRoute {
+    BY_INDEX,
+    DEDICATED,
+    UNAVAILABLE,
 }

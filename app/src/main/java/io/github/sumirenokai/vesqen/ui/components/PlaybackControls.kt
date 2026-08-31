@@ -53,7 +53,7 @@ fun PlaybackControls(
                     .size(secondaryControlSize)
                     .testTag("vesqen.now.previous"),
                 onClick = onPrevious,
-                enabled = controlsEnabled && snapshot.hasPrevious,
+                enabled = controlsEnabled && snapshot.canSkipPrevious,
                 colors = IconButtonDefaults.iconButtonColors(
                     contentColor = transportColor,
                     disabledContentColor = transportColor.copy(alpha = .38f),
@@ -81,7 +81,7 @@ fun PlaybackControls(
                     .size(secondaryControlSize)
                     .testTag("vesqen.now.next"),
                 onClick = onNext,
-                enabled = controlsEnabled && snapshot.hasNext,
+                enabled = controlsEnabled && snapshot.canSkipNext,
                 colors = IconButtonDefaults.iconButtonColors(
                     contentColor = transportColor,
                     disabledContentColor = transportColor.copy(alpha = .38f),

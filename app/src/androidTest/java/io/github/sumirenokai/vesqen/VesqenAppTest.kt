@@ -4,6 +4,7 @@ import android.content.res.Configuration
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertHeightIsEqualTo
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assert
@@ -119,7 +120,7 @@ class VesqenAppTest {
     }
 
     @Test
-    fun full_player_uses_track_information_sheet_and_horizontal_session_page() {
+    fun full_player_keeps_its_shell_stable_while_an_explicit_session_toggle_replaces_only_the_stage() {
         render(
             grantedState(
                 tracks = sampleTracks,
@@ -141,8 +142,29 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.track-details").assertIsDisplayed()
 
         composeRule.onNodeWithContentDescription(context.getString(R.string.close)).performClick()
-        composeRule.onNodeWithTag("vesqen.now.info-pager").performTouchInput { swipeLeft() }
+        composeRule.onNodeWithTag("vesqen.now.session-toggle").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                context.getString(R.string.album_artwork),
+            ),
+        )
+        val stableShellBounds = captureNowShellBounds()
+        composeRule.onNodeWithTag("vesqen.now.focus-content").performTouchInput { swipeLeft() }
+        composeRule.onNodeWithTag("vesqen.now.info.session").assertDoesNotExist()
+        composeRule.onNodeWithTag("vesqen.now.session-toggle").performClick()
         composeRule.onNodeWithTag("vesqen.now.info.session").assertIsDisplayed()
+        assertNowShellBoundsStable(stableShellBounds)
+        composeRule.onNodeWithTag("vesqen.now.back").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.transport-dock").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.play-pause").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.focus-content").assert(
+            SemanticsMatcher.keyNotDefined(SemanticsProperties.HorizontalScrollAxisRange),
+        )
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag("vesqen.now.info.session").assertDoesNotExist()
+        composeRule.onNodeWithTag("vesqen.now.artwork-stage").assertIsDisplayed()
     }
 
     @Test
@@ -281,6 +303,8 @@ class VesqenAppTest {
                             durationMs = track.durationMs,
                             hasPrevious = trackIndex.value > 0,
                             hasNext = trackIndex.value < sampleTracks.lastIndex,
+                            canSkipPrevious = trackIndex.value > 0,
+                            canSkipNext = trackIndex.value < sampleTracks.lastIndex,
                         ),
                     ),
                     onRequestMusicAccess = {},
@@ -304,6 +328,8 @@ class VesqenAppTest {
         composeRule.onNodeWithText("Dawn Signal").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.next").performClick()
         composeRule.onNodeWithText("Long Light").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.previous").performClick()
+        composeRule.onNodeWithText("Dawn Signal").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.artwork-stage").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.transport-dock").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
@@ -377,6 +403,31 @@ class VesqenAppTest {
     }
 
     @Test
+    fun transport_controls_stay_disabled_when_the_session_has_no_executable_neighbor_route() {
+        render(
+            state = grantedState(
+                tracks = sampleTracks,
+                playback = PlaybackSnapshot(
+                    isControllerReady = true,
+                    trackId = 1,
+                    title = "Dawn Signal",
+                    artist = "Mori",
+                    hasPrevious = true,
+                    hasNext = true,
+                    canSkipPrevious = false,
+                    canSkipNext = false,
+                ),
+            ),
+        )
+
+        composeRule.onNodeWithTag("vesqen.mini-player.previous").assertIsNotEnabled()
+        composeRule.onNodeWithTag("vesqen.mini-player.next").assertIsNotEnabled()
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.previous").assertIsNotEnabled()
+        composeRule.onNodeWithTag("vesqen.now.next").assertIsNotEnabled()
+    }
+
+    @Test
     fun mini_player_stays_a_single_compact_row_at_320dp() {
         render(
             state = grantedState(
@@ -433,8 +484,30 @@ class VesqenAppTest {
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
         )
         assertFocusedNowControlsAreFullyVisible()
-        composeRule.onNodeWithTag("vesqen.now.info-pager").performTouchInput { swipeLeft() }
-        composeRule.onNodeWithTag("vesqen.now.info.chain").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.session-toggle").performClick()
+        composeRule.onNodeWithTag("vesqen.now.info.session").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.playback_progress)).assertDoesNotExist()
+        assertNodesAreFullyVisibleIn(
+            containerTag = "vesqen.now.focus-content",
+            tags = arrayOf("vesqen.now.info.session"),
+        )
+        composeRule.onNodeWithTag("vesqen.now.transport-dock").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.play-pause").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.compact-chain").assertIsDisplayed()
+        assertNodesAreFullyVisibleIn(
+            containerTag = "vesqen.now.player-page",
+            tags = arrayOf("vesqen.now.compact-chain"),
+        )
+        assertFooterActionsDoNotOverlap(
+            "vesqen.now.shuffle",
+            "vesqen.now.session-toggle",
+            "vesqen.now.repeat",
+            "vesqen.now.info",
+        )
+        composeRule.onNodeWithTag("vesqen.now.compact-chain").performClick()
+        composeRule.onNodeWithTag("vesqen.chain").assertIsDisplayed()
     }
 
     @Test
@@ -682,9 +755,16 @@ class VesqenAppTest {
                 "vesqen.now.play-pause",
                 "vesqen.now.next",
                 "vesqen.now.shuffle",
+                "vesqen.now.session-toggle",
                 "vesqen.now.repeat",
                 "vesqen.now.info",
             ),
+        )
+        assertFooterActionsDoNotOverlap(
+            "vesqen.now.shuffle",
+            "vesqen.now.session-toggle",
+            "vesqen.now.repeat",
+            "vesqen.now.info",
         )
 
         val title = composeRule.onNodeWithTag("vesqen.now.title").fetchSemanticsNode()
@@ -709,6 +789,8 @@ class VesqenAppTest {
             "vesqen.now.play-pause",
             "vesqen.now.next",
             "vesqen.now.shuffle",
+            "vesqen.now.session-toggle",
+            "vesqen.now.compact-chain",
             "vesqen.now.repeat",
             "vesqen.now.info",
         )
@@ -738,6 +820,54 @@ class VesqenAppTest {
                     touchBounds.width + epsilon >= minimumTouchTargetPx &&
                         touchBounds.height + epsilon >= minimumTouchTargetPx,
                 )
+            }
+        }
+    }
+
+    private fun captureNowShellBounds(): Map<String, androidx.compose.ui.geometry.Rect> {
+        val stableTags = arrayOf(
+            "vesqen.now.back",
+            "vesqen.now.title",
+            "vesqen.now.transport-dock",
+            "vesqen.now.progress",
+            "vesqen.now.previous",
+            "vesqen.now.play-pause",
+            "vesqen.now.next",
+            "vesqen.now.shuffle",
+            "vesqen.now.session-toggle",
+            "vesqen.now.repeat",
+            "vesqen.now.info",
+        )
+        return stableTags.associateWith { tag ->
+            composeRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+        }
+    }
+
+    private fun assertNowShellBoundsStable(
+        before: Map<String, androidx.compose.ui.geometry.Rect>,
+    ) {
+        before.forEach { (tag, expectedBounds) ->
+            assertEquals(
+                "$tag must not move when the focus stage changes",
+                expectedBounds,
+                composeRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot,
+            )
+        }
+    }
+
+    private fun assertFooterActionsDoNotOverlap(vararg tags: String) {
+        val bounds = tags.associateWith { tag ->
+            composeRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+        }
+        tags.forEachIndexed { index, firstTag ->
+            tags.drop(index + 1).forEach { secondTag ->
+                val first = bounds.getValue(firstTag)
+                val second = bounds.getValue(secondTag)
+                val separate = first.right <= second.left ||
+                    second.right <= first.left ||
+                    first.bottom <= second.top ||
+                    second.bottom <= first.top
+                assertTrue("$firstTag must not overlap $secondTag", separate)
             }
         }
     }

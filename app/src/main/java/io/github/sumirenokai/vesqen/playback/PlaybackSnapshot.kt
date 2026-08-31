@@ -23,6 +23,10 @@ data class PlaybackSnapshot(
     val positionMs: Long = 0,
     val hasPrevious: Boolean = false,
     val hasNext: Boolean = false,
+    /** True only when the session grants a usable route to the previous queue item. */
+    val canSkipPrevious: Boolean = hasPrevious,
+    /** True only when the session grants a usable route to the next queue item. */
+    val canSkipNext: Boolean = hasNext,
     val shuffleEnabled: Boolean = false,
     val repeatMode: PlaybackRepeatMode = PlaybackRepeatMode.OFF,
     /** Zero-based media item index and item count reported by the active Media3 player. */
