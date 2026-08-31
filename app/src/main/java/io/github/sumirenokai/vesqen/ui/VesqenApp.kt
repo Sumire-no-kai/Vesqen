@@ -14,7 +14,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -54,6 +57,8 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+
+private val FocusedPlayerEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
 /** Android boundary for real permissions, MediaStore, and Media3. */
 @Composable
@@ -332,21 +337,83 @@ private fun VesqenDestinationFrame(
             targetState = destination,
             modifier = Modifier.fillMaxSize(),
             transitionSpec = {
-                val duration = if (
-                    targetState == VesqenDestination.NOW && initialState != VesqenDestination.NOW
-                ) {
-                    motionPolicy.playerExpandMillis
-                } else {
-                    motionPolicy.stateChangeMillis
-                }
-                if (motionPolicy.reduceMotion) {
-                    fadeIn(animationSpec = tween(duration)) togetherWith
-                        fadeOut(animationSpec = tween(duration))
-                } else {
+                val opensFocusedPlayer = targetState == VesqenDestination.NOW &&
+                    initialState != VesqenDestination.NOW
+                val closesFocusedPlayer = initialState == VesqenDestination.NOW &&
+                    targetState != VesqenDestination.NOW
+                when {
+                    motionPolicy.reduceMotion -> {
+                        fadeIn(animationSpec = tween(motionPolicy.stateChangeMillis)) togetherWith
+                            fadeOut(animationSpec = tween(motionPolicy.stateChangeMillis))
+                    }
+
+                    opensFocusedPlayer -> {
+                        (fadeIn(
+                            animationSpec = tween(
+                                motionPolicy.playerExpandMillis,
+                                easing = FocusedPlayerEasing,
+                            ),
+                        ) + slideInVertically(
+                            animationSpec = tween(
+                                motionPolicy.playerExpandMillis,
+                                easing = FocusedPlayerEasing,
+                            ),
+                            initialOffsetY = { height -> height / 10 },
+                        ) + scaleIn(
+                            initialScale = .985f,
+                            animationSpec = tween(
+                                motionPolicy.playerExpandMillis,
+                                easing = FocusedPlayerEasing,
+                            ),
+                        )) togetherWith
+                            (fadeOut(
+                                animationSpec = tween(
+                                    motionPolicy.playerCollapseMillis,
+                                    easing = FocusedPlayerEasing,
+                                ),
+                            ) + scaleOut(
+                                targetScale = .99f,
+                                animationSpec = tween(
+                                    motionPolicy.playerCollapseMillis,
+                                    easing = FocusedPlayerEasing,
+                                ),
+                            ))
+                    }
+
+                    closesFocusedPlayer -> {
+                        fadeIn(
+                            animationSpec = tween(
+                                motionPolicy.stateChangeMillis,
+                                easing = FocusedPlayerEasing,
+                            ),
+                        ) togetherWith
+                            (fadeOut(
+                                animationSpec = tween(
+                                    motionPolicy.playerCollapseMillis,
+                                    easing = FocusedPlayerEasing,
+                                ),
+                            ) + slideOutVertically(
+                                animationSpec = tween(
+                                    motionPolicy.playerCollapseMillis,
+                                    easing = FocusedPlayerEasing,
+                                ),
+                                targetOffsetY = { height -> height / 12 },
+                            ) + scaleOut(
+                                targetScale = .985f,
+                                animationSpec = tween(
+                                    motionPolicy.playerCollapseMillis,
+                                    easing = FocusedPlayerEasing,
+                                ),
+                            ))
+                    }
+
+                    else -> {
+                        val duration = motionPolicy.stateChangeMillis
                     (fadeIn(animationSpec = tween(duration)) +
                         scaleIn(initialScale = .98f, animationSpec = tween(duration))) togetherWith
                         (fadeOut(animationSpec = tween(duration / 2)) +
                             scaleOut(targetScale = .98f, animationSpec = tween(duration / 2)))
+                    }
                 }
             },
             label = "vesqen-destination",
@@ -385,6 +452,7 @@ private fun VesqenDestinationFrame(
                     onCycleRepeatMode = onCycleRepeatMode,
                     onSeek = onSeek,
                     onPlayTrack = onTrackSelected,
+                    motionPolicy = motionPolicy,
                     modifier = destinationModifier,
                 )
 

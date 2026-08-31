@@ -12,8 +12,17 @@ data class VesqenMotionPolicy(
     val stateChangeMillis: Int
         get() = if (reduceMotion) VesqenMotion.ReducedMotionMillis else VesqenMotion.StateChangeMillis
 
+    val modeChangeMillis: Int
+        get() = if (reduceMotion) VesqenMotion.ReducedMotionMillis else VesqenMotion.ModeChangeMillis
+
     val playerExpandMillis: Int
         get() = if (reduceMotion) VesqenMotion.ReducedMotionMillis else VesqenMotion.PlayerExpandMillis
+
+    val playerCollapseMillis: Int
+        get() = if (reduceMotion) VesqenMotion.ReducedMotionMillis else VesqenMotion.PlayerCollapseMillis
+
+    val trackChangeMillis: Int
+        get() = if (reduceMotion) VesqenMotion.ReducedMotionMillis else VesqenMotion.TrackChangeMillis
 }
 
 /**

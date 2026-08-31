@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode
 import io.github.sumirenokai.vesqen.ui.LibraryUiState
 import io.github.sumirenokai.vesqen.ui.MusicAccess
 import io.github.sumirenokai.vesqen.ui.VesqenAppContent
@@ -183,6 +185,128 @@ class VesqenAppTest {
             assertEquals(1, repeatCalls)
         }
         composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
+    }
+
+    @Test
+    fun one_repeat_control_cycles_off_all_one_and_back_with_its_state_exposed() {
+        composeRule.setContent {
+            VesqenTheme {
+                val repeatMode = remember { androidx.compose.runtime.mutableStateOf(PlaybackRepeatMode.OFF) }
+                val track = sampleTracks.first()
+                VesqenAppContent(
+                    state = grantedState(
+                        tracks = sampleTracks,
+                        playback = PlaybackSnapshot(
+                            isControllerReady = true,
+                            trackId = track.id,
+                            title = track.title,
+                            artist = track.artist,
+                            album = track.album,
+                            durationMs = track.durationMs,
+                            repeatMode = repeatMode.value,
+                        ),
+                    ),
+                    onRequestMusicAccess = {},
+                    onOpenAppSettings = {},
+                    onOpenNotificationSettings = {},
+                    onRescan = {},
+                    onTrackSelected = {},
+                    onPrevious = {},
+                    onPlayPause = {},
+                    onNext = {},
+                    onSeek = {},
+                    onToggleShuffle = {},
+                    onCycleRepeatMode = {
+                        repeatMode.value = when (repeatMode.value) {
+                            PlaybackRepeatMode.OFF -> PlaybackRepeatMode.ALL
+                            PlaybackRepeatMode.ALL -> PlaybackRepeatMode.ONE
+                            PlaybackRepeatMode.ONE -> PlaybackRepeatMode.OFF
+                        }
+                    },
+                    onRefreshConnectedOutputs = {},
+                    motionPolicy = VesqenMotionPolicy(reduceMotion = true),
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onAllNodesWithTag("vesqen.now.repeat").assertCountEquals(1)
+        composeRule.onNodeWithTag("vesqen.now.repeat").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                context.getString(R.string.repeat_off),
+            ),
+        )
+
+        composeRule.onNodeWithTag("vesqen.now.repeat").performClick()
+        composeRule.onNodeWithTag("vesqen.now.repeat").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                context.getString(R.string.repeat_all),
+            ),
+        )
+        composeRule.onNodeWithTag("vesqen.now.repeat").performClick()
+        composeRule.onNodeWithTag("vesqen.now.repeat").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                context.getString(R.string.repeat_one),
+            ),
+        )
+        composeRule.onNodeWithTag("vesqen.now.repeat").performClick()
+        composeRule.onNodeWithTag("vesqen.now.repeat").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                context.getString(R.string.repeat_off),
+            ),
+        )
+    }
+
+    @Test
+    fun track_skip_keeps_the_focused_transport_stable_while_track_identity_changes() {
+        composeRule.setContent {
+            VesqenTheme {
+                val trackIndex = remember { androidx.compose.runtime.mutableStateOf(0) }
+                val track = sampleTracks[trackIndex.value]
+                VesqenAppContent(
+                    state = grantedState(
+                        tracks = sampleTracks,
+                        playback = PlaybackSnapshot(
+                            isControllerReady = true,
+                            trackId = track.id,
+                            title = track.title,
+                            artist = track.artist,
+                            album = track.album,
+                            durationMs = track.durationMs,
+                            hasPrevious = trackIndex.value > 0,
+                            hasNext = trackIndex.value < sampleTracks.lastIndex,
+                        ),
+                    ),
+                    onRequestMusicAccess = {},
+                    onOpenAppSettings = {},
+                    onOpenNotificationSettings = {},
+                    onRescan = {},
+                    onTrackSelected = {},
+                    onPrevious = { trackIndex.value = (trackIndex.value - 1).coerceAtLeast(0) },
+                    onPlayPause = {},
+                    onNext = { trackIndex.value = (trackIndex.value + 1).coerceAtMost(sampleTracks.lastIndex) },
+                    onSeek = {},
+                    onToggleShuffle = {},
+                    onCycleRepeatMode = {},
+                    onRefreshConnectedOutputs = {},
+                    motionPolicy = VesqenMotionPolicy(reduceMotion = true),
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithText("Dawn Signal").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.next").performClick()
+        composeRule.onNodeWithText("Long Light").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.artwork-stage").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.transport-dock").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.play-pause").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
     }
 
     @Test

@@ -5,6 +5,18 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
@@ -43,6 +55,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -54,6 +67,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -68,6 +82,7 @@ import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode
 import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.components.PlaybackControls
@@ -76,10 +91,27 @@ import io.github.sumirenokai.vesqen.ui.components.VesqenEmptyState
 import io.github.sumirenokai.vesqen.ui.formatDuration
 import io.github.sumirenokai.vesqen.ui.theme.MidnightViolet
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
+import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.view.WindowCompat
+
+private val TrackTransitionEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
+
+private enum class TrackTransitionDirection {
+    FORWARD,
+    BACKWARD,
+}
+
+@Immutable
+private data class NowTrackPresentation(
+    val trackId: Long?,
+    val title: String,
+    val artist: String,
+    val album: String,
+    val artworkTrack: AudioTrack?,
+)
 
 @Composable
 fun NowScreen(
@@ -95,6 +127,7 @@ fun NowScreen(
     onCycleRepeatMode: () -> Unit,
     onSeek: (Long) -> Unit,
     onPlayTrack: (AudioTrack) -> Unit,
+    motionPolicy: VesqenMotionPolicy,
     modifier: Modifier = Modifier,
 ) {
     if (!snapshot.hasActiveTrack) {
@@ -103,13 +136,29 @@ fun NowScreen(
     }
 
     var showDetails by remember { mutableStateOf(false) }
+    var trackTransitionDirection by remember { mutableStateOf(TrackTransitionDirection.FORWARD) }
     val pagerState = rememberPagerState { 2 }
+    val trackPresentation = NowTrackPresentation(
+        trackId = snapshot.trackId,
+        title = snapshot.title,
+        artist = snapshot.artist,
+        album = snapshot.album,
+        artworkTrack = artworkTrack,
+    )
 
     LaunchedEffect(currentTrack) {
         if (currentTrack == null) showDetails = false
     }
     BackHandler(enabled = showDetails && currentTrack != null) { showDetails = false }
     val openDetails = { if (currentTrack != null) showDetails = true }
+    val requestPrevious = {
+        trackTransitionDirection = TrackTransitionDirection.BACKWARD
+        onPrevious()
+    }
+    val requestNext = {
+        trackTransitionDirection = TrackTransitionDirection.FORWARD
+        onNext()
+    }
 
     VesqenTheme(darkTheme = true) {
         FullPlayerSystemBars()
@@ -161,7 +210,9 @@ fun NowScreen(
                         when (page) {
                             0 -> NowPlayerPage(
                                 snapshot = snapshot,
-                                artworkTrack = artworkTrack,
+                                trackPresentation = trackPresentation,
+                                trackTransitionDirection = trackTransitionDirection,
+                                motionPolicy = motionPolicy,
                                 artworkSize = artworkSize,
                                 isShortScreen = isShortScreen,
                                 isUltraCompact = isUltraCompact,
@@ -169,9 +220,9 @@ fun NowScreen(
                                 isTallScreen = isTallScreen,
                                 onOpenChain = onOpenChain,
                                 onToggleShuffle = onToggleShuffle,
-                                onPrevious = onPrevious,
+                                onPrevious = requestPrevious,
                                 onPlayPause = onPlayPause,
-                                onNext = onNext,
+                                onNext = requestNext,
                                 onCycleRepeatMode = onCycleRepeatMode,
                                 onSeek = onSeek,
                                 onOpenDetails = openDetails,
@@ -188,6 +239,7 @@ fun NowScreen(
                                 canOpenDetails = currentTrack != null,
                                 isUltraCompact = isUltraCompact,
                                 selectedInfoPage = page,
+                                motionPolicy = motionPolicy,
                             )
                         }
                     }
@@ -301,10 +353,52 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
+private fun androidx.compose.animation.AnimatedContentTransitionScope<NowTrackPresentation>.trackPresentationTransition(
+    direction: TrackTransitionDirection,
+    motionPolicy: VesqenMotionPolicy,
+) = if (motionPolicy.reduceMotion) {
+    fadeIn(animationSpec = tween(motionPolicy.trackChangeMillis)) togetherWith
+        fadeOut(animationSpec = tween(motionPolicy.trackChangeMillis))
+} else {
+    val enteringOffset: (Int) -> Int = if (direction == TrackTransitionDirection.FORWARD) {
+        { width -> width / 10 }
+    } else {
+        { width -> -width / 10 }
+    }
+    val leavingOffset: (Int) -> Int = if (direction == TrackTransitionDirection.FORWARD) {
+        { width -> -width / 12 }
+    } else {
+        { width -> width / 12 }
+    }
+    (fadeIn(
+        animationSpec = tween(motionPolicy.trackChangeMillis, easing = TrackTransitionEasing),
+    ) + slideInHorizontally(
+        animationSpec = tween(motionPolicy.trackChangeMillis, easing = TrackTransitionEasing),
+        initialOffsetX = enteringOffset,
+    ) + scaleIn(
+        initialScale = .985f,
+        animationSpec = tween(motionPolicy.trackChangeMillis, easing = TrackTransitionEasing),
+    )) togetherWith
+        (fadeOut(
+            animationSpec = tween(
+                durationMillis = motionPolicy.trackChangeMillis * 3 / 4,
+                easing = TrackTransitionEasing,
+            ),
+        ) + slideOutHorizontally(
+            animationSpec = tween(motionPolicy.trackChangeMillis, easing = TrackTransitionEasing),
+            targetOffsetX = leavingOffset,
+        ) + scaleOut(
+            targetScale = .985f,
+            animationSpec = tween(motionPolicy.trackChangeMillis, easing = TrackTransitionEasing),
+        ))
+}
+
 @Composable
 private fun NowPlayerPage(
     snapshot: PlaybackSnapshot,
-    artworkTrack: AudioTrack?,
+    trackPresentation: NowTrackPresentation,
+    trackTransitionDirection: TrackTransitionDirection,
+    motionPolicy: VesqenMotionPolicy,
     artworkSize: androidx.compose.ui.unit.Dp,
     isShortScreen: Boolean,
     isUltraCompact: Boolean,
@@ -327,10 +421,8 @@ private fun NowPlayerPage(
             .clipToBounds()
             .testTag("vesqen.now.player-page")
     ) {
-        PlayerArtworkStage(
-            artworkTrack = artworkTrack,
-            artworkSize = artworkSize,
-            compact = isUltraCompact,
+        AnimatedContent(
+            targetState = trackPresentation,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(top = when {
@@ -338,9 +430,22 @@ private fun NowPlayerPage(
                     isTallScreen -> VesqenSpacing.lg
                     else -> VesqenSpacing.sm
                 }),
-        )
+            transitionSpec = {
+                trackPresentationTransition(trackTransitionDirection, motionPolicy)
+            },
+            label = "vesqen.now.artwork-transition",
+        ) { presentation ->
+            PlayerArtworkStage(
+                artworkTrack = presentation.artworkTrack,
+                artworkSize = artworkSize,
+                compact = isUltraCompact,
+            )
+        }
         NowTransportDock(
             snapshot = snapshot,
+            trackPresentation = trackPresentation,
+            trackTransitionDirection = trackTransitionDirection,
+            motionPolicy = motionPolicy,
             isShortScreen = isShortScreen,
             isUltraCompact = isUltraCompact,
             isExtremeText = isExtremeText,
@@ -390,6 +495,9 @@ private fun PlayerArtworkStage(
 @Composable
 private fun NowTransportDock(
     snapshot: PlaybackSnapshot,
+    trackPresentation: NowTrackPresentation,
+    trackTransitionDirection: TrackTransitionDirection,
+    motionPolicy: VesqenMotionPolicy,
     isShortScreen: Boolean,
     isUltraCompact: Boolean,
     isExtremeText: Boolean,
@@ -439,12 +547,21 @@ private fun NowTransportDock(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(sectionSpacing),
         ) {
-            NowTrackIdentity(
-                snapshot = snapshot,
-                showArtist = !isExtremeText,
-                showAlbum = !isUltraCompact && !isExtremeText,
-                compact = isUltraCompact,
-            )
+            AnimatedContent(
+                targetState = trackPresentation,
+                transitionSpec = {
+                    trackPresentationTransition(trackTransitionDirection, motionPolicy)
+                },
+                label = "vesqen.now.identity-transition",
+            ) { presentation ->
+                NowTrackIdentity(
+                    presentation = presentation,
+                    isControllerReady = snapshot.isControllerReady,
+                    showArtist = !isExtremeText,
+                    showAlbum = !isUltraCompact && !isExtremeText,
+                    compact = isUltraCompact,
+                )
+            }
             if (!isExtremeText) {
                 OutputStatusChip(
                     declaration = snapshot.declaration,
@@ -470,6 +587,7 @@ private fun NowTransportDock(
                 onOpenDetails = onOpenDetails,
                 canOpenDetails = canOpenDetails,
                 compact = isUltraCompact,
+                motionPolicy = motionPolicy,
             )
         }
     }
@@ -485,6 +603,7 @@ private fun NowSessionPage(
     canOpenDetails: Boolean,
     isUltraCompact: Boolean,
     selectedInfoPage: Int,
+    motionPolicy: VesqenMotionPolicy,
 ) {
     val queueLabel = snapshot.queuePosition?.let { position ->
         stringResource(R.string.queue_position, position, snapshot.queueSize)
@@ -561,6 +680,7 @@ private fun NowSessionPage(
             onOpenDetails = onOpenDetails,
             canOpenDetails = canOpenDetails,
             compact = isUltraCompact,
+            motionPolicy = motionPolicy,
         )
     }
 }
@@ -597,6 +717,7 @@ private fun NowInfoFooter(
     onOpenDetails: () -> Unit,
     canOpenDetails: Boolean,
     compact: Boolean,
+    motionPolicy: VesqenMotionPolicy,
 ) {
     val controlsEnabled = snapshot.isControllerReady
     val shuffleState = stringResource(
@@ -604,13 +725,37 @@ private fun NowInfoFooter(
     )
     val repeatState = stringResource(
         when (snapshot.repeatMode) {
-            io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode.OFF -> R.string.repeat_off
-            io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode.ALL -> R.string.repeat_all
-            io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode.ONE -> R.string.repeat_one
+            PlaybackRepeatMode.OFF -> R.string.repeat_off
+            PlaybackRepeatMode.ALL -> R.string.repeat_all
+            PlaybackRepeatMode.ONE -> R.string.repeat_one
         },
     )
     val inactiveModeColor = MaterialTheme.colorScheme.onSurfaceVariant
     val disabledModeColor = inactiveModeColor.copy(alpha = .38f)
+    val shuffleTint by animateColorAsState(
+        targetValue = if (snapshot.shuffleEnabled) MaterialTheme.colorScheme.primary else inactiveModeColor,
+        animationSpec = tween(motionPolicy.modeChangeMillis, easing = TrackTransitionEasing),
+        label = "vesqen.shuffle.tint",
+    )
+    val shuffleIconScale by animateFloatAsState(
+        targetValue = if (snapshot.shuffleEnabled) 1f else .92f,
+        animationSpec = tween(motionPolicy.modeChangeMillis, easing = TrackTransitionEasing),
+        label = "vesqen.shuffle.scale",
+    )
+    val repeatTint by animateColorAsState(
+        targetValue = if (snapshot.repeatMode == PlaybackRepeatMode.OFF) {
+            inactiveModeColor
+        } else {
+            MaterialTheme.colorScheme.primary
+        },
+        animationSpec = tween(motionPolicy.modeChangeMillis, easing = TrackTransitionEasing),
+        label = "vesqen.repeat.tint",
+    )
+    val repeatIconScale by animateFloatAsState(
+        targetValue = if (snapshot.repeatMode == PlaybackRepeatMode.OFF) .92f else 1f,
+        animationSpec = tween(motionPolicy.modeChangeMillis, easing = TrackTransitionEasing),
+        label = "vesqen.repeat.scale",
+    )
 
     BoxWithConstraints(
         modifier = Modifier
@@ -627,17 +772,17 @@ private fun NowInfoFooter(
                 .testTag("vesqen.now.shuffle")
                 .semantics { stateDescription = shuffleState },
             colors = IconButtonDefaults.iconButtonColors(
-                contentColor = if (snapshot.shuffleEnabled) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    inactiveModeColor
-                },
+                contentColor = shuffleTint,
                 disabledContentColor = disabledModeColor,
             ),
         ) {
             Icon(
                 imageVector = Icons.Filled.Shuffle,
                 contentDescription = stringResource(R.string.shuffle),
+                modifier = Modifier.graphicsLayer {
+                    scaleX = shuffleIconScale
+                    scaleY = shuffleIconScale
+                },
             )
         }
         Row(
@@ -674,28 +819,60 @@ private fun NowInfoFooter(
                 modifier = Modifier
                     .size(48.dp)
                     .testTag("vesqen.now.repeat")
-                    .semantics { stateDescription = repeatState },
+                .semantics { stateDescription = repeatState },
                 colors = IconButtonDefaults.iconButtonColors(
-                    contentColor = if (
-                        snapshot.repeatMode == io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode.OFF
-                    ) {
-                        inactiveModeColor
-                    } else {
-                        MaterialTheme.colorScheme.primary
-                    },
+                    contentColor = repeatTint,
                     disabledContentColor = disabledModeColor,
                 ),
             ) {
-                Icon(
-                    imageVector = if (
-                        snapshot.repeatMode == io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode.ONE
-                    ) {
-                        Icons.Filled.RepeatOne
-                    } else {
-                        Icons.Filled.Repeat
+                AnimatedContent(
+                    targetState = snapshot.repeatMode,
+                    transitionSpec = {
+                        if (motionPolicy.reduceMotion) {
+                            fadeIn(animationSpec = tween(motionPolicy.modeChangeMillis)) togetherWith
+                                fadeOut(animationSpec = tween(motionPolicy.modeChangeMillis))
+                        } else {
+                            (fadeIn(
+                                animationSpec = tween(
+                                    motionPolicy.modeChangeMillis,
+                                    easing = TrackTransitionEasing,
+                                ),
+                            ) + scaleIn(
+                                initialScale = .76f,
+                                animationSpec = tween(
+                                    motionPolicy.modeChangeMillis,
+                                    easing = TrackTransitionEasing,
+                                ),
+                            )) togetherWith
+                                (fadeOut(
+                                    animationSpec = tween(
+                                        motionPolicy.modeChangeMillis * 3 / 4,
+                                        easing = TrackTransitionEasing,
+                                    ),
+                                ) + scaleOut(
+                                    targetScale = .76f,
+                                    animationSpec = tween(
+                                        motionPolicy.modeChangeMillis,
+                                        easing = TrackTransitionEasing,
+                                    ),
+                                ))
+                        }
                     },
-                    contentDescription = stringResource(R.string.repeat),
-                )
+                    label = "vesqen.repeat.mode",
+                ) { repeatMode ->
+                    Icon(
+                        imageVector = if (repeatMode == PlaybackRepeatMode.ONE) {
+                            Icons.Filled.RepeatOne
+                        } else {
+                            Icons.Filled.Repeat
+                        },
+                        contentDescription = stringResource(R.string.repeat),
+                        modifier = Modifier.graphicsLayer {
+                            scaleX = repeatIconScale
+                            scaleY = repeatIconScale
+                        },
+                    )
+                }
             }
             IconButton(
                 onClick = onOpenDetails,
@@ -752,19 +929,20 @@ private fun NowHeader(onBack: () -> Unit, modifier: Modifier = Modifier) {
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 private fun NowTrackIdentity(
-    snapshot: PlaybackSnapshot,
+    presentation: NowTrackPresentation,
+    isControllerReady: Boolean,
     showArtist: Boolean,
     showAlbum: Boolean,
     compact: Boolean,
 ) {
-    val album = snapshot.album.takeIf { it.isNotBlank() }
+    val album = presentation.album.takeIf { it.isNotBlank() }
     Column(
         modifier = Modifier.padding(horizontal = VesqenSpacing.md),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs),
     ) {
         Text(
-            text = snapshot.title.ifBlank { stringResource(R.string.unknown_title) },
+            text = presentation.title.ifBlank { stringResource(R.string.unknown_title) },
             style = if (compact) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
@@ -778,7 +956,7 @@ private fun NowTrackIdentity(
         )
         if (showArtist) {
             Text(
-                text = snapshot.artist.ifBlank { stringResource(R.string.unknown_artist) },
+                text = presentation.artist.ifBlank { stringResource(R.string.unknown_artist) },
                 style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -796,7 +974,7 @@ private fun NowTrackIdentity(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .78f),
             )
         }
-        if (!snapshot.isControllerReady) {
+        if (!isControllerReady) {
             Text(
                 text = stringResource(R.string.playback_controls_connecting),
                 style = MaterialTheme.typography.bodySmall,
