@@ -6,11 +6,13 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
@@ -23,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -140,6 +143,9 @@ class VesqenAppTest {
 
     @Test
     fun now_back_returns_to_library_and_extended_controls_call_real_callbacks() {
+        var previousCalls = 0
+        var playPauseCalls = 0
+        var nextCalls = 0
         var shuffleCalls = 0
         var repeatCalls = 0
         render(
@@ -154,16 +160,25 @@ class VesqenAppTest {
                     hasNext = true,
                 ),
             ),
+            onPrevious = { previousCalls++ },
+            onPlayPause = { playPauseCalls++ },
+            onNext = { nextCalls++ },
             onToggleShuffle = { shuffleCalls++ },
             onCycleRepeatMode = { repeatCalls++ },
         )
 
         composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.previous").performClick()
+        composeRule.onNodeWithTag("vesqen.now.play-pause").performClick()
+        composeRule.onNodeWithTag("vesqen.now.next").performClick()
         composeRule.onNodeWithTag("vesqen.now.shuffle").performClick()
         composeRule.onNodeWithTag("vesqen.now.repeat").performClick()
         composeRule.onNodeWithTag("vesqen.now.back").performClick()
 
         composeRule.runOnIdle {
+            assertEquals(1, previousCalls)
+            assertEquals(1, playPauseCalls)
+            assertEquals(1, nextCalls)
             assertEquals(1, shuffleCalls)
             assertEquals(1, repeatCalls)
         }
@@ -288,8 +303,177 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.repeat").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.info").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.player-page").assert(
+            SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
+        )
         composeRule.onNodeWithTag("vesqen.now.info-pager").performTouchInput { swipeLeft() }
         composeRule.onNodeWithTag("vesqen.now.info.chain").assertIsDisplayed()
+    }
+
+    @Test
+    fun focused_player_keeps_all_primary_controls_visible_inside_a_light_host() {
+        render(
+            state = grantedState(
+                tracks = sampleTracks,
+                playback = PlaybackSnapshot(
+                    isControllerReady = true,
+                    trackId = 1,
+                    title = "Dawn Signal",
+                    artist = "Mori",
+                    album = "Quiet Rooms",
+                    durationMs = 245_000,
+                    positionMs = 30_000,
+                    hasPrevious = true,
+                    hasNext = true,
+                ),
+            ),
+            containerWidth = 360.dp,
+            containerHeight = 533.dp,
+            darkTheme = false,
+        )
+
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.focus-surface").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.transport-dock").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.back").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.title").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.progress").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.play-pause").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.shuffle").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.repeat").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.info").assertIsDisplayed()
+    }
+
+    @Test
+    fun focused_player_keeps_primary_controls_inside_360dp_with_large_text() {
+        render(
+            state = grantedState(
+                tracks = sampleTracks,
+                playback = PlaybackSnapshot(
+                    isControllerReady = true,
+                    trackId = 1,
+                    title = "A deliberately long local track title that must remain one line",
+                    artist = "Mori",
+                    durationMs = 245_000,
+                    positionMs = 30_000,
+                    hasPrevious = true,
+                    hasNext = true,
+                ),
+            ),
+            containerWidth = 360.dp,
+            containerHeight = 533.dp,
+            fontScale = 2f,
+        )
+
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.back").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.title").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.progress").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.play-pause").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.shuffle").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.repeat").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.info").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.player-page").assert(
+            SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
+        )
+    }
+
+    @Test
+    fun focused_player_keeps_primary_controls_inside_a_short_landscape_window() {
+        render(
+            state = grantedState(
+                tracks = sampleTracks,
+                playback = PlaybackSnapshot(
+                    isControllerReady = true,
+                    trackId = 1,
+                    title = "Dawn Signal",
+                    artist = "Mori",
+                    durationMs = 245_000,
+                    positionMs = 30_000,
+                    hasPrevious = true,
+                    hasNext = true,
+                ),
+            ),
+            containerWidth = 640.dp,
+            containerHeight = 320.dp,
+        )
+
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.back").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.title").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.progress").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.play-pause").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.shuffle").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.repeat").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.info").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.player-page").assert(
+            SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
+        )
+    }
+
+    @Test
+    fun focused_player_hides_the_wide_navigation_rail_and_keeps_a_single_system_bar_surface() {
+        render(
+            state = grantedState(
+                tracks = sampleTracks,
+                playback = PlaybackSnapshot(
+                    isControllerReady = true,
+                    trackId = 1,
+                    title = "Dawn Signal",
+                    artist = "Mori",
+                    durationMs = 245_000,
+                    hasPrevious = true,
+                    hasNext = true,
+                ),
+            ),
+            containerWidth = 720.dp,
+            containerHeight = 720.dp,
+            darkTheme = false,
+        )
+
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.focus-surface").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.nav.library").assertDoesNotExist()
+        composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
+    }
+
+    @Test
+    fun focused_player_keeps_primary_controls_inside_a_640dp_height_window() {
+        render(
+            state = grantedState(
+                tracks = sampleTracks,
+                playback = PlaybackSnapshot(
+                    isControllerReady = true,
+                    trackId = 1,
+                    title = "Dawn Signal",
+                    artist = "Mori",
+                    durationMs = 245_000,
+                    positionMs = 30_000,
+                    hasPrevious = true,
+                    hasNext = true,
+                ),
+            ),
+            containerWidth = 360.dp,
+            containerHeight = 640.dp,
+        )
+
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.artwork-stage").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.transport-dock").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.progress").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.play-pause").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.shuffle").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.repeat").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.info").assertIsDisplayed()
     }
 
     private fun render(
@@ -302,9 +486,10 @@ class VesqenAppTest {
         containerWidth: Dp? = null,
         containerHeight: Dp = 720.dp,
         fontScale: Float? = null,
+        darkTheme: Boolean = true,
     ) {
         composeRule.setContent {
-            VesqenTheme(darkTheme = true) {
+            VesqenTheme(darkTheme = darkTheme) {
                 val app: @Composable () -> Unit = {
                     VesqenAppContent(
                         state = state,
@@ -336,20 +521,29 @@ class VesqenAppTest {
                         }
                     }
                 }
-                if (fontScale == null) {
+                if (fontScale == null && containerWidth == null) {
                     renderWithinSize()
                 } else {
                     val configuration = LocalConfiguration.current
                     val density = LocalDensity.current
-                    val scaledConfiguration = remember(configuration, fontScale) {
-                        Configuration(configuration).apply { this.fontScale = fontScale }
+                    val sizedConfiguration = remember(
+                        configuration,
+                        containerWidth,
+                        containerHeight,
+                        fontScale,
+                    ) {
+                        Configuration(configuration).apply {
+                            this.fontScale = fontScale ?: configuration.fontScale
+                            containerWidth?.let { screenWidthDp = it.value.toInt() }
+                            containerWidth?.let { screenHeightDp = containerHeight.value.toInt() }
+                        }
                     }
-                    val scaledDensity = remember(density, fontScale) {
-                        Density(density.density, fontScale)
+                    val sizedDensity = remember(density, fontScale) {
+                        Density(density.density, fontScale ?: density.fontScale)
                     }
                     CompositionLocalProvider(
-                        LocalConfiguration provides scaledConfiguration,
-                        LocalDensity provides scaledDensity,
+                        LocalConfiguration provides sizedConfiguration,
+                        LocalDensity provides sizedDensity,
                     ) {
                         renderWithinSize()
                     }

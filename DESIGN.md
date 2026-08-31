@@ -295,9 +295,11 @@ Translucency is purposeful. The full player may use a protected, low-frequency a
 
 ### Full Player
 
-- **Structure:** Large artwork, expanded title/artist, factual route chip, scrubber, primary playback controls, and overflow.
-- **Atmosphere:** Artwork may tint a blurred background behind a stable dark scrim. Controls retain semantic colors and do not sample arbitrary artwork colors.
-- **Focus mode:** On compact windows, Now is a full-height listening surface rather than a squeezed destination panel. Bottom navigation yields its space to the player; toolbar Back and Android Back return to the originating destination, while the factual route chip remains the deliberate path to Chain.
+- **Structure:** A framed artwork stage anchors the upper field. One purposeful, opaque lower transport dock contains the one-line title, artist/album when space permits, factual route chip, scrubber, and controls; it is not a stack of floating cards.
+- **Control hierarchy:** Previous / play-pause / next form the large centered primary transport group. Shuffle, repeat, page dots, and the circled information action live in the dock's secondary footer, so transport never competes with modes or metadata. The mini-player never repeats the route chip.
+- **Atmosphere:** Artwork may tint a blurred background behind a stable dark scrim. The focused surface explicitly supplies its light foreground tokens; controls retain semantic colors and do not sample arbitrary artwork colors.
+- **Focus mode:** Now is a full-height, edge-to-edge Midnight Violet listening surface rather than a squeezed destination panel. Top-level navigation yields its space to the focused player (including the wide-window rail), so transparent system bars always sit above one protected dark surface; their icons restore on exit. Toolbar Back and Android Back return to the originating destination, while the factual route chip remains the deliberate path to Chain.
+- **Responsive behavior:** The player is never vertically scrollable. Track and header titles remain one line; an overlong track title may marquee horizontally. Artwork, gaps, and secondary metadata contract as height or font scale decreases, but the scrubber, three primary transport controls, mode controls, and information action remain reachable.
 - **Progressive session information:** Horizontal paging may reveal only live facts the current player exposes (play state, elapsed/remaining time, queue position, and output declaration). The circled information action opens track metadata; it does not invent codec, sample-rate, PCM, or proof telemetry.
 - **Details:** Overflow opens an inline sheet for track details; Chain remains the authoritative path for route and proof data.
 

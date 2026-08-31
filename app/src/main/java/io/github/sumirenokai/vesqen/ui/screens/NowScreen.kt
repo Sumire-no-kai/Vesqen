@@ -1,5 +1,8 @@
 package io.github.sumirenokai.vesqen.ui.screens
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -14,23 +17,31 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -43,6 +54,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -65,6 +77,8 @@ import io.github.sumirenokai.vesqen.ui.theme.MidnightViolet
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.core.view.WindowCompat
 
 @Composable
 fun NowScreen(
@@ -97,66 +111,84 @@ fun NowScreen(
     val openDetails = { if (currentTrack != null) showDetails = true }
 
     VesqenTheme(darkTheme = true) {
-        BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-            val configuration = LocalConfiguration.current
-            val isShortScreen = maxHeight < 640.dp || configuration.fontScale > 1.15f
-            val isUltraCompact = maxHeight < 560.dp ||
-                (maxHeight < 640.dp && configuration.fontScale > 1.15f) ||
-                configuration.fontScale > 1.5f
-            val isExtremeText = configuration.fontScale >= 2f
-            val artworkSize = minOf(
-                when {
-                    maxHeight < 480.dp ||
-                        (maxHeight < 640.dp && configuration.fontScale >= 1.8f) ||
-                        isExtremeText -> 64.dp
-                    isUltraCompact -> 96.dp
-                    configuration.fontScale > 1.3f -> 128.dp
-                    maxHeight < 640.dp || configuration.fontScale > 1.15f -> 176.dp
-                    maxHeight < 760.dp -> 224.dp
-                    else -> 320.dp
-                },
-                (maxWidth - 64.dp).coerceAtLeast(128.dp),
-            )
+        FullPlayerSystemBars()
+        Surface(
+            modifier = modifier
+                .fillMaxSize()
+                .testTag("vesqen.now.focus-surface"),
+            color = MidnightViolet,
+            contentColor = MaterialTheme.colorScheme.onBackground,
+        ) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val configuration = LocalConfiguration.current
+                val isShortScreen = maxHeight < 720.dp || configuration.fontScale > 1.15f
+                val isUltraCompact = maxHeight < 640.dp ||
+                    (maxHeight < 720.dp && configuration.fontScale > 1.15f) ||
+                    configuration.fontScale > 1.5f
+                // A short landscape window has the same vertical budget as extreme text: reserve
+                // it for transport rather than letting artist and route metadata clip the dock.
+                val isExtremeText = configuration.fontScale >= 2f || maxHeight < 480.dp
+                val isTallScreen = maxHeight >= 760.dp && configuration.fontScale <= 1.15f
+                val artworkSize = minOf(
+                    when {
+                        maxHeight < 480.dp ||
+                            (maxHeight < 640.dp && configuration.fontScale >= 1.8f) ||
+                            isExtremeText -> 64.dp
+                        isUltraCompact -> 88.dp
+                        configuration.fontScale > 1.3f -> 120.dp
+                        maxHeight < 720.dp || configuration.fontScale > 1.15f -> 160.dp
+                        maxHeight < 760.dp -> 200.dp
+                        else -> 248.dp
+                    },
+                    (maxWidth - 72.dp).coerceAtLeast(96.dp),
+                )
 
-            FullPlayerBackdrop(artworkTrack = artworkTrack)
-            Column(modifier = Modifier.fillMaxSize()) {
-                NowHeader(onBack = onBackToLibrary)
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .testTag("vesqen.now.info-pager"),
-                    beyondViewportPageCount = 0,
-                ) { page ->
-                    when (page) {
-                        0 -> NowPlayerPage(
-                            snapshot = snapshot,
-                            currentTrack = currentTrack,
-                            artworkTrack = artworkTrack,
-                            artworkSize = artworkSize,
-                            isShortScreen = isShortScreen,
-                            isUltraCompact = isUltraCompact,
-                            isExtremeText = isExtremeText,
-                            onOpenChain = onOpenChain,
-                            onToggleShuffle = onToggleShuffle,
-                            onPrevious = onPrevious,
-                            onPlayPause = onPlayPause,
-                            onNext = onNext,
-                            onCycleRepeatMode = onCycleRepeatMode,
-                            onSeek = onSeek,
-                            onOpenDetails = openDetails,
-                            selectedInfoPage = page,
-                        )
+                FullPlayerBackdrop(artworkTrack = artworkTrack)
+                Column(modifier = Modifier.fillMaxSize()) {
+                    NowHeader(
+                        onBack = onBackToLibrary,
+                        modifier = Modifier.statusBarsPadding(),
+                    )
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .testTag("vesqen.now.info-pager"),
+                        beyondViewportPageCount = 0,
+                    ) { page ->
+                        when (page) {
+                            0 -> NowPlayerPage(
+                                snapshot = snapshot,
+                                artworkTrack = artworkTrack,
+                                artworkSize = artworkSize,
+                                isShortScreen = isShortScreen,
+                                isUltraCompact = isUltraCompact,
+                                isExtremeText = isExtremeText,
+                                isTallScreen = isTallScreen,
+                                onOpenChain = onOpenChain,
+                                onToggleShuffle = onToggleShuffle,
+                                onPrevious = onPrevious,
+                                onPlayPause = onPlayPause,
+                                onNext = onNext,
+                                onCycleRepeatMode = onCycleRepeatMode,
+                                onSeek = onSeek,
+                                onOpenDetails = openDetails,
+                                canOpenDetails = currentTrack != null,
+                                selectedInfoPage = page,
+                            )
 
-                        else -> NowSessionPage(
-                            snapshot = snapshot,
-                            onOpenChain = onOpenChain,
-                            onOpenDetails = openDetails,
-                            canOpenDetails = currentTrack != null,
-                            isUltraCompact = isUltraCompact,
-                            selectedInfoPage = page,
-                        )
+                            else -> NowSessionPage(
+                                snapshot = snapshot,
+                                onOpenChain = onOpenChain,
+                                onToggleShuffle = onToggleShuffle,
+                                onCycleRepeatMode = onCycleRepeatMode,
+                                onOpenDetails = openDetails,
+                                canOpenDetails = currentTrack != null,
+                                isUltraCompact = isUltraCompact,
+                                selectedInfoPage = page,
+                            )
+                        }
                     }
                 }
             }
@@ -202,12 +234,126 @@ private fun FullPlayerBackdrop(artworkTrack: AudioTrack?) {
     }
 }
 
+/**
+ * The focused player deliberately owns the window edge-to-edge while it is visible. The
+ * surrounding app can still follow the system theme, but this protected listening surface needs
+ * light system-bar icons over its Midnight Violet backdrop.
+ */
+@Composable
+private fun FullPlayerSystemBars() {
+    val view = LocalView.current
+    val restoreLightAppearance = !isSystemInDarkTheme()
+
+    DisposableEffect(view, restoreLightAppearance) {
+        val controller = view.context.findActivity()?.window?.let { window ->
+            WindowCompat.getInsetsController(window, view)
+        }
+        controller?.isAppearanceLightStatusBars = false
+        controller?.isAppearanceLightNavigationBars = false
+
+        onDispose {
+            controller?.isAppearanceLightStatusBars = restoreLightAppearance
+            controller?.isAppearanceLightNavigationBars = restoreLightAppearance
+        }
+    }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 @Composable
 private fun NowPlayerPage(
     snapshot: PlaybackSnapshot,
-    currentTrack: AudioTrack?,
     artworkTrack: AudioTrack?,
     artworkSize: androidx.compose.ui.unit.Dp,
+    isShortScreen: Boolean,
+    isUltraCompact: Boolean,
+    isExtremeText: Boolean,
+    isTallScreen: Boolean,
+    onOpenChain: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onPrevious: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onCycleRepeatMode: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onOpenDetails: () -> Unit,
+    canOpenDetails: Boolean,
+    selectedInfoPage: Int,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clipToBounds()
+            .testTag("vesqen.now.player-page")
+    ) {
+        PlayerArtworkStage(
+            artworkTrack = artworkTrack,
+            artworkSize = artworkSize,
+            compact = isUltraCompact,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = when {
+                    isUltraCompact -> VesqenSpacing.xxs
+                    isTallScreen -> VesqenSpacing.lg
+                    else -> VesqenSpacing.sm
+                }),
+        )
+        NowTransportDock(
+            snapshot = snapshot,
+            isShortScreen = isShortScreen,
+            isUltraCompact = isUltraCompact,
+            isExtremeText = isExtremeText,
+            onOpenChain = onOpenChain,
+            onToggleShuffle = onToggleShuffle,
+            onPrevious = onPrevious,
+            onPlayPause = onPlayPause,
+            onNext = onNext,
+            onCycleRepeatMode = onCycleRepeatMode,
+            onSeek = onSeek,
+            onOpenDetails = onOpenDetails,
+            canOpenDetails = canOpenDetails,
+            selectedInfoPage = selectedInfoPage,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding(),
+        )
+    }
+}
+
+@Composable
+private fun PlayerArtworkStage(
+    artworkTrack: AudioTrack?,
+    artworkSize: androidx.compose.ui.unit.Dp,
+    compact: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val framePadding = if (compact) VesqenSpacing.xxs else VesqenSpacing.xs
+    Surface(
+        modifier = modifier
+            .size(artworkSize + framePadding * 2)
+            .testTag("vesqen.now.artwork-stage"),
+        shape = RoundedCornerShape(VesqenRadii.surface),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
+        AlbumArtwork(
+            track = artworkTrack,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(framePadding)
+                .testTag("vesqen.now.artwork"),
+            emphasized = true,
+        )
+    }
+}
+
+@Composable
+private fun NowTransportDock(
+    snapshot: PlaybackSnapshot,
     isShortScreen: Boolean,
     isUltraCompact: Boolean,
     isExtremeText: Boolean,
@@ -219,56 +365,75 @@ private fun NowPlayerPage(
     onCycleRepeatMode: () -> Unit,
     onSeek: (Long) -> Unit,
     onOpenDetails: () -> Unit,
+    canOpenDetails: Boolean,
     selectedInfoPage: Int,
+    modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .clipToBounds()
-            .testTag("vesqen.now.player-page")
-            .padding(horizontal = VesqenSpacing.md),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(
-            when {
-                isUltraCompact -> 0.dp
-                isShortScreen -> VesqenSpacing.xs
-                else -> VesqenSpacing.sm
-            },
+    val verticalPadding = when {
+        isUltraCompact -> VesqenSpacing.xs
+        isShortScreen -> VesqenSpacing.sm
+        else -> VesqenSpacing.lg
+    }
+    val sectionSpacing = when {
+        isUltraCompact -> VesqenSpacing.xxs
+        isShortScreen -> VesqenSpacing.xs
+        else -> VesqenSpacing.sm
+    }
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("vesqen.now.transport-dock"),
+        shape = RoundedCornerShape(
+            topStart = VesqenRadii.surface,
+            topEnd = VesqenRadii.surface,
         ),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
-        if (!isUltraCompact) Spacer(Modifier.height(VesqenSpacing.xs))
-        AlbumArtwork(
-            track = artworkTrack,
-            modifier = Modifier
-                .size(artworkSize)
-                .testTag("vesqen.now.artwork"),
-            emphasized = true,
-        )
-        NowTrackIdentity(snapshot = snapshot, showArtist = !isExtremeText)
-        if (!isExtremeText) {
-            OutputStatusChip(
-                declaration = snapshot.declaration,
-                onClick = onOpenChain,
-                modifier = Modifier.testTag("vesqen.now.open-chain"),
+        Column(
+            modifier = Modifier.padding(
+                start = VesqenSpacing.lg,
+                top = verticalPadding,
+                end = VesqenSpacing.lg,
+                bottom = VesqenSpacing.xs,
+            ),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(sectionSpacing),
+        ) {
+            NowTrackIdentity(
+                snapshot = snapshot,
+                showArtist = !isExtremeText,
+                showAlbum = !isUltraCompact && !isExtremeText,
+                compact = isUltraCompact,
+            )
+            if (!isExtremeText) {
+                OutputStatusChip(
+                    declaration = snapshot.declaration,
+                    onClick = onOpenChain,
+                    modifier = Modifier.testTag("vesqen.now.open-chain"),
+                )
+            }
+            PlaybackProgress(snapshot = snapshot, onSeek = onSeek)
+            PlaybackControls(
+                snapshot = snapshot,
+                onPrevious = onPrevious,
+                onPlayPause = onPlayPause,
+                onNext = onNext,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 320.dp),
+            )
+            NowInfoFooter(
+                snapshot = snapshot,
+                selectedPage = selectedInfoPage,
+                onToggleShuffle = onToggleShuffle,
+                onCycleRepeatMode = onCycleRepeatMode,
+                onOpenDetails = onOpenDetails,
+                canOpenDetails = canOpenDetails,
+                compact = isUltraCompact,
             )
         }
-        PlaybackProgress(snapshot = snapshot, onSeek = onSeek)
-        PlaybackControls(
-            snapshot = snapshot,
-            onToggleShuffle = onToggleShuffle,
-            onPrevious = onPrevious,
-            onPlayPause = onPlayPause,
-            onNext = onNext,
-            onCycleRepeatMode = onCycleRepeatMode,
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 320.dp),
-        )
-        NowInfoFooter(
-            selectedPage = selectedInfoPage,
-            onOpenDetails = onOpenDetails,
-            canOpenDetails = currentTrack != null,
-        )
     }
 }
 
@@ -276,6 +441,8 @@ private fun NowPlayerPage(
 private fun NowSessionPage(
     snapshot: PlaybackSnapshot,
     onOpenChain: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeatMode: () -> Unit,
     onOpenDetails: () -> Unit,
     canOpenDetails: Boolean,
     isUltraCompact: Boolean,
@@ -290,6 +457,7 @@ private fun NowSessionPage(
         modifier = Modifier
             .fillMaxSize()
             .clipToBounds()
+            .navigationBarsPadding()
             .padding(horizontal = if (isUltraCompact) VesqenSpacing.md else VesqenSpacing.lg),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -301,6 +469,7 @@ private fun NowSessionPage(
                 .testTag("vesqen.now.info.session"),
             shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.surface),
             color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .96f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
         ) {
             Column(
                 modifier = Modifier.padding(if (isUltraCompact) VesqenSpacing.md else VesqenSpacing.lg),
@@ -347,9 +516,13 @@ private fun NowSessionPage(
         }
         Spacer(Modifier.weight(1f))
         NowInfoFooter(
+            snapshot = snapshot,
             selectedPage = selectedInfoPage,
+            onToggleShuffle = onToggleShuffle,
+            onCycleRepeatMode = onCycleRepeatMode,
             onOpenDetails = onOpenDetails,
             canOpenDetails = canOpenDetails,
+            compact = isUltraCompact,
         )
     }
 }
@@ -379,19 +552,68 @@ private fun NowInfoLine(label: String, value: String, compact: Boolean) {
 
 @Composable
 private fun NowInfoFooter(
+    snapshot: PlaybackSnapshot,
     selectedPage: Int,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeatMode: () -> Unit,
     onOpenDetails: () -> Unit,
     canOpenDetails: Boolean,
+    compact: Boolean,
 ) {
-    Box(
+    val controlsEnabled = snapshot.isControllerReady
+    val shuffleState = stringResource(
+        if (snapshot.shuffleEnabled) R.string.shuffle_on else R.string.shuffle_off,
+    )
+    val repeatState = stringResource(
+        when (snapshot.repeatMode) {
+            io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode.OFF -> R.string.repeat_off
+            io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode.ALL -> R.string.repeat_all
+            io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode.ONE -> R.string.repeat_one
+        },
+    )
+    val inactiveModeColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val disabledModeColor = inactiveModeColor.copy(alpha = .38f)
+
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .height(48.dp),
     ) {
+        val showSessionLabel = !compact && maxWidth >= 300.dp
+        IconButton(
+            onClick = onToggleShuffle,
+            enabled = controlsEnabled,
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .size(48.dp)
+                .testTag("vesqen.now.shuffle")
+                .semantics { stateDescription = shuffleState },
+            colors = IconButtonDefaults.iconButtonColors(
+                contentColor = if (snapshot.shuffleEnabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    inactiveModeColor
+                },
+                disabledContentColor = disabledModeColor,
+            ),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Shuffle,
+                contentDescription = stringResource(R.string.shuffle),
+            )
+        }
         Row(
             modifier = Modifier.align(Alignment.Center),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (showSessionLabel) {
+                Text(
+                    text = stringResource(R.string.playback_session),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             repeat(2) { index ->
                 Surface(
                     modifier = Modifier.size(if (index == selectedPage) 8.dp else 6.dp),
@@ -404,26 +626,63 @@ private fun NowInfoFooter(
                 ) {}
             }
         }
-        IconButton(
-            onClick = onOpenDetails,
-            enabled = canOpenDetails,
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .size(48.dp)
-                .testTag("vesqen.now.info"),
+        Row(
+            modifier = Modifier.align(Alignment.CenterEnd),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.Outlined.Info,
-                contentDescription = stringResource(R.string.track_information),
-            )
+            IconButton(
+                onClick = onCycleRepeatMode,
+                enabled = controlsEnabled,
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag("vesqen.now.repeat")
+                    .semantics { stateDescription = repeatState },
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = if (
+                        snapshot.repeatMode == io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode.OFF
+                    ) {
+                        inactiveModeColor
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+                    disabledContentColor = disabledModeColor,
+                ),
+            ) {
+                Icon(
+                    imageVector = if (
+                        snapshot.repeatMode == io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode.ONE
+                    ) {
+                        Icons.Filled.RepeatOne
+                    } else {
+                        Icons.Filled.Repeat
+                    },
+                    contentDescription = stringResource(R.string.repeat),
+                )
+            }
+            IconButton(
+                onClick = onOpenDetails,
+                enabled = canOpenDetails,
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag("vesqen.now.info"),
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .38f),
+                ),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Info,
+                    contentDescription = stringResource(R.string.track_information),
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun NowHeader(onBack: () -> Unit) {
+private fun NowHeader(onBack: () -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
@@ -435,13 +694,18 @@ private fun NowHeader(onBack: () -> Unit) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = stringResource(R.string.back_to_library),
+                tint = MaterialTheme.colorScheme.onSurface,
             )
         }
         Text(
             text = stringResource(R.string.destination_now),
             style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Center,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.size(48.dp))
     }
@@ -449,7 +713,13 @@ private fun NowHeader(onBack: () -> Unit) {
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
-private fun NowTrackIdentity(snapshot: PlaybackSnapshot, showArtist: Boolean) {
+private fun NowTrackIdentity(
+    snapshot: PlaybackSnapshot,
+    showArtist: Boolean,
+    showAlbum: Boolean,
+    compact: Boolean,
+) {
+    val album = snapshot.album.takeIf { it.isNotBlank() }
     Column(
         modifier = Modifier.padding(horizontal = VesqenSpacing.md),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -457,7 +727,8 @@ private fun NowTrackIdentity(snapshot: PlaybackSnapshot, showArtist: Boolean) {
     ) {
         Text(
             text = snapshot.title.ifBlank { stringResource(R.string.unknown_title) },
-            style = MaterialTheme.typography.headlineSmall,
+            style = if (compact) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Clip,
@@ -470,11 +741,21 @@ private fun NowTrackIdentity(snapshot: PlaybackSnapshot, showArtist: Boolean) {
         if (showArtist) {
             Text(
                 text = snapshot.artist.ifBlank { stringResource(R.string.unknown_artist) },
-                style = MaterialTheme.typography.bodyLarge,
+                style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (showAlbum && album != null) {
+            Text(
+                text = album,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .78f),
             )
         }
         if (!snapshot.isControllerReady) {

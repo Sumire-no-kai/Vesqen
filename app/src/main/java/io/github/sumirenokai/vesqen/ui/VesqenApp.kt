@@ -18,11 +18,13 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -168,7 +170,11 @@ fun VesqenAppContent(
         returnDestination = VesqenDestination.valueOf(returnDestinationName),
     )
     val destination = navigationState.destination
-    val useNavigationRail = LocalConfiguration.current.screenWidthDp >= 600
+    val hasFocusedPlayer = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
+    // A protected Now surface owns the whole window. Keeping a light navigation rail beside it
+    // would split the transparent status bar between incompatible backgrounds and make one set of
+    // system icons unreadable. Back remains the deliberate route to the stable top-level shell.
+    val useNavigationRail = LocalConfiguration.current.screenWidthDp >= 600 && !hasFocusedPlayer
 
     fun applyNavigation(updated: VesqenNavigationState) {
         destinationName = updated.destination.name
@@ -276,6 +282,7 @@ private fun VesqenDestinationFrame(
     onCycleRepeatMode: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val usesFocusedPlayerInsets = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
     val showMiniPlayer = state.playback.hasActiveTrack && destination != VesqenDestination.NOW
     val showCompactNavigation = showNavigation && destination != VesqenDestination.NOW
     val currentTrack = state.playback.trackId?.takeIf {
@@ -293,6 +300,11 @@ private fun VesqenDestinationFrame(
     }
     Scaffold(
         modifier = modifier,
+        contentWindowInsets = if (usesFocusedPlayerInsets) {
+            WindowInsets(0, 0, 0, 0)
+        } else {
+            ScaffoldDefaults.contentWindowInsets
+        },
         bottomBar = {
             Column {
                 if (showMiniPlayer) {
@@ -318,9 +330,7 @@ private fun VesqenDestinationFrame(
     ) { innerPadding ->
         AnimatedContent(
             targetState = destination,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
+            modifier = Modifier.fillMaxSize(),
             transitionSpec = {
                 val duration = if (
                     targetState == VesqenDestination.NOW && initialState != VesqenDestination.NOW
@@ -341,6 +351,15 @@ private fun VesqenDestinationFrame(
             },
             label = "vesqen-destination",
         ) { activeDestination ->
+            // During destination transitions keep the outgoing focused player edge-to-edge until
+            // it fades out. Applying the incoming Library padding here would flash a white inset.
+            val destinationModifier = if (
+                activeDestination == VesqenDestination.NOW && state.playback.hasActiveTrack
+            ) {
+                Modifier
+            } else {
+                Modifier.padding(innerPadding)
+            }
             when (activeDestination) {
                 VesqenDestination.LIBRARY -> LibraryScreen(
                     state = state.library,
@@ -350,6 +369,7 @@ private fun VesqenDestinationFrame(
                     onOpenNotificationSettings = onOpenNotificationSettings,
                     onRescan = onRescan,
                     onTrackSelected = onTrackSelected,
+                    modifier = destinationModifier,
                 )
 
                 VesqenDestination.NOW -> NowScreen(
@@ -365,12 +385,14 @@ private fun VesqenDestinationFrame(
                     onCycleRepeatMode = onCycleRepeatMode,
                     onSeek = onSeek,
                     onPlayTrack = onTrackSelected,
+                    modifier = destinationModifier,
                 )
 
                 VesqenDestination.CHAIN -> ChainScreen(
                     library = state.library,
                     snapshot = state.playback,
                     onBackToLibrary = onNavigateBack,
+                    modifier = destinationModifier,
                 )
             }
         }
