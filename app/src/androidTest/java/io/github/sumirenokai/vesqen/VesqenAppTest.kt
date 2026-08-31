@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode
 import io.github.sumirenokai.vesqen.ui.LibraryUiState
@@ -105,8 +106,7 @@ class VesqenAppTest {
         composeRule.onAllNodesWithText(context.getString(R.string.system_mixed)).assertCountEquals(0)
         composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
         composeRule.onNodeWithTag("vesqen.now.progress").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.now.shuffle").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.now.repeat").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.playback-order").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.info").assertIsDisplayed()
         val outputDescription = "${context.getString(R.string.output_status_description, context.getString(R.string.system_mixed))}. " +
             context.getString(R.string.open_playback_chain)
@@ -172,8 +172,7 @@ class VesqenAppTest {
         var previousCalls = 0
         var playPauseCalls = 0
         var nextCalls = 0
-        var shuffleCalls = 0
-        var repeatCalls = 0
+        var playbackOrderCalls = 0
         render(
             state = grantedState(
                 tracks = sampleTracks,
@@ -189,33 +188,30 @@ class VesqenAppTest {
             onPrevious = { previousCalls++ },
             onPlayPause = { playPauseCalls++ },
             onNext = { nextCalls++ },
-            onToggleShuffle = { shuffleCalls++ },
-            onCycleRepeatMode = { repeatCalls++ },
+            onCyclePlaybackOrder = { playbackOrderCalls++ },
         )
 
         composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
         composeRule.onNodeWithTag("vesqen.now.previous").performClick()
         composeRule.onNodeWithTag("vesqen.now.play-pause").performClick()
         composeRule.onNodeWithTag("vesqen.now.next").performClick()
-        composeRule.onNodeWithTag("vesqen.now.shuffle").performClick()
-        composeRule.onNodeWithTag("vesqen.now.repeat").performClick()
+        composeRule.onNodeWithTag("vesqen.now.playback-order").performClick()
         composeRule.onNodeWithTag("vesqen.now.back").performClick()
 
         composeRule.runOnIdle {
             assertEquals(1, previousCalls)
             assertEquals(1, playPauseCalls)
             assertEquals(1, nextCalls)
-            assertEquals(1, shuffleCalls)
-            assertEquals(1, repeatCalls)
+            assertEquals(1, playbackOrderCalls)
         }
         composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
     }
 
     @Test
-    fun one_repeat_control_cycles_off_all_one_and_back_with_its_state_exposed() {
+    fun one_playback_order_control_cycles_all_modes_with_its_state_exposed() {
+        val playbackOrder = androidx.compose.runtime.mutableStateOf(PlaybackOrderMode.SEQUENTIAL)
         composeRule.setContent {
             VesqenTheme {
-                val repeatMode = remember { androidx.compose.runtime.mutableStateOf(PlaybackRepeatMode.OFF) }
                 val track = sampleTracks.first()
                 VesqenAppContent(
                     state = grantedState(
@@ -227,7 +223,18 @@ class VesqenAppTest {
                             artist = track.artist,
                             album = track.album,
                             durationMs = track.durationMs,
-                            repeatMode = repeatMode.value,
+                            shuffleEnabled = playbackOrder.value in setOf(
+                                PlaybackOrderMode.SHUFFLE,
+                                PlaybackOrderMode.SHUFFLE_REPEAT_ALL,
+                                PlaybackOrderMode.SHUFFLE_REPEAT_ONE,
+                            ),
+                            repeatMode = when (playbackOrder.value) {
+                                PlaybackOrderMode.REPEAT_ALL,
+                                PlaybackOrderMode.SHUFFLE_REPEAT_ALL -> PlaybackRepeatMode.ALL
+                                PlaybackOrderMode.REPEAT_ONE,
+                                PlaybackOrderMode.SHUFFLE_REPEAT_ONE -> PlaybackRepeatMode.ONE
+                                else -> PlaybackRepeatMode.OFF
+                            },
                         ),
                     ),
                     onRequestMusicAccess = {},
@@ -239,12 +246,14 @@ class VesqenAppTest {
                     onPlayPause = {},
                     onNext = {},
                     onSeek = {},
-                    onToggleShuffle = {},
-                    onCycleRepeatMode = {
-                        repeatMode.value = when (repeatMode.value) {
-                            PlaybackRepeatMode.OFF -> PlaybackRepeatMode.ALL
-                            PlaybackRepeatMode.ALL -> PlaybackRepeatMode.ONE
-                            PlaybackRepeatMode.ONE -> PlaybackRepeatMode.OFF
+                    onCyclePlaybackOrder = {
+                        playbackOrder.value = when (playbackOrder.value) {
+                            PlaybackOrderMode.SEQUENTIAL -> PlaybackOrderMode.SHUFFLE
+                            PlaybackOrderMode.SHUFFLE -> PlaybackOrderMode.REPEAT_ALL
+                            PlaybackOrderMode.REPEAT_ALL -> PlaybackOrderMode.REPEAT_ONE
+                            PlaybackOrderMode.REPEAT_ONE -> PlaybackOrderMode.SEQUENTIAL
+                            PlaybackOrderMode.SHUFFLE_REPEAT_ALL,
+                            PlaybackOrderMode.SHUFFLE_REPEAT_ONE -> PlaybackOrderMode.SEQUENTIAL
                         }
                     },
                     onRefreshConnectedOutputs = {},
@@ -254,33 +263,80 @@ class VesqenAppTest {
         }
 
         composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
-        composeRule.onAllNodesWithTag("vesqen.now.repeat").assertCountEquals(1)
-        composeRule.onNodeWithTag("vesqen.now.repeat").assert(
+        composeRule.onAllNodesWithTag("vesqen.now.playback-order").assertCountEquals(1)
+        composeRule.onAllNodesWithTag("vesqen.now.shuffle").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("vesqen.now.repeat").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.now.playback-order").assert(
             SemanticsMatcher.expectValue(
                 SemanticsProperties.StateDescription,
-                context.getString(R.string.repeat_off),
+                context.getString(R.string.playback_order_sequential),
+            ),
+        )
+        composeRule.onNodeWithTag("vesqen.now.playback-order").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.ContentDescription,
+                listOf(context.getString(R.string.playback_order)),
             ),
         )
 
-        composeRule.onNodeWithTag("vesqen.now.repeat").performClick()
-        composeRule.onNodeWithTag("vesqen.now.repeat").assert(
+        composeRule.onNodeWithTag("vesqen.now.playback-order").performClick()
+        composeRule.onNodeWithTag("vesqen.now.playback-order").assert(
             SemanticsMatcher.expectValue(
                 SemanticsProperties.StateDescription,
-                context.getString(R.string.repeat_all),
+                context.getString(R.string.playback_order_shuffle),
             ),
         )
-        composeRule.onNodeWithTag("vesqen.now.repeat").performClick()
-        composeRule.onNodeWithTag("vesqen.now.repeat").assert(
+        composeRule.onNodeWithTag("vesqen.now.playback-order").performClick()
+        composeRule.onNodeWithTag("vesqen.now.playback-order").assert(
             SemanticsMatcher.expectValue(
                 SemanticsProperties.StateDescription,
-                context.getString(R.string.repeat_one),
+                context.getString(R.string.playback_order_repeat_all),
             ),
         )
-        composeRule.onNodeWithTag("vesqen.now.repeat").performClick()
-        composeRule.onNodeWithTag("vesqen.now.repeat").assert(
+        composeRule.onNodeWithTag("vesqen.now.playback-order").performClick()
+        composeRule.onNodeWithTag("vesqen.now.playback-order").assert(
             SemanticsMatcher.expectValue(
                 SemanticsProperties.StateDescription,
-                context.getString(R.string.repeat_off),
+                context.getString(R.string.playback_order_repeat_one),
+            ),
+        )
+        composeRule.onNodeWithTag("vesqen.now.playback-order").performClick()
+        composeRule.onNodeWithTag("vesqen.now.playback-order").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                context.getString(R.string.playback_order_sequential),
+            ),
+        )
+        composeRule.runOnIdle {
+            playbackOrder.value = PlaybackOrderMode.SHUFFLE_REPEAT_ALL
+        }
+        composeRule.onNodeWithTag("vesqen.now.playback-order").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                context.getString(R.string.playback_order_shuffle_repeat_all),
+            ),
+        )
+        composeRule.onNodeWithTag("vesqen.now.playback-order").performClick()
+        composeRule.onNodeWithTag("vesqen.now.playback-order").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                context.getString(R.string.playback_order_sequential),
+            ),
+        )
+        composeRule.runOnIdle {
+            playbackOrder.value = PlaybackOrderMode.SHUFFLE_REPEAT_ONE
+        }
+        composeRule.onNodeWithTag("vesqen.now.playback-order").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                context.getString(R.string.playback_order_shuffle_repeat_one),
+            ),
+        )
+        composeRule.onNodeWithTag("vesqen.now.playback-order").performClick()
+        composeRule.onNodeWithTag("vesqen.now.playback-order").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                context.getString(R.string.playback_order_sequential),
             ),
         )
     }
@@ -316,8 +372,7 @@ class VesqenAppTest {
                     onPlayPause = {},
                     onNext = { trackIndex.value = (trackIndex.value + 1).coerceAtMost(sampleTracks.lastIndex) },
                     onSeek = {},
-                    onToggleShuffle = {},
-                    onCycleRepeatMode = {},
+                    onCyclePlaybackOrder = {},
                     onRefreshConnectedOutputs = {},
                     motionPolicy = VesqenMotionPolicy(reduceMotion = true),
                 )
@@ -474,11 +529,10 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.title").assertIsDisplayed()
         composeRule.onNodeWithText(longTitle).assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.progress").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.now.shuffle").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.playback-order").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.play-pause").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.now.repeat").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.info").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.player-page").assert(
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
@@ -501,9 +555,9 @@ class VesqenAppTest {
             tags = arrayOf("vesqen.now.compact-chain"),
         )
         assertFooterActionsDoNotOverlap(
-            "vesqen.now.shuffle",
+            "vesqen.now.playback-order",
             "vesqen.now.session-toggle",
-            "vesqen.now.repeat",
+            "vesqen.now.compact-chain",
             "vesqen.now.info",
         )
         composeRule.onNodeWithTag("vesqen.now.compact-chain").performClick()
@@ -541,8 +595,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.play-pause").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.now.shuffle").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.now.repeat").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.playback-order").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.info").assertIsDisplayed()
     }
 
@@ -574,8 +627,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.play-pause").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.now.shuffle").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.now.repeat").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.playback-order").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.info").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.player-page").assert(
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
@@ -610,8 +662,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.play-pause").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.now.shuffle").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.now.repeat").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.playback-order").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.info").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.player-page").assert(
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
@@ -673,8 +724,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.play-pause").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.now.shuffle").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.now.repeat").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.playback-order").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.info").assertIsDisplayed()
         assertFocusedNowControlsAreFullyVisible()
     }
@@ -742,6 +792,14 @@ class VesqenAppTest {
     }
 
     private fun assertFocusedNowControlsAreFullyVisible() {
+        val footerTags = mutableListOf(
+            "vesqen.now.playback-order",
+            "vesqen.now.session-toggle",
+            "vesqen.now.info",
+        )
+        if (composeRule.onAllNodesWithTag("vesqen.now.compact-chain").fetchSemanticsNodes().isNotEmpty()) {
+            footerTags.add(2, "vesqen.now.compact-chain")
+        }
         assertNodesAreFullyVisibleIn(
             containerTag = "vesqen.now.focus-surface",
             tags = arrayOf("vesqen.now.back"),
@@ -754,18 +812,10 @@ class VesqenAppTest {
                 "vesqen.now.previous",
                 "vesqen.now.play-pause",
                 "vesqen.now.next",
-                "vesqen.now.shuffle",
-                "vesqen.now.session-toggle",
-                "vesqen.now.repeat",
-                "vesqen.now.info",
+                *footerTags.toTypedArray(),
             ),
         )
-        assertFooterActionsDoNotOverlap(
-            "vesqen.now.shuffle",
-            "vesqen.now.session-toggle",
-            "vesqen.now.repeat",
-            "vesqen.now.info",
-        )
+        assertFooterActionsDoNotOverlap(*footerTags.toTypedArray())
 
         val title = composeRule.onNodeWithTag("vesqen.now.title").fetchSemanticsNode()
         val primaryTransport = composeRule.onNodeWithTag("vesqen.now.play-pause").fetchSemanticsNode()
@@ -788,10 +838,9 @@ class VesqenAppTest {
             "vesqen.now.previous",
             "vesqen.now.play-pause",
             "vesqen.now.next",
-            "vesqen.now.shuffle",
+            "vesqen.now.playback-order",
             "vesqen.now.session-toggle",
             "vesqen.now.compact-chain",
-            "vesqen.now.repeat",
             "vesqen.now.info",
         )
 
@@ -833,9 +882,8 @@ class VesqenAppTest {
             "vesqen.now.previous",
             "vesqen.now.play-pause",
             "vesqen.now.next",
-            "vesqen.now.shuffle",
+            "vesqen.now.playback-order",
             "vesqen.now.session-toggle",
-            "vesqen.now.repeat",
             "vesqen.now.info",
         )
         return stableTags.associateWith { tag ->
@@ -877,8 +925,7 @@ class VesqenAppTest {
         onPrevious: () -> Unit = {},
         onPlayPause: () -> Unit = {},
         onNext: () -> Unit = {},
-        onToggleShuffle: () -> Unit = {},
-        onCycleRepeatMode: () -> Unit = {},
+        onCyclePlaybackOrder: () -> Unit = {},
         containerWidth: Dp? = null,
         containerHeight: Dp = 720.dp,
         fontScale: Float? = null,
@@ -899,8 +946,7 @@ class VesqenAppTest {
                         onPlayPause = onPlayPause,
                         onNext = onNext,
                         onSeek = {},
-                        onToggleShuffle = onToggleShuffle,
-                        onCycleRepeatMode = onCycleRepeatMode,
+                        onCyclePlaybackOrder = onCyclePlaybackOrder,
                         onRefreshConnectedOutputs = {},
                         motionPolicy = motionPolicy,
                     )

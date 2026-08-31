@@ -32,6 +32,13 @@
     <string name="repeat_off">Repeat off</string>
     <string name="repeat_all">Repeat all</string>
     <string name="repeat_one">Repeat one</string>
+    <string name="playback_order">Playback order</string>
+    <string name="playback_order_sequential">Sequential</string>
+    <string name="playback_order_shuffle">Shuffle</string>
+    <string name="playback_order_repeat_all">Repeat all</string>
+    <string name="playback_order_repeat_one">Repeat one</string>
+    <string name="playback_order_shuffle_repeat_all">Shuffle and repeat all</string>
+    <string name="playback_order_shuffle_repeat_one">Shuffle and repeat one</string>
     <string name="playback_position">%1$s of %2$s</string>
     <string name="destination_library">Library</string>
     <string name="destination_now">Now</string>

@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountTree
+import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
@@ -83,8 +84,8 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
-import io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode
 import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.components.PlaybackControls
@@ -132,11 +133,10 @@ fun NowScreen(
     artworkTrack: AudioTrack?,
     onBackToLibrary: () -> Unit,
     onOpenChain: () -> Unit,
-    onToggleShuffle: () -> Unit,
+    onCyclePlaybackOrder: () -> Unit,
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
-    onCycleRepeatMode: () -> Unit,
     onSeek: (Long) -> Unit,
     onPlayTrack: (AudioTrack) -> Unit,
     motionPolicy: VesqenMotionPolicy,
@@ -232,11 +232,10 @@ fun NowScreen(
                         isExtremeText = isExtremeText,
                         isTallScreen = isTallScreen,
                         onOpenChain = onOpenChain,
-                        onToggleShuffle = onToggleShuffle,
+                        onCyclePlaybackOrder = onCyclePlaybackOrder,
                         onPrevious = requestPrevious,
                         onPlayPause = onPlayPause,
                         onNext = requestNext,
-                        onCycleRepeatMode = onCycleRepeatMode,
                         onSeek = onSeek,
                         onOpenDetails = openDetails,
                         onToggleFocusContent = {
@@ -451,11 +450,10 @@ private fun NowPlayerPage(
     isExtremeText: Boolean,
     isTallScreen: Boolean,
     onOpenChain: () -> Unit,
-    onToggleShuffle: () -> Unit,
+    onCyclePlaybackOrder: () -> Unit,
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
-    onCycleRepeatMode: () -> Unit,
     onSeek: (Long) -> Unit,
     onOpenDetails: () -> Unit,
     onToggleFocusContent: () -> Unit,
@@ -501,11 +499,10 @@ private fun NowPlayerPage(
             isUltraCompact = isUltraCompact,
             isExtremeText = isExtremeText,
             onOpenChain = onOpenChain,
-            onToggleShuffle = onToggleShuffle,
+            onCyclePlaybackOrder = onCyclePlaybackOrder,
             onPrevious = onPrevious,
             onPlayPause = onPlayPause,
             onNext = onNext,
-            onCycleRepeatMode = onCycleRepeatMode,
             onSeek = onSeek,
             onOpenDetails = onOpenDetails,
             canOpenDetails = canOpenDetails,
@@ -627,11 +624,10 @@ private fun NowTransportDock(
     isUltraCompact: Boolean,
     isExtremeText: Boolean,
     onOpenChain: () -> Unit,
-    onToggleShuffle: () -> Unit,
+    onCyclePlaybackOrder: () -> Unit,
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
-    onCycleRepeatMode: () -> Unit,
     onSeek: (Long) -> Unit,
     onOpenDetails: () -> Unit,
     canOpenDetails: Boolean,
@@ -716,8 +712,7 @@ private fun NowTransportDock(
                 focusContent = focusContent,
                 onToggleFocusContent = onToggleFocusContent,
                 onOpenChain = onOpenChain,
-                onToggleShuffle = onToggleShuffle,
-                onCycleRepeatMode = onCycleRepeatMode,
+                onCyclePlaybackOrder = onCyclePlaybackOrder,
                 onOpenDetails = onOpenDetails,
                 canOpenDetails = canOpenDetails,
                 isExtremeText = isExtremeText,
@@ -821,22 +816,22 @@ private fun NowInfoFooter(
     focusContent: NowFocusContent,
     onToggleFocusContent: () -> Unit,
     onOpenChain: () -> Unit,
-    onToggleShuffle: () -> Unit,
-    onCycleRepeatMode: () -> Unit,
+    onCyclePlaybackOrder: () -> Unit,
     onOpenDetails: () -> Unit,
     canOpenDetails: Boolean,
     isExtremeText: Boolean,
     motionPolicy: VesqenMotionPolicy,
 ) {
     val controlsEnabled = snapshot.isControllerReady
-    val shuffleState = stringResource(
-        if (snapshot.shuffleEnabled) R.string.shuffle_on else R.string.shuffle_off,
-    )
-    val repeatState = stringResource(
-        when (snapshot.repeatMode) {
-            PlaybackRepeatMode.OFF -> R.string.repeat_off
-            PlaybackRepeatMode.ALL -> R.string.repeat_all
-            PlaybackRepeatMode.ONE -> R.string.repeat_one
+    val playbackOrderMode = snapshot.playbackOrderMode
+    val playbackOrderState = stringResource(
+        when (playbackOrderMode) {
+            PlaybackOrderMode.SEQUENTIAL -> R.string.playback_order_sequential
+            PlaybackOrderMode.SHUFFLE -> R.string.playback_order_shuffle
+            PlaybackOrderMode.REPEAT_ALL -> R.string.playback_order_repeat_all
+            PlaybackOrderMode.REPEAT_ONE -> R.string.playback_order_repeat_one
+            PlaybackOrderMode.SHUFFLE_REPEAT_ALL -> R.string.playback_order_shuffle_repeat_all
+            PlaybackOrderMode.SHUFFLE_REPEAT_ONE -> R.string.playback_order_shuffle_repeat_one
         },
     )
     val focusState = stringResource(
@@ -855,29 +850,19 @@ private fun NowInfoFooter(
     )
     val inactiveModeColor = MaterialTheme.colorScheme.onSurfaceVariant
     val disabledModeColor = inactiveModeColor.copy(alpha = .38f)
-    val shuffleTint by animateColorAsState(
-        targetValue = if (snapshot.shuffleEnabled) MaterialTheme.colorScheme.primary else inactiveModeColor,
-        animationSpec = tween(motionPolicy.modeChangeMillis, easing = TrackTransitionEasing),
-        label = "vesqen.shuffle.tint",
-    )
-    val shuffleIconScale by animateFloatAsState(
-        targetValue = if (snapshot.shuffleEnabled) 1f else .92f,
-        animationSpec = tween(motionPolicy.modeChangeMillis, easing = TrackTransitionEasing),
-        label = "vesqen.shuffle.scale",
-    )
-    val repeatTint by animateColorAsState(
-        targetValue = if (snapshot.repeatMode == PlaybackRepeatMode.OFF) {
+    val playbackOrderTint by animateColorAsState(
+        targetValue = if (playbackOrderMode == PlaybackOrderMode.SEQUENTIAL) {
             inactiveModeColor
         } else {
             MaterialTheme.colorScheme.primary
         },
         animationSpec = tween(motionPolicy.modeChangeMillis, easing = TrackTransitionEasing),
-        label = "vesqen.repeat.tint",
+        label = "vesqen.playback-order.tint",
     )
-    val repeatIconScale by animateFloatAsState(
-        targetValue = if (snapshot.repeatMode == PlaybackRepeatMode.OFF) .92f else 1f,
+    val playbackOrderIconScale by animateFloatAsState(
+        targetValue = if (playbackOrderMode == PlaybackOrderMode.SEQUENTIAL) .92f else 1f,
         animationSpec = tween(motionPolicy.modeChangeMillis, easing = TrackTransitionEasing),
-        label = "vesqen.repeat.scale",
+        label = "vesqen.playback-order.scale",
     )
 
     BoxWithConstraints(
@@ -892,13 +877,15 @@ private fun NowInfoFooter(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                NowShuffleButton(
-                    onClick = onToggleShuffle,
+                NowPlaybackOrderButton(
+                    onClick = onCyclePlaybackOrder,
                     enabled = controlsEnabled,
-                    state = shuffleState,
-                    tint = shuffleTint,
+                    mode = playbackOrderMode,
+                    state = playbackOrderState,
+                    tint = playbackOrderTint,
                     disabledTint = disabledModeColor,
-                    iconScale = shuffleIconScale,
+                    iconScale = playbackOrderIconScale,
+                    motionPolicy = motionPolicy,
                     modifier = Modifier.size(48.dp),
                 )
                 NowFocusToggleButton(
@@ -915,17 +902,6 @@ private fun NowInfoFooter(
                         modifier = Modifier.size(48.dp),
                     )
                 }
-                NowRepeatButton(
-                    onClick = onCycleRepeatMode,
-                    enabled = controlsEnabled,
-                    repeatMode = snapshot.repeatMode,
-                    state = repeatState,
-                    tint = repeatTint,
-                    disabledTint = disabledModeColor,
-                    iconScale = repeatIconScale,
-                    motionPolicy = motionPolicy,
-                    modifier = Modifier.size(48.dp),
-                )
                 NowInfoButton(
                     onClick = onOpenDetails,
                     enabled = canOpenDetails,
@@ -934,13 +910,15 @@ private fun NowInfoFooter(
             }
         } else {
             Box(modifier = Modifier.fillMaxSize()) {
-                NowShuffleButton(
-                    onClick = onToggleShuffle,
+                NowPlaybackOrderButton(
+                    onClick = onCyclePlaybackOrder,
                     enabled = controlsEnabled,
-                    state = shuffleState,
-                    tint = shuffleTint,
+                    mode = playbackOrderMode,
+                    state = playbackOrderState,
+                    tint = playbackOrderTint,
                     disabledTint = disabledModeColor,
-                    iconScale = shuffleIconScale,
+                    iconScale = playbackOrderIconScale,
+                    motionPolicy = motionPolicy,
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .size(48.dp),
@@ -956,60 +934,126 @@ private fun NowInfoFooter(
                         .width(96.dp)
                         .height(48.dp),
                 )
-                Row(
-                    modifier = Modifier.align(Alignment.CenterEnd),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    NowRepeatButton(
-                        onClick = onCycleRepeatMode,
-                        enabled = controlsEnabled,
-                        repeatMode = snapshot.repeatMode,
-                        state = repeatState,
-                        tint = repeatTint,
-                        disabledTint = disabledModeColor,
-                        iconScale = repeatIconScale,
-                        motionPolicy = motionPolicy,
-                        modifier = Modifier.size(48.dp),
-                    )
-                    NowInfoButton(
-                        onClick = onOpenDetails,
-                        enabled = canOpenDetails,
-                        modifier = Modifier.size(48.dp),
-                    )
-                }
+                NowInfoButton(
+                    onClick = onOpenDetails,
+                    enabled = canOpenDetails,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .size(48.dp),
+                )
             }
         }
     }
 }
 
 @Composable
-private fun NowShuffleButton(
+private fun NowPlaybackOrderButton(
     onClick: () -> Unit,
     enabled: Boolean,
+    mode: PlaybackOrderMode,
     state: String,
     tint: androidx.compose.ui.graphics.Color,
     disabledTint: androidx.compose.ui.graphics.Color,
     iconScale: Float,
+    motionPolicy: VesqenMotionPolicy,
     modifier: Modifier = Modifier,
 ) {
+    val description = stringResource(R.string.playback_order)
     IconButton(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier
-            .testTag("vesqen.now.shuffle")
-            .semantics { stateDescription = state },
+            .testTag("vesqen.now.playback-order")
+            .semantics {
+                contentDescription = description
+                stateDescription = state
+            },
         colors = IconButtonDefaults.iconButtonColors(
             contentColor = tint,
             disabledContentColor = disabledTint,
         ),
     ) {
-        Icon(
-            imageVector = Icons.Filled.Shuffle,
-            contentDescription = stringResource(R.string.shuffle),
-            modifier = Modifier.graphicsLayer {
-                scaleX = iconScale
-                scaleY = iconScale
+        AnimatedContent(
+            targetState = mode,
+            transitionSpec = {
+                if (motionPolicy.reduceMotion) {
+                    fadeIn(animationSpec = tween(motionPolicy.modeChangeMillis)) togetherWith
+                        fadeOut(animationSpec = tween(motionPolicy.modeChangeMillis))
+                } else {
+                    (fadeIn(
+                        animationSpec = tween(
+                            motionPolicy.modeChangeMillis,
+                            easing = TrackTransitionEasing,
+                        ),
+                    ) + scaleIn(
+                        initialScale = .76f,
+                        animationSpec = tween(
+                            motionPolicy.modeChangeMillis,
+                            easing = TrackTransitionEasing,
+                        ),
+                    )) togetherWith
+                        (fadeOut(
+                            animationSpec = tween(
+                                motionPolicy.modeChangeMillis * 3 / 4,
+                                easing = TrackTransitionEasing,
+                            ),
+                        ) + scaleOut(
+                            targetScale = .76f,
+                            animationSpec = tween(
+                                motionPolicy.modeChangeMillis,
+                                easing = TrackTransitionEasing,
+                            ),
+                        ))
+                }
             },
+            label = "vesqen.playback-order.mode",
+        ) { currentMode ->
+            NowPlaybackOrderIcon(mode = currentMode, iconScale = iconScale)
+        }
+    }
+}
+
+@Composable
+private fun NowPlaybackOrderIcon(mode: PlaybackOrderMode, iconScale: Float) {
+    val iconModifier = Modifier.graphicsLayer {
+        scaleX = iconScale
+        scaleY = iconScale
+    }
+    when (mode) {
+        PlaybackOrderMode.SHUFFLE_REPEAT_ALL,
+        PlaybackOrderMode.SHUFFLE_REPEAT_ONE -> Box(
+            modifier = iconModifier.size(28.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Shuffle,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Icon(
+                imageVector = if (mode == PlaybackOrderMode.SHUFFLE_REPEAT_ONE) {
+                    Icons.Filled.RepeatOne
+                } else {
+                    Icons.Filled.Repeat
+                },
+                contentDescription = null,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(14.dp),
+            )
+        }
+
+        else -> Icon(
+            imageVector = when (mode) {
+                PlaybackOrderMode.SEQUENTIAL -> Icons.Filled.FormatListNumbered
+                PlaybackOrderMode.SHUFFLE -> Icons.Filled.Shuffle
+                PlaybackOrderMode.REPEAT_ALL -> Icons.Filled.Repeat
+                PlaybackOrderMode.REPEAT_ONE -> Icons.Filled.RepeatOne
+                PlaybackOrderMode.SHUFFLE_REPEAT_ALL,
+                PlaybackOrderMode.SHUFFLE_REPEAT_ONE -> error("Compound modes are rendered above")
+            },
+            contentDescription = null,
+            modifier = iconModifier,
         )
     }
 }
@@ -1076,80 +1120,6 @@ private fun NowCompactChainButton(
             imageVector = Icons.Filled.AccountTree,
             contentDescription = stringResource(R.string.open_playback_chain),
         )
-    }
-}
-
-@Composable
-private fun NowRepeatButton(
-    onClick: () -> Unit,
-    enabled: Boolean,
-    repeatMode: PlaybackRepeatMode,
-    state: String,
-    tint: androidx.compose.ui.graphics.Color,
-    disabledTint: androidx.compose.ui.graphics.Color,
-    iconScale: Float,
-    motionPolicy: VesqenMotionPolicy,
-    modifier: Modifier = Modifier,
-) {
-    IconButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier
-            .testTag("vesqen.now.repeat")
-            .semantics { stateDescription = state },
-        colors = IconButtonDefaults.iconButtonColors(
-            contentColor = tint,
-            disabledContentColor = disabledTint,
-        ),
-    ) {
-        AnimatedContent(
-            targetState = repeatMode,
-            transitionSpec = {
-                if (motionPolicy.reduceMotion) {
-                    fadeIn(animationSpec = tween(motionPolicy.modeChangeMillis)) togetherWith
-                        fadeOut(animationSpec = tween(motionPolicy.modeChangeMillis))
-                } else {
-                    (fadeIn(
-                        animationSpec = tween(
-                            motionPolicy.modeChangeMillis,
-                            easing = TrackTransitionEasing,
-                        ),
-                    ) + scaleIn(
-                        initialScale = .76f,
-                        animationSpec = tween(
-                            motionPolicy.modeChangeMillis,
-                            easing = TrackTransitionEasing,
-                        ),
-                    )) togetherWith
-                        (fadeOut(
-                            animationSpec = tween(
-                                motionPolicy.modeChangeMillis * 3 / 4,
-                                easing = TrackTransitionEasing,
-                            ),
-                        ) + scaleOut(
-                            targetScale = .76f,
-                            animationSpec = tween(
-                                motionPolicy.modeChangeMillis,
-                                easing = TrackTransitionEasing,
-                            ),
-                        ))
-                }
-            },
-            label = "vesqen.repeat.mode",
-        ) { mode ->
-            Icon(
-                imageVector = if (mode == PlaybackRepeatMode.ONE) {
-                    Icons.Filled.RepeatOne
-                } else {
-                    Icons.Filled.Repeat
-                },
-                contentDescription = stringResource(R.string.repeat),
-                modifier = Modifier.graphicsLayer {
-                    scaleX = iconScale
-                    scaleY = iconScale
-                },
-            )
-        }
     }
 }
 

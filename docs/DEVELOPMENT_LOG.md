@@ -351,3 +351,29 @@ M1-A 只实现本地媒体库到系统混音播放的最小闭环：
 1. 由设备所有者在最终包上确认 Now 的视觉与交互感受；确认前不创建或合并 PR。
 2. 获得独立的空闲设备/模拟器窗口后，重跑 `connectedDebugAndroidTest` 并取得完整 runner 报告；不要把当前的手动验收替代为仪器测试通过。
 3. 继续将 `SYSTEM MIXED` 限定为 M1 事实声明，不由新的光影或封面呈现推导 direct、独占、无损或 bit-perfect 结论。
+
+## 2026-08-31 · 播放顺序单一入口纠正
+
+### 触发与范围
+
+用户复核最终真机画面后指出：此前实现虽然已经把“列表循环／单曲循环”收进一个 Repeat 入口，却仍保留了独立 Shuffle 入口；这没有满足“随机、循环、单曲循环都在一次点击中切换”的约定。问题来自实现方对早先反馈的错误收窄，而不是用户误读图标。
+
+本轮继续在尚未合并的 `codex/rework-now-materials` 上修复，只重构 Now 页的播放顺序控制及其 Media3 状态映射；不改动输出声明、焦点页材质、队列内容、主运输控制或页面导航。
+
+### 设计与实现决策
+
+| 决策/问题 | 处理与理由 |
+| --- | --- |
+| 底栏如何不再表现为三颗模式按钮 | 只保留一颗 48 dp“播放顺序”图标按钮，位置仍在 footer 左侧。它依次切换“顺序播放 → 随机播放 → 列表循环 → 单曲循环 → 顺序播放”；会话与 `i` 入口保留各自职责，不把模式、详情和会话混成一颗按钮。 |
+| 图标如何让状态可见但不增加文案噪声 | 顺序、随机、列表循环、单曲循环分别用 numbered-list、shuffle、repeat、repeat-with-`1`；关闭/顺序态为中性，其他三态为 Signal Moss。图标与 tint 在 160 ms 内作受控淡入/缩放，减少动效时回退为短交叉淡入淡出。 |
+| Media3 的 Shuffle 与 Repeat 可叠加 | 这是底层能力，不是 Vesqen 普通点击循环的模式模型。新增 `PlaybackOrderMode` 将四个常规选择设为互斥；每次点击完整写入 shuffle/repeat 设置并清除另一个开关。若外部控制器仍传来复合状态，则由同一按钮以组合状态如实呈现，下一次点击归一到顺序播放；不能把实际复合状态伪装成单一随机或循环状态。 |
+| 无障碍与回归 | 单一节点提供“播放顺序”可访问名称和当前状态；Android Compose 回归将断言只有一个模式节点、旧 shuffle/repeat 节点不存在、四态轮换及状态朗读正确。纯 JVM 用例覆盖状态投影、完整循环和每态对应的互斥 Media3 设置。 |
+
+### 验证记录
+
+| 检查 | 结果 |
+| --- | --- |
+| Kotlin/JVM、lint、Compose 测试源码编译与 Debug 组装 | `./gradlew.bat -I C:/tmp/vesqen-playback-order.init.gradle.kts testDebugUnitTest lintDebug :app:compileDebugAndroidTestKotlin assembleDebug --rerun-tasks --no-configuration-cache --console=plain --stacktrace` | **已通过**：8 个 JVM suite、23 个测试、0 failures、0 errors；Compose Android 测试源码已编译；本次隔离输出的 lint SARIF 为 0 errors、0 warnings，并生成 Debug APK。一次常规输出目录在清理旧缓存时遇到 `NoSuchFileException`，随后仅将本轮构建输出重定向到新的 `C:/tmp` 临时目录；这不是代码失败，未改动项目 Gradle 配置。 |
+| Compose UI 回归覆盖 | `VesqenAppTest` | **已编译**：断言 Now 只存在一个 `playback-order` 节点、旧 shuffle/repeat 节点不存在；四态正常循环、两个外部复合状态的准确 TalkBack 状态，以及点击复合状态后归一到顺序播放均有源码回归。有效仪器 runner 报告仍待独立执行。 |
+| 真机手动回归 | Android 15 物理设备、最终隔离 Debug APK、真实本地媒体 | **已通过（本轮范围）**：重新安装最终 APK 后，UI tree 中“播放顺序”节点数量为 1；实际点击依次观察到顺序 → 随机 → 列表循环 → 单曲循环 → 顺序，footer 没有并列的随机或循环按钮。测试结束后由 UI tree 定位并暂停播放；crash buffer 中本应用匹配为 0。临时截图与 UI XML 已在复核后删除。 |
+| Compose 仪器测试执行 | `connectedDebugAndroidTest` | **未执行 / 不计为通过**：本轮只编译 Android 测试源码并完成手动真机交互；不得将其表述为 runner 已通过。 |

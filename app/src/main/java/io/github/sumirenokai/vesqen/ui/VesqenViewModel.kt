@@ -127,9 +127,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     fun seekTo(positionMs: Long) = playbackController?.seekTo(positionMs)
 
-    fun toggleShuffle() = playbackController?.toggleShuffle()
-
-    fun cycleRepeatMode() = playbackController?.cycleRepeatMode()
+    fun cyclePlaybackOrderMode() = playbackController?.cyclePlaybackOrderMode()
 
     fun refreshPlaybackPosition() = playbackController?.refreshPosition()
 

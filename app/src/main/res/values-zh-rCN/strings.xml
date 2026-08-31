@@ -32,6 +32,13 @@
     <string name="repeat_off">循环关闭</string>
     <string name="repeat_all">列表循环</string>
     <string name="repeat_one">单曲循环</string>
+    <string name="playback_order">播放顺序</string>
+    <string name="playback_order_sequential">顺序播放</string>
+    <string name="playback_order_shuffle">随机播放</string>
+    <string name="playback_order_repeat_all">列表循环</string>
+    <string name="playback_order_repeat_one">单曲循环</string>
+    <string name="playback_order_shuffle_repeat_all">随机播放与列表循环</string>
+    <string name="playback_order_shuffle_repeat_one">随机播放与单曲循环</string>
     <string name="playback_position">%1$s / %2$s</string>
     <string name="destination_library">曲库</string>
     <string name="destination_now">正在播放</string>

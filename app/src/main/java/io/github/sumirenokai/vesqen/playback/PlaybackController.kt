@@ -30,13 +30,16 @@ class PlaybackController(
     ).buildAsync()
     private var controller: MediaController? = null
     private var pendingQueue: PendingQueue? = null
+    private var isApplyingPlaybackOrder = false
 
     var snapshot by mutableStateOf(PlaybackSnapshot())
         private set
 
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
-            publish(player)
+            // Applying one listener-visible mode can require two Media3 setters. Do not expose
+            // their valid-but-transient intermediate state to Compose between those setters.
+            if (!isApplyingPlaybackOrder) publish(player)
         }
     }
 
@@ -118,19 +121,13 @@ class PlaybackController(
         controller?.seekTo(positionMs.coerceAtLeast(0))
     }
 
-    fun toggleShuffle() {
+    fun cyclePlaybackOrderMode() {
         controller?.let { activeController ->
-            activeController.shuffleModeEnabled = !activeController.shuffleModeEnabled
-            publish(activeController)
-        }
-    }
-
-    fun cycleRepeatMode() {
-        controller?.let { activeController ->
-            activeController.repeatMode = when (activeController.repeatMode) {
-                Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
-                Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-                else -> Player.REPEAT_MODE_OFF
+            isApplyingPlaybackOrder = true
+            try {
+                activeController.applyPlaybackOrderMode(activeController.playbackOrderMode.next())
+            } finally {
+                isApplyingPlaybackOrder = false
             }
             publish(activeController)
         }
@@ -205,6 +202,34 @@ class PlaybackController(
         Player.REPEAT_MODE_ALL -> PlaybackRepeatMode.ALL
         Player.REPEAT_MODE_ONE -> PlaybackRepeatMode.ONE
         else -> PlaybackRepeatMode.OFF
+    }
+
+    private val Player.playbackOrderMode: PlaybackOrderMode
+        get() = resolvePlaybackOrderMode(
+            shuffleEnabled = shuffleModeEnabled,
+            repeatMode = repeatMode.toPlaybackRepeatMode(),
+        )
+
+    /**
+     * Apply the next listener-visible order as a complete configuration. This deliberately clears
+     * the other Media3 switch so a single UI control cannot leave a hidden shuffle-plus-repeat
+     * combination behind.
+     */
+    private fun Player.applyPlaybackOrderMode(mode: PlaybackOrderMode) {
+        val settings = mode.toSettings()
+        // Clear the mutually exclusive switch before applying the target. This prevents a
+        // shuffle-to-repeat transition from ever producing a temporary shuffle-plus-repeat state.
+        if (shuffleModeEnabled && !settings.shuffleEnabled) shuffleModeEnabled = false
+        if (repeatMode != settings.repeatMode.toMedia3RepeatMode()) {
+            repeatMode = settings.repeatMode.toMedia3RepeatMode()
+        }
+        if (!shuffleModeEnabled && settings.shuffleEnabled) shuffleModeEnabled = true
+    }
+
+    private fun PlaybackRepeatMode.toMedia3RepeatMode(): Int = when (this) {
+        PlaybackRepeatMode.OFF -> Player.REPEAT_MODE_OFF
+        PlaybackRepeatMode.ALL -> Player.REPEAT_MODE_ALL
+        PlaybackRepeatMode.ONE -> Player.REPEAT_MODE_ONE
     }
 
     private fun Player.seekToNeighbor(
