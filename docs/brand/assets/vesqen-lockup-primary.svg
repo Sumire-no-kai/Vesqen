@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="108" viewBox="0 0 420 108" fill="none">
+  <title>Vesqen horizontal lockup — primary</title>
+  <path d="M29 32L54 78L79 32" stroke="#1B1C18" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M39 32L54 60L69 32" stroke="#9FBF4B" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="118" y="70" fill="#1B1C18" font-family="Roboto, 'Noto Sans SC', sans-serif" font-size="48" font-weight="600" letter-spacing="-.5">Vesqen</text>
+</svg>

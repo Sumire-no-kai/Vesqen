@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200" fill="none">
+  <title>Vesqen visual identity system v1.0</title>
+  <defs>
+    <linearGradient id="playerGlow" x1="1090" y1="560" x2="1450" y2="1030" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1E1B2B"/>
+      <stop offset=".55" stop-color="#171914"/>
+      <stop offset="1" stop-color="#0F0F0F"/>
+    </linearGradient>
+    <radialGradient id="albumGlow" cx="0" cy="0" r="1" gradientTransform="translate(1290 710) rotate(90) scale(270)">
+      <stop stop-color="#9FBF4B" stop-opacity=".24"/>
+      <stop offset="1" stop-color="#9FBF4B" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#0F0F0F" flood-opacity=".16"/>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="1200" fill="#F6F7F2"/>
+
+  <g transform="translate(64 48)">
+    <path d="M20 18L37 50L54 18" stroke="#1B1C18" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M27 18L37 37L47 18" stroke="#9FBF4B" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="76" y="47" fill="#1B1C18" font-family="Roboto, 'Noto Sans SC', sans-serif" font-size="38" font-weight="600" letter-spacing="-.5">Vesqen</text>
+  </g>
+  <text x="64" y="142" fill="#1B1C18" font-family="Roboto, sans-serif" font-size="54" font-weight="600" letter-spacing="-1.5">The Quiet Signal</text>
+  <text x="66" y="179" fill="#5E6056" font-family="Roboto, sans-serif" font-size="18">Visual identity system · v1.0 · calm, precise, intimate</text>
+  <rect x="1326" y="54" width="210" height="44" rx="22" fill="#1B1C18"/>
+  <text x="1431" y="82" text-anchor="middle" fill="#BFD66B" font-family="Roboto Mono, monospace" font-size="14" font-weight="600">FORMAL BASELINE</text>
+
+  <rect x="64" y="226" width="610" height="286" rx="24" fill="#FFFFFF" filter="url(#softShadow)"/>
+  <text x="96" y="270" fill="#1B1C18" font-family="Roboto, sans-serif" font-size="14" font-weight="600" letter-spacing="1.6">01 · TWIN PATHS</text>
+  <g transform="translate(118 302) scale(1.55)">
+    <path d="M29 32L54 78L79 32" stroke="#1B1C18" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M39 32L54 60L69 32" stroke="#9FBF4B" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <g transform="translate(330 300)">
+    <rect width="164" height="164" rx="38" fill="#0F0F0F"/>
+    <g transform="translate(28 28)">
+      <path d="M29 32L54 78L79 32" stroke="#E7E8E1" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M39 32L54 60L69 32" stroke="#BFD66B" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+  <text x="96" y="486" fill="#5E6056" font-family="Roboto, sans-serif" font-size="15">Playback path + evidence path · one symmetric axis</text>
+  <text x="522" y="338" fill="#1B1C18" font-family="Roboto, sans-serif" font-size="16" font-weight="600">Primary</text>
+  <text x="522" y="365" fill="#5E6056" font-family="Roboto, sans-serif" font-size="14">Light surfaces</text>
+  <text x="522" y="414" fill="#1B1C18" font-family="Roboto, sans-serif" font-size="16" font-weight="600">Inverse</text>
+  <text x="522" y="441" fill="#5E6056" font-family="Roboto, sans-serif" font-size="14">Dark surfaces</text>
+
+  <rect x="706" y="226" width="830" height="286" rx="24" fill="#FFFFFF" filter="url(#softShadow)"/>
+  <text x="738" y="270" fill="#1B1C18" font-family="Roboto, sans-serif" font-size="14" font-weight="600" letter-spacing="1.6">02 · COLOUR</text>
+  <g font-family="Roboto, sans-serif">
+    <g transform="translate(738 300)"><rect width="116" height="116" rx="18" fill="#9FBF4B"/><text x="0" y="142" fill="#1B1C18" font-size="14" font-weight="600">Signal Moss</text><text x="0" y="164" fill="#5E6056" font-size="13">#9FBF4B</text></g>
+    <g transform="translate(878 300)"><rect width="116" height="116" rx="18" fill="#BFD66B"/><text x="0" y="142" fill="#1B1C18" font-size="14" font-weight="600">Moss Bright</text><text x="0" y="164" fill="#5E6056" font-size="13">#BFD66B</text></g>
+    <g transform="translate(1018 300)"><rect width="116" height="116" rx="18" fill="#536B1E"/><text x="0" y="142" fill="#1B1C18" font-size="14" font-weight="600">Moss Deep</text><text x="0" y="164" fill="#5E6056" font-size="13">#536B1E</text></g>
+    <g transform="translate(1158 300)"><rect width="116" height="116" rx="18" fill="#0F0F0F"/><text x="0" y="142" fill="#1B1C18" font-size="14" font-weight="600">Carbon</text><text x="0" y="164" fill="#5E6056" font-size="13">#0F0F0F</text></g>
+    <g transform="translate(1298 300)"><rect width="116" height="116" rx="18" fill="#F6F7F2" stroke="#E7E8E1"/><text x="0" y="142" fill="#1B1C18" font-size="14" font-weight="600">Frost</text><text x="0" y="164" fill="#5E6056" font-size="13">#F6F7F2</text></g>
+  </g>
+  <rect x="1442" y="300" width="62" height="164" rx="18" fill="#1E1B2B"/>
+  <text x="1473" y="486" text-anchor="middle" fill="#5E6056" font-family="Roboto, sans-serif" font-size="12">ambient</text>
+
+  <text x="64" y="574" fill="#1B1C18" font-family="Roboto, sans-serif" font-size="14" font-weight="600" letter-spacing="1.6">03 · ONE SYSTEM, THREE SURFACES</text>
+  <text x="64" y="610" fill="#5E6056" font-family="Roboto, sans-serif" font-size="17">A is the dark Library. B is the same system in light. C is the complete Now page.</text>
+
+  <g transform="translate(64 650)" filter="url(#softShadow)">
+    <rect width="438" height="478" rx="32" fill="#0F0F0F"/>
+    <text x="28" y="45" fill="#BFD66B" font-family="Roboto Mono, monospace" font-size="13" font-weight="600">A · LIBRARY DARK</text>
+    <text x="28" y="88" fill="#E7E8E1" font-family="Roboto, sans-serif" font-size="30" font-weight="600">Library</text>
+    <rect x="28" y="112" width="382" height="42" rx="12" fill="#171914"/>
+    <circle cx="52" cy="133" r="7" stroke="#C8C9BE" stroke-width="2"/>
+    <path d="M57 138L63 144" stroke="#C8C9BE" stroke-width="2" stroke-linecap="round"/>
+    <text x="78" y="139" fill="#C8C9BE" font-family="Roboto, sans-serif" font-size="14">Search local music</text>
+    <g font-family="Roboto, sans-serif">
+      <g transform="translate(28 180)"><rect width="52" height="52" rx="10" fill="#23261E"/><rect x="68" y="5" width="178" height="11" rx="5.5" fill="#E7E8E1"/><rect x="68" y="29" width="124" height="8" rx="4" fill="#5E6056"/><circle cx="359" cy="26" r="3" fill="#C8C9BE"/></g>
+      <g transform="translate(28 248)"><rect width="52" height="52" rx="10" fill="#1E1B2B"/><rect x="68" y="5" width="138" height="11" rx="5.5" fill="#E7E8E1"/><rect x="68" y="29" width="96" height="8" rx="4" fill="#5E6056"/><circle cx="359" cy="26" r="3" fill="#C8C9BE"/></g>
+      <g transform="translate(28 316)"><rect width="52" height="52" rx="10" fill="#536B1E"/><rect x="68" y="5" width="205" height="11" rx="5.5" fill="#BFD66B"/><rect x="68" y="29" width="112" height="8" rx="4" fill="#5E6056"/><circle cx="359" cy="26" r="3" fill="#C8C9BE"/></g>
+    </g>
+    <rect x="18" y="392" width="402" height="70" rx="18" fill="#23261E"/>
+    <rect x="32" y="405" width="44" height="44" rx="10" fill="#1E1B2B"/>
+    <rect x="90" y="410" width="128" height="10" rx="5" fill="#E7E8E1"/>
+    <rect x="90" y="431" width="86" height="7" rx="3.5" fill="#C8C9BE"/>
+    <circle cx="332" cy="427" r="18" fill="#BFD66B"/><path d="M328 419L339 427L328 435Z" fill="#1B1C18"/>
+    <path d="M378 419V435M369 427L378 419M369 427L378 435" stroke="#E7E8E1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <g transform="translate(550 650)" filter="url(#softShadow)">
+    <rect width="438" height="478" rx="32" fill="#FFFFFF"/>
+    <text x="28" y="45" fill="#536B1E" font-family="Roboto Mono, monospace" font-size="13" font-weight="600">B · LIBRARY LIGHT</text>
+    <text x="28" y="88" fill="#1B1C18" font-family="Roboto, sans-serif" font-size="30" font-weight="600">Library</text>
+    <rect x="28" y="112" width="382" height="42" rx="12" fill="#F6F7F2"/>
+    <circle cx="52" cy="133" r="7" stroke="#5E6056" stroke-width="2"/>
+    <path d="M57 138L63 144" stroke="#5E6056" stroke-width="2" stroke-linecap="round"/>
+    <text x="78" y="139" fill="#5E6056" font-family="Roboto, sans-serif" font-size="14">Search local music</text>
+    <g font-family="Roboto, sans-serif">
+      <g transform="translate(28 180)"><rect width="52" height="52" rx="10" fill="#E7E8E1"/><rect x="68" y="5" width="178" height="11" rx="5.5" fill="#1B1C18"/><rect x="68" y="29" width="124" height="8" rx="4" fill="#C8C9BE"/><circle cx="359" cy="26" r="3" fill="#5E6056"/></g>
+      <g transform="translate(28 248)"><rect width="52" height="52" rx="10" fill="#E7E8E1"/><rect x="68" y="5" width="138" height="11" rx="5.5" fill="#1B1C18"/><rect x="68" y="29" width="96" height="8" rx="4" fill="#C8C9BE"/><circle cx="359" cy="26" r="3" fill="#5E6056"/></g>
+      <g transform="translate(28 316)"><rect width="52" height="52" rx="10" fill="#9FBF4B" fill-opacity=".28"/><rect x="68" y="5" width="205" height="11" rx="5.5" fill="#536B1E"/><rect x="68" y="29" width="112" height="8" rx="4" fill="#C8C9BE"/><circle cx="359" cy="26" r="3" fill="#5E6056"/></g>
+    </g>
+    <rect x="18" y="392" width="402" height="70" rx="18" fill="#F6F7F2"/>
+    <rect x="32" y="405" width="44" height="44" rx="10" fill="#E7E8E1"/>
+    <rect x="90" y="410" width="128" height="10" rx="5" fill="#1B1C18"/>
+    <rect x="90" y="431" width="86" height="7" rx="3.5" fill="#5E6056"/>
+    <circle cx="332" cy="427" r="18" fill="#536B1E"/><path d="M328 419L339 427L328 435Z" fill="#FFFFFF"/>
+    <path d="M378 419V435M369 427L378 419M369 427L378 435" stroke="#1B1C18" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <g transform="translate(1036 650)" filter="url(#softShadow)">
+    <rect width="500" height="478" rx="32" fill="url(#playerGlow)"/>
+    <rect width="500" height="478" rx="32" fill="url(#albumGlow)"/>
+    <text x="28" y="45" fill="#BFD66B" font-family="Roboto Mono, monospace" font-size="13" font-weight="600">C · NOW PLAYING</text>
+    <rect x="142" y="72" width="216" height="216" rx="20" fill="#23261E"/>
+    <circle cx="250" cy="180" r="62" fill="#1E1B2B"/>
+    <circle cx="250" cy="180" r="24" fill="#BFD66B" fill-opacity=".78"/>
+    <path d="M221 138L250 220L279 138" stroke="#E7E8E1" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity=".88"/>
+    <text x="250" y="330" text-anchor="middle" fill="#E7E8E1" font-family="Roboto, sans-serif" font-size="24" font-weight="600">Track title</text>
+    <text x="250" y="357" text-anchor="middle" fill="#C8C9BE" font-family="Roboto, sans-serif" font-size="14">Artist</text>
+    <rect x="184" y="374" width="132" height="28" rx="14" fill="#23261E"/>
+    <text x="250" y="393" text-anchor="middle" fill="#C8C9BE" font-family="Roboto Mono, monospace" font-size="11" font-weight="600">SYSTEM MIXED</text>
+    <rect x="48" y="420" width="404" height="4" rx="2" fill="#5E6056"/><rect x="48" y="420" width="174" height="4" rx="2" fill="#BFD66B"/>
+    <path d="M138 443V463M126 453L138 443M126 453L138 463" stroke="#E7E8E1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="250" cy="453" r="23" fill="#BFD66B"/><path d="M245 442L261 453L245 464Z" fill="#1B1C18"/>
+    <path d="M362 443V463M374 453L362 443M374 453L362 463" stroke="#E7E8E1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <g transform="translate(64 1158)" font-family="Roboto, sans-serif" font-size="13">
+    <text fill="#5E6056">Navigation: Library · Now · Chain</text>
+    <text x="530" fill="#5E6056">Shape: 10 / 12 / 16 dp</text>
+    <text x="890" fill="#5E6056">Motion: 150 / 180 / 240 ms</text>
+    <text x="1250" fill="#536B1E" font-weight="600">Moss ≤ 10%</text>
+  </g>
+</svg>

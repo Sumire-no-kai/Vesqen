@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108" fill="none">
+  <title>Vesqen notification symbol — optical small-size correction</title>
+  <desc>Expanded monochrome Twin Paths geometry for Android 24dp notification rendering.</desc>
+  <g stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M22 24L54 84L86 24" stroke-width="9"/>
+    <path d="M35 24L54 61L73 24" stroke-width="8"/>
+  </g>
+</svg>

@@ -1,0 +1,285 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-31T13:13:09.7284334+10:00",
+  "title": "Design System: Vesqen",
+  "extensions": {
+    "colorMeta": {
+      "signal-moss": {
+        "role": "primary",
+        "displayName": "Signal Moss",
+        "canonical": "oklch(0.758 0.147 123.0)",
+        "tonalRamp": ["oklch(0.15 0.10 123)", "oklch(0.25 0.11 123)", "oklch(0.35 0.12 123)", "oklch(0.45 0.13 123)", "oklch(0.58 0.14 123)", "oklch(0.70 0.147 123)", "oklch(0.82 0.12 123)", "oklch(0.95 0.05 123)"]
+      },
+      "signal-moss-bright": {
+        "role": "primary",
+        "displayName": "Signal Moss Bright",
+        "canonical": "oklch(0.836 0.136 119.5)",
+        "tonalRamp": ["oklch(0.15 0.09 120)", "oklch(0.25 0.10 120)", "oklch(0.35 0.11 120)", "oklch(0.45 0.12 120)", "oklch(0.58 0.13 120)", "oklch(0.70 0.136 120)", "oklch(0.84 0.136 120)", "oklch(0.95 0.05 120)"]
+      },
+      "signal-moss-deep": {
+        "role": "primary",
+        "displayName": "Signal Moss Deep",
+        "canonical": "oklch(0.492 0.106 125.2)",
+        "tonalRamp": ["oklch(0.15 0.07 125)", "oklch(0.25 0.08 125)", "oklch(0.35 0.09 125)", "oklch(0.45 0.10 125)", "oklch(0.58 0.106 125)", "oklch(0.70 0.09 125)", "oklch(0.82 0.07 125)", "oklch(0.95 0.03 125)"]
+      },
+      "carbon-black": {
+        "role": "neutral",
+        "displayName": "Carbon Black",
+        "canonical": "oklch(0.168 0.000 0)",
+        "tonalRamp": ["oklch(0.10 0 0)", "oklch(0.20 0 0)", "oklch(0.30 0 0)", "oklch(0.42 0 0)", "oklch(0.55 0 0)", "oklch(0.68 0 0)", "oklch(0.82 0 0)", "oklch(0.95 0 0)"]
+      },
+      "carbon-surface": {
+        "role": "neutral",
+        "displayName": "Carbon Surface",
+        "canonical": "oklch(0.209 0.010 125.0)",
+        "tonalRamp": ["oklch(0.15 0.010 125)", "oklch(0.25 0.010 125)", "oklch(0.35 0.010 125)", "oklch(0.45 0.010 125)", "oklch(0.58 0.010 125)", "oklch(0.70 0.010 125)", "oklch(0.82 0.010 125)", "oklch(0.95 0.010 125)"]
+      },
+      "carbon-elevated": {
+        "role": "neutral",
+        "displayName": "Carbon Elevated",
+        "canonical": "oklch(0.263 0.015 124.2)",
+        "tonalRamp": ["oklch(0.15 0.015 124)", "oklch(0.25 0.015 124)", "oklch(0.35 0.015 124)", "oklch(0.45 0.015 124)", "oklch(0.58 0.015 124)", "oklch(0.70 0.015 124)", "oklch(0.82 0.015 124)", "oklch(0.95 0.015 124)"]
+      },
+      "pure-white": {
+        "role": "neutral",
+        "displayName": "Pure White",
+        "canonical": "oklch(1.000 0.000 0)",
+        "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.25 0 0)", "oklch(0.35 0 0)", "oklch(0.45 0 0)", "oklch(0.58 0 0)", "oklch(0.70 0 0)", "oklch(0.82 0 0)", "oklch(0.95 0 0)"]
+      },
+      "frost-surface": {
+        "role": "neutral",
+        "displayName": "Frost Surface",
+        "canonical": "oklch(0.974 0.007 115.7)",
+        "tonalRamp": ["oklch(0.15 0.007 116)", "oklch(0.25 0.007 116)", "oklch(0.35 0.007 116)", "oklch(0.45 0.007 116)", "oklch(0.58 0.007 116)", "oklch(0.70 0.007 116)", "oklch(0.82 0.007 116)", "oklch(0.95 0.007 116)"]
+      },
+      "ink-dark": {
+        "role": "neutral",
+        "displayName": "Dark Ink",
+        "canonical": "oklch(0.224 0.008 118.4)",
+        "tonalRamp": ["oklch(0.15 0.008 118)", "oklch(0.25 0.008 118)", "oklch(0.35 0.008 118)", "oklch(0.45 0.008 118)", "oklch(0.58 0.008 118)", "oklch(0.70 0.008 118)", "oklch(0.82 0.008 118)", "oklch(0.95 0.008 118)"]
+      },
+      "ink-light": {
+        "role": "neutral",
+        "displayName": "Light Ink",
+        "canonical": "oklch(0.928 0.009 113.2)",
+        "tonalRamp": ["oklch(0.15 0.009 113)", "oklch(0.25 0.009 113)", "oklch(0.35 0.009 113)", "oklch(0.45 0.009 113)", "oklch(0.58 0.009 113)", "oklch(0.70 0.009 113)", "oklch(0.82 0.009 113)", "oklch(0.95 0.009 113)"]
+      },
+      "muted-dark": {
+        "role": "neutral",
+        "displayName": "Muted Light Ink",
+        "canonical": "oklch(0.832 0.015 110.9)",
+        "tonalRamp": ["oklch(0.15 0.015 111)", "oklch(0.25 0.015 111)", "oklch(0.35 0.015 111)", "oklch(0.45 0.015 111)", "oklch(0.58 0.015 111)", "oklch(0.70 0.015 111)", "oklch(0.82 0.015 111)", "oklch(0.95 0.015 111)"]
+      },
+      "muted-light": {
+        "role": "neutral",
+        "displayName": "Muted Dark Ink",
+        "canonical": "oklch(0.484 0.016 116.2)",
+        "tonalRamp": ["oklch(0.15 0.016 116)", "oklch(0.25 0.016 116)", "oklch(0.35 0.016 116)", "oklch(0.45 0.016 116)", "oklch(0.58 0.016 116)", "oklch(0.70 0.016 116)", "oklch(0.82 0.016 116)", "oklch(0.95 0.016 116)"]
+      },
+      "midnight-violet": {
+        "role": "tertiary",
+        "displayName": "Midnight Violet",
+        "canonical": "oklch(0.233 0.031 292.5)",
+        "tonalRamp": ["oklch(0.15 0.031 293)", "oklch(0.25 0.031 293)", "oklch(0.35 0.031 293)", "oklch(0.45 0.031 293)", "oklch(0.58 0.031 293)", "oklch(0.70 0.031 293)", "oklch(0.82 0.031 293)", "oklch(0.95 0.020 293)"]
+      },
+      "warning-amber-bright": {
+        "role": "semantic",
+        "displayName": "Warning Amber Bright",
+        "canonical": "oklch(0.841 0.119 81.6)",
+        "tonalRamp": ["oklch(0.15 0.07 82)", "oklch(0.25 0.08 82)", "oklch(0.35 0.09 82)", "oklch(0.45 0.10 82)", "oklch(0.58 0.11 82)", "oklch(0.70 0.119 82)", "oklch(0.84 0.119 82)", "oklch(0.95 0.05 82)"]
+      },
+      "warning-amber-deep": {
+        "role": "semantic",
+        "displayName": "Warning Amber Deep",
+        "canonical": "oklch(0.464 0.099 73.2)",
+        "tonalRamp": ["oklch(0.15 0.06 73)", "oklch(0.25 0.075 73)", "oklch(0.35 0.09 73)", "oklch(0.46 0.099 73)", "oklch(0.58 0.095 73)", "oklch(0.70 0.08 73)", "oklch(0.82 0.06 73)", "oklch(0.95 0.03 73)"]
+      },
+      "error": {
+        "role": "semantic",
+        "displayName": "Error Red",
+        "canonical": "oklch(0.506 0.193 27.7)",
+        "tonalRamp": ["oklch(0.15 0.10 28)", "oklch(0.25 0.13 28)", "oklch(0.35 0.16 28)", "oklch(0.45 0.18 28)", "oklch(0.58 0.19 28)", "oklch(0.70 0.16 28)", "oklch(0.82 0.11 28)", "oklch(0.95 0.04 28)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Full-player track titles and exceptional empty-state headlines." },
+      "headline": { "displayName": "Headline", "purpose": "Destination and major sheet titles." },
+      "title": { "displayName": "Title", "purpose": "Sections and compact current-track titles." },
+      "body": { "displayName": "Body", "purpose": "Readable product copy and metadata." },
+      "action": { "displayName": "Action", "purpose": "Primary and secondary button labels at 14sp/20sp." },
+      "label": { "displayName": "Label", "purpose": "Navigation and status chips at 12sp/16sp." },
+      "data": { "displayName": "Data", "purpose": "Measured technical values inside detail and Chain surfaces only." }
+    },
+    "shadows": [
+      { "name": "ambient-low", "value": "0 2px 8px rgba(0, 0, 0, 0.20)", "purpose": "Menus and the persistent mini-player without a decorative border." },
+      { "name": "player-lift", "value": "0 12px 32px rgba(0, 0, 0, 0.28)", "purpose": "Expanded player and bottom sheets only." },
+      { "name": "focus-halo", "value": "0 0 0 3px rgba(159, 191, 75, 0.38)", "purpose": "Visible keyboard and accessibility focus." }
+    ],
+    "motion": [
+      { "name": "fast-feedback", "value": "150ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Press, selection, and small state feedback." },
+      { "name": "standard-transition", "value": "180ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Navigation and content-state changes." },
+      { "name": "player-expand", "value": "240ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Mini-player to full-player shared-axis transition." },
+      { "name": "reduced-motion", "value": "80ms linear crossfade", "purpose": "Fallback when system reduced-motion behavior is requested." }
+    ],
+    "breakpoints": [
+      { "name": "compact", "value": "0-599dp" },
+      { "name": "medium", "value": "600-839dp" },
+      { "name": "expanded", "value": "840dp+" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Dark Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary-dark",
+      "description": "Bright Signal Moss action for Carbon surfaces.",
+      "html": "<button class=\"ds-btn-dark\">Play</button>",
+      "css": ".ds-btn-dark{height:48px;padding:0 20px;border:0;border-radius:12px;background:#BFD66B;color:#1B1C18;font:600 14px/20px Roboto,sans-serif;transition:background 150ms cubic-bezier(.16,1,.3,1),transform 150ms cubic-bezier(.16,1,.3,1)}.ds-btn-dark:hover{background:#CBE17D}.ds-btn-dark:active{transform:scale(.98)}.ds-btn-dark:focus-visible{outline:3px solid rgba(159,191,75,.38);outline-offset:3px}"
+    },
+    {
+      "name": "Light Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary-light",
+      "description": "Deep Signal Moss action for Pure White and Frost surfaces.",
+      "html": "<button class=\"ds-btn-light\">Play</button>",
+      "css": ".ds-btn-light{height:48px;padding:0 20px;border:0;border-radius:12px;background:#536B1E;color:#FFFFFF;font:600 14px/20px Roboto,sans-serif;transition:background 150ms cubic-bezier(.16,1,.3,1),transform 150ms cubic-bezier(.16,1,.3,1)}.ds-btn-light:hover{background:#435818}.ds-btn-light:active{transform:scale(.98)}.ds-btn-light:focus-visible{outline:3px solid rgba(83,107,30,.35);outline-offset:3px}"
+    },
+    {
+      "name": "Dark Neutral Playback Status",
+      "kind": "chip",
+      "refersTo": "status-chip-neutral-dark",
+      "description": "Neutral evidence state for SYSTEM MIXED and DIRECT SUPPORTED on Carbon.",
+      "html": "<button class=\"ds-status-neutral-dark\">SYSTEM MIXED</button>",
+      "css": ".ds-status-neutral-dark{padding:6px 10px;border:0;border-radius:999px;background:#23261E;color:#C8C9BE;font:600 12px/16px Roboto,sans-serif;letter-spacing:.02em}.ds-status-neutral-dark:focus-visible{outline:3px solid rgba(159,191,75,.38);outline-offset:2px}"
+    },
+    {
+      "name": "Light Neutral Playback Status",
+      "kind": "chip",
+      "refersTo": "status-chip-neutral-light",
+      "description": "Neutral evidence state for SYSTEM MIXED and DIRECT SUPPORTED on White.",
+      "html": "<button class=\"ds-status-neutral-light\">SYSTEM MIXED</button>",
+      "css": ".ds-status-neutral-light{padding:6px 10px;border:0;border-radius:999px;background:#F6F7F2;color:#5E6056;font:600 12px/16px Roboto,sans-serif;letter-spacing:.02em}.ds-status-neutral-light:focus-visible{outline:3px solid rgba(83,107,30,.35);outline-offset:2px}"
+    },
+    {
+      "name": "Dark Available Playback Status",
+      "kind": "chip",
+      "refersTo": "status-chip-available-dark",
+      "description": "Outlined positive capability state; not active or verified.",
+      "html": "<button class=\"ds-status-available-dark\">○ BIT-PERFECT AVAILABLE</button>",
+      "css": ".ds-status-available-dark{padding:5px 9px;border:1px solid #BFD66B;border-radius:999px;background:#171914;color:#BFD66B;font:600 12px/16px Roboto,sans-serif;letter-spacing:.02em}.ds-status-available-dark:focus-visible{outline:3px solid rgba(159,191,75,.38);outline-offset:2px}"
+    },
+    {
+      "name": "Light Available Playback Status",
+      "kind": "chip",
+      "refersTo": "status-chip-available-light",
+      "description": "Outlined positive capability state; not active or verified.",
+      "html": "<button class=\"ds-status-available-light\">○ BIT-PERFECT AVAILABLE</button>",
+      "css": ".ds-status-available-light{padding:5px 9px;border:1px solid #536B1E;border-radius:999px;background:#F6F7F2;color:#536B1E;font:600 12px/16px Roboto,sans-serif;letter-spacing:.02em}.ds-status-available-light:focus-visible{outline:3px solid rgba(83,107,30,.35);outline-offset:2px}"
+    },
+    {
+      "name": "Dark Active Playback Status",
+      "kind": "chip",
+      "refersTo": "status-chip-active-dark",
+      "description": "Filled current-state treatment; exact ACTIVE text remains mandatory.",
+      "html": "<button class=\"ds-status-active-dark\">● BIT-PERFECT ACTIVE</button>",
+      "css": ".ds-status-active-dark{padding:6px 10px;border:0;border-radius:999px;background:#BFD66B;color:#1B1C18;font:600 12px/16px Roboto,sans-serif;letter-spacing:.02em}.ds-status-active-dark:focus-visible{outline:3px solid rgba(191,214,107,.45);outline-offset:2px}"
+    },
+    {
+      "name": "Light Active Playback Status",
+      "kind": "chip",
+      "refersTo": "status-chip-active-light",
+      "description": "Filled current-state treatment; exact ACTIVE text remains mandatory.",
+      "html": "<button class=\"ds-status-active-light\">● BIT-PERFECT ACTIVE</button>",
+      "css": ".ds-status-active-light{padding:6px 10px;border:0;border-radius:999px;background:#536B1E;color:#FFFFFF;font:600 12px/16px Roboto,sans-serif;letter-spacing:.02em}.ds-status-active-light:focus-visible{outline:3px solid rgba(83,107,30,.35);outline-offset:2px}"
+    },
+    {
+      "name": "Dark Track Row",
+      "kind": "custom",
+      "refersTo": "track-row-dark",
+      "description": "Compact Library row on Carbon with listening-first metadata.",
+      "html": "<div class=\"ds-track-dark\"><span class=\"ds-art-dark\"></span><span><strong>Afterglow</strong><small>Vespera</small></span><button aria-label=\"More\">•••</button></div>",
+      "css": ".ds-track-dark{height:72px;padding:8px 16px;display:flex;gap:12px;align-items:center;background:#0F0F0F;color:#E7E8E1;font-family:Roboto,sans-serif}.ds-art-dark{width:48px;height:48px;border-radius:10px;background:#536B1E}.ds-track-dark span:nth-child(2){display:grid;gap:3px;flex:1}.ds-track-dark strong{font-size:16px}.ds-track-dark small,.ds-track-dark button{color:#C8C9BE}.ds-track-dark button{width:48px;height:48px;border:0;background:transparent}.ds-track-dark:focus-within{background:#171914}"
+    },
+    {
+      "name": "Light Track Row",
+      "kind": "custom",
+      "refersTo": "track-row-light",
+      "description": "Exact daylight counterpart to the dark Library row.",
+      "html": "<div class=\"ds-track-light\"><span class=\"ds-art-light\"></span><span><strong>Afterglow</strong><small>Vespera</small></span><button aria-label=\"More\">•••</button></div>",
+      "css": ".ds-track-light{height:72px;padding:8px 16px;display:flex;gap:12px;align-items:center;background:#FFFFFF;color:#1B1C18;font-family:Roboto,sans-serif}.ds-art-light{width:48px;height:48px;border-radius:10px;background:#E7E8E1}.ds-track-light span:nth-child(2){display:grid;gap:3px;flex:1}.ds-track-light strong{font-size:16px}.ds-track-light small,.ds-track-light button{color:#5E6056}.ds-track-light button{width:48px;height:48px;border:0;background:transparent}.ds-track-light:focus-within{background:#F6F7F2}"
+    },
+    {
+      "name": "Dark Mini Player",
+      "kind": "custom",
+      "refersTo": "mini-player-dark",
+      "description": "Persistent route to Now on Carbon surfaces.",
+      "html": "<div class=\"ds-mini-dark\"><span class=\"ds-mini-art-dark\"></span><span><strong>Afterglow</strong><small>Vespera</small></span><button aria-label=\"Pause\">Ⅱ</button><button aria-label=\"Next\">›</button></div>",
+      "css": ".ds-mini-dark{height:72px;padding:8px 12px;display:flex;gap:10px;align-items:center;border-radius:16px;background:#23261E;color:#E7E8E1;box-shadow:0 2px 8px rgba(0,0,0,.20);font-family:Roboto,sans-serif}.ds-mini-art-dark{width:48px;height:48px;border-radius:10px;background:#536B1E}.ds-mini-dark span:nth-child(2){display:grid;gap:2px;flex:1}.ds-mini-dark small{color:#C8C9BE}.ds-mini-dark button{width:48px;height:48px;border:0;border-radius:999px;background:transparent;color:#E7E8E1;font-size:20px}.ds-mini-dark button:focus-visible{outline:3px solid rgba(159,191,75,.38)}"
+    },
+    {
+      "name": "Light Mini Player",
+      "kind": "custom",
+      "refersTo": "mini-player-light",
+      "description": "Exact daylight counterpart to the dark persistent player.",
+      "html": "<div class=\"ds-mini-light\"><span class=\"ds-mini-art-light\"></span><span><strong>Afterglow</strong><small>Vespera</small></span><button aria-label=\"Pause\">Ⅱ</button><button aria-label=\"Next\">›</button></div>",
+      "css": ".ds-mini-light{height:72px;padding:8px 12px;display:flex;gap:10px;align-items:center;border-radius:16px;background:#F6F7F2;color:#1B1C18;box-shadow:0 2px 8px rgba(15,15,15,.12);font-family:Roboto,sans-serif}.ds-mini-art-light{width:48px;height:48px;border-radius:10px;background:#E7E8E1}.ds-mini-light span:nth-child(2){display:grid;gap:2px;flex:1}.ds-mini-light small{color:#5E6056}.ds-mini-light button{width:48px;height:48px;border:0;border-radius:999px;background:transparent;color:#1B1C18;font-size:20px}.ds-mini-light button:focus-visible{outline:3px solid rgba(83,107,30,.35)}"
+    },
+    {
+      "name": "Dark Bottom Navigation",
+      "kind": "nav",
+      "refersTo": "bottom-navigation-dark",
+      "description": "Library, Now, and Chain on the dark surface system.",
+      "html": "<nav class=\"ds-nav-dark\"><button class=\"active\">Library</button><button>Now</button><button>Chain</button></nav>",
+      "css": ".ds-nav-dark{height:80px;padding:8px 12px;display:flex;align-items:center;justify-content:space-around;background:#0F0F0F;font-family:Roboto,sans-serif}.ds-nav-dark button{min-width:72px;height:56px;border:0;border-radius:12px;background:transparent;color:#C8C9BE;font:600 12px/16px Roboto,sans-serif}.ds-nav-dark button.active{color:#BFD66B;background:#23261E}.ds-nav-dark button:focus-visible{outline:3px solid rgba(159,191,75,.38);outline-offset:2px}"
+    },
+    {
+      "name": "Light Bottom Navigation",
+      "kind": "nav",
+      "refersTo": "bottom-navigation-light",
+      "description": "Exact daylight counterpart to the dark top-level navigation.",
+      "html": "<nav class=\"ds-nav-light\"><button class=\"active\">Library</button><button>Now</button><button>Chain</button></nav>",
+      "css": ".ds-nav-light{height:80px;padding:8px 12px;display:flex;align-items:center;justify-content:space-around;background:#FFFFFF;font-family:Roboto,sans-serif}.ds-nav-light button{min-width:72px;height:56px;border:0;border-radius:12px;background:transparent;color:#5E6056;font:600 12px/16px Roboto,sans-serif}.ds-nav-light button.active{color:#536B1E;background:#F6F7F2}.ds-nav-light button:focus-visible{outline:3px solid rgba(83,107,30,.35);outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Signal",
+    "overview": "Vesqen should feel like a listening instrument used in a dim train carriage, a quiet study, or a softly lit room: the screen recedes until a meaningful state changes. The dark experience is the primary expression, while the light experience is a complete daylight counterpart—not a separate brand. Album artwork may cast a restrained ambient tint on the full player, but navigation, text, and evidence labels remain stable and legible.",
+    "keyCharacteristics": [
+      "Dark-first and light-complete, with identical hierarchy and behavior.",
+      "One moss signal color used sparingly for active controls, selection, and positive evidence above neutral playback states.",
+      "Soft tonal separation instead of hard divider lines or nested card grids.",
+      "Album-derived atmosphere only on the full player and only behind protected contrast layers.",
+      "Familiar Android navigation and controls, with advanced evidence one deliberate tap away."
+    ],
+    "rules": [
+      { "name": "The Three-Destination Rule", "body": "Top-level navigation is Library, Now, and Chain. Settings and track details are secondary destinations and never become additional permanent tabs.", "section": "components" },
+      { "name": "The Progressive Proof Rule", "body": "The track list contains title, artist, artwork, playback state, and overflow only. Format, path, source parameters, route evidence, and live metrics belong in track details, Now, or Chain.", "section": "components" },
+      { "name": "The Evidence Hierarchy Rule", "body": "SYSTEM MIXED and DIRECT SUPPORTED use neutral chips. AVAILABLE uses a Moss outline and open icon, ACTIVE uses a filled Moss chip and activity dot, and VERIFIED uses an outlined or tonal badge with a shield and exact device-matrix context. Color never promotes evidence by itself.", "section": "colors" },
+      { "name": "The Chain Empty-State Rule", "body": "Without a playback session, Chain explains that evidence appears after playback starts and offers one primary action back to Library.", "section": "components" },
+      { "name": "The Localized Navigation Rule", "body": "Library, Now, and Chain are stable semantic IDs. English uses those labels; Simplified Chinese displays 曲库, 正在播放, and 链路.", "section": "components" },
+      { "name": "The Signal Budget Rule", "body": "Signal Moss occupies no more than roughly 10% of an ordinary screen. Its rarity creates recognition and makes active state unambiguous.", "section": "colors" },
+      { "name": "The Stable Truth Rule", "body": "Android dynamic color is not enabled in the v1.0 baseline. If it is added later, output states keep fixed semantic roles: brand, warning, error, and proof meanings never inherit an arbitrary wallpaper hue.", "section": "colors" },
+      { "name": "The One-Family Rule", "body": "UI labels, buttons, track metadata, and navigation use the same sans-serif family. Monospace never leaks into the ordinary library or primary controls.", "section": "typography" },
+      { "name": "The No-Line Rule", "body": "Separate list items with rhythm, alignment, and surface tone. Hard dividers are limited to dense technical tables where row tracking genuinely requires them.", "section": "elevation" },
+      { "name": "The Opaque Fallback Rule", "body": "If blur, transparency, performance, or contrast cannot be guaranteed, render a fully opaque semantic surface without changing layout or affordance.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep Library, Now, and Chain stable across themes and window sizes.",
+      "Do keep Signal Moss below roughly 10% of ordinary screen area and reserve it for identity, focus, selection, and positive evidence above neutral playback states.",
+      "Do maintain at least WCAG 2.2 AA contrast, 48dp touch targets, TalkBack labels, scalable text, and reduced-motion behavior.",
+      "Do use soft tonal transitions, restrained artwork light, and platform blur only when they clarify elevation or playback context.",
+      "Do disclose technical detail progressively and preserve evidence confidence labels in Chain and detail surfaces.",
+      "Do use the symmetric Twin Paths V mark inside the Android adaptive-icon safe zone and provide a dedicated monochrome layer."
+    ],
+    "donts": [
+      "Don't build a feed-heavy streaming surface with recommendations, social activity, advertising, or engagement loops.",
+      "Don't imitate Spotify, NetEase Cloud Music, Apple Music, or another recognizable player.",
+      "Don't use neon gaming-audio dashboards, spectrum visualizer spectacle, or dense audiophile telemetry on the default screen.",
+      "Don't use generic glassmorphism, decorative blur, oversized rounded-card grids, purple-gradient dark mode, or animation without a state purpose.",
+      "Don't use music notes, headphones, play triangles, vinyl records, waveforms, or checkmarks as the product mark.",
+      "Don't let Android dynamic color change the Vesqen mark or semantic playback state.",
+      "Don't style SYSTEM MIXED or DIRECT SUPPORTED as Moss success states.",
+      "Don't pair a decorative border with a wide soft shadow, use side-stripe accents, gradient text, or card radii above 16dp."
+    ]
+  }
+}
