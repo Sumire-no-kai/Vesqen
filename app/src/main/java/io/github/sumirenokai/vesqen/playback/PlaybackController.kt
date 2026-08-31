@@ -16,7 +16,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
 /** Main-thread facade around the Media3 controller used by the Compose UI. */
-class PlaybackController(context: Context) {
+class PlaybackController(
+    context: Context,
+    private val onSnapshotChanged: (PlaybackSnapshot) -> Unit = {},
+) {
     private val appContext = context.applicationContext
     private val executor = ContextCompat.getMainExecutor(appContext)
     private val tracksById = mutableMapOf<String, AudioTrack>()
@@ -50,7 +53,7 @@ class PlaybackController(context: Context) {
                         }
                     }
                     .onFailure {
-                        snapshot = PlaybackSnapshot()
+                        updateSnapshot(PlaybackSnapshot())
                     }
             },
             executor,
@@ -117,16 +120,26 @@ class PlaybackController(context: Context) {
     private fun publish(player: Player) {
         val item = player.currentMediaItem
         val track = item?.mediaId?.let(tracksById::get)
-        snapshot = PlaybackSnapshot(
+        val metadata = item?.mediaMetadata
+        updateSnapshot(
+            PlaybackSnapshot(
             isControllerReady = true,
             isPlaying = player.isPlaying,
-            title = track?.title.orEmpty(),
-            artist = track?.artist.orEmpty(),
+            trackId = item?.mediaId?.toLongOrNull(),
+            title = track?.title ?: metadata?.title?.toString().orEmpty(),
+            artist = track?.artist ?: metadata?.artist?.toString().orEmpty(),
+            album = track?.album ?: metadata?.albumTitle?.toString().orEmpty(),
             durationMs = player.duration.coerceAtLeast(0),
             positionMs = player.currentPosition.coerceAtLeast(0),
             hasPrevious = player.hasPreviousMediaItem(),
             hasNext = player.hasNextMediaItem(),
+            ),
         )
+    }
+
+    private fun updateSnapshot(updated: PlaybackSnapshot) {
+        snapshot = updated
+        onSnapshotChanged(updated)
     }
 
     private fun AudioTrack.toMediaItem(): MediaItem = MediaItem.Builder()

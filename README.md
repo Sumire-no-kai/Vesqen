@@ -2,7 +2,7 @@
 
 Vesqen is a lightweight, offline-first Android player for local lossless audio. Its defining goal is to expose an auditable playback chain and use Android's official USB bit-perfect path only when the device, ROM, DAC, and source format genuinely support it.
 
-The repository now contains the M1-A local-playback baseline: MediaStore library access, Media3 playback and session controls, a persistent playback surface, and an explicit `SYSTEM MIXED` declaration. USB direct/bit-perfect output, the complete `Library / Now / Chain` UI, and later M1 capabilities remain separate milestones; see the [product requirements](docs/PRD.md), [roadmap](docs/ROADMAP.md), and [development log](docs/DEVELOPMENT_LOG.md) for the verified scope.
+The repository now contains the M1-A local-playback and visual/navigation baseline: MediaStore library access, Media3 playback and session controls, a persistent `Library / Now / Chain` shell, and an explicit `SYSTEM MIXED` declaration. USB direct/bit-perfect output, auditable source/output evidence, and later M1 capabilities remain separate milestones; see the [product requirements](docs/PRD.md), [roadmap](docs/ROADMAP.md), and [development log](docs/DEVELOPMENT_LOG.md) for the verified scope.
 
 The formal Vesqen visual baseline is documented in [DESIGN.md](DESIGN.md) and the [visual identity guide](docs/brand/VISUAL_IDENTITY.md). Its Twin Paths mark, adaptive launcher icon, light/dark palette, and component tokens are versioned with the application instead of being maintained as detached mockups.
 

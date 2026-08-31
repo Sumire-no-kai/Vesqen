@@ -14,4 +14,10 @@ class PlaybackSnapshotTest {
     fun `m1 declaration never overclaims bit perfect playback`() {
         assertEquals(OutputDeclaration.SYSTEM_MIXED, PlaybackSnapshot().declaration)
     }
+
+    @Test
+    fun `active track is identified by stable MediaStore id rather than title`() {
+        assertEquals(false, PlaybackSnapshot(title = "A title is not a session").hasActiveTrack)
+        assertEquals(true, PlaybackSnapshot(trackId = 42, title = "").hasActiveTrack)
+    }
 }

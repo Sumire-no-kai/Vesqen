@@ -123,3 +123,44 @@ M1-A 只实现本地媒体库到系统混音播放的最小闭环：
 1. 在下一轮实现正式 Library、Now、Chain 页面、持久 mini-player、底部导航 / navigation rail 和详情层级；不得把视觉板当作已完成 UI。
 2. 在 Android 13+ 验证主题 monochrome launcher，在 API 31+ 验证深浅启动画面，并检查媒体通知小图标的实际状态栏清晰度。
 3. 完整 UI 落地后补充深浅模式、字体缩放、TalkBack、减少动效和窄/宽窗口的截图与自动化证据。
+
+## 2026-08-31 · 正式 UI 壳层落地（进行中）
+
+### 范围
+
+本轮工作位于 `codex/implement-ui-shell`，将正式视觉识别系统落实到可运行的 Compose 界面，同时保持 M1-A 的实际能力边界：
+
+- 实现固定顺序的 `曲库 / 正在播放 / 链路` 顶层目的地；窄窗口使用底部导航，宽窗口切换为 navigation rail。
+- 实现曲库授权、加载、空、错误、搜索、紧凑曲目行与曲目详情层级；曲目行只显示标题和艺术家，详情只呈现目前真实可得的专辑和时长元数据。
+- 实现跨目的地持续的 mini-player、完整 Now 播放页，以及只陈述事实的 Chain 页面。
+- 以 Twin Paths 的中性占位视觉表示当前缺失的封面数据；它不是伪造专辑封面，也不为曲目补写不存在的采样率、编码或 DAC 信息。
+- 补齐中英文文案、可测试的纯 `VesqenAppContent` 边界、减少动效策略与可访问的 48 dp 交互目标。
+
+### 设计与实现决策
+
+| 决策/问题 | 处理与理由 |
+| --- | --- |
+| 播放快照原先可能不触发 Compose 重组 | `VesqenViewModel` 改为拥有 `PlaybackSnapshot` 状态，并由 `PlaybackController` 发布更新。这样首次开始播放后 mini-player、Now 与 Chain 能收到真实状态变化。 |
+| 输出链路是否展示“当前路由”或“位完美” | 不展示。M1-A 只固定声明 `SYSTEM MIXED`；已连接输出类型明确标注为枚举能力，不冒充活动路由，direct / bit-perfect 明确为不可用。 |
+| 没有封面字段时如何避免页面空洞 | 使用品牌的 Twin Paths 中性占位组件，并在代码和文案中避免把它称为真实封面；未来加入媒体封面元数据后替换该数据源，而不是把视觉占位写入模型。 |
+| Now、Library、Chain 是否做成三套皮肤 | 不做。三者共享同一 token、层级、导航顺序和状态语义；仅在信息密度与任务焦点上不同。 |
+| 测试是否需要启动真实 Activity | 新增 Compose 测试直接驱动无 Android 依赖的 `VesqenAppContent`，不请求权限、不查询 MediaStore、不连接 Media3，从而能覆盖导航、空态、详情、mini-player 与 Chain 文案而不污染设备媒体数据。 |
+| 减少动效支持 | 当系统关闭 Animator 时使用短 fade 回退；测试可注入减少动效策略。API 26 无公共“移除动画”偏好读取 API，因此不把该偏好伪装成已检测状态。 |
+| 用户在系统设置中改完权限后界面可能陈旧 | 为 `VesqenApp` 注册生命周期 `ON_RESUME` 同步。这样从应用设置返回时会重新读取音乐和通知权限、刷新曲库或移除通知警告，而不是要求用户杀掉应用或再次点击重试。 |
+| mini-player 是否重复展示输出标签 | 不展示。它只保留封面占位、标题/艺术家和三个播放控制，避免在 320–360 dp 窄屏压缩标题；可点的 `SYSTEM MIXED` 解释入口保留在 Now 页，跳转 Chain。 |
+| 可点状态标签的无障碍语义 | Now 页的 `SYSTEM MIXED` 标签除了状态文本，还提供“查看播放链路”的动作标签；Chain 摘要中的非点击标签仍只朗读事实状态，避免把同一标签误读为可操作。 |
+
+### 验证记录
+
+| 检查 | 环境/命令 | 结果 |
+| --- | --- | --- |
+| JVM 单元测试、lint、Debug 组装、仪器测试源码编译 | `./gradlew.bat testDebugUnitTest lintDebug assembleDebug :app:compileDebugAndroidTestKotlin --stacktrace` | **已通过**：6 个 JVM 测试通过、lint 无错误、Debug APK 可组装，新增 Compose 仪器测试源码可编译。 |
+| Android 15 手动视觉冒烟 | vivo V2171A，浅色中文系统 | **已通过（限定为空态与导航）**：安装和启动成功；授权引导、曲库、Now 空态、Chain 空态、三目的地导航、Twin Paths 占位和 Moss 主操作层级均在实际屏幕检查；崩溃缓冲区为空。设备当时无可供本应用播放的本地曲目，因此不把此项写作真实播放状态的视觉或音频验证。 |
+| Compose 仪器测试执行 | `./gradlew.bat :app:connectedDebugAndroidTest --stacktrace` | **未获得有效结果 / 待换环境复验**：设备生成 `0` 个测试的空报告。报告显示 UTP 在测试启动前重新安装 `app-debug.apk` 时收到 `ShellCommandUnresponsiveException`（`SplitApkInstaller.installCommit`），因此当前 Compose 用例尚未执行；约两分钟后仅停止已确认挂起的本机 Gradle 测试进程，设备 crash buffer 为空。不能将此记作测试通过或应用失败。 |
+| 绕过 UTP 的安装诊断 | `adb install -r -t app-debug.apk` | **需要用户确认 / 未绕过安全提示**：vivo Package Installer 展示“未知来源”风险确认，继续安装按钮在确认风险前不可用。为避免代理自动确认设备安全提示，已返回并停止挂起的 ADB 安装进程；现有 Debug 安装仍保留。该现象佐证安装通道限制，不改动 runner 或测试源码。 |
+
+### 后续验证
+
+1. 在干净 Android 模拟器或另一台设备重新获得 Compose runner 的非空完成报告，并覆盖有真实本地媒体时的 mini-player、Now、详情与 Chain 状态；若继续使用本 vivo，需由设备所有者明确确认“未知来源”安装提示后再诊断，期间不并发使用 UI 自动化工具。
+2. 在深色系统、字体缩放、TalkBack、减少动效以及宽窗口上补充设备级截图/自动化证据。
+3. 后续 M 阶段接入可审计的输出链路数据前，继续只显示 `SYSTEM MIXED`，不扩展为 direct、独占或 bit-perfect 声称。
