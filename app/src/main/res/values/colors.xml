@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="signal_moss">#9FBF4B</color>
+    <color name="signal_moss_bright">#BFD66B</color>
+    <color name="signal_moss_deep">#536B1E</color>
+    <color name="window_background">#FFFFFF</color>
+    <color name="splash_background">#FFFFFF</color>
+</resources>

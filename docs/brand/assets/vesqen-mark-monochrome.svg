@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108" fill="none">
+  <title>Vesqen Twin Paths mark — monochrome</title>
+  <desc>Single-colour mark for tinting and constrained reproduction.</desc>
+  <g stroke="#0F0F0F" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M29 32L54 78L79 32" stroke-width="7"/>
+    <path d="M39 32L54 60L69 32" stroke-width="6"/>
+  </g>
+</svg>

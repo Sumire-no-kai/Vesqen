@@ -62,3 +62,64 @@ M1-A 只实现本地媒体库到系统混音播放的最小闭环：
 
 1. 在干净的 Android 模拟器或另一台设备上重跑 `connectedDebugAndroidTest`，取得独立的通过/失败结论；不要在 runner 执行期间并发调用 `uiautomator`。
 2. 补充通过验证后，提交功能分支、创建 PR、等待 CI，并仅在 CI 通过后合并。
+
+## 2026-08-31 · M1-A 合并闭环
+
+- 功能分支 `codex/m1a-local-playback` 已通过 PR #1 合并到 `master`，合并提交为 `37c822a0bf71ddaf1252ea06d6879595a91d0e25`。
+- 合并前证据包括 JVM 单元测试、lint、Debug 组装、GitHub CI 和 vivo V2171A（Android 15）手动冒烟；Compose runner 未回传有效完成事件的限制继续保留，未被 CI 或手动检查替代。
+- 因此，M1-A 的本地曲库、普通系统混音播放、后台会话和基础控制闭环可以作为后续开发基线；这不等于完整 M1、完整 UI 架构或任何 bit-perfect 阶段已经完成。
+
+## 2026-08-31 · 正式视觉识别系统 v1.0
+
+### 范围
+
+本轮工作位于 `codex/visual-identity-system`，负责把已确认的 UI 方向和 Logo 从样例收敛为可版本化的正式基线：
+
+- A 固定为深色 Library 主表达，B 是同一系统的浅色主题，C 是该系统中的完整 Now 播放页，而不是第三套皮肤。
+- 确立 `The Quiet Signal` 视觉北极星和 `Library / Now / Chain` 顶层信息架构。
+- 以对称 `Twin Paths` 双路径 V 作为正式标识；交付主标、反白、单色、App 图标、横向组合、构造图、24 dp 通知光学校正版和视觉系统板 SVG，以及视觉板 PNG 预览。
+- 建立 `PRODUCT.md`、`DESIGN.md`、`.impeccable/design.json`、视觉识别指南和 Compose 品牌 token。
+- 为 status chip、曲目行、mini-player 和底部导航分别提供深浅机器可读组件，避免 B 主题依赖后续开发者自行推断颜色。
+- 替换 Android 模板紫色主题、机器人 launcher 图标和网格背景；增加专用 monochrome、应用内标志、API 31+ 启动画面和媒体通知小图标。
+- 将品牌、导航、渐进式信息密度、动效、光影、不透明回退和可访问性要求同步到 PRD v0.5。
+
+本轮不声称完整 Compose Library/Now/Chain 页面已经实现；正式资产和主题是下一轮 UI 重构的输入与约束。
+
+### 设计决策
+
+| 决策 | 处理与理由 |
+| --- | --- |
+| Logo 是否保留样例中的双 V | 保留“双路径”含义，但所有路径围绕 `x=54` 严格对称，移除单边上扬、尾部和播放三角，降低被读成对勾或箭头的风险。 |
+| 主色如何区别于常见播放器绿 | 采用偏橄榄黄绿的 Signal Moss `#9FBF4B`，深色活跃值 `#BFD66B`、浅色实心活跃值 `#536B1E`；普通页面限制在约 10% 面积。 |
+| `SYSTEM MIXED` 是否使用 Moss | 否。它与 `DIRECT SUPPORTED` 都是中性事实状态；AVAILABLE 用 Moss 描边，ACTIVE 用 Moss 实心，VERIFIED 必须附盾牌/证书提示和精确设备矩阵上下文。颜色不能单独提升证据等级。 |
+| 深浅模式是否形成两套品牌 | 否。A/B 共享组件、布局、导航和语义，只替换对应 surface/on-surface 层级；Logo 和证据语义不随壁纸改变。 |
+| Android 动态色默认行为 | 从模板的默认开启改为默认关闭。未来可作为主动选项，但固定品牌和证据状态不得漂移。 |
+| 高版本透明与模糊 | 只用于完整播放页和确有分离关系的浮层，并要求 Carbon Elevated / Frost Surface 的不透明高对比回退。 |
+| 旧密度 launcher WebP | 项目最低版本为 API 26，自适应 `mipmap-anydpi` 已覆盖支持范围；删除 10 个仍包含 Android 模板机器人的旧 WebP，避免仓库中存在冲突品牌源。删除可由 Git 恢复。 |
+| 通知标志是否直接缩放 108 单位主标 | 否。状态栏 24 dp 下标准主标墨迹偏小，保留同一对称轴与双路径关系，将外/内路径光学校正为 9/8 单位和更大的外接范围；专用 SVG 与 VectorDrawable 同步。 |
+
+### 实现问题与修复
+
+| 问题 | 处理 |
+| --- | --- |
+| `android:windowLightNavigationBar` 在基础主题触发 API 27 lint 错误，而产品最低为 API 26 | 从基础主题移除该属性；运行时 edge-to-edge 继续负责受支持版本的系统栏外观，不提高最低版本，也不以 lint baseline 掩盖。 |
+| Media3 1.11 的通知图标 API 与旧 Builder 示例不同 | 直接检查项目实际依赖字节码，确认 `setSmallIcon()` 位于构建后的 `DefaultMediaNotificationProvider`；改为 provider 实例配置。 |
+| `DefaultMediaNotificationProvider` 属于 Media3 `UnstableApi` | 将 `@UnstableApi` 精确限定在 `PlaybackService.onCreate()`，避免把整个 Service 类型传播为 opt-in API。 |
+| 沙箱环境首次无法下载 Gradle 9.5.0 | 在取得授权的网络/缓存环境完成下载和复验；该错误属于构建环境限制，不记为应用测试失败。 |
+
+### 验证记录
+
+| 检查 | 结果 |
+| --- | --- |
+| SVG / Android XML 解析 | **已通过**：正式资产和 Android 资源均可作为 XML 解析。 |
+| `.impeccable/design.json` 解析 | **已通过**：schema v2 sidecar 可解析。 |
+| 视觉板渲染 | **已通过**：使用本机 Chrome headless 以 1600×1200 渲染 SVG，并人工检查主标、色板和 A/B/C 关系。 |
+| 品牌文字对比度 | **已通过（含实际组件组合）**：Ink Light/Carbon 15.54:1、Muted Dark/Carbon Elevated 9.18:1、Ink Dark/White 17.13:1、Muted Light/Frost 5.94:1、Moss Bright/Carbon Surface 11.00:1、Moss Deep/Frost 5.59:1、White/Moss Deep 6.02:1、Ink Dark/Moss Bright 10.64:1、White/Warning Deep 7.13:1、Ink Dark/Warning Bright 10.44:1。 |
+| JVM 单元测试、lint、Debug 组装 | `./gradlew.bat testDebugUnitTest lintDebug assembleDebug` **已通过**；4 个 JVM 测试通过、lint 无错误、Debug APK 可组装。 |
+| Android 15 安装与图标冒烟 | vivo V2171A **已通过（限定范围）**：`installDebug` 成功；`MainActivity` 冷启动 1.102 秒；系统应用信息页实际蒙版图标清晰显示 Twin Paths；检查期间 crash buffer 为空。未保存设备媒体内容，截图仅位于被忽略的 `app/build` QA 目录。 |
+
+### 待验证 / 下一步
+
+1. 在下一轮实现正式 Library、Now、Chain 页面、持久 mini-player、底部导航 / navigation rail 和详情层级；不得把视觉板当作已完成 UI。
+2. 在 Android 13+ 验证主题 monochrome launcher，在 API 31+ 验证深浅启动画面，并检查媒体通知小图标的实际状态栏清晰度。
+3. 完整 UI 落地后补充深浅模式、字体缩放、TalkBack、减少动效和窄/宽窗口的截图与自动化证据。
