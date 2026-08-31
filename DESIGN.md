@@ -157,12 +157,14 @@ components:
     backgroundColor: "{colors.carbon-black}"
     textColor: "{colors.muted-dark}"
     padding: "8dp 12dp"
-    height: "80dp"
+    height: "64dp"
+    systemInset: "navigation bar inset added by platform"
   bottom-navigation-light:
     backgroundColor: "{colors.pure-white}"
     textColor: "{colors.muted-light}"
     padding: "8dp 12dp"
-    height: "80dp"
+    height: "64dp"
+    systemInset: "navigation bar inset added by platform"
 ---
 
 # Design System: Vesqen
@@ -301,6 +303,7 @@ Translucency is purposeful. The full player may use a protected, low-frequency a
 ### Mini-player
 
 - **Structure:** Artwork, title/artist, previous, play/pause, and next. The entire non-button surface opens Now.
+- **Placement:** It floats as one 72dp tonal card above compact navigation with a 4dp visual gap; the Library canvas and navigation background remain continuous behind it. It must never reserve or paint a full-width lower white slab.
 - **Material:** One elevated tonal surface with optional low-intensity artwork glow. It never becomes a nested card stack.
 - **Motion:** Expands into Now with a 240ms shared-axis transition. Reduced motion uses an 80ms crossfade.
 
@@ -308,7 +311,7 @@ Translucency is purposeful. The full player may use a protected, low-frequency a
 
 - **Structure:** A framed artwork stage anchors the upper field. One purposeful, opaque lower transport dock contains the one-line title, artist/album when space permits, factual route chip, scrubber, and controls; it is not a stack of floating cards.
 - **Control hierarchy:** Previous / play-pause / next form the large centered primary transport group. One Playback Order switch, one explicit Playback Session switch, and the circled information action live in the dock's secondary footer, so transport never competes with modes or metadata. At narrow widths the same three 48dp actions become evenly spaced icons; the session switch uses the GraphicEq glyph but retains an explicit TalkBack action/state. When extreme text hides the route chip, one 48dp AccountTree action becomes the single Chain path. The mini-player never repeats the route chip.
-- **Playback-order control:** Shuffle, list repeat, and single-track repeat are **not** separate buttons. One familiar 48dp control cycles `Sequential → Shuffle → Repeat all → Repeat one → Sequential`; this normal cycle always writes mutually exclusive Media3 switches. Sequential uses a numbered-list glyph, Shuffle uses the standard shuffle glyph, Repeat all uses the standard repeat glyph, and Repeat one uses repeat-with-`1`. Sequential is muted; the other three modes use Signal Moss. If an external controller supplies a compound shuffle-plus-repeat state, the same one button renders its two-part state accurately and one tap resets it to Sequential rather than hiding a switch. Each transition changes tint and icon/scale over 160ms and exposes the exact mode to TalkBack.
+- **Playback-order control:** Shuffle, list repeat, and single-track repeat are **not** separate buttons. One familiar 48dp control cycles `Sequential → Shuffle → Repeat all → Repeat one → Sequential`; this normal cycle always writes mutually exclusive Media3 switches. Sequential uses a numbered-list glyph, Shuffle uses the standard shuffle glyph, Repeat all uses the standard repeat glyph, and Repeat one uses repeat-with-`1`. Sequential is muted; the other three modes use Signal Moss. If an external controller supplies a compound shuffle-plus-repeat state, the same one button renders its two-part state accurately and one tap resets it to Sequential rather than hiding a switch. Each transition changes tint and icon/scale over 160ms and exposes the exact mode to TalkBack. After the controller state actually changes, a non-persistent (~1.5s) floating pill in the upper safe area confirms the exact new mode as a polite live region; it must not predict a requested mode before the state arrives or cover the transport dock.
 - **Motion:** Opening Now follows the mini-player's 240ms shared-axis path; returning uses a 180ms inverse path. A user-initiated previous/next change moves only artwork and track identity 220ms in the corresponding horizontal direction while the transport dock remains spatially stable. Reduced motion replaces these movements with the 80ms crossfade fallback.
 - **Atmosphere:** Artwork may cast a 3.96% low-frequency reflection behind a stable 82% Nocturne Canvas scrim. The focused surface explicitly supplies fixed light foreground tokens; controls and `SYSTEM MIXED` retain their semantic colors and never sample arbitrary artwork colors. Missing/unreadable artwork has an opaque neutral fallback with no false reflection.
 - **Focus mode:** Now is a full-height, edge-to-edge Nocturne Graphite listening surface rather than a squeezed destination panel. Top-level navigation yields its space to the focused player (including the wide-window rail): the status bar continues the Canvas and the navigation bar continues the opaque Dock, with platform contrast scrims disabled. One Player Lift—not a hard line—separates the Dock from the field. Light system glyphs remain legible and all prior system-bar state restores on exit. Toolbar Back and Android Back return to the originating destination, while the factual route chip—or its compact AccountTree fallback under extreme text—remains the deliberate path to Chain.
@@ -320,6 +323,7 @@ Translucency is purposeful. The full player may use a protected, low-frequency a
 
 - **Destinations:** Library, Now, and Chain, each with a familiar icon and persistent text label.
 - **Localization:** `Library`, `Now`, and `Chain` are stable semantic IDs, not forced English display strings. English uses those labels; Simplified Chinese uses `曲库`, `正在播放`, and `链路`.
+- **Compact shell:** Compact windows use a 64dp text-labelled navigation bar before the system navigation inset. The bar continues the page canvas instead of introducing a second near-white surface; labels remain one line and may ellipsize rather than wrap or clip.
 - **Default:** First launch and ordinary cold launch begin in Library. Now without a track explains the single next action: choose a track from Library.
 - **Adaptive:** Compact windows use bottom navigation; medium and expanded windows use a navigation rail while preserving the same order and labels.
 

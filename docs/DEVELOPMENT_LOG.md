@@ -378,3 +378,36 @@ M1-A 只实现本地媒体库到系统混音播放的最小闭环：
 | 真机手动回归 | Android 15 物理设备、最终隔离 Debug APK、真实本地媒体 | **已通过（本轮范围）**：重新安装最终 APK 后，UI tree 中“播放顺序”节点数量为 1；实际点击依次观察到顺序 → 随机 → 列表循环 → 单曲循环 → 顺序，footer 没有并列的随机或循环按钮。测试结束后由 UI tree 定位并暂停播放；crash buffer 中本应用匹配为 0。临时截图与 UI XML 已在复核后删除。 |
 | Compose 仪器测试执行 | `connectedDebugAndroidTest` | **未执行 / 不计为通过**：本轮只编译 Android 测试源码并完成手动真机交互；不得将其表述为 runner 已通过。 |
 | 远端 Android CI | PR #6 的 `verify`（workflow：`Android CI`） | **已通过**：合并提交进入 `master` 后，远端 workflow 的最终结论为 `success`。该项是仓库 CI 通过，不改变上行“设备 Compose runner 未执行”的结论。 |
+
+## 2026-08-31 · 曲库底部层级与播放顺序悬浮反馈
+
+### 触发与范围
+
+本轮位于 `codex/polish-library-feedback`。用户指出普通曲库页的底部导航过厚、mini-player 周围被一整块近白 Surface 托起，以及播放顺序单一入口在切换后缺少明确且位置合理的模式反馈。范围仅限 Library 底部层级、Now 的播放顺序反馈、对应设计契约与回归；不改变 Media3 播放顺序的写入规则、输出声明或 M1 的能力边界。
+
+### 设计与实现决策
+
+| 问题 / 决策 | 处理与理由 |
+| --- | --- |
+| 紧凑导航为什么显得过厚 | 原有 Material `NavigationBar` 与下方 mini-player 叠加，形成约 80 dp + 72 dp 的连续底部质量。紧凑窗口改用 Material3 `ShortNavigationBar` 的 64 dp 内容高度，保留系统导航 inset、单行标签和 48 dp 触控目标；不硬压标准组件的内部触控几何。 |
+| 为什么会有整块近白底 | 原先 mini-player 属于 `Scaffold.bottomBar` 的叠加结构，导航及其周边 Surface 一起形成大面积浅层。mini-player 移到根 `Box` 的独立 overlay，固定为 72 dp `surfaceVariant` tonal card、4 dp 视觉间隙和 4 dp Ambient Low 阴影；内容仍预留安全空间，曲库画布与导航背景连续。 |
+| 播放顺序反馈何时出现 | 点击先记录当前 `PlaybackOrderMode`，只在 Media3 回传不同的实际模式后才显示文字。外部控制器直接修改状态不触发“用户已切换”提示；失败或未改变的请求也不虚报成功。 |
+| 提示应该放在哪里 | 首版将提示限制在 footer 左侧，真机画面显示它仍像覆盖运输控制的一层。改为 Now 顶部安全区下、标题和封面之间的居中短暂悬浮小气泡：约 1.5 秒、淡入/微缩放、减少动效时仅淡入淡出、`polite` live region。它不参与布局、不遮挡运输台，并由 Compose 回归断言其底边位于播放顺序控制之上。 |
+| Compose 半径 token | 首次将提示写成 pill 时，编译器准确发现 Compose token 没有 `VesqenRadii.pill`。未临时扩张 token 表面，改用现有 12 dp `control` 圆角；该错误未进入 APK。 |
+| 临时构建 APK 被占用 | 一个旧隔离输出路径中的 `app-debug.apk` 被 Windows 进程占用，Gradle 无法清理。没有猜测或终止任何进程；改用新的 `C:/tmp` 隔离 build root 重新完成质量门禁，项目 Gradle 配置未修改。 |
+
+### 验证记录
+
+| 检查 | 结果 |
+| --- | --- |
+| Impeccable 静态 UI 复核 | `detect.mjs` 覆盖本轮 4 个 Compose UI 文件，**无命中**。该结果辅助设计审查，不替代运行时视觉验收。 |
+| JVM、lint、Android 测试源码与 APK | `./gradlew.bat -I C:/tmp/vesqen-order-feedback-final.init.gradle.kts testDebugUnitTest lintDebug :app:compileDebugAndroidTestKotlin assembleDebug --rerun-tasks --no-configuration-cache --console=plain --stacktrace` **已通过**：8 个 JVM suite、23 个测试、0 failures、0 errors；lint 0 error（保留 20 条既有报告项）；Android Compose 测试源码编译完成；Debug APK 已组装。 |
+| Android 15 真机手动 QA | **已通过（本轮 UI/交互范围）**：新 APK 安装并启动；曲库确认 64 dp 紧凑导航、独立 mini-player 与连续背景；Now 确认无纵向 scroll 节点，播放顺序切换后出现顶部居中、本地化的模式小气泡，超时后节点消失；测试播放最后恢复为暂停。未在日志、提交或报告中记录设备媒体内容。 |
+| 临时资料清理 | **已完成**：本地 QA 截图/UI XML，以及设备端临时截图、UI XML 和安装包均按精确路径删除；复查不存在。 |
+| Compose 仪器 runner | **仍待有效完成报告 / 不计为通过**：本轮只编译 Android 测试源码并执行真机手动回归；既有设备 runner 限制不因本轮构建或手动检查而关闭。 |
+
+### 后续步骤
+
+1. 在可稳定部署测试 APK 的空闲模拟器或设备取得 `connectedDebugAndroidTest` 的完整 runner 报告。
+2. 在深浅系统、字体缩放、TalkBack、减少动效和宽窗口上补充本轮紧凑导航、悬浮 mini-player 和提示位置的设备级证据。
+3. 继续把 `SYSTEM MIXED` 限定为 M1 的事实性系统混音声明，不由更精致的交互或材质推出 direct、独占、无损或 bit-perfect 结论。

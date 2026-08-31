@@ -34,6 +34,8 @@ import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 
+internal val MiniPlayerHeight = 72.dp
+
 @Composable
 fun MiniPlayer(
     snapshot: PlaybackSnapshot,
@@ -49,11 +51,13 @@ fun MiniPlayer(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .height(72.dp)
+            .height(MiniPlayerHeight)
             .testTag("vesqen.mini-player"),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.surface),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 2.dp,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        tonalElevation = 0.dp,
+        shadowElevation = 4.dp,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),

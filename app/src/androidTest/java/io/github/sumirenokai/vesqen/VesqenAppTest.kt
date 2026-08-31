@@ -266,6 +266,7 @@ class VesqenAppTest {
         composeRule.onAllNodesWithTag("vesqen.now.playback-order").assertCountEquals(1)
         composeRule.onAllNodesWithTag("vesqen.now.shuffle").assertCountEquals(0)
         composeRule.onAllNodesWithTag("vesqen.now.repeat").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("vesqen.now.playback-order-feedback").assertCountEquals(0)
         composeRule.onNodeWithTag("vesqen.now.playback-order").assert(
             SemanticsMatcher.expectValue(
                 SemanticsProperties.StateDescription,
@@ -278,6 +279,19 @@ class VesqenAppTest {
                 listOf(context.getString(R.string.playback_order)),
             ),
         )
+        composeRule.runOnIdle {
+            playbackOrder.value = PlaybackOrderMode.SHUFFLE_REPEAT_ALL
+        }
+        composeRule.onNodeWithTag("vesqen.now.playback-order").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                context.getString(R.string.playback_order_shuffle_repeat_all),
+            ),
+        )
+        composeRule.onAllNodesWithTag("vesqen.now.playback-order-feedback").assertCountEquals(0)
+        composeRule.runOnIdle {
+            playbackOrder.value = PlaybackOrderMode.SEQUENTIAL
+        }
 
         composeRule.onNodeWithTag("vesqen.now.playback-order").performClick()
         composeRule.onNodeWithTag("vesqen.now.playback-order").assert(
@@ -286,6 +300,28 @@ class VesqenAppTest {
                 context.getString(R.string.playback_order_shuffle),
             ),
         )
+        composeRule.waitUntil(timeoutMillis = 1_000) {
+            composeRule.onAllNodesWithTag("vesqen.now.playback-order-feedback")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        composeRule.onNodeWithTag("vesqen.now.playback-order-feedback").assertIsDisplayed()
+        val feedbackBounds = composeRule.onNodeWithTag("vesqen.now.playback-order-feedback")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val orderControlBounds = composeRule.onNodeWithTag("vesqen.now.playback-order")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        assertTrue(
+            "Playback-order feedback must float above, not cover, the footer control",
+            feedbackBounds.bottom <= orderControlBounds.top,
+        )
+        composeRule.onNodeWithText(
+            context.getString(
+                R.string.playback_order_changed,
+                context.getString(R.string.playback_order_shuffle),
+            ),
+        ).assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.playback-order").performClick()
         composeRule.onNodeWithTag("vesqen.now.playback-order").assert(
             SemanticsMatcher.expectValue(
@@ -501,6 +537,36 @@ class VesqenAppTest {
 
         composeRule.onNodeWithTag("vesqen.mini-player").assertHeightIsEqualTo(72.dp)
         composeRule.onAllNodesWithText(context.getString(R.string.system_mixed)).assertCountEquals(0)
+    }
+
+    @Test
+    fun mini_player_floats_above_compact_navigation_without_overlap() {
+        render(
+            state = grantedState(
+                tracks = sampleTracks,
+                playback = PlaybackSnapshot(
+                    isControllerReady = true,
+                    trackId = 1,
+                    title = "Dawn Signal",
+                    artist = "Mori",
+                    hasPrevious = true,
+                    hasNext = true,
+                ),
+            ),
+            containerWidth = 360.dp,
+            containerHeight = 720.dp,
+        )
+
+        val miniPlayerBounds = composeRule.onNodeWithTag("vesqen.mini-player")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val compactNavigationBounds = composeRule.onNodeWithTag("vesqen.navigation.compact")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        assertTrue(
+            "The floating mini-player must leave the compact navigation unobscured",
+            miniPlayerBounds.bottom <= compactNavigationBounds.top,
+        )
     }
 
     @Test
