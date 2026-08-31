@@ -377,3 +377,4 @@ M1-A 只实现本地媒体库到系统混音播放的最小闭环：
 | Compose UI 回归覆盖 | `VesqenAppTest` | **已编译**：断言 Now 只存在一个 `playback-order` 节点、旧 shuffle/repeat 节点不存在；四态正常循环、两个外部复合状态的准确 TalkBack 状态，以及点击复合状态后归一到顺序播放均有源码回归。有效仪器 runner 报告仍待独立执行。 |
 | 真机手动回归 | Android 15 物理设备、最终隔离 Debug APK、真实本地媒体 | **已通过（本轮范围）**：重新安装最终 APK 后，UI tree 中“播放顺序”节点数量为 1；实际点击依次观察到顺序 → 随机 → 列表循环 → 单曲循环 → 顺序，footer 没有并列的随机或循环按钮。测试结束后由 UI tree 定位并暂停播放；crash buffer 中本应用匹配为 0。临时截图与 UI XML 已在复核后删除。 |
 | Compose 仪器测试执行 | `connectedDebugAndroidTest` | **未执行 / 不计为通过**：本轮只编译 Android 测试源码并完成手动真机交互；不得将其表述为 runner 已通过。 |
+| 远端 Android CI | PR #6 的 `verify`（workflow：`Android CI`） | **已通过**：合并提交进入 `master` 后，远端 workflow 的最终结论为 `success`。该项是仓库 CI 通过，不改变上行“设备 Compose runner 未执行”的结论。 |
