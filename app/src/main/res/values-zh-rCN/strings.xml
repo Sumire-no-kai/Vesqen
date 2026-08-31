@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">Vesqen</string>
+    <string name="library_permission_title">你的音乐始终留在设备上</string>
+    <string name="library_permission_body">Vesqen 需要读取音频文件，以建立本地曲库。播放不需要账号或网络连接。</string>
+    <string name="grant_music_access">允许访问音乐</string>
+    <string name="try_again">重试</string>
+    <string name="open_app_settings">打开应用设置</string>
+    <string name="system_mixed">SYSTEM MIXED</string>
+    <string name="system_mixed_explanation">Android 会选择当前路由，并且可能发生混音、重采样或系统处理。</string>
+    <string name="connected_outputs">已连接的输出类型：%1$s</string>
+    <string name="output_phone_speaker">手机扬声器</string>
+    <string name="output_wired_or_usb">有线或 USB 音频</string>
+    <string name="output_bluetooth">蓝牙音频</string>
+    <string name="output_other">其他输出</string>
+    <string name="output_none_detected">未检测到输出</string>
+    <string name="notifications_disabled">通知已关闭。播放仍可继续，但 Android 可能不会在通知栏显示媒体控制。</string>
+    <string name="loading_library">正在扫描本地音乐…</string>
+    <string name="no_local_music">未找到本地音乐</string>
+    <string name="no_local_music_body">请将音乐文件添加到设备后重新扫描。</string>
+    <string name="rescan_library">重新扫描曲库</string>
+    <string name="library_load_failed">Vesqen 无法读取本地曲库。</string>
+    <string name="unknown_title">未知标题</string>
+    <string name="unknown_artist">未知艺术家</string>
+    <string name="previous">上一首</string>
+    <string name="play">播放</string>
+    <string name="pause">暂停</string>
+    <string name="next">下一首</string>
+    <string name="playback_position">%1$s / %2$s</string>
+</resources>
