@@ -29,8 +29,75 @@ class PlaybackSnapshotTest {
     }
 
     @Test
-    fun `repeat state remains explicit rather than inferred from shuffle`() {
-        assertEquals(PlaybackRepeatMode.OFF, PlaybackSnapshot(shuffleEnabled = true).repeatMode)
-        assertEquals(PlaybackRepeatMode.ONE, PlaybackSnapshot(repeatMode = PlaybackRepeatMode.ONE).repeatMode)
+    fun `playback order presents the four ordinary listener modes`() {
+        assertEquals(PlaybackOrderMode.SEQUENTIAL, PlaybackSnapshot().playbackOrderMode)
+        assertEquals(
+            PlaybackOrderMode.SHUFFLE,
+            PlaybackSnapshot(shuffleEnabled = true).playbackOrderMode,
+        )
+        assertEquals(
+            PlaybackOrderMode.REPEAT_ALL,
+            PlaybackSnapshot(repeatMode = PlaybackRepeatMode.ALL).playbackOrderMode,
+        )
+        assertEquals(
+            PlaybackOrderMode.REPEAT_ONE,
+            PlaybackSnapshot(repeatMode = PlaybackRepeatMode.ONE).playbackOrderMode,
+        )
+    }
+
+    @Test
+    fun `playback order surfaces external compound Media3 states exactly`() {
+        assertEquals(
+            PlaybackOrderMode.SHUFFLE_REPEAT_ALL,
+            PlaybackSnapshot(
+                shuffleEnabled = true,
+                repeatMode = PlaybackRepeatMode.ALL,
+            ).playbackOrderMode,
+        )
+        assertEquals(
+            PlaybackOrderMode.SHUFFLE_REPEAT_ONE,
+            PlaybackSnapshot(
+                shuffleEnabled = true,
+                repeatMode = PlaybackRepeatMode.ONE,
+            ).playbackOrderMode,
+        )
+    }
+
+    @Test
+    fun `playback order cycle covers sequential shuffle list repeat and single repeat`() {
+        assertEquals(PlaybackOrderMode.SHUFFLE, PlaybackOrderMode.SEQUENTIAL.next())
+        assertEquals(PlaybackOrderMode.REPEAT_ALL, PlaybackOrderMode.SHUFFLE.next())
+        assertEquals(PlaybackOrderMode.REPEAT_ONE, PlaybackOrderMode.REPEAT_ALL.next())
+        assertEquals(PlaybackOrderMode.SEQUENTIAL, PlaybackOrderMode.REPEAT_ONE.next())
+        assertEquals(PlaybackOrderMode.SEQUENTIAL, PlaybackOrderMode.SHUFFLE_REPEAT_ALL.next())
+        assertEquals(PlaybackOrderMode.SEQUENTIAL, PlaybackOrderMode.SHUFFLE_REPEAT_ONE.next())
+    }
+
+    @Test
+    fun `each listener playback order resets the other Media3 switch`() {
+        assertEquals(
+            PlaybackOrderSettings(shuffleEnabled = false, repeatMode = PlaybackRepeatMode.OFF),
+            PlaybackOrderMode.SEQUENTIAL.toSettings(),
+        )
+        assertEquals(
+            PlaybackOrderSettings(shuffleEnabled = true, repeatMode = PlaybackRepeatMode.OFF),
+            PlaybackOrderMode.SHUFFLE.toSettings(),
+        )
+        assertEquals(
+            PlaybackOrderSettings(shuffleEnabled = false, repeatMode = PlaybackRepeatMode.ALL),
+            PlaybackOrderMode.REPEAT_ALL.toSettings(),
+        )
+        assertEquals(
+            PlaybackOrderSettings(shuffleEnabled = false, repeatMode = PlaybackRepeatMode.ONE),
+            PlaybackOrderMode.REPEAT_ONE.toSettings(),
+        )
+        assertEquals(
+            PlaybackOrderSettings(shuffleEnabled = true, repeatMode = PlaybackRepeatMode.ALL),
+            PlaybackOrderMode.SHUFFLE_REPEAT_ALL.toSettings(),
+        )
+        assertEquals(
+            PlaybackOrderSettings(shuffleEnabled = true, repeatMode = PlaybackRepeatMode.ONE),
+            PlaybackOrderMode.SHUFFLE_REPEAT_ONE.toSettings(),
+        )
     }
 }

@@ -15,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -27,8 +28,10 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 @Composable
 fun OutputStatusChip(
     declaration: OutputDeclaration,
-    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    containerColor: Color? = null,
+    contentColor: Color? = null,
 ) {
     val label = when (declaration) {
         OutputDeclaration.SYSTEM_MIXED -> androidx.compose.ui.res.stringResource(R.string.system_mixed)
@@ -50,6 +53,8 @@ fun OutputStatusChip(
                 onClick = onClick,
             )
     }
+    val resolvedContainerColor = containerColor ?: MaterialTheme.colorScheme.surfaceContainerHigh
+    val resolvedContentColor = contentColor ?: MaterialTheme.colorScheme.onSurfaceVariant
 
     Box(
         modifier = modifier
@@ -62,8 +67,8 @@ fun OutputStatusChip(
     ) {
         Surface(
             shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = resolvedContainerColor,
+            contentColor = resolvedContentColor,
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),

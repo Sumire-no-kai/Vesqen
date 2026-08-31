@@ -76,11 +76,29 @@
         "canonical": "oklch(0.484 0.016 116.2)",
         "tonalRamp": ["oklch(0.15 0.016 116)", "oklch(0.25 0.016 116)", "oklch(0.35 0.016 116)", "oklch(0.45 0.016 116)", "oklch(0.58 0.016 116)", "oklch(0.70 0.016 116)", "oklch(0.82 0.016 116)", "oklch(0.95 0.016 116)"]
       },
-      "midnight-violet": {
-        "role": "tertiary",
-        "displayName": "Midnight Violet",
-        "canonical": "oklch(0.233 0.031 292.5)",
-        "tonalRamp": ["oklch(0.15 0.031 293)", "oklch(0.25 0.031 293)", "oklch(0.35 0.031 293)", "oklch(0.45 0.031 293)", "oklch(0.58 0.031 293)", "oklch(0.70 0.031 293)", "oklch(0.82 0.031 293)", "oklch(0.95 0.020 293)"]
+      "now-canvas": {
+        "role": "neutral",
+        "displayName": "Now Canvas",
+        "canonical": "oklch(0.187 0.007 214.5)",
+        "tonalRamp": ["oklch(0.12 0.007 215)", "oklch(0.19 0.007 215)", "oklch(0.27 0.007 215)", "oklch(0.40 0.007 215)", "oklch(0.55 0.007 215)", "oklch(0.68 0.007 215)", "oklch(0.82 0.007 215)", "oklch(0.95 0.007 215)"]
+      },
+      "now-dock": {
+        "role": "neutral",
+        "displayName": "Now Dock",
+        "canonical": "oklch(0.234 0.009 208.7)",
+        "tonalRamp": ["oklch(0.14 0.009 209)", "oklch(0.23 0.009 209)", "oklch(0.32 0.009 209)", "oklch(0.45 0.009 209)", "oklch(0.58 0.009 209)", "oklch(0.70 0.009 209)", "oklch(0.84 0.009 209)", "oklch(0.96 0.009 209)"]
+      },
+      "now-raised": {
+        "role": "neutral",
+        "displayName": "Now Raised",
+        "canonical": "oklch(0.266 0.010 207.0)",
+        "tonalRamp": ["oklch(0.16 0.010 207)", "oklch(0.27 0.010 207)", "oklch(0.36 0.010 207)", "oklch(0.48 0.010 207)", "oklch(0.60 0.010 207)", "oklch(0.72 0.010 207)", "oklch(0.85 0.010 207)", "oklch(0.96 0.010 207)"]
+      },
+      "now-artwork-frame": {
+        "role": "neutral",
+        "displayName": "Now Artwork Frame",
+        "canonical": "oklch(0.287 0.010 207.1)",
+        "tonalRamp": ["oklch(0.17 0.010 207)", "oklch(0.29 0.010 207)", "oklch(0.38 0.010 207)", "oklch(0.50 0.010 207)", "oklch(0.62 0.010 207)", "oklch(0.74 0.010 207)", "oklch(0.86 0.010 207)", "oklch(0.97 0.010 207)"]
       },
       "warning-amber-bright": {
         "role": "semantic",
@@ -112,7 +130,7 @@
     },
     "shadows": [
       { "name": "ambient-low", "value": "0 2px 8px rgba(0, 0, 0, 0.20)", "purpose": "Menus and the persistent mini-player without a decorative border." },
-      { "name": "player-lift", "value": "0 12px 32px rgba(0, 0, 0, 0.28)", "purpose": "Expanded player and bottom sheets only." },
+      { "name": "player-lift", "value": "20dp ambient rgba(0, 0, 0, 0.22) + spot rgba(0, 0, 0, 0.30)", "purpose": "The single full-player dock boundary; never pair it with a divider, border, glow, or second shadow." },
       { "name": "focus-halo", "value": "0 0 0 3px rgba(159, 191, 75, 0.38)", "purpose": "Visible keyboard and accessibility focus." }
     ],
     "motion": [
@@ -243,12 +261,12 @@
   ],
   "narrative": {
     "northStar": "The Quiet Signal",
-    "overview": "Vesqen should feel like a listening instrument used in a dim train carriage, a quiet study, or a softly lit room: the screen recedes until a meaningful state changes. The dark experience is the primary expression, while the light experience is a complete daylight counterpart—not a separate brand. Album artwork may cast a restrained ambient tint on the full player, but navigation, text, and evidence labels remain stable and legible.",
+    "overview": "Vesqen should feel like a listening instrument used in a dim train carriage, a quiet study, or a softly lit room: the screen recedes until a meaningful state changes. The dark experience is the primary expression, while the light experience is a complete daylight counterpart—not a separate brand. The protected full player uses the near-neutral Nocturne Graphite material ladder; genuine album artwork may contribute only a restrained, protected reflection behind that ladder. Navigation, text, and evidence labels remain stable and legible.",
     "keyCharacteristics": [
       "Dark-first and light-complete, with identical hierarchy and behavior.",
       "One moss signal color used sparingly for active controls, selection, and positive evidence above neutral playback states.",
       "Soft tonal separation instead of hard divider lines or nested card grids.",
-      "Album-derived atmosphere only on the full player and only behind protected contrast layers.",
+      "Nocturne Graphite material only on the protected full player; real album artwork may contribute a restrained reflection only behind its opaque contrast layer.",
       "Familiar Android navigation and controls, with advanced evidence one deliberate tap away."
     ],
     "rules": [
@@ -261,7 +279,9 @@
       { "name": "The Stable Truth Rule", "body": "Android dynamic color is not enabled in the v1.0 baseline. If it is added later, output states keep fixed semantic roles: brand, warning, error, and proof meanings never inherit an arbitrary wallpaper hue.", "section": "colors" },
       { "name": "The One-Family Rule", "body": "UI labels, buttons, track metadata, and navigation use the same sans-serif family. Monospace never leaks into the ordinary library or primary controls.", "section": "typography" },
       { "name": "The No-Line Rule", "body": "Separate list items with rhythm, alignment, and surface tone. Hard dividers are limited to dense technical tables where row tracking genuinely requires them.", "section": "elevation" },
-      { "name": "The Opaque Fallback Rule", "body": "If blur, transparency, performance, or contrast cannot be guaranteed, render a fully opaque semantic surface without changing layout or affordance.", "section": "elevation" }
+      { "name": "The Opaque Fallback Rule", "body": "If blur, transparency, performance, or contrast cannot be guaranteed, render a fully opaque semantic surface without changing layout or affordance.", "section": "elevation" },
+      { "name": "The Focused Player Material Rule", "body": "Now uses Canvas #101415, Dock #191F20, Raised #202728, and Artwork Frame #252C2D. A real cover may be blurred 36dp at 22% alpha behind an 82% Canvas scrim, leaving 3.96% visible reflection. Missing or unreadable artwork remains opaque; Moss stays action-only.", "section": "elevation" },
+      { "name": "The Single Player Lift Rule", "body": "The Now transport dock is separated by one 20dp ambient-plus-spot shadow only. It has no hard divider, border, glow, gradient, glass treatment, or competing elevation cue.", "section": "elevation" }
     ],
     "dos": [
       "Do keep Library, Now, and Chain stable across themes and window sizes.",

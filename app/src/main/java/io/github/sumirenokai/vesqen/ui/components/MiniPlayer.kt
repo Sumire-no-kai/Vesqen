@@ -91,7 +91,7 @@ fun MiniPlayer(
             IconButton(
                 modifier = Modifier.size(48.dp).testTag("vesqen.mini-player.previous"),
                 onClick = onPrevious,
-                enabled = snapshot.isControllerReady && snapshot.hasPrevious,
+                enabled = snapshot.isControllerReady && snapshot.canSkipPrevious,
             ) {
                 Icon(
                     imageVector = Icons.Filled.SkipPrevious,
@@ -114,7 +114,7 @@ fun MiniPlayer(
             IconButton(
                 modifier = Modifier.size(48.dp).testTag("vesqen.mini-player.next"),
                 onClick = onNext,
-                enabled = snapshot.isControllerReady && snapshot.hasNext,
+                enabled = snapshot.isControllerReady && snapshot.canSkipNext,
             ) {
                 Icon(
                     imageVector = Icons.Filled.SkipNext,

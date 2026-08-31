@@ -32,6 +32,13 @@
     <string name="repeat_off">Repeat off</string>
     <string name="repeat_all">Repeat all</string>
     <string name="repeat_one">Repeat one</string>
+    <string name="playback_order">Playback order</string>
+    <string name="playback_order_sequential">Sequential</string>
+    <string name="playback_order_shuffle">Shuffle</string>
+    <string name="playback_order_repeat_all">Repeat all</string>
+    <string name="playback_order_repeat_one">Repeat one</string>
+    <string name="playback_order_shuffle_repeat_all">Shuffle and repeat all</string>
+    <string name="playback_order_shuffle_repeat_one">Shuffle and repeat one</string>
     <string name="playback_position">%1$s of %2$s</string>
     <string name="destination_library">Library</string>
     <string name="destination_now">Now</string>
@@ -64,6 +71,9 @@
     <string name="playback_controls_connecting">Preparing playback controls…</string>
     <string name="playback_progress">Playback progress</string>
     <string name="playback_session">Playback session</string>
+    <string name="album_artwork">Album artwork</string>
+    <string name="show_playback_session">Show playback session</string>
+    <string name="show_album_artwork">Show album artwork</string>
     <string name="playback_state">State</string>
     <string name="remaining_time">Remaining</string>
     <string name="queue">Queue</string>

@@ -139,8 +139,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
         onPlayPause = viewModel::togglePlayback,
         onNext = viewModel::skipToNext,
         onSeek = viewModel::seekTo,
-        onToggleShuffle = viewModel::toggleShuffle,
-        onCycleRepeatMode = viewModel::cycleRepeatMode,
+        onCyclePlaybackOrder = viewModel::cyclePlaybackOrderMode,
         onRefreshConnectedOutputs = viewModel::refreshConnectedOutputs,
     )
 }
@@ -161,8 +160,7 @@ fun VesqenAppContent(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onSeek: (Long) -> Unit,
-    onToggleShuffle: () -> Unit,
-    onCycleRepeatMode: () -> Unit,
+    onCyclePlaybackOrder: () -> Unit,
     onRefreshConnectedOutputs: () -> Unit,
     modifier: Modifier = Modifier,
     motionPolicy: VesqenMotionPolicy? = null,
@@ -235,8 +233,7 @@ fun VesqenAppContent(
                 onPlayPause = onPlayPause,
                 onNext = onNext,
                 onSeek = onSeek,
-                onToggleShuffle = onToggleShuffle,
-                onCycleRepeatMode = onCycleRepeatMode,
+                onCyclePlaybackOrder = onCyclePlaybackOrder,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -258,8 +255,7 @@ fun VesqenAppContent(
             onPlayPause = onPlayPause,
             onNext = onNext,
             onSeek = onSeek,
-            onToggleShuffle = onToggleShuffle,
-            onCycleRepeatMode = onCycleRepeatMode,
+            onCyclePlaybackOrder = onCyclePlaybackOrder,
             modifier = modifier,
         )
     }
@@ -283,8 +279,7 @@ private fun VesqenDestinationFrame(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onSeek: (Long) -> Unit,
-    onToggleShuffle: () -> Unit,
-    onCycleRepeatMode: () -> Unit,
+    onCyclePlaybackOrder: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val usesFocusedPlayerInsets = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
@@ -445,11 +440,10 @@ private fun VesqenDestinationFrame(
                     artworkTrack = artworkTrack,
                     onBackToLibrary = onNavigateBack,
                     onOpenChain = onOpenChainFromNow,
-                    onToggleShuffle = onToggleShuffle,
+                    onCyclePlaybackOrder = onCyclePlaybackOrder,
                     onPrevious = onPrevious,
                     onPlayPause = onPlayPause,
                     onNext = onNext,
-                    onCycleRepeatMode = onCycleRepeatMode,
                     onSeek = onSeek,
                     onPlayTrack = onTrackSelected,
                     motionPolicy = motionPolicy,

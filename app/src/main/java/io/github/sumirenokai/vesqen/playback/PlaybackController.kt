@@ -30,13 +30,16 @@ class PlaybackController(
     ).buildAsync()
     private var controller: MediaController? = null
     private var pendingQueue: PendingQueue? = null
+    private var isApplyingPlaybackOrder = false
 
     var snapshot by mutableStateOf(PlaybackSnapshot())
         private set
 
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
-            publish(player)
+            // Applying one listener-visible mode can require two Media3 setters. Do not expose
+            // their valid-but-transient intermediate state to Compose between those setters.
+            if (!isApplyingPlaybackOrder) publish(player)
         }
     }
 
@@ -94,13 +97,23 @@ class PlaybackController(
 
     fun skipToPrevious() {
         controller?.let { activeController ->
-            if (activeController.hasPreviousMediaItem()) activeController.seekToPreviousMediaItem()
+            activeController.seekToNeighbor(
+                hasNeighbor = activeController.hasPreviousMediaItem(),
+                neighborIndex = activeController.previousMediaItemIndex,
+                dedicatedCommand = Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
+                seekDedicated = Player::seekToPreviousMediaItem,
+            )
         }
     }
 
     fun skipToNext() {
         controller?.let { activeController ->
-            if (activeController.hasNextMediaItem()) activeController.seekToNextMediaItem()
+            activeController.seekToNeighbor(
+                hasNeighbor = activeController.hasNextMediaItem(),
+                neighborIndex = activeController.nextMediaItemIndex,
+                dedicatedCommand = Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+                seekDedicated = Player::seekToNextMediaItem,
+            )
         }
     }
 
@@ -108,19 +121,13 @@ class PlaybackController(
         controller?.seekTo(positionMs.coerceAtLeast(0))
     }
 
-    fun toggleShuffle() {
+    fun cyclePlaybackOrderMode() {
         controller?.let { activeController ->
-            activeController.shuffleModeEnabled = !activeController.shuffleModeEnabled
-            publish(activeController)
-        }
-    }
-
-    fun cycleRepeatMode() {
-        controller?.let { activeController ->
-            activeController.repeatMode = when (activeController.repeatMode) {
-                Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
-                Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-                else -> Player.REPEAT_MODE_OFF
+            isApplyingPlaybackOrder = true
+            try {
+                activeController.applyPlaybackOrderMode(activeController.playbackOrderMode.next())
+            } finally {
+                isApplyingPlaybackOrder = false
             }
             publish(activeController)
         }
@@ -155,6 +162,16 @@ class PlaybackController(
             positionMs = player.currentPosition.coerceAtLeast(0),
             hasPrevious = player.hasPreviousMediaItem(),
             hasNext = player.hasNextMediaItem(),
+            canSkipPrevious = player.canSeekToNeighbor(
+                hasNeighbor = player.hasPreviousMediaItem(),
+                neighborIndex = player.previousMediaItemIndex,
+                dedicatedCommand = Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
+            ),
+            canSkipNext = player.canSeekToNeighbor(
+                hasNeighbor = player.hasNextMediaItem(),
+                neighborIndex = player.nextMediaItemIndex,
+                dedicatedCommand = Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+            ),
             shuffleEnabled = player.shuffleModeEnabled,
             repeatMode = player.repeatMode.toPlaybackRepeatMode(),
             queueIndex = player.currentMediaItemIndex.coerceAtLeast(0),
@@ -187,8 +204,90 @@ class PlaybackController(
         else -> PlaybackRepeatMode.OFF
     }
 
+    private val Player.playbackOrderMode: PlaybackOrderMode
+        get() = resolvePlaybackOrderMode(
+            shuffleEnabled = shuffleModeEnabled,
+            repeatMode = repeatMode.toPlaybackRepeatMode(),
+        )
+
+    /**
+     * Apply the next listener-visible order as a complete configuration. This deliberately clears
+     * the other Media3 switch so a single UI control cannot leave a hidden shuffle-plus-repeat
+     * combination behind.
+     */
+    private fun Player.applyPlaybackOrderMode(mode: PlaybackOrderMode) {
+        val settings = mode.toSettings()
+        // Clear the mutually exclusive switch before applying the target. This prevents a
+        // shuffle-to-repeat transition from ever producing a temporary shuffle-plus-repeat state.
+        if (shuffleModeEnabled && !settings.shuffleEnabled) shuffleModeEnabled = false
+        if (repeatMode != settings.repeatMode.toMedia3RepeatMode()) {
+            repeatMode = settings.repeatMode.toMedia3RepeatMode()
+        }
+        if (!shuffleModeEnabled && settings.shuffleEnabled) shuffleModeEnabled = true
+    }
+
+    private fun PlaybackRepeatMode.toMedia3RepeatMode(): Int = when (this) {
+        PlaybackRepeatMode.OFF -> Player.REPEAT_MODE_OFF
+        PlaybackRepeatMode.ALL -> Player.REPEAT_MODE_ALL
+        PlaybackRepeatMode.ONE -> Player.REPEAT_MODE_ONE
+    }
+
+    private fun Player.seekToNeighbor(
+        hasNeighbor: Boolean,
+        neighborIndex: Int,
+        dedicatedCommand: Int,
+        seekDedicated: Player.() -> Unit,
+    ) {
+        when (
+            selectNeighborSeekRoute(
+                hasNeighbor = hasNeighbor,
+                neighborIndex = neighborIndex,
+                canSeekToMediaItem = isCommandAvailable(Player.COMMAND_SEEK_TO_MEDIA_ITEM),
+                canUseDedicatedCommand = isCommandAvailable(dedicatedCommand),
+            )
+        ) {
+            NeighborSeekRoute.BY_INDEX -> seekToDefaultPosition(neighborIndex)
+            NeighborSeekRoute.DEDICATED -> seekDedicated()
+            NeighborSeekRoute.UNAVAILABLE -> Unit
+        }
+    }
+
+    private fun Player.canSeekToNeighbor(
+        hasNeighbor: Boolean,
+        neighborIndex: Int,
+        dedicatedCommand: Int,
+    ): Boolean = selectNeighborSeekRoute(
+        hasNeighbor = hasNeighbor,
+        neighborIndex = neighborIndex,
+        canSeekToMediaItem = isCommandAvailable(Player.COMMAND_SEEK_TO_MEDIA_ITEM),
+        canUseDedicatedCommand = isCommandAvailable(dedicatedCommand),
+    ) != NeighborSeekRoute.UNAVAILABLE
+
     private data class PendingQueue(
         val tracks: List<AudioTrack>,
         val startIndex: Int,
     )
+}
+
+/**
+ * Chooses a transport route that can be both represented by a MediaSession and executed by its
+ * controller. Indexed seeking is preferred: it preserves Media3's shuffle-aware neighbour index
+ * while avoiding a session that exposes a timeline but declines the dedicated previous/next
+ * command.
+ */
+internal fun selectNeighborSeekRoute(
+    hasNeighbor: Boolean,
+    neighborIndex: Int,
+    canSeekToMediaItem: Boolean,
+    canUseDedicatedCommand: Boolean,
+): NeighborSeekRoute = when {
+    hasNeighbor && neighborIndex != C.INDEX_UNSET && canSeekToMediaItem -> NeighborSeekRoute.BY_INDEX
+    hasNeighbor && canUseDedicatedCommand -> NeighborSeekRoute.DEDICATED
+    else -> NeighborSeekRoute.UNAVAILABLE
+}
+
+internal enum class NeighborSeekRoute {
+    BY_INDEX,
+    DEDICATED,
+    UNAVAILABLE,
 }

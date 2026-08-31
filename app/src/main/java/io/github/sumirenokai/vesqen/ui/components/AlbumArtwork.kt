@@ -15,12 +15,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.library.AlbumArtworkLoader
 import io.github.sumirenokai.vesqen.library.AudioTrack
@@ -34,9 +36,12 @@ import kotlinx.coroutines.withContext
  */
 @Composable
 fun AlbumArtwork(
-    track: AudioTrack? = null,
     modifier: Modifier = Modifier,
+    track: AudioTrack? = null,
     emphasized: Boolean = false,
+    fallbackContainerColor: Color? = null,
+    showFallback: Boolean = true,
+    loadedArtworkModifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier = modifier) {
         val appContext = LocalContext.current.applicationContext
@@ -65,23 +70,24 @@ fun AlbumArtwork(
         Surface(
             modifier = Modifier.fillMaxSize(),
             shape = shape,
-            color = if (emphasized) {
+            color = fallbackContainerColor ?: if (emphasized) {
                 MaterialTheme.colorScheme.tertiaryContainer
             } else {
                 MaterialTheme.colorScheme.surfaceContainerHigh
             },
         ) {
             val artworkBitmap = bitmap
-            if (artworkBitmap == null) {
+            if (artworkBitmap == null && showFallback) {
                 TwinPathsPlaceholder(emphasized = emphasized)
-            } else {
+            } else if (artworkBitmap != null) {
                 Image(
                     bitmap = artworkBitmap.asImageBitmap(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(shape),
+                        .clip(shape)
+                        .then(loadedArtworkModifier),
                 )
             }
         }
@@ -92,7 +98,12 @@ fun AlbumArtwork(
 private fun TwinPathsPlaceholder(emphasized: Boolean) {
     val primary = MaterialTheme.colorScheme.primary
     val onSurface = MaterialTheme.colorScheme.onSurface
-    Box(contentAlignment = Alignment.Center) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("vesqen.album-artwork.fallback"),
+        contentAlignment = Alignment.Center,
+    ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val center = Offset(size.width / 2f, size.height / 2f)
             val radius = size.minDimension * if (emphasized) .31f else .24f

@@ -280,3 +280,100 @@ M1-A 只实现本地媒体库到系统混音播放的最小闭环：
 1. 设备所有者完成当前系统更新确认后，先比对新 APK 与设备安装包哈希，再做上述真机手动回归。
 2. 获得通过的本地与真机证据后，创建行为变更 PR、等待 CI，并按既定 Git workflow 合并。
 3. 从更新后的 `master` 新开独立分支，仅重做 Now 页的背景、控制台材质与受控光影；不在这一条行为分支掺入主题色改动。
+
+## 2026-08-31 · Now 夜间石墨材质与受控封面反光
+
+### 触发与范围
+
+在播放模式与动效分支合并后，用户要求不再保留“墨绿色与蓝黑色/紫色割裂”的焦点页，而是在不复制其他播放器品牌、也不扩大 M1 音频能力的前提下，重做 Now 的背景、运输台材质与光影。本轮位于 `codex/rework-now-materials`，只影响有活动播放时的全屏 Now 与其信息页；曲库、mini-player、输出事实语义和播放控制行为保持不变。
+
+### 设计与实现决策
+
+| 决策/问题 | 处理与理由 |
+| --- | --- |
+| 焦点页是否继续使用可感知的紫色/绿色分区 | 不继续。Now 采用专属的 **Nocturne Graphite / 夜间石墨** 中性材质阶梯：Canvas `#101415`、Dock `#191F20`、Raised `#202728`、Artwork Frame `#252C2D`。Signal Moss 继续只表示可操作的激活/正向状态，而不是铺满背景或运输台。 |
+| 封面氛围是否做成大面积渐变或“假封面” | 不做。只有真实 bitmap 加载后才显示 36 dp 模糊的封面反光；其 alpha 为 22%，再经 82% Canvas scrim，最终可见量严格为 3.96%。无封面、不可读 URI、加载失败或 API 26–30 时均保持纯不透明 Canvas，不把 Twin Paths 占位或未模糊图片伪装成光源。 |
+| 旧 Android 上的 `blur` | Compose 的平台 blur 在 Android 12（API 31）以下不保证真实效果。反光明确以 API 31 为门槛，较低版本直接使用不改变布局的 Canvas 回退；新增 JVM 边界用例锁定 API 30/31 行为。 |
+| 如何界定运输台而不回到硬线条 | 使用一个 20 dp 的 ambient + spot **Player Lift** 阴影作为唯一边界。Dock 不加 divider、border、glow、渐变或第二层阴影；导航手势 inset 放在全宽 Dock 内，避免高版本 edge-to-edge 下出现底部断色。 |
+| 封面舞台和背景异步加载不一致 | 背景与舞台复用同一安全 `AlbumArtworkLoader` 路径（专辑 URI 失败后可回退媒体 item thumbnail）。反光测试标记只附在成功加载的 `Image`，而不是其中性的加载容器，因此不可读 URI 不会声称存在反光。 |
+| 可读性是否由视觉印象决定 | 不依赖主观判断。固定前景在 Canvas/Dock/Raised 上分别计算对比度：Ink Light/Canvas 15.03:1、Ink Light/Dock 13.53:1、Muted/Raised 9.08:1、Moss/Dock 10.37:1；这些均高于 WCAG AA 门槛。 |
+| 规范是否会与实现再次漂移 | 同步更新 `Color.kt`、`DESIGN.md`、`docs/brand/VISUAL_IDENTITY.md`、PRD 及机器可读的 `.impeccable/design.json`；本地 Impeccable 检查对 `NowScreen.kt` 没有额外发现。 |
+
+### 验证记录
+
+| 检查 | 环境/命令 | 结果 |
+| --- | --- | --- |
+| JVM 单元测试、lint、Android 测试源码编译 | `./gradlew.bat testDebugUnitTest lintDebug :app:compileDebugAndroidTestKotlin --rerun-tasks --stacktrace` | **已通过**：7 个 JVM suite、16 个测试、0 failures、0 errors；Android Compose 测试源码可编译。Lint 保留 13 条既有项目提醒，但本轮修改的 `NowScreen`、`AlbumArtwork` 和 `OutputStatusChip` 为 0 条结果。 |
+| 常规 APK 输出目录 | `./gradlew.bat assembleDebug` | **外部文件占用 / 非代码失败**：Windows 持续占用旧的 `app/build/outputs/apk/debug/app-debug.apk`，Gradle 无法删除它。未猜测或终止 ADB、IDE、系统扫描或用户进程。 |
+| 隔离 APK 组装 | `./gradlew.bat -I C:/tmp/vesqen-isolated-build.init.gradle.kts assembleDebug` | **已通过**：仅将本轮输出重定向到临时目录；未修改项目的正式 Gradle 配置，成功生成新的 Debug APK。 |
+| 真机截图/手动视觉回归 | Android 15 物理设备 | **待验证 / 不计为通过**：检查时设备前台正在运行用户的其他工作，因此未覆盖安装、未拉起 Vesqen、未截屏，也未运行 Compose runner。真机将重点核查真实封面、无封面回退、Canvas/Dock 系统栏衔接和轻主题宿主进入/退出 Now。 |
+
+### 后续步骤
+
+1. 在设备空闲且由所有者确认后，安装隔离构建的 APK，核查上述 Now 视觉场景并在查看后删除临时截图/UI XML。
+2. 设备级截图确认前不合并本分支；截图通过后创建 PR、等待 CI，再按 Git workflow 合并。
+3. 继续将 `SYSTEM MIXED` 限定为 M1 事实声明，不由新的光影或封面呈现推导 direct、独占、无损或 bit-perfect 结论。
+
+## 2026-08-31 · Now 固定骨架与会话原位过渡
+
+### 触发与范围
+
+真机反馈指出原来的 Now 会在左右滑动时像相册一样拖动整张页面：封面、信息页和底部运输台一起离开/进入，既破坏了播放器的空间连续性，也让原本应该始终可用的主控制显得不稳定。本轮仍在 `codex/rework-now-materials`，重做 Now 内部会话信息的交互层级，并同时修复真机复现的上一首/下一首可见却不可执行问题；不改变 M1 的事实声明边界，也不把会话升级为新的顶层目的地。
+
+### 设计与实现决策
+
+| 决策/问题 | 处理与理由 |
+| --- | --- |
+| 为什么不能仅调 Pager 的动画参数 | 根因是 `HorizontalPager` 承载了两张各自拥有 dock 的完整页面；即使减慢或淡化位移，用户仍会感到整页像照片一样被替换。直接删除 Pager 与 page state。 |
+| 上一首/下一首为什么会显示可点却不切歌 | 真机复现表明 timeline 的 `hasPrevious/hasNext` 不等于当前 MediaSession 已授权专用上一/下一首命令。执行路线改为：优先使用 shuffle-aware 的相邻 index + `seekToDefaultPosition`；专用命令可用时再回退；两者均不可执行时以 `canSkipPrevious/canSkipNext` 禁用 mini-player 与 Now 控件，避免假可用状态。该选择以纯函数单元测试和真机来回切歌回归保护。 |
+| 哪些元素必须固定 | Nocturne Canvas/封面反光、系统栏、Now 页头与 Back、一个运输台、曲目身份、route chip、进度、上一首/播放暂停/下一首、随机、循环和 `i` 始终留在同一空间位置。 |
+| 会话信息如何可发现 | 原分页点替换为 dock 中央明确可点的“播放会话 / 专辑封面”入口；`i` 继续只打开曲目详情，职责不混淆。TalkBack 同时得到动作描述与当前状态。 |
+| 如何避免生硬切屏 | 仅上部固定尺寸的 focus stage 在封面与会话事实卡间使用 `AnimatedContent` 的受控淡入淡出与 0.985 微缩放；不使用 horizontal slide、整页拖动或布局重排。减少动效时退化为现有的短交叉淡入淡出。 |
+| 切歌时为什么仍需要局部方向动效 | 会话开关只以 focus content 为 target，不能因此丢失上一首/下一首的封面过渡。Artwork 分支内部继续以 track presentation 为 target，保留 220 ms、受固定 stage 裁切的定向淡入/微缩放；身份和运输台不横移。 |
+| 返回行为 | Android Back 的优先级为：曲目详情 → 已展开的播放会话 → 既有的 Now 返回来源逻辑。因此查看会话不会让一次返回直接离开播放器。 |
+| 小屏/大字体 | 会话卡与封面共享同一个上部 stage；紧凑状态省略标题和剩余时间，极端字号再把会话卡收敛为状态与队列，进度仍由固定运输台提供，避免在 112 dp stage 中裁切或滚动。此时 route chip 改为 footer 内唯一的 48 dp AccountTree → Chain 入口；窄宽 footer 的随机/会话/循环/详情则改为四颗均分的 48 dp 图标，消除中间文字按钮与右侧控件重叠。 |
+| 规范一致性 | `DESIGN.md` 和 PRD 已将“横向分页/横向切换”改为“明确会话入口 + 原位内容过渡”，避免未来实现重新引入照片式分页。 |
+
+### 验证记录
+
+| 检查 | 环境/命令 | 结果 |
+| --- | --- | --- |
+| Kotlin 与 Android Compose 测试源码编译 | `./gradlew.bat :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin --stacktrace` | **已通过**。 |
+| JVM 回归 | `./gradlew.bat testDebugUnitTest --rerun-tasks` | **已通过**：8 个 suite、20 个测试、0 failures、0 errors；包括相邻曲目执行路线的纯函数覆盖。 |
+| Lint 与 Android UI 测试编译 | `./gradlew.bat testDebugUnitTest lintDebug :app:compileDebugAndroidTestKotlin --rerun-tasks --stacktrace` | **已通过**：最终工作树的 lint 为 0 errors、13 条既有 warnings；Android Compose 测试源码可编译。 |
+| Compose UI 回归覆盖 | `VesqenAppTest` 源码 | **已编译**：会话显式入口、左滑不切换会话、切换前后固定壳层 bounds 相同、无 horizontal scroll 语义、Android Back 先收起会话，以及 320 dp/2×字号下会话卡、footer 触控边界和极端字号 Chain 入口均有源码回归。有效 runner 报告仍待空闲设备或模拟器。 |
+| Impeccable 静态复核 | `detect.mjs --json NowScreen.kt` | **无命中**；该结果只辅助代码审查，不能替代实机动效与视觉验收。 |
+| 真机安装与视觉回归 | Android 15 物理设备、真实本地媒体 | **已通过（普通字体/实际交互范围）**：最终隔离 Debug APK 与设备安装包一致。横向滑动不会打开会话；明确入口才会原位打开会话，header、进度与固定运输台控件 bounds 在前后相同，footer 无重叠，UI tree 无横向 scroll 节点。Android Back 先收起会话，再从 Now 回曲库；上一首/下一首实际改变并复原曲目；正常 route chip 仍能进入 Chain；本轮 crash buffer 无应用记录。临时截图与 UI XML 将在记录后删除。 |
+| Compose 仪器测试执行 | `connectedDebugAndroidTest` | **仍待有效 runner 报告 / 不计为通过**：本轮未在用户设备上重新部署测试 APK，以免打断设备当前的手动验收；源码编译、JVM 回归和手动真机检查不能替代该门禁。 |
+
+### 后续步骤
+
+1. 由设备所有者在最终包上确认 Now 的视觉与交互感受；确认前不创建或合并 PR。
+2. 获得独立的空闲设备/模拟器窗口后，重跑 `connectedDebugAndroidTest` 并取得完整 runner 报告；不要把当前的手动验收替代为仪器测试通过。
+3. 继续将 `SYSTEM MIXED` 限定为 M1 事实声明，不由新的光影或封面呈现推导 direct、独占、无损或 bit-perfect 结论。
+
+## 2026-08-31 · 播放顺序单一入口纠正
+
+### 触发与范围
+
+用户复核最终真机画面后指出：此前实现虽然已经把“列表循环／单曲循环”收进一个 Repeat 入口，却仍保留了独立 Shuffle 入口；这没有满足“随机、循环、单曲循环都在一次点击中切换”的约定。问题来自实现方对早先反馈的错误收窄，而不是用户误读图标。
+
+本轮继续在尚未合并的 `codex/rework-now-materials` 上修复，只重构 Now 页的播放顺序控制及其 Media3 状态映射；不改动输出声明、焦点页材质、队列内容、主运输控制或页面导航。
+
+### 设计与实现决策
+
+| 决策/问题 | 处理与理由 |
+| --- | --- |
+| 底栏如何不再表现为三颗模式按钮 | 只保留一颗 48 dp“播放顺序”图标按钮，位置仍在 footer 左侧。它依次切换“顺序播放 → 随机播放 → 列表循环 → 单曲循环 → 顺序播放”；会话与 `i` 入口保留各自职责，不把模式、详情和会话混成一颗按钮。 |
+| 图标如何让状态可见但不增加文案噪声 | 顺序、随机、列表循环、单曲循环分别用 numbered-list、shuffle、repeat、repeat-with-`1`；关闭/顺序态为中性，其他三态为 Signal Moss。图标与 tint 在 160 ms 内作受控淡入/缩放，减少动效时回退为短交叉淡入淡出。 |
+| Media3 的 Shuffle 与 Repeat 可叠加 | 这是底层能力，不是 Vesqen 普通点击循环的模式模型。新增 `PlaybackOrderMode` 将四个常规选择设为互斥；每次点击完整写入 shuffle/repeat 设置并清除另一个开关。若外部控制器仍传来复合状态，则由同一按钮以组合状态如实呈现，下一次点击归一到顺序播放；不能把实际复合状态伪装成单一随机或循环状态。 |
+| 无障碍与回归 | 单一节点提供“播放顺序”可访问名称和当前状态；Android Compose 回归将断言只有一个模式节点、旧 shuffle/repeat 节点不存在、四态轮换及状态朗读正确。纯 JVM 用例覆盖状态投影、完整循环和每态对应的互斥 Media3 设置。 |
+
+### 验证记录
+
+| 检查 | 结果 |
+| --- | --- |
+| Kotlin/JVM、lint、Compose 测试源码编译与 Debug 组装 | `./gradlew.bat -I C:/tmp/vesqen-playback-order.init.gradle.kts testDebugUnitTest lintDebug :app:compileDebugAndroidTestKotlin assembleDebug --rerun-tasks --no-configuration-cache --console=plain --stacktrace` | **已通过**：8 个 JVM suite、23 个测试、0 failures、0 errors；Compose Android 测试源码已编译；本次隔离输出的 lint SARIF 为 0 errors、0 warnings，并生成 Debug APK。一次常规输出目录在清理旧缓存时遇到 `NoSuchFileException`，随后仅将本轮构建输出重定向到新的 `C:/tmp` 临时目录；这不是代码失败，未改动项目 Gradle 配置。 |
+| Compose UI 回归覆盖 | `VesqenAppTest` | **已编译**：断言 Now 只存在一个 `playback-order` 节点、旧 shuffle/repeat 节点不存在；四态正常循环、两个外部复合状态的准确 TalkBack 状态，以及点击复合状态后归一到顺序播放均有源码回归。有效仪器 runner 报告仍待独立执行。 |
+| 真机手动回归 | Android 15 物理设备、最终隔离 Debug APK、真实本地媒体 | **已通过（本轮范围）**：重新安装最终 APK 后，UI tree 中“播放顺序”节点数量为 1；实际点击依次观察到顺序 → 随机 → 列表循环 → 单曲循环 → 顺序，footer 没有并列的随机或循环按钮。测试结束后由 UI tree 定位并暂停播放；crash buffer 中本应用匹配为 0。临时截图与 UI XML 已在复核后删除。 |
+| Compose 仪器测试执行 | `connectedDebugAndroidTest` | **未执行 / 不计为通过**：本轮只编译 Android 测试源码并完成手动真机交互；不得将其表述为 runner 已通过。 |
