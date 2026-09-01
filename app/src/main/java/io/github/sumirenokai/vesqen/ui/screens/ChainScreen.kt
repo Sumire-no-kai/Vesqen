@@ -12,10 +12,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,11 +41,16 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 fun ChainScreen(
     library: LibraryUiState,
     snapshot: PlaybackSnapshot,
-    onBackToLibrary: () -> Unit,
+    onBack: () -> Unit,
+    onBrowseLibrary: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (!snapshot.hasActiveTrack) {
-        ChainEmptyScreen(onBackToLibrary = onBackToLibrary, modifier = modifier)
+        ChainEmptyScreen(
+            onBack = onBack,
+            onBrowseLibrary = onBrowseLibrary,
+            modifier = modifier,
+        )
         return
     }
 
@@ -71,10 +78,7 @@ fun ChainScreen(
         verticalArrangement = Arrangement.spacedBy(VesqenSpacing.md),
     ) {
         item {
-            Text(
-                text = stringResource(R.string.destination_chain),
-                style = MaterialTheme.typography.headlineLarge,
-            )
+            ChainHeader(onBack = onBack)
         }
         item {
             ChainSummary(snapshot = snapshot)
@@ -178,19 +182,45 @@ private fun EvidencePanel(
 }
 
 @Composable
-private fun ChainEmptyScreen(onBackToLibrary: () -> Unit, modifier: Modifier = Modifier) {
+private fun ChainEmptyScreen(
+    onBack: () -> Unit,
+    onBrowseLibrary: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(modifier = modifier.fillMaxSize()) {
-        Text(
-            text = stringResource(R.string.destination_chain),
-            style = MaterialTheme.typography.headlineLarge,
+        ChainHeader(
+            onBack = onBack,
             modifier = Modifier.padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.md),
         )
         VesqenEmptyState(
             title = stringResource(R.string.chain_empty_title),
             body = stringResource(R.string.chain_empty_body),
             actionLabel = stringResource(R.string.browse_library),
-            onAction = onBackToLibrary,
+            onAction = onBrowseLibrary,
             modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
+        )
+    }
+}
+
+@Composable
+private fun ChainHeader(onBack: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(
+            onClick = onBack,
+            modifier = Modifier.testTag("vesqen.chain.back"),
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(R.string.back),
+            )
+        }
+        Spacer(Modifier.width(VesqenSpacing.xs))
+        Text(
+            text = stringResource(R.string.destination_chain),
+            style = MaterialTheme.typography.headlineLarge,
         )
     }
 }

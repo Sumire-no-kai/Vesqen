@@ -44,6 +44,16 @@
     <string name="destination_library">曲库</string>
     <string name="destination_now">正在播放</string>
     <string name="destination_chain">链路</string>
+    <string name="destination_settings">设置</string>
+    <string name="settings_audio_output">音频与输出</string>
+    <string name="settings_playback_chain">播放链路</string>
+    <string name="settings_playback_chain_body">查看当前 Android 路由声明、已检测的输出类型与证据边界。</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_local_first">本地优先播放</string>
+    <string name="settings_local_first_body">Vesqen 无需账号即可播放设备上的本地曲库，播放也不依赖网络。</string>
+    <string name="back">返回</string>
+    <string name="focus_artwork_short">专辑封面</string>
+    <string name="focus_session_short">播放会话</string>
     <string name="search_local_music">搜索本地音乐</string>
     <string name="clear_search">清除搜索</string>
     <string name="no_search_results">没有匹配的音乐</string>

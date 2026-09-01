@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationItemIconPosition
@@ -22,7 +23,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import io.github.sumirenokai.vesqen.R
 
 /** The compact bar's content height; system navigation insets are added by Material. */
 internal val CompactNavigationBarContentHeight = 64.dp
@@ -36,7 +36,7 @@ fun VesqenNavigation(
 ) {
     if (useNavigationRail) {
         NavigationRail(modifier = modifier) {
-            VesqenDestination.entries.forEach { destination ->
+            TopLevelDestinations.forEach { destination ->
                 DestinationRailItem(
                     destination = destination,
                     selected = destination == selectedDestination,
@@ -51,7 +51,7 @@ fun VesqenNavigation(
             contentColor = MaterialTheme.colorScheme.onSurface,
             arrangement = ShortNavigationBarArrangement.EqualWeight,
         ) {
-            VesqenDestination.entries.forEach { destination ->
+            TopLevelDestinations.forEach { destination ->
                 DestinationShortBarItem(
                     destination = destination,
                     selected = destination == selectedDestination,
@@ -112,15 +112,13 @@ private fun ColumnScope.DestinationRailItem(
 
 @Composable
 private fun DestinationIcon(destination: VesqenDestination) {
-    Icon(
-        imageVector = destination.icon,
-        contentDescription = null,
-    )
+    Icon(imageVector = destination.icon, contentDescription = null)
 }
 
 private val VesqenDestination.icon: ImageVector
     get() = when (this) {
         VesqenDestination.LIBRARY -> Icons.Filled.LibraryMusic
         VesqenDestination.NOW -> Icons.Filled.PlayCircle
+        VesqenDestination.SETTINGS -> Icons.Filled.Settings
         VesqenDestination.CHAIN -> Icons.Filled.AccountTree
     }

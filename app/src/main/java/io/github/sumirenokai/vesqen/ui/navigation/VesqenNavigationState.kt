@@ -3,8 +3,8 @@ package io.github.sumirenokai.vesqen.ui.navigation
 /**
  * Small, pure navigation reducer shared by toolbar and Android Back behavior.
  *
- * Full-player expansion is a focused detour from Library. Chain opened from Now is the one
- * contextual exception: Android Back first restores the player, then returns to Library.
+ * Full-player expansion is a focused detour from Library. Playback Chain is a secondary detail
+ * route and returns to whichever top-level surface opened it.
  */
 data class VesqenNavigationState(
     val destination: VesqenDestination = VesqenDestination.LIBRARY,
@@ -15,9 +15,9 @@ data class VesqenNavigationState(
         returnDestination = VesqenDestination.LIBRARY,
     )
 
-    fun openChainFromNow(): VesqenNavigationState = copy(
+    fun openChain(): VesqenNavigationState = copy(
         destination = VesqenDestination.CHAIN,
-        returnDestination = VesqenDestination.NOW,
+        returnDestination = destination,
     )
 
     fun back(): VesqenNavigationState = if (destination == VesqenDestination.LIBRARY) {

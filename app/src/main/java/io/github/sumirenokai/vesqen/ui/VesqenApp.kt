@@ -1,7 +1,11 @@
 package io.github.sumirenokai.vesqen.ui
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -34,6 +38,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,6 +62,7 @@ import io.github.sumirenokai.vesqen.ui.navigation.VesqenNavigationState
 import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
 import io.github.sumirenokai.vesqen.ui.screens.LibraryScreen
 import io.github.sumirenokai.vesqen.ui.screens.NowScreen
+import io.github.sumirenokai.vesqen.ui.screens.SettingsScreen
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
@@ -146,6 +152,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
         onSeek = viewModel::seekTo,
         onCyclePlaybackOrder = viewModel::cyclePlaybackOrderMode,
         onRefreshConnectedOutputs = viewModel::refreshConnectedOutputs,
+        managePhoneOrientation = true,
     )
 }
 
@@ -169,6 +176,7 @@ fun VesqenAppContent(
     onRefreshConnectedOutputs: () -> Unit,
     modifier: Modifier = Modifier,
     motionPolicy: VesqenMotionPolicy? = null,
+    managePhoneOrientation: Boolean = false,
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     var destinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
@@ -179,10 +187,16 @@ fun VesqenAppContent(
     )
     val destination = navigationState.destination
     val hasFocusedPlayer = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
+    PhoneOrientationPolicy(
+        allowLandscape = hasFocusedPlayer,
+        enabled = managePhoneOrientation,
+    )
     // A protected Now surface owns the whole window. Keeping a light navigation rail beside it
     // would split the transparent status bar between incompatible backgrounds and make one set of
     // system icons unreadable. Back remains the deliberate route to the stable top-level shell.
-    val useNavigationRail = LocalConfiguration.current.screenWidthDp >= 600 && !hasFocusedPlayer
+    val isSecondaryDetail = destination == VesqenDestination.CHAIN
+    val useNavigationRail = LocalConfiguration.current.screenWidthDp >= 600 &&
+        !hasFocusedPlayer && !isSecondaryDetail
 
     fun applyNavigation(updated: VesqenNavigationState) {
         destinationName = updated.destination.name
@@ -193,8 +207,8 @@ fun VesqenAppContent(
         applyNavigation(navigationState.selectTopLevel(destination))
     }
 
-    fun openChainFromNow() {
-        applyNavigation(navigationState.openChainFromNow())
+    fun openChain() {
+        applyNavigation(navigationState.openChain())
     }
 
     fun navigateBack() {
@@ -227,7 +241,7 @@ fun VesqenAppContent(
                 showNavigation = false,
                 motionPolicy = appliedMotionPolicy,
                 onDestinationSelected = ::selectTopLevel,
-                onOpenChainFromNow = ::openChainFromNow,
+                onOpenChain = ::openChain,
                 onNavigateBack = ::navigateBack,
                 onRequestMusicAccess = onRequestMusicAccess,
                 onOpenAppSettings = onOpenAppSettings,
@@ -249,7 +263,7 @@ fun VesqenAppContent(
             showNavigation = true,
             motionPolicy = appliedMotionPolicy,
             onDestinationSelected = ::selectTopLevel,
-            onOpenChainFromNow = ::openChainFromNow,
+            onOpenChain = ::openChain,
             onNavigateBack = ::navigateBack,
             onRequestMusicAccess = onRequestMusicAccess,
             onOpenAppSettings = onOpenAppSettings,
@@ -273,7 +287,7 @@ private fun VesqenDestinationFrame(
     showNavigation: Boolean,
     motionPolicy: VesqenMotionPolicy,
     onDestinationSelected: (VesqenDestination) -> Unit,
-    onOpenChainFromNow: () -> Unit,
+    onOpenChain: () -> Unit,
     onNavigateBack: () -> Unit,
     onRequestMusicAccess: () -> Unit,
     onOpenAppSettings: () -> Unit,
@@ -288,8 +302,10 @@ private fun VesqenDestinationFrame(
     modifier: Modifier = Modifier,
 ) {
     val usesFocusedPlayerInsets = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
-    val showMiniPlayer = state.playback.hasActiveTrack && destination != VesqenDestination.NOW
-    val showCompactNavigation = showNavigation && destination != VesqenDestination.NOW
+    val showMiniPlayer = state.playback.hasActiveTrack &&
+        destination != VesqenDestination.NOW && destination != VesqenDestination.CHAIN
+    val showCompactNavigation = showNavigation &&
+        destination != VesqenDestination.NOW && destination != VesqenDestination.CHAIN
     val miniPlayerContentClearance = if (showMiniPlayer) {
         MiniPlayerHeight + VesqenSpacing.xxs
     } else {
@@ -444,7 +460,7 @@ private fun VesqenDestinationFrame(
                         currentTrack = currentTrack,
                         artworkTrack = artworkTrack,
                         onBackToLibrary = onNavigateBack,
-                        onOpenChain = onOpenChainFromNow,
+                        onOpenChain = onOpenChain,
                         onCyclePlaybackOrder = onCyclePlaybackOrder,
                         onPrevious = onPrevious,
                         onPlayPause = onPlayPause,
@@ -455,10 +471,16 @@ private fun VesqenDestinationFrame(
                         modifier = destinationModifier,
                     )
 
+                    VesqenDestination.SETTINGS -> SettingsScreen(
+                        onOpenPlaybackChain = onOpenChain,
+                        modifier = destinationModifier,
+                    )
+
                     VesqenDestination.CHAIN -> ChainScreen(
                         library = state.library,
                         snapshot = state.playback,
-                        onBackToLibrary = onNavigateBack,
+                        onBack = onNavigateBack,
+                        onBrowseLibrary = { onDestinationSelected(VesqenDestination.LIBRARY) },
                         modifier = destinationModifier,
                     )
                 }
@@ -497,4 +519,37 @@ private fun PlaybackSnapshot.toArtworkTrackOrNull(): AudioTrack? {
         albumArtworkUri = albumArtworkUri,
         artworkRevision = artworkRevision,
     )
+}
+
+@Composable
+private fun PhoneOrientationPolicy(allowLandscape: Boolean, enabled: Boolean) {
+    val configuration = LocalConfiguration.current
+    val activity = LocalContext.current.findActivity()
+    val isPhone = configuration.smallestScreenWidthDp < 600
+    val originalOrientation = remember(activity) {
+        activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    }
+
+    LaunchedEffect(activity, enabled, isPhone, allowLandscape) {
+        if (activity != null && enabled && isPhone) {
+            activity.requestedOrientation = if (allowLandscape) {
+                ActivityInfo.SCREEN_ORIENTATION_USER
+            } else {
+                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            }
+        }
+    }
+    DisposableEffect(activity, enabled, isPhone) {
+        onDispose {
+            if (activity != null && enabled && isPhone) {
+                activity.requestedOrientation = originalOrientation
+            }
+        }
+    }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
