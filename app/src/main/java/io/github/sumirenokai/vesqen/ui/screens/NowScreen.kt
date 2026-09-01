@@ -22,7 +22,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -46,6 +45,8 @@ import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -79,7 +80,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
@@ -103,6 +103,9 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.view.WindowCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
 
 private val TrackTransitionEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
@@ -223,7 +226,7 @@ fun NowScreen(
     }
 
     VesqenTheme(darkTheme = true) {
-        FullPlayerSystemBars()
+        FullPlayerSystemBars(immersive = isLandscape)
         Surface(
             modifier = modifier
                 .fillMaxSize()
@@ -241,11 +244,18 @@ fun NowScreen(
                 // it for transport rather than letting artist and route metadata clip the dock.
                 val isExtremeText = configuration.fontScale >= 2f || maxHeight < 480.dp
                 val isTallScreen = maxHeight >= 760.dp && configuration.fontScale <= 1.15f
-                val isCompactLandscape = maxWidth > maxHeight && maxHeight < 600.dp
+                val useLandscapeLayout = isLandscape && maxWidth > maxHeight
+                // Landscape gains horizontal room and no longer pays for a portrait toolbar or
+                // system bars. Keep useful identity and route facts until height or text scale
+                // actually makes them collide, rather than inheriting the portrait 480dp cutoff.
+                val isLandscapeContentCompressed = configuration.fontScale >= 1.5f || maxHeight < 320.dp
                 val artworkSize = minOf(
                     when {
-                        isCompactLandscape ->
-                            (maxHeight - 160.dp).coerceIn(64.dp, 160.dp)
+                        useLandscapeLayout ->
+                            minOf(
+                                (maxHeight - 72.dp).coerceIn(144.dp, 320.dp),
+                                (maxWidth * .43f - 48.dp).coerceAtLeast(144.dp),
+                            )
                         maxHeight < 480.dp ||
                             (maxHeight < 640.dp && configuration.fontScale >= 1.8f) ||
                             isExtremeText -> 64.dp
@@ -262,26 +272,15 @@ fun NowScreen(
                     artworkTrack = artworkTrack,
                     motionPolicy = motionPolicy,
                 )
-                Column(modifier = Modifier.fillMaxSize()) {
-                    NowHeader(
-                        onBack = onBackToLibrary,
-                        onToggleOrientation = onToggleOrientation,
-                        showOrientationToggle = showOrientationToggle,
-                        isLandscape = isLandscape,
-                        modifier = Modifier.statusBarsPadding(),
-                    )
-                    NowPlayerPage(
+                if (useLandscapeLayout) {
+                    NowLandscapePlayerPage(
                         snapshot = snapshot,
                         trackPresentation = trackPresentation,
                         trackTransitionDirection = trackTransitionDirection,
                         focusContent = focusContent,
                         motionPolicy = motionPolicy,
                         artworkSize = artworkSize,
-                        isShortScreen = isShortScreen,
-                        isUltraCompact = isUltraCompact,
-                        isExtremeText = isExtremeText,
-                        isTallScreen = isTallScreen,
-                        isCompactLandscape = isCompactLandscape,
+                        isExtremeText = isLandscapeContentCompressed,
                         onOpenChain = onOpenChain,
                         onCyclePlaybackOrder = requestPlaybackOrder,
                         onPrevious = requestPrevious,
@@ -297,16 +296,56 @@ fun NowScreen(
                             }
                         },
                         canOpenDetails = currentTrack != null,
-                        modifier = Modifier.weight(1f),
+                        onBack = onBackToLibrary,
+                        onToggleOrientation = onToggleOrientation,
+                        showOrientationToggle = showOrientationToggle,
                     )
+                } else {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        NowHeader(
+                            onBack = onBackToLibrary,
+                            onToggleOrientation = onToggleOrientation,
+                            showOrientationToggle = showOrientationToggle,
+                            isLandscape = false,
+                            modifier = Modifier.statusBarsPadding(),
+                        )
+                        NowPlayerPage(
+                            snapshot = snapshot,
+                            trackPresentation = trackPresentation,
+                            trackTransitionDirection = trackTransitionDirection,
+                            focusContent = focusContent,
+                            motionPolicy = motionPolicy,
+                            artworkSize = artworkSize,
+                            isShortScreen = isShortScreen,
+                            isUltraCompact = isUltraCompact,
+                            isExtremeText = isExtremeText,
+                            isTallScreen = isTallScreen,
+                            onOpenChain = onOpenChain,
+                            onCyclePlaybackOrder = requestPlaybackOrder,
+                            onPrevious = requestPrevious,
+                            onPlayPause = onPlayPause,
+                            onNext = requestNext,
+                            onSeek = onSeek,
+                            onOpenDetails = openDetails,
+                            onToggleFocusContent = {
+                                focusContent = if (focusContent == NowFocusContent.ARTWORK) {
+                                    NowFocusContent.SESSION
+                                } else {
+                                    NowFocusContent.ARTWORK
+                                }
+                            },
+                            canOpenDetails = currentTrack != null,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
                 PlaybackOrderFeedback(
                     text = playbackOrderFeedback,
                     motionPolicy = motionPolicy,
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .statusBarsPadding()
-                        .padding(top = if (isUltraCompact) 56.dp else 72.dp),
+                        .then(if (useLandscapeLayout) Modifier else Modifier.statusBarsPadding())
+                        .padding(top = if (useLandscapeLayout) 12.dp else if (isUltraCompact) 56.dp else 72.dp),
                 )
             }
         }
@@ -397,11 +436,11 @@ private fun androidx.compose.animation.AnimatedContentTransitionScope<AudioTrack
  */
 @Composable
 @Suppress("DEPRECATION") // API 35+ draws edge-to-edge from the focus surface; older APIs need this fallback.
-private fun FullPlayerSystemBars() {
+private fun FullPlayerSystemBars(immersive: Boolean) {
     val view = LocalView.current
     val navigationBarColor = FocusedPlayerMaterial.Dock.toArgb()
 
-    DisposableEffect(view, navigationBarColor) {
+    DisposableEffect(view, navigationBarColor, immersive) {
         val window = view.context.findActivity()?.window
         val controller = window?.let { activityWindow ->
             WindowCompat.getInsetsController(activityWindow, view)
@@ -410,6 +449,10 @@ private fun FullPlayerSystemBars() {
         val previousNavigationBarColor = window?.navigationBarColor
         val previousLightStatusBars = controller?.isAppearanceLightStatusBars
         val previousLightNavigationBars = controller?.isAppearanceLightNavigationBars
+        val previousSystemBarsBehavior = controller?.systemBarsBehavior
+        val rootInsets = ViewCompat.getRootWindowInsets(view)
+        val previousStatusBarsVisible = rootInsets?.isVisible(WindowInsetsCompat.Type.statusBars())
+        val previousNavigationBarsVisible = rootInsets?.isVisible(WindowInsetsCompat.Type.navigationBars())
         val previousStatusBarContrast = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window?.isStatusBarContrastEnforced
         } else {
@@ -432,6 +475,13 @@ private fun FullPlayerSystemBars() {
         }
         controller?.isAppearanceLightStatusBars = false
         controller?.isAppearanceLightNavigationBars = false
+        if (immersive) {
+            controller?.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller?.hide(WindowInsetsCompat.Type.systemBars())
+        } else {
+            controller?.show(WindowInsetsCompat.Type.systemBars())
+        }
 
         onDispose {
             window?.let { activityWindow ->
@@ -445,6 +495,21 @@ private fun FullPlayerSystemBars() {
             controller?.let { systemBars ->
                 previousLightStatusBars?.let { systemBars.isAppearanceLightStatusBars = it }
                 previousLightNavigationBars?.let { systemBars.isAppearanceLightNavigationBars = it }
+                previousSystemBarsBehavior?.let { systemBars.systemBarsBehavior = it }
+                previousStatusBarsVisible?.let { wasVisible ->
+                    if (wasVisible) {
+                        systemBars.show(WindowInsetsCompat.Type.statusBars())
+                    } else {
+                        systemBars.hide(WindowInsetsCompat.Type.statusBars())
+                    }
+                }
+                previousNavigationBarsVisible?.let { wasVisible ->
+                    if (wasVisible) {
+                        systemBars.show(WindowInsetsCompat.Type.navigationBars())
+                    } else {
+                        systemBars.hide(WindowInsetsCompat.Type.navigationBars())
+                    }
+                }
             }
         }
     }
@@ -508,7 +573,6 @@ private fun NowPlayerPage(
     isUltraCompact: Boolean,
     isExtremeText: Boolean,
     isTallScreen: Boolean,
-    isCompactLandscape: Boolean,
     onOpenChain: () -> Unit,
     onCyclePlaybackOrder: () -> Unit,
     onPrevious: () -> Unit,
@@ -566,27 +630,6 @@ private fun NowPlayerPage(
         .clipToBounds()
         .testTag("vesqen.now.player-page")
 
-    if (isCompactLandscape) {
-        Row(modifier = pageModifier) {
-            focusStage(
-                Modifier
-                    .weight(.36f)
-                    .fillMaxHeight()
-                    .padding(
-                        start = VesqenSpacing.lg,
-                        end = VesqenSpacing.sm,
-                        bottom = VesqenSpacing.sm,
-                    ),
-            )
-            transportDock(
-                Modifier
-                    .weight(.64f)
-                    .fillMaxHeight(),
-            )
-        }
-        return
-    }
-
     Column(
         modifier = pageModifier,
     ) {
@@ -596,6 +639,142 @@ private fun NowPlayerPage(
                 .padding(top = focusStageTopPadding, bottom = focusStageBottomPadding),
         )
         transportDock(Modifier)
+    }
+}
+
+/** Landscape is a dedicated listening surface, not a compressed portrait dock. */
+@Composable
+private fun NowLandscapePlayerPage(
+    snapshot: PlaybackSnapshot,
+    trackPresentation: NowTrackPresentation,
+    trackTransitionDirection: TrackTransitionDirection,
+    focusContent: NowFocusContent,
+    motionPolicy: VesqenMotionPolicy,
+    artworkSize: androidx.compose.ui.unit.Dp,
+    isExtremeText: Boolean,
+    onOpenChain: () -> Unit,
+    onCyclePlaybackOrder: () -> Unit,
+    onPrevious: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onOpenDetails: () -> Unit,
+    onToggleFocusContent: () -> Unit,
+    canOpenDetails: Boolean,
+    onBack: () -> Unit,
+    onToggleOrientation: () -> Unit,
+    showOrientationToggle: Boolean,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clipToBounds()
+            .testTag("vesqen.now.landscape-player"),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("vesqen.now.player-page"),
+        ) {
+            NowFocusStage(
+                focusContent = focusContent,
+                snapshot = snapshot,
+                trackPresentation = trackPresentation,
+                trackTransitionDirection = trackTransitionDirection,
+                artworkSize = artworkSize,
+                compact = true,
+                isExtremeText = isExtremeText,
+                motionPolicy = motionPolicy,
+                modifier = Modifier
+                    .weight(.43f)
+                    .fillMaxHeight()
+                    .padding(
+                        start = VesqenSpacing.md,
+                        top = 52.dp,
+                        end = VesqenSpacing.md,
+                        bottom = VesqenSpacing.sm,
+                    ),
+            )
+            Surface(
+                modifier = Modifier
+                    .weight(.57f)
+                    .fillMaxHeight()
+                    .testTag("vesqen.now.landscape-controls"),
+                color = FocusedPlayerMaterial.Dock,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(
+                                start = VesqenSpacing.lg,
+                                top = VesqenSpacing.sm,
+                                end = VesqenSpacing.lg,
+                                bottom = VesqenSpacing.xs,
+                            ),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        AnimatedContent(
+                            targetState = trackPresentation,
+                            transitionSpec = {
+                                trackPresentationTransition(trackTransitionDirection, motionPolicy)
+                            },
+                            label = "vesqen.now.landscape-identity-transition",
+                        ) { presentation ->
+                            NowTrackIdentity(
+                                presentation = presentation,
+                                isControllerReady = snapshot.isControllerReady,
+                                showArtist = !isExtremeText,
+                                showAlbum = false,
+                                compact = true,
+                                modifier = Modifier.padding(horizontal = 48.dp),
+                            )
+                        }
+                        if (!isExtremeText) {
+                            OutputStatusChip(
+                                declaration = snapshot.declaration,
+                                onClick = onOpenChain,
+                                modifier = Modifier.testTag("vesqen.now.open-chain"),
+                                containerColor = FocusedPlayerMaterial.Raised,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
+                        PlaybackProgress(snapshot = snapshot, onSeek = onSeek)
+                        PlaybackControls(
+                            snapshot = snapshot,
+                            onPrevious = onPrevious,
+                            onPlayPause = onPlayPause,
+                            onNext = onNext,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .widthIn(max = 360.dp),
+                        )
+                        NowInfoFooter(
+                            snapshot = snapshot,
+                            focusContent = focusContent,
+                            onToggleFocusContent = onToggleFocusContent,
+                            onCyclePlaybackOrder = onCyclePlaybackOrder,
+                            onOpenDetails = onOpenDetails,
+                            canOpenDetails = canOpenDetails,
+                            motionPolicy = motionPolicy,
+                        )
+                    }
+                    if (showOrientationToggle) {
+                        NowOrientationButton(
+                            onClick = onToggleOrientation,
+                            isLandscape = true,
+                            modifier = Modifier.align(Alignment.TopEnd),
+                        )
+                    }
+                }
+            }
+        }
+        NowBackButton(
+            onClick = onBack,
+            modifier = Modifier.align(Alignment.TopStart),
+        )
     }
 }
 
@@ -976,11 +1155,9 @@ private fun NowInfoFooter(
                 motionPolicy = motionPolicy,
                 modifier = Modifier.size(48.dp),
             )
-            NowFocusSegmentedControl(
+            NowFocusSwitchButton(
                 focusContent = focusContent,
-                onSelect = { target ->
-                    if (target != focusContent) onToggleFocusContent()
-                },
+                onClick = onToggleFocusContent,
                 state = focusState,
                 motionPolicy = motionPolicy,
                 modifier = Modifier
@@ -1176,89 +1353,66 @@ private fun NowPlaybackOrderIcon(mode: PlaybackOrderMode, iconScale: Float) {
 }
 
 @Composable
-private fun NowFocusSegmentedControl(
+private fun NowFocusSwitchButton(
     focusContent: NowFocusContent,
-    onSelect: (NowFocusContent) -> Unit,
+    onClick: () -> Unit,
     state: String,
     motionPolicy: VesqenMotionPolicy,
     modifier: Modifier = Modifier,
 ) {
+    val actionLabel = stringResource(
+        if (focusContent == NowFocusContent.ARTWORK) {
+            R.string.show_playback_session
+        } else {
+            R.string.show_album_artwork
+        },
+    )
     Surface(
+        onClick = onClick,
         modifier = modifier
             .testTag("vesqen.now.session-toggle")
             .semantics {
+                contentDescription = actionLabel
                 stateDescription = state
             },
         shape = RoundedCornerShape(VesqenRadii.control),
-        color = FocusedPlayerMaterial.Raised,
+        color = androidx.compose.ui.graphics.Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
         Row(
-            modifier = Modifier.padding(2.dp),
+            modifier = Modifier.padding(horizontal = VesqenSpacing.xs),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            NowFocusSegment(
-                text = stringResource(R.string.focus_artwork_short),
-                selected = focusContent == NowFocusContent.ARTWORK,
-                onClick = { onSelect(NowFocusContent.ARTWORK) },
-                motionPolicy = motionPolicy,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .testTag("vesqen.now.focus.artwork"),
-            )
-            NowFocusSegment(
-                text = stringResource(R.string.focus_session_short),
-                selected = focusContent == NowFocusContent.SESSION,
-                onClick = { onSelect(NowFocusContent.SESSION) },
-                motionPolicy = motionPolicy,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .testTag("vesqen.now.focus.session"),
-            )
-        }
-    }
-}
-
-@Composable
-private fun NowFocusSegment(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    motionPolicy: VesqenMotionPolicy,
-    modifier: Modifier = Modifier,
-) {
-    val background by animateColorAsState(
-        targetValue = if (selected) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            androidx.compose.ui.graphics.Color.Transparent
-        },
-        animationSpec = tween(motionPolicy.modeChangeMillis),
-        label = "vesqen.now.focus-segment.background",
-    )
-    val foreground by animateColorAsState(
-        targetValue = if (selected) {
-            MaterialTheme.colorScheme.onPrimary
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        },
-        animationSpec = tween(motionPolicy.modeChangeMillis),
-        label = "vesqen.now.focus-segment.foreground",
-    )
-    Surface(
-        modifier = modifier.selectable(
-            selected = selected,
-            onClick = onClick,
-            role = Role.Tab,
-        ),
-        shape = RoundedCornerShape(VesqenRadii.control - 2.dp),
-        color = background,
-        contentColor = foreground,
-    ) {
-        Box(contentAlignment = Alignment.Center) {
+            AnimatedContent(
+                targetState = focusContent,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(motionPolicy.modeChangeMillis)) togetherWith
+                        fadeOut(animationSpec = tween(motionPolicy.modeChangeMillis))
+                },
+                label = "vesqen.now.focus-switch.icon",
+            ) { content ->
+                Icon(
+                    imageVector = if (content == NowFocusContent.ARTWORK) {
+                        Icons.Outlined.GraphicEq
+                    } else {
+                        Icons.Outlined.Image
+                    },
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .testTag(
+                            if (content == NowFocusContent.ARTWORK) {
+                                "vesqen.now.focus.session"
+                            } else {
+                                "vesqen.now.focus.artwork"
+                            },
+                        ),
+                )
+            }
+            Spacer(Modifier.width(VesqenSpacing.xs))
             Text(
-                text = text,
+                text = actionLabel,
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 1,
                 softWrap = false,
@@ -1304,16 +1458,7 @@ private fun NowHeader(
             .padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(
-            onClick = onBack,
-            modifier = Modifier.size(48.dp).testTag("vesqen.now.back"),
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = stringResource(R.string.back_to_library),
-                tint = MaterialTheme.colorScheme.onSurface,
-            )
-        }
+        NowBackButton(onClick = onBack)
         Text(
             text = stringResource(R.string.destination_now),
             style = MaterialTheme.typography.titleLarge,
@@ -1325,25 +1470,47 @@ private fun NowHeader(
             overflow = TextOverflow.Ellipsis,
         )
         if (showOrientationToggle) {
-            IconButton(
-                onClick = onToggleOrientation,
-                modifier = Modifier.size(48.dp).testTag("vesqen.now.orientation-toggle"),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.ScreenRotation,
-                    contentDescription = stringResource(
-                        if (isLandscape) {
-                            R.string.switch_to_portrait
-                        } else {
-                            R.string.switch_to_landscape
-                        },
-                    ),
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
+            NowOrientationButton(onClick = onToggleOrientation, isLandscape = isLandscape)
         } else {
             Spacer(Modifier.size(48.dp))
         }
+    }
+}
+
+@Composable
+private fun NowBackButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier.size(48.dp).testTag("vesqen.now.back"),
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = stringResource(R.string.back_to_library),
+            tint = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
+private fun NowOrientationButton(
+    onClick: () -> Unit,
+    isLandscape: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier.size(48.dp).testTag("vesqen.now.orientation-toggle"),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.ScreenRotation,
+            contentDescription = stringResource(
+                if (isLandscape) R.string.switch_to_portrait else R.string.switch_to_landscape,
+            ),
+            tint = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
@@ -1355,10 +1522,11 @@ private fun NowTrackIdentity(
     showArtist: Boolean,
     showAlbum: Boolean,
     compact: Boolean,
+    modifier: Modifier = Modifier,
 ) {
     val album = presentation.album.takeIf { it.isNotBlank() }
     Column(
-        modifier = Modifier.padding(horizontal = VesqenSpacing.md),
+        modifier = modifier.padding(horizontal = VesqenSpacing.md),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs),
     ) {
