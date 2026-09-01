@@ -17,7 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AccountTree
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -35,6 +35,8 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 @Composable
 fun SettingsScreen(
     onOpenPlaybackChain: () -> Unit,
+    onOpenAbout: () -> Unit,
+    versionName: String,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -71,10 +73,12 @@ fun SettingsScreen(
                 SettingsSectionLabel(stringResource(R.string.settings_about))
             }
             item {
-                SettingsInfoRow(
-                    icon = { Icon(Icons.Filled.Lock, contentDescription = null) },
-                    title = stringResource(R.string.settings_local_first),
-                    body = stringResource(R.string.settings_local_first_body),
+                SettingsActionRow(
+                    icon = { Icon(Icons.Outlined.Info, contentDescription = null) },
+                    title = stringResource(R.string.settings_about_vesqen),
+                    body = stringResource(R.string.settings_version, versionName),
+                    onClick = onOpenAbout,
+                    modifier = Modifier.testTag("vesqen.settings.about"),
                 )
             }
         }
@@ -107,21 +111,6 @@ private fun SettingsActionRow(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         SettingsRowContent(icon = icon, title = title, body = body, showChevron = true)
-    }
-}
-
-@Composable
-private fun SettingsInfoRow(
-    icon: @Composable () -> Unit,
-    title: String,
-    body: String,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.surface),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
-        SettingsRowContent(icon = icon, title = title, body = body, showChevron = false)
     }
 }
 

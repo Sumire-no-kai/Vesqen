@@ -1,7 +1,24 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+val vesqenVersion = Properties().apply {
+    rootProject.file("version.properties").inputStream().use(::load)
+}
+val vesqenVersionName = requireNotNull(vesqenVersion.getProperty("versionName")) {
+    "versionName is required in version.properties"
+}
+val vesqenVersionCode = requireNotNull(vesqenVersion.getProperty("versionCode")) {
+    "versionCode is required in version.properties"
+}.toInt()
+
+require(vesqenVersionName.matches(Regex("(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?"))) {
+    "versionName must use semantic versioning"
+}
+require(vesqenVersionCode > 0) { "versionCode must be positive" }
 
 android {
     namespace = "io.github.sumirenokai.vesqen"
@@ -13,8 +30,8 @@ android {
         applicationId = "io.github.sumirenokai.vesqen"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = vesqenVersionCode
+        versionName = vesqenVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -31,6 +48,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
     buildFeatures {
+        buildConfig = true
         compose = true
     }
 }

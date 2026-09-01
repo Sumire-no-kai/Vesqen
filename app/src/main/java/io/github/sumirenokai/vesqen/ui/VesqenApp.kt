@@ -7,6 +7,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -51,6 +52,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.sumirenokai.vesqen.BuildConfig
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.components.MiniPlayer
@@ -59,6 +61,8 @@ import io.github.sumirenokai.vesqen.ui.navigation.CompactNavigationBarContentHei
 import io.github.sumirenokai.vesqen.ui.navigation.VesqenDestination
 import io.github.sumirenokai.vesqen.ui.navigation.VesqenNavigation
 import io.github.sumirenokai.vesqen.ui.navigation.VesqenNavigationState
+import io.github.sumirenokai.vesqen.ui.navigation.isSecondaryDetail
+import io.github.sumirenokai.vesqen.ui.screens.AboutScreen
 import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
 import io.github.sumirenokai.vesqen.ui.screens.LibraryScreen
 import io.github.sumirenokai.vesqen.ui.screens.NowScreen
@@ -70,6 +74,25 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
 private val FocusedPlayerEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
+
+internal enum class PlayerOrientationOverride {
+    FOLLOW_SYSTEM,
+    FORCE_PORTRAIT,
+    FORCE_LANDSCAPE,
+}
+
+internal fun requestedPhoneOrientation(
+    hasFocusedPlayer: Boolean,
+    playerOverride: PlayerOrientationOverride,
+): Int = if (!hasFocusedPlayer) {
+    ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+} else {
+    when (playerOverride) {
+        PlayerOrientationOverride.FOLLOW_SYSTEM -> ActivityInfo.SCREEN_ORIENTATION_USER
+        PlayerOrientationOverride.FORCE_PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        PlayerOrientationOverride.FORCE_LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+    }
+}
 
 /** Android boundary for real permissions, MediaStore, and Media3. */
 @Composable
@@ -177,6 +200,8 @@ fun VesqenAppContent(
     modifier: Modifier = Modifier,
     motionPolicy: VesqenMotionPolicy? = null,
     managePhoneOrientation: Boolean = false,
+    versionName: String = BuildConfig.VERSION_NAME,
+    versionCode: Int = BuildConfig.VERSION_CODE,
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     var destinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
@@ -187,14 +212,27 @@ fun VesqenAppContent(
     )
     val destination = navigationState.destination
     val hasFocusedPlayer = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
+    val configuration = LocalConfiguration.current
+    val isPhone = configuration.smallestScreenWidthDp < 600
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    var playerOrientationOverrideName by rememberSaveable {
+        mutableStateOf(PlayerOrientationOverride.FOLLOW_SYSTEM.name)
+    }
+    val playerOrientationOverride = PlayerOrientationOverride.valueOf(playerOrientationOverrideName)
+    LaunchedEffect(hasFocusedPlayer) {
+        if (!hasFocusedPlayer) {
+            playerOrientationOverrideName = PlayerOrientationOverride.FOLLOW_SYSTEM.name
+        }
+    }
     PhoneOrientationPolicy(
-        allowLandscape = hasFocusedPlayer,
+        hasFocusedPlayer = hasFocusedPlayer,
+        playerOverride = playerOrientationOverride,
         enabled = managePhoneOrientation,
     )
     // A protected Now surface owns the whole window. Keeping a light navigation rail beside it
     // would split the transparent status bar between incompatible backgrounds and make one set of
     // system icons unreadable. Back remains the deliberate route to the stable top-level shell.
-    val isSecondaryDetail = destination == VesqenDestination.CHAIN
+    val isSecondaryDetail = destination.isSecondaryDetail
     val useNavigationRail = LocalConfiguration.current.screenWidthDp >= 600 &&
         !hasFocusedPlayer && !isSecondaryDetail
 
@@ -209,6 +247,18 @@ fun VesqenAppContent(
 
     fun openChain() {
         applyNavigation(navigationState.openChain())
+    }
+
+    fun openAbout() {
+        applyNavigation(navigationState.openAbout())
+    }
+
+    fun togglePlayerOrientation() {
+        playerOrientationOverrideName = if (isLandscape) {
+            PlayerOrientationOverride.FORCE_PORTRAIT.name
+        } else {
+            PlayerOrientationOverride.FORCE_LANDSCAPE.name
+        }
     }
 
     fun navigateBack() {
@@ -242,6 +292,7 @@ fun VesqenAppContent(
                 motionPolicy = appliedMotionPolicy,
                 onDestinationSelected = ::selectTopLevel,
                 onOpenChain = ::openChain,
+                onOpenAbout = ::openAbout,
                 onNavigateBack = ::navigateBack,
                 onRequestMusicAccess = onRequestMusicAccess,
                 onOpenAppSettings = onOpenAppSettings,
@@ -253,6 +304,11 @@ fun VesqenAppContent(
                 onNext = onNext,
                 onSeek = onSeek,
                 onCyclePlaybackOrder = onCyclePlaybackOrder,
+                onTogglePlayerOrientation = ::togglePlayerOrientation,
+                showOrientationToggle = isPhone,
+                isLandscape = isLandscape,
+                versionName = versionName,
+                versionCode = versionCode,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -264,6 +320,7 @@ fun VesqenAppContent(
             motionPolicy = appliedMotionPolicy,
             onDestinationSelected = ::selectTopLevel,
             onOpenChain = ::openChain,
+            onOpenAbout = ::openAbout,
             onNavigateBack = ::navigateBack,
             onRequestMusicAccess = onRequestMusicAccess,
             onOpenAppSettings = onOpenAppSettings,
@@ -275,6 +332,11 @@ fun VesqenAppContent(
             onNext = onNext,
             onSeek = onSeek,
             onCyclePlaybackOrder = onCyclePlaybackOrder,
+            onTogglePlayerOrientation = ::togglePlayerOrientation,
+            showOrientationToggle = isPhone,
+            isLandscape = isLandscape,
+            versionName = versionName,
+            versionCode = versionCode,
             modifier = modifier,
         )
     }
@@ -288,6 +350,7 @@ private fun VesqenDestinationFrame(
     motionPolicy: VesqenMotionPolicy,
     onDestinationSelected: (VesqenDestination) -> Unit,
     onOpenChain: () -> Unit,
+    onOpenAbout: () -> Unit,
     onNavigateBack: () -> Unit,
     onRequestMusicAccess: () -> Unit,
     onOpenAppSettings: () -> Unit,
@@ -299,13 +362,18 @@ private fun VesqenDestinationFrame(
     onNext: () -> Unit,
     onSeek: (Long) -> Unit,
     onCyclePlaybackOrder: () -> Unit,
+    onTogglePlayerOrientation: () -> Unit,
+    showOrientationToggle: Boolean,
+    isLandscape: Boolean,
+    versionName: String,
+    versionCode: Int,
     modifier: Modifier = Modifier,
 ) {
     val usesFocusedPlayerInsets = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
     val showMiniPlayer = state.playback.hasActiveTrack &&
-        destination != VesqenDestination.NOW && destination != VesqenDestination.CHAIN
+        destination != VesqenDestination.NOW && !destination.isSecondaryDetail
     val showCompactNavigation = showNavigation &&
-        destination != VesqenDestination.NOW && destination != VesqenDestination.CHAIN
+        !usesFocusedPlayerInsets && !destination.isSecondaryDetail
     val miniPlayerContentClearance = if (showMiniPlayer) {
         MiniPlayerHeight + VesqenSpacing.xxs
     } else {
@@ -467,12 +535,17 @@ private fun VesqenDestinationFrame(
                         onNext = onNext,
                         onSeek = onSeek,
                         onPlayTrack = onTrackSelected,
+                        onToggleOrientation = onTogglePlayerOrientation,
+                        showOrientationToggle = showOrientationToggle,
+                        isLandscape = isLandscape,
                         motionPolicy = motionPolicy,
                         modifier = destinationModifier,
                     )
 
                     VesqenDestination.SETTINGS -> SettingsScreen(
                         onOpenPlaybackChain = onOpenChain,
+                        onOpenAbout = onOpenAbout,
+                        versionName = versionName,
                         modifier = destinationModifier,
                     )
 
@@ -481,6 +554,13 @@ private fun VesqenDestinationFrame(
                         snapshot = state.playback,
                         onBack = onNavigateBack,
                         onBrowseLibrary = { onDestinationSelected(VesqenDestination.LIBRARY) },
+                        modifier = destinationModifier,
+                    )
+
+                    VesqenDestination.ABOUT -> AboutScreen(
+                        versionName = versionName,
+                        versionCode = versionCode,
+                        onBack = onNavigateBack,
                         modifier = destinationModifier,
                     )
                 }
@@ -522,7 +602,11 @@ private fun PlaybackSnapshot.toArtworkTrackOrNull(): AudioTrack? {
 }
 
 @Composable
-private fun PhoneOrientationPolicy(allowLandscape: Boolean, enabled: Boolean) {
+private fun PhoneOrientationPolicy(
+    hasFocusedPlayer: Boolean,
+    playerOverride: PlayerOrientationOverride,
+    enabled: Boolean,
+) {
     val configuration = LocalConfiguration.current
     val activity = LocalContext.current.findActivity()
     val isPhone = configuration.smallestScreenWidthDp < 600
@@ -530,13 +614,12 @@ private fun PhoneOrientationPolicy(allowLandscape: Boolean, enabled: Boolean) {
         activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
 
-    LaunchedEffect(activity, enabled, isPhone, allowLandscape) {
+    LaunchedEffect(activity, enabled, isPhone, hasFocusedPlayer, playerOverride) {
         if (activity != null && enabled && isPhone) {
-            activity.requestedOrientation = if (allowLandscape) {
-                ActivityInfo.SCREEN_ORIENTATION_USER
-            } else {
-                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-            }
+            activity.requestedOrientation = requestedPhoneOrientation(
+                hasFocusedPlayer = hasFocusedPlayer,
+                playerOverride = playerOverride,
+            )
         }
     }
     DisposableEffect(activity, enabled, isPhone) {
