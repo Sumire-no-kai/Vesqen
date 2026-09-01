@@ -1,7 +1,5 @@
 <resources>
     <string name="app_name">Vesqen</string>
-    <string name="library_permission_title">Your music stays on your device</string>
-    <string name="library_permission_body">Vesqen needs access to audio files to build your local library. It never needs an account or network connection for playback.</string>
     <string name="grant_music_access">Grant music access</string>
     <string name="try_again">Try again</string>
     <string name="open_app_settings">Open app settings</string>
@@ -14,9 +12,33 @@
     <string name="output_other">Other output</string>
     <string name="output_none_detected">No output detected</string>
     <string name="notifications_disabled">Notifications are disabled. Playback can continue, but Android may not show media controls in the notification shade.</string>
-    <string name="loading_library">Scanning local music…</string>
+    <string name="device_music_access">Device music access</string>
+    <string name="device_music_access_body">Grant Android media access to include music indexed by this device. You can still add individual folders below.</string>
+    <string name="music_sources">Music sources</string>
+    <string name="add_music_folder">Add music folder</string>
+    <string name="manage_music_sources">Manage music sources</string>
+    <plurals name="imported_folders_count">
+        <item quantity="one">%1$d imported folder</item>
+        <item quantity="other">%1$d imported folders</item>
+    </plurals>
+    <string name="remove_music_folder">Remove</string>
+    <string name="library_scanning_source">Scanning %1$s…</string>
+    <plurals name="library_scan_paused">
+        <item quantity="one">Scan paused in %1$s after %2$d track</item>
+        <item quantity="other">Scan paused in %1$s after %2$d tracks</item>
+    </plurals>
+    <string name="pause_scan">Pause</string>
+    <string name="resume_scan">Resume</string>
+    <string name="library_source_scan_failed">Could not refresh this source. Existing tracks are kept.</string>
+    <string name="library_folder_access_needs_renewal">Folder access needs to be added again before its tracks can be used.</string>
+    <string name="library_source_paused">Scan paused</string>
+    <string name="library_source_interrupted">Scan was interrupted; resume to continue</string>
+    <plurals name="library_source_track_count">
+        <item quantity="one">%1$d track</item>
+        <item quantity="other">%1$d tracks</item>
+    </plurals>
     <string name="no_local_music">No local music found</string>
-    <string name="no_local_music_body">Add music files to this device, then scan again.</string>
+    <string name="no_local_music_body">Grant device music access or add a music folder, then scan again.</string>
     <string name="rescan_library">Rescan library</string>
     <string name="library_load_failed">Vesqen could not read the local library.</string>
     <string name="unknown_title">Unknown title</string>

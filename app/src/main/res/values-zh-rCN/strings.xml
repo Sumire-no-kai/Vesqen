@@ -1,7 +1,5 @@
 <resources>
     <string name="app_name">Vesqen</string>
-    <string name="library_permission_title">你的音乐始终留在设备上</string>
-    <string name="library_permission_body">Vesqen 需要读取音频文件，以建立本地曲库。播放不需要账号或网络连接。</string>
     <string name="grant_music_access">允许访问音乐</string>
     <string name="try_again">重试</string>
     <string name="open_app_settings">打开应用设置</string>
@@ -14,9 +12,30 @@
     <string name="output_other">其他输出</string>
     <string name="output_none_detected">未检测到输出</string>
     <string name="notifications_disabled">通知已关闭。播放仍可继续，但 Android 可能不会在通知栏显示媒体控制。</string>
-    <string name="loading_library">正在扫描本地音乐…</string>
+    <string name="device_music_access">设备音乐访问权限</string>
+    <string name="device_music_access_body">授予 Android 媒体访问权限即可纳入系统已索引的音乐。你仍可以在下方单独添加文件夹。</string>
+    <string name="music_sources">音乐来源</string>
+    <string name="add_music_folder">添加音乐文件夹</string>
+    <string name="manage_music_sources">管理音乐来源</string>
+    <plurals name="imported_folders_count">
+        <item quantity="other">已导入 %1$d 个文件夹</item>
+    </plurals>
+    <string name="remove_music_folder">移除</string>
+    <string name="library_scanning_source">正在扫描 %1$s…</string>
+    <plurals name="library_scan_paused">
+        <item quantity="other">已在 %1$s 暂停扫描，已检查 %2$d 首曲目</item>
+    </plurals>
+    <string name="pause_scan">暂停</string>
+    <string name="resume_scan">继续</string>
+    <string name="library_source_scan_failed">无法刷新此来源，已有曲目会保留。</string>
+    <string name="library_folder_access_needs_renewal">需要重新添加文件夹访问权限，才能使用其中的曲目。</string>
+    <string name="library_source_paused">扫描已暂停</string>
+    <string name="library_source_interrupted">扫描已中断；继续即可恢复</string>
+    <plurals name="library_source_track_count">
+        <item quantity="other">%1$d 首曲目</item>
+    </plurals>
     <string name="no_local_music">未找到本地音乐</string>
-    <string name="no_local_music_body">请将音乐文件添加到设备后重新扫描。</string>
+    <string name="no_local_music_body">请授予设备音乐访问权限或添加音乐文件夹，然后重新扫描。</string>
     <string name="rescan_library">重新扫描曲库</string>
     <string name="library_load_failed">Vesqen 无法读取本地曲库。</string>
     <string name="unknown_title">未知标题</string>

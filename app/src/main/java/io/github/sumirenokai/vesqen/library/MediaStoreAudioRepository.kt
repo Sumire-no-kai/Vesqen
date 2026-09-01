@@ -1,17 +1,27 @@
 package io.github.sumirenokai.vesqen.library
 
-import android.content.ContentResolver
 import android.content.ContentUris
+import android.content.ContentResolver
+import android.content.Context
+import android.os.Build
 import android.provider.MediaStore
-import java.util.concurrent.atomic.AtomicLong
 
-class MediaStoreAudioRepository(
+/** MediaStore adapter for the catalog; its source identity never escapes this boundary. */
+internal class MediaStoreAudioRepository(
+    private val context: Context,
     private val contentResolver: ContentResolver,
 ) {
-    private val scanGeneration = AtomicLong()
+    /** API 30+ lets an unchanged volume avoid reopening every audio row. */
+    fun currentGeneration(): Long? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        MediaStore.getGeneration(context, MediaStore.VOLUME_EXTERNAL)
+    } else {
+        null
+    }
 
-    fun loadTracks(): List<AudioTrack> {
-        val artworkRevision = scanGeneration.incrementAndGet()
+    fun scanTracks(
+        shouldPause: () -> Boolean,
+        onTrack: (LibraryTrackCandidate) -> Unit,
+    ): ScanIterationResult {
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
@@ -20,17 +30,20 @@ class MediaStoreAudioRepository(
             MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DATE_MODIFIED,
+            MediaStore.Audio.Media.SIZE,
+            MediaStore.Audio.Media.MIME_TYPE,
         )
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} > 0"
         val sortOrder = "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
 
-        return contentResolver.query(
+        val cursor = contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             projection,
             selection,
             null,
             sortOrder,
-        )?.use { cursor ->
+        ) ?: throw IllegalStateException("MediaStore returned no cursor")
+        return try {
             val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val titleIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val artistIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
@@ -38,35 +51,65 @@ class MediaStoreAudioRepository(
             val albumIdIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
             val durationIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val dateModifiedIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
+            val sizeIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
+            val mimeTypeIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
 
-            buildList {
-                while (cursor.moveToNext()) {
-                    val id = cursor.getLong(idIndex)
-                    val albumId = cursor.getLong(albumIdIndex).takeIf { it > 0 }
-                    add(
-                        AudioTrack(
-                            id = id,
-                            contentUri = ContentUris.withAppendedId(
-                                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                                id,
-                            ).toString(),
-                            title = cursor.getString(titleIndex).orEmpty(),
-                            artist = cursor.getString(artistIndex).orEmpty(),
-                            album = cursor.getString(albumIndex).orEmpty(),
-                            durationMs = cursor.getLong(durationIndex),
-                            albumId = albumId,
-                            albumArtworkUri = albumId?.let {
-                                ContentUris.withAppendedId(
-                                    MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI,
-                                    it,
-                                ).toString()
-                            },
-                            dateModifiedSeconds = cursor.getLong(dateModifiedIndex),
-                            artworkRevision = artworkRevision,
-                        ),
-                    )
+            var processedTrackCount = 0
+            while (cursor.moveToNext()) {
+                if (shouldPause()) {
+                    return ScanIterationResult(completed = false, processedTrackCount = processedTrackCount)
                 }
+                val id = cursor.getLong(idIndex)
+                val albumId = cursor.getLong(albumIdIndex).takeIf { it > 0 }
+                val contentUri = ContentUris.withAppendedId(
+                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                    id,
+                ).toString()
+                val title = cursor.getString(titleIndex).orEmpty()
+                val artist = cursor.getString(artistIndex).orEmpty()
+                val album = cursor.getString(albumIndex).orEmpty()
+                val durationMs = cursor.getLong(durationIndex)
+                val dateModifiedSeconds = cursor.getLong(dateModifiedIndex)
+                val sizeBytes = cursor.getLong(sizeIndex)
+                val mimeType = cursor.getString(mimeTypeIndex).orEmpty()
+                onTrack(
+                    LibraryTrackCandidate(
+                        remoteId = id.toString(),
+                        contentUri = contentUri,
+                        title = title,
+                        artist = artist,
+                        album = album,
+                        durationMs = durationMs,
+                        albumId = albumId,
+                        albumArtworkUri = albumId?.let {
+                            ContentUris.withAppendedId(
+                                MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI,
+                                it,
+                            ).toString()
+                        },
+                        dateModifiedSeconds = dateModifiedSeconds,
+                        sizeBytes = sizeBytes,
+                        mimeType = mimeType,
+                        fingerprint = libraryFingerprint(
+                            "media",
+                            id,
+                            contentUri,
+                            title,
+                            artist,
+                            album,
+                            durationMs,
+                            albumId,
+                            dateModifiedSeconds,
+                            sizeBytes,
+                            mimeType,
+                        ),
+                    ),
+                )
+                processedTrackCount++
             }
-        }.orEmpty()
+            ScanIterationResult(completed = true, processedTrackCount = processedTrackCount)
+        } finally {
+            cursor.close()
+        }
     }
 }

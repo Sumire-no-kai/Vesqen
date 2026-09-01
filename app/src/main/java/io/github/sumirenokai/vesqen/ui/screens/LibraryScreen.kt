@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,14 +17,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,15 +42,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.library.LibraryScanState
+import io.github.sumirenokai.vesqen.library.LibrarySource
+import io.github.sumirenokai.vesqen.library.LibrarySourceKind
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.LibraryUiState
 import io.github.sumirenokai.vesqen.ui.MusicAccess
-import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
 import io.github.sumirenokai.vesqen.ui.components.TrackDetailsSheet
 import io.github.sumirenokai.vesqen.ui.components.TrackRow
 import io.github.sumirenokai.vesqen.ui.components.VesqenEmptyState
@@ -65,75 +71,39 @@ fun LibraryScreen(
     onRescan: () -> Unit,
     onTrackSelected: (AudioTrack) -> Unit,
     modifier: Modifier = Modifier,
+    onAddLibraryFolder: () -> Unit = {},
+    onRemoveLibraryFolder: (String) -> Unit = {},
+    onPauseLibraryScan: () -> Unit = {},
+    onResumeLibraryScan: () -> Unit = {},
 ) {
-    when (state.musicAccess) {
-        MusicAccess.NEEDS_PERMISSION,
-        MusicAccess.DENIED,
-        -> LibraryPermissionScreen(
-            denied = state.musicAccess == MusicAccess.DENIED,
-            onRequestMusicAccess = onRequestMusicAccess,
-            onOpenAppSettings = onOpenAppSettings,
-            modifier = modifier,
-        )
-
-        MusicAccess.GRANTED -> LibraryContent(
-            state = state,
-            playback = playback,
-            onRescan = onRescan,
-            onOpenNotificationSettings = onOpenNotificationSettings,
-            onTrackSelected = onTrackSelected,
-            modifier = modifier,
-        )
-    }
-}
-
-@Composable
-private fun LibraryPermissionScreen(
-    denied: Boolean,
-    onRequestMusicAccess: () -> Unit,
-    onOpenAppSettings: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = VesqenSpacing.lg),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        AlbumArtwork(modifier = Modifier.size(72.dp), emphasized = true)
-        Spacer(Modifier.height(VesqenSpacing.lg))
-        Text(
-            text = stringResource(R.string.library_permission_title),
-            style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(VesqenSpacing.xs))
-        Text(
-            text = stringResource(R.string.library_permission_body),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(VesqenSpacing.lg))
-        Button(onClick = onRequestMusicAccess, modifier = Modifier.testTag("vesqen.permission.request")) {
-            Text(stringResource(if (denied) R.string.try_again else R.string.grant_music_access))
-        }
-        if (denied) {
-            Spacer(Modifier.height(VesqenSpacing.xs))
-            OutlinedButton(onClick = onOpenAppSettings) {
-                Text(stringResource(R.string.open_app_settings))
-            }
-        }
-    }
+    LibraryContent(
+        state = state,
+        playback = playback,
+        onRequestMusicAccess = onRequestMusicAccess,
+        onOpenAppSettings = onOpenAppSettings,
+        onOpenNotificationSettings = onOpenNotificationSettings,
+        onRescan = onRescan,
+        onAddLibraryFolder = onAddLibraryFolder,
+        onRemoveLibraryFolder = onRemoveLibraryFolder,
+        onPauseLibraryScan = onPauseLibraryScan,
+        onResumeLibraryScan = onResumeLibraryScan,
+        onTrackSelected = onTrackSelected,
+        modifier = modifier,
+    )
 }
 
 @Composable
 private fun LibraryContent(
     state: LibraryUiState,
     playback: PlaybackSnapshot,
+    onRequestMusicAccess: () -> Unit,
+    onOpenAppSettings: () -> Unit,
     onRescan: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
+    onAddLibraryFolder: () -> Unit,
+    onRemoveLibraryFolder: (String) -> Unit,
+    onPauseLibraryScan: () -> Unit,
+    onResumeLibraryScan: () -> Unit,
     onTrackSelected: (AudioTrack) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -142,15 +112,40 @@ private fun LibraryContent(
     val visibleTracks = filterTracks(state.tracks, query)
 
     Column(modifier = modifier.fillMaxSize()) {
-        LibraryHeader(onRescan = onRescan)
+        LibraryHeader(
+            onAddLibraryFolder = onAddLibraryFolder,
+            onRescan = onRescan,
+            sourceActionsEnabled = !state.isLoading,
+        )
+        if (state.musicAccess != MusicAccess.GRANTED) {
+            DeviceMusicAccessNotice(
+                denied = state.musicAccess == MusicAccess.DENIED,
+                onRequestMusicAccess = onRequestMusicAccess,
+                onOpenAppSettings = onOpenAppSettings,
+                onAddLibraryFolder = onAddLibraryFolder,
+            )
+        }
+        if (
+            state.sources.any { it.kind == LibrarySourceKind.FOLDER } ||
+            state.scanProgress != null ||
+            state.sources.any { it.scanState == LibraryScanState.FAILED }
+        ) {
+            LibrarySourcesCard(
+                state = state,
+                onAddLibraryFolder = onAddLibraryFolder,
+                onRemoveLibraryFolder = onRemoveLibraryFolder,
+                onPauseLibraryScan = onPauseLibraryScan,
+                onResumeLibraryScan = onResumeLibraryScan,
+            )
+        }
         if (!state.notificationsAllowed) {
             NotificationNotice(onOpenNotificationSettings = onOpenNotificationSettings)
         }
         LibrarySearchField(query = query, onQueryChange = { query = it })
         Box(modifier = Modifier.weight(1f)) {
             when {
-                state.isLoading -> LibraryLoading()
-                state.loadingFailed -> VesqenEmptyState(
+                state.isLoading && state.tracks.isEmpty() -> LibraryLoading()
+                state.loadingFailed && state.tracks.isEmpty() -> VesqenEmptyState(
                     title = stringResource(R.string.library_load_failed),
                     body = stringResource(
                         if (playback.hasActiveTrack) {
@@ -167,8 +162,8 @@ private fun LibraryContent(
                 state.tracks.isEmpty() -> VesqenEmptyState(
                     title = stringResource(R.string.no_local_music),
                     body = stringResource(R.string.no_local_music_body),
-                    actionLabel = stringResource(R.string.rescan_library),
-                    onAction = onRescan,
+                    actionLabel = stringResource(R.string.add_music_folder),
+                    onAction = onAddLibraryFolder,
                     modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
                 )
 
@@ -217,7 +212,11 @@ private fun LibraryContent(
 }
 
 @Composable
-private fun LibraryHeader(onRescan: () -> Unit) {
+private fun LibraryHeader(
+    onAddLibraryFolder: () -> Unit,
+    onRescan: () -> Unit,
+    sourceActionsEnabled: Boolean,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -230,8 +229,19 @@ private fun LibraryHeader(onRescan: () -> Unit) {
             modifier = Modifier.weight(1f),
         )
         IconButton(
+            modifier = Modifier.size(48.dp).testTag("vesqen.library.add-folder"),
+            onClick = onAddLibraryFolder,
+            enabled = sourceActionsEnabled,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CreateNewFolder,
+                contentDescription = stringResource(R.string.add_music_folder),
+            )
+        }
+        IconButton(
             modifier = Modifier.size(48.dp).testTag("vesqen.library.rescan"),
             onClick = onRescan,
+            enabled = sourceActionsEnabled,
         ) {
             Icon(
                 imageVector = Icons.Filled.Refresh,
@@ -239,6 +249,263 @@ private fun LibraryHeader(onRescan: () -> Unit) {
             )
         }
     }
+}
+
+@Composable
+private fun DeviceMusicAccessNotice(
+    denied: Boolean,
+    onRequestMusicAccess: () -> Unit,
+    onOpenAppSettings: () -> Unit,
+    onAddLibraryFolder: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.xs),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Column(modifier = Modifier.padding(VesqenSpacing.md)) {
+            Text(
+                text = stringResource(R.string.device_music_access),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Spacer(Modifier.height(VesqenSpacing.xxs))
+            Text(
+                text = stringResource(R.string.device_music_access_body),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(VesqenSpacing.sm))
+            Row(horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.xs)) {
+                Button(
+                    onClick = onRequestMusicAccess,
+                    modifier = Modifier.testTag("vesqen.permission.request"),
+                ) {
+                    Text(stringResource(if (denied) R.string.try_again else R.string.grant_music_access))
+                }
+                TextButton(onClick = onAddLibraryFolder) {
+                    Text(stringResource(R.string.add_music_folder))
+                }
+            }
+            if (denied) {
+                TextButton(onClick = onOpenAppSettings) {
+                    Text(stringResource(R.string.open_app_settings))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibrarySourcesCard(
+    state: LibraryUiState,
+    onAddLibraryFolder: () -> Unit,
+    onRemoveLibraryFolder: (String) -> Unit,
+    onPauseLibraryScan: () -> Unit,
+    onResumeLibraryScan: () -> Unit,
+) {
+    var showSourceManager by rememberSaveable { mutableStateOf(false) }
+    val folders = state.sources.filter { it.kind == LibrarySourceKind.FOLDER }
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.xs)
+            .testTag("vesqen.library.sources"),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Column(modifier = Modifier.padding(VesqenSpacing.md)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.FolderOpen,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(VesqenSpacing.xs))
+                Text(
+                    text = stringResource(R.string.music_sources),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    onClick = if (folders.isEmpty()) {
+                        onAddLibraryFolder
+                    } else {
+                        { showSourceManager = true }
+                    },
+                    enabled = !state.isLoading,
+                    modifier = Modifier.testTag(
+                        if (folders.isEmpty()) {
+                            "vesqen.library.sources.add"
+                        } else {
+                            "vesqen.library.sources.manage"
+                        },
+                    ),
+                ) {
+                    Text(
+                        stringResource(
+                            if (folders.isEmpty()) R.string.add_music_folder else R.string.manage_music_sources,
+                        ),
+                    )
+                }
+            }
+            Text(
+                text = pluralStringResource(
+                    R.plurals.imported_folders_count,
+                    folders.size,
+                    folders.size,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            val progress = state.scanProgress
+            if (progress != null) {
+                Spacer(Modifier.height(VesqenSpacing.xs))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (state.isScanPaused) {
+                            pluralStringResource(
+                                R.plurals.library_scan_paused,
+                                progress.scannedTrackCount,
+                                progress.sourceName,
+                                progress.scannedTrackCount,
+                            )
+                        } else {
+                            stringResource(
+                                R.string.library_scanning_source,
+                                progress.sourceName,
+                            )
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick = if (state.isScanPaused) onResumeLibraryScan else onPauseLibraryScan,
+                        modifier = Modifier.testTag(
+                            if (state.isScanPaused) {
+                                "vesqen.library.resume-scan"
+                            } else {
+                                "vesqen.library.pause-scan"
+                            },
+                        ),
+                    ) {
+                        Text(
+                            stringResource(
+                                if (state.isScanPaused) R.string.resume_scan else R.string.pause_scan,
+                            ),
+                        )
+                    }
+                }
+            }
+            if (state.sources.any { it.scanState == LibraryScanState.FAILED }) {
+                Text(
+                    text = stringResource(R.string.library_source_scan_failed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            if (folders.any { !it.isAvailable }) {
+                Text(
+                    text = stringResource(R.string.library_folder_access_needs_renewal),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+    }
+    if (showSourceManager) {
+        LibrarySourcesSheet(
+            folders = folders,
+            scanInProgress = state.isLoading,
+            onDismiss = { showSourceManager = false },
+            onAddLibraryFolder = {
+                showSourceManager = false
+                onAddLibraryFolder()
+            },
+            onRemove = { sourceId ->
+                onRemoveLibraryFolder(sourceId)
+                if (folders.size == 1) showSourceManager = false
+            },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LibrarySourcesSheet(
+    folders: List<LibrarySource>,
+    scanInProgress: Boolean,
+    onDismiss: () -> Unit,
+    onAddLibraryFolder: () -> Unit,
+    onRemove: (String) -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag("vesqen.library.source-manager"),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.sm),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.manage_music_sources),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    onClick = onAddLibraryFolder,
+                    enabled = !scanInProgress,
+                ) {
+                    Text(stringResource(R.string.add_music_folder))
+                }
+            }
+            Spacer(Modifier.height(VesqenSpacing.sm))
+            LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                items(items = folders, key = LibrarySource::id) { source ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = VesqenSpacing.xs),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(source.displayName, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text = sourceStatusText(source),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        TextButton(
+                            enabled = !scanInProgress,
+                            onClick = { onRemove(source.id) },
+                            modifier = Modifier.testTag("vesqen.library.source.${source.id}.remove"),
+                        ) {
+                            Text(stringResource(R.string.remove_music_folder))
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(VesqenSpacing.sm))
+        }
+    }
+}
+
+@Composable
+private fun sourceStatusText(source: LibrarySource): String = when {
+    !source.isAvailable -> stringResource(R.string.library_folder_access_needs_renewal)
+    source.scanState == LibraryScanState.PAUSED -> stringResource(R.string.library_source_paused)
+    source.scanState == LibraryScanState.INTERRUPTED -> stringResource(R.string.library_source_interrupted)
+    source.scanState == LibraryScanState.FAILED -> stringResource(R.string.library_source_scan_failed)
+    else -> pluralStringResource(
+        R.plurals.library_source_track_count,
+        source.trackCount,
+        source.trackCount,
+    )
 }
 
 @Composable
