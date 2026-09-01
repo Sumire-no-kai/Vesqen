@@ -2,8 +2,8 @@
 
 > Local lossless audio, without compromise.
 
-- 文档状态：Draft v0.5
-- 更新日期：2026-08-31
+- 文档状态：Draft v0.9
+- 更新日期：2026-09-01
 - 产品形态：Android 本地音乐播放器
 - 开源许可证：Apache License 2.0
 - 最低安装版本：Android 8.0（API 26，产品支持基线）
@@ -123,7 +123,7 @@ Vesqen 的长期差异化来自“可验证的播放链路”，而不只是格�
 - 搜索、排序、收藏、最近播放和播放次数。
 - 播放列表和当前播放队列。
 - 大型曲库扫描可暂停、恢复，不阻塞播放和主界面。
-- 默认曲目行保持 72 dp 左右的紧凑节奏，只展示 48 dp 封面、标题、艺术家、播放状态和更多操作；时长、专辑、格式、采样率、文件位置和遥测不堆叠在默认列表中。
+- 默认曲目行保持 72 dp 左右的紧凑节奏，主要展示 48 dp 封面、标题、艺术家、播放状态和更多操作；允许加入一枚紧凑的源音频质量标签，但时长、专辑、文件位置和完整遥测不得堆叠在默认列表中。
 - 曲目详情通过明确的详情页或底部浮层展开；列表中的整行主操作始终是播放该曲目。
 
 ### F2：格式与元数据
@@ -145,6 +145,18 @@ Vesqen 的长期差异化来自“可验证的播放链路”，而不只是格�
 
 高级格式候选：APE、WavPack、CUE、DSD/DoP。它们属于独立里程碑，不进入首个稳定版承诺。
 
+#### F2.1 源音频质量标签
+
+在 M4 之前完成源音频主标签；基础版本纳入 M1，实时增强纳入 M2：
+
+- 曲库列表和 Now 播放页可以显示紧凑的 `LOSSLESS SOURCE` 或 `HI-RES SOURCE` 文字标签。
+- `LOSSLESS SOURCE` 只根据已识别的无损编码与有效源参数判定，例如 FLAC、ALAC 或无损 PCM；不得据此宣称最终输出无损。
+- `HI-RES SOURCE` 使用 Vesqen 公开、可测试的源文件规则。初始候选规则为无损源、位深至少 24-bit 且采样率至少 88.2 kHz；正式实现前须确认阈值、文案和商标边界。
+- 标签旁优先展示两个主要源参数，例如 `24-bit · 96 kHz`；码率可作为另一枚次级值或进入详情。
+- 曲库列表使用扫描得到的静态/平均码率；Now 页面在 M2 telemetry 可用时可以显示窗口实时码率，并明确区分 `LIVE` 与 `AVG`。
+- 标签只使用 Vesqen 自有文字和视觉，不使用未经授权的 Hi-Res Audio 标志。
+- 元数据缺失、冲突或无法可靠判定时不显示质量结论，只显示已确认的参数或 `UNKNOWN`。
+
 ### F3：播放体验
 
 - 播放、暂停、上一首、下一首、拖动进度。
@@ -157,6 +169,7 @@ Vesqen 的长期差异化来自“可验证的播放链路”，而不只是格�
 - 睡眠定时器作为稳定版后续的小型功能。
 - 曲库底部提供持久 mini-player，包含封面、标题/艺术家、上一首、播放/暂停和下一首；非按钮区域打开完整播放页。它作为独立的 72 dp tonal card 悬浮在紧凑导航上方，以 4 dp 间隙与之分离；导航和曲库画布连续，禁止为 mini-player 在底部另铺一整块近白/近黑背景。
 - 完整播放页采用“封面舞台 + 单一底部运输台”：上部是大封面，下部不透明运输台承载固定单行曲名、空间允许时的艺术家/专辑、事实性输出状态、进度和控制；曲目详情与播放链证据分别通过明确入口打开，不在主控制区堆叠参数。
+- Now 页在不挤压核心控制的前提下展示源音频主标签及两个主要参数；标签属于源文件事实，必须与当前输出状态在视觉和语义上分开。
 - Now 的可见材质采用 Nocturne Graphite：Canvas `#101415`、Dock `#191F20`、Raised `#202728`、Artwork Frame `#252C2D` 是同一条近中性石墨阶梯。真实封面只能在 36 dp 模糊、22% 输入与 82% Canvas 遮罩后提供约 3.96% 的低频反光；无封面或读取失败时保持完全中性。禁止回到紫色上域/橄榄底座的硬切、绿色大面积背景、装饰渐变、玻璃卡、亮分割线或描边加大阴影。
 - 上一首／播放暂停／下一首必须组成居中的主控制组；一个“播放顺序”入口、明确可点的“播放会话”入口与圆形 `i` 为底栏次级控制，不能与三枚运输控制同排抢占层级。`SYSTEM MIXED` 只在 Now/Chain 的事实入口出现，不在 mini-player 中挤占标题空间。
 - 完整播放页在紧凑或宽屏窗口中都是沉浸式焦点面：隐藏承载顶层目的地的底部导航或 navigation rail，让一个受保护的深色 Now Surface 覆盖全窗口；工具栏和 Android Back 都返回其来源（通常为 Library），状态 chip 仍可进入 Chain，不允许形成回退到桌面的死路。
@@ -165,6 +178,17 @@ Vesqen 的长期差异化来自“可验证的播放链路”，而不只是格�
 - mini-player 展开为完整播放页时使用约 240 ms 的空间连续转换；系统开启减少动效时改为约 80 ms 的交叉淡入淡出。
 - 随机、列表循环和单曲循环不得拆成多个底栏按钮。一个熟悉的 48 dp“播放顺序”入口按“顺序播放 → 随机播放 → 列表循环 → 单曲循环 → 顺序播放”轮换；该普通循环必须在每次切换时清除其他 Media3 播放顺序开关，不能由 Vesqen 留下隐藏的“随机 + 循环”组合。若外部 Media3 控制器传来复合状态，仍由这一颗按钮以组合图标和准确 TalkBack 状态如实展示；下一次点击统一回到顺序播放。顺序播放使用中性弱化色，其余三态使用品牌主色；随机、列表循环和单曲循环分别使用标准 shuffle、repeat 与 repeat-with-`1` 图标。每次用户点按后，只有实际 controller 状态发生变化才在 Now 顶部安全区给出约 1.5 秒的非持久、居中悬浮小气泡，明确新模式并作为 polite live region；它不得覆盖运输台或根据预期 next state 预先提示。
 - Now 返回来源使用约 180 ms 的反向空间转换；用户点按上一首/下一首时，仅封面与曲目信息以约 220 ms 的对应横向方向过渡，运输控制台保持空间稳定。减少动效时统一使用上述 80 ms 交叉淡入淡出回退。
+
+#### F3.1 连续倍速播放
+
+- 普通/DSP 播放模式提供连续倍速控制，初始目标范围为 0.50×–2.00×，默认 1.00×。
+- UI 表现为连续滑杆，实际速度至少支持 0.01× 的有效调节精度；同时提供 0.50×、0.75×、1.00×、1.25×、1.50× 和 2.00× 快捷值。
+- 滑杆接近 1.00× 时应吸附到标准速度，并通过轻微触觉或视觉反馈确认；不得要求用户精确拖动才能回到原速。
+- 控件旁始终提供独立、明确且支持 TalkBack 的 `重置为 1.00×` 操作，即使滑杆位置异常或数值不可见也能恢复。
+- 默认启用保持音调的 time-stretch；是否开放独立 pitch 调节作为 M5 评估项，不进入基础倍速承诺。
+- 倍速状态至少在当前播放会话中保持；是否跨会话记忆必须由用户主动启用，默认新会话为 1.00×。
+- 倍速不为 1.00× 时，Now 和 Dashboard 必须持续显示当前速度，避免用户忘记已经修改。
+- 任何非 1.00× 倍速都会改变 PCM/播放时钟，因此不得在 bit-perfect 模式中启用。
 
 ### F4：普通系统播放模式
 
@@ -201,13 +225,13 @@ Vesqen 的长期差异化来自“可验证的播放链路”，而不只是格�
 
 ### F6：Audio Proof 音频链路面板
 
-Audio Proof 在顶层导航中显示为 `Chain`。默认层先给出用户可理解的当前声明、输出类型和是否存在需要处理的问题；源、解码、处理、系统路由、USB 与实时观测按层展开。默认页面不得直接呈现完整工程仪表盘。
+Audio Proof 在顶层导航中显示为 `Chain`，同时允许从 Now 进入与当前播放会话绑定的信息 Dashboard。默认层先给出用户可理解的当前声明、输出类型和是否存在需要处理的问题；源、解码、处理、系统路由、USB 与实时观测按层展开。默认页面不得直接呈现完整工程仪表盘。
 
 显示以下信息：
 
 - 源文件：容器、编码、采样率、位深、声道、码率和文件大小。
 - 解码器：名称、实现来源、软件/平台/offload 路径和解码输出格式。
-- 处理链：ReplayGain、EQ、crossfade、响度、格式转换和其他 DSP 状态。
+- 处理链：播放倍速、pitch 保持、ReplayGain、EQ、crossfade、响度、格式转换和其他 DSP 状态。
 - 系统路由：扬声器、蓝牙 codec、耳机或 USB 设备。
 - USB 设备：制造商、产品名、VID、PID、设备类型和可读取的能力。
 - 输出：请求格式、系统 mixer attribute、Direct Playback 支持位和实际可观察状态。
@@ -216,7 +240,28 @@ Audio Proof 在顶层导航中显示为 `Chain`。默认层先给出用户可理
 
 高级用户可以导出一份不含音乐内容和个人路径的诊断报告。
 
-#### F6.1 实时观测
+#### F6.1 Now 到播放信息 Dashboard
+
+- M2 应提供从 Now 进入播放信息 Dashboard 的连续动画入口，可以研究左滑、右滑、上滑或下滑，但最终方向在 M2 交互设计阶段确定。
+- 手势方向必须与系统返回手势、歌词入口、队列、TalkBack 和单手操作共同评估；在 M2 前不把某一方向写成不可更改的产品约束。
+- Dashboard 出现应采用局部揭示、浮现、层级展开或其他保持空间连续性的动画，不得实现为生硬的整页 pager、翻书或与内容无关的“翻页”效果。
+- 手势不能成为唯一入口；Now 必须保留明确可点击且可被 TalkBack 发现的播放信息/Chain 入口。
+- Dashboard 具有清晰的主次层级：顶部先显示源标签、主要参数、当前输出、输出声明和最重要异常；详细 decoder、route、telemetry 与诊断数据按区块展开。
+- 本节只定义能力与体验约束，不提前固定最终布局、手势方向、动画曲线或歌词页面关系；这些内容在 M2 原型和真机测试后确定。
+
+#### F6.2 按输出路由动态加载信息
+
+Dashboard 根据实际活跃输出动态显示对应详情，并保留一组跨路由共享的源、decoder、缓冲和 Vesqen CPU 信息：
+
+- USB DAC：设备名、VID/PID、可观察的 UAC/格式能力、请求与观察到的输出格式、mixer attribute、直出策略、权限、DSP/音量状态和 bit-perfect 声明证据。
+- 3.5 mm/有线模拟输出：有线设备类型、当前路由、请求与可观察输出格式、系统混音/DSP/音量状态；无法观察手机内部 DAC 后半段时必须明确说明，不推测芯片或模拟链参数。
+- Bluetooth Classic/LE Audio：输出类型、设备、A2DP/LE Audio/SCO profile、连接与播放状态；在公开系统接口、系统版本和用户权限允许时，进一步展示当前 codec 配置、采样率、bits per sample、channel mode、可确认的 bitrate/quality mode 和本地/可选能力。
+- 内置扬声器：扬声器路由类型、请求与可观察输出格式、声道、系统混音、音量、DSP/音效状态和其他可确认的处理。
+- 路由切换时对应区块更新，但源文件、播放控制和 Dashboard 的主层级保持稳定，避免整个页面像翻页一样突然替换。
+
+蓝牙监控以 Android 公开能力为上限。需要时向用户解释并请求 `BLUETOOTH_CONNECT`；权限被拒绝、ROM 未暴露、查询要求 privileged 权限或实际协商参数不可取得时，显示 `UNAVAILABLE` 和原因。不得使用隐藏接口、Root 或开发者选项文本推测当前 codec，更不能把设备支持列表当作正在使用的配置。
+
+#### F6.3 实时观测
 
 在播放页的可选信息区、Audio Proof 和设备实验室中，按设备与系统实际可取得的数据展示：
 
@@ -229,7 +274,7 @@ Audio Proof 在顶层导航中显示为 `Chain`。默认层先给出用户可理
 
 “实时码率”默认表示最近时间窗口内读取的压缩音频字节数推导出的码率，不得把文件平均码率冒充实时值。“SoC 占用”不能作为笼统且无法验证的单一数字；优先显示 Vesqen 进程 CPU、可读取的系统指标和已确认的 decoder/offload 路径。厂商未公开的数据必须显示为不可用，不能通过设备营销参数推测。
 
-#### F6.2 数据可信度
+#### F6.4 数据可信度
 
 每项高级指标必须携带数据来源、更新时间和以下可信度之一：
 
@@ -242,7 +287,7 @@ Audio Proof 在顶层导航中显示为 `Chain`。默认层先给出用户可理
 
 历史图表、导出报告和 UI 标签必须保留该可信度，不能在展示层丢失来源信息。
 
-#### F6.3 自由布局与安全调节
+#### F6.5 自由布局与安全调节
 
 - 自由布局、图表和刷新率属于用户主动进入的高级视图；普通 Chain 摘要保持稳定，不继承高级信息密度。
 - 用户可以选择、隐藏、固定、排序和分组指标，并为播放页、Audio Proof 和实验室保存独立布局。
@@ -253,9 +298,11 @@ Audio Proof 在顶层导航中显示为 `Chain`。默认层先给出用户可理
 - 可调工程参数候选包括缓冲目标、预缓冲、decoder 偏好、低功耗/低延迟策略和曲库扫描并发度。
 - 任何会改变 PCM 数据、采样率、音量或 DSP 的调节，在 bit-perfect 模式下必须锁定或触发退出，不能以“高级自由”为由破坏声明。
 
-#### F6.4 初步实现思路
+#### F6.6 初步实现思路
 
 建立独立 `PlaybackTelemetry` Module，通过小型 Interface 按需返回 `TelemetrySnapshot`。其 Implementation 在内部汇总播放内核、进程/系统、thermal/power 和 USB/audio Adapter；UI 只消费统一快照，不直接轮询系统或播放器内部对象。
+
+各输出类型可以提供独立的 route telemetry Adapter，并投影为同一份带可信度的 Dashboard 数据模型；具体 Adapter 命名和 UI 组合方式在 M2 设计与技术验证时决定。
 
 Telemetry Module 默认不常驻采样。只有相关页面可见或用户主动开始诊断录制时启用定时采样；页面关闭、播放停止或录制结束后立即取消。播放内核通过事件提供高频原始计数，Telemetry Implementation 按用户选择的窗口聚合，避免 UI 刷新频率反向干扰音频线程。
 
@@ -268,17 +315,27 @@ Telemetry Module 默认不常驻采样。只有相关页面可见或用户主动
 - 支持导出和导入匿名设备能力报告。
 - 官方设备矩阵只收录可复现、带证据等级的结果。
 
-### F8：DSP 模式（独立于 bit-perfect）
+### F8：DSP 与播放调节模式（独立于 bit-perfect）
 
 候选能力包括：
 
+- 连续倍速播放和默认保持音调的 time-stretch。
 - ReplayGain。
 - 参数均衡器。
 - Crossfeed。
 - Crossfade。
 - 响度归一化。
 
-任何 DSP 启用后，界面必须退出 bit-perfect 状态。DSP 不是核心首发功能，也不得成为播放的默认前提。
+#### F8.1 均衡器
+
+- 均衡器位于普通/DSP 播放模式，初始关闭且默认曲线为平直。
+- 至少提供参数均衡、若干清晰命名的预设、总开关、preamp/headroom 和削波风险提示；具体频段数量在 M5 原型与性能测试后确定。
+- 始终提供独立的 `恢复平直` 和 `关闭均衡器` 操作；重置不得依赖逐个拖回所有频段。
+- 用户预设可以保存、重命名和删除；内置预设始终可以恢复，用户修改内置预设时另存为用户预设。
+- 切换输出设备时保留用户选择，但若设备或当前模式不支持，必须暂停应用并解释原因，不能静默应用不同曲线。
+- Dashboard 显示 EQ 开关、当前预设、preamp/headroom 和可确认的削波状态。
+
+任何非 1.00× 倍速或 DSP 启用后，界面必须退出 bit-perfect 状态。用户在 bit-perfect 模式中打开倍速或 EQ 时，应用必须先说明会退出直出并取得明确操作；用户进入 bit-perfect 时也必须先恢复 1.00× 并旁路全部 DSP。不得在后台自动切换后保留错误的直出声明。DSP 与倍速不是核心首发功能，也不得成为播放的默认前提。
 
 ### F9：渐进式自研播放内核（条件性核心演进）
 
@@ -296,9 +353,31 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 
 ### F10：高级 USB 引擎（实验性可选模块）
 
-长期候选目标是在 Android 8–13 上通过 USB Host API 直接管理 UAC 设备，包括权限、interface、endpoint、连接、异步传输、格式协商和时钟行为。
+长期候选目标是在 Android 8–13 上绕过 Android 默认音频混音链，由 Vesqen 在用户态直接管理 UAC 设备并把解码后的 PCM 送到 USB DAC。Android USB Host 公开层负责设备枚举、用户授权、interface/endpoint 描述、control transfer 和连接生命周期；音频数据面另设可替换的 isochronous transport。
 
-该模块具有显著兼容性和维护成本，只有在 Android 14+ 路径完成、设备矩阵成熟且用户价值被验证后才启动。初始实验应先限定 UAC1 PCM，之后再评估 UAC2、异步反馈、DSD/DoP 和多声道。
+该模式的核心理念是：不把 OEM Audio HAL 或 Android mixer 作为严格直出的可信前提，由 App 掌握从本地音频文件到提交 USB 音频 packet 之间的完整用户态数据链：
+
+`Local file → App extractor → App-controlled decoder → PCM ring buffer → clock/packetizer → native isochronous transport → USB DAC`
+
+在该链路中：
+
+- 目标格式初期使用经过审计、随 App 交付或由 App 明确选择的 FLAC/WAV software decoder，不把 OEM platform decoder/offload 作为严格路径的必要条件；这不要求 Vesqen 从零重写 FLAC 算法。
+- 音频数据不得经过 `AudioTrack`、AAudio、OpenSL ES、AudioFlinger、Android mixer、系统音量处理或 OEM Audio HAL。
+- App 负责源格式验证、解封装、解码输出格式、PCM buffer、软件音量/DSP 旁路、时钟同步、UAC packetization 和错误状态。
+- Android 仍负责文件/USB 权限、进程调度、电源管理、Linux USB 栈、USB host controller 与物理传输；因此该模式是 App-owned user-space audio chain，不是“完全绕过 Android 操作系统”。
+- Android 14+ 官方 bit-perfect 路径与 App-owned direct USB 路径是两个独立 Implementation，必须分别标识、测试和验证，不能共享未经证明的 `VERIFIED` 结论。
+
+Android 公开 `UsbEndpoint`/`UsbRequest` 接口并不提供完整 isochronous streaming：公开异步请求只覆盖 bulk/interrupt endpoint。因此不得把普通 `UsbRequest.queue()` 描述成 UAC 等时音频实现。M7 必须先验证一条不需要 Root 的 native transport 路径，例如在系统和内核允许时基于 `UsbDeviceConnection` 授权后的 file descriptor 使用经过审计的 usbfs/libusb-compatible Implementation。该路径不是 Android 官方音频直出能力，不能假设所有 ROM、内核或商店分发环境均可用。
+
+核心工程范围明确包括：
+
+- UAC 协议：描述符解析、AudioControl/AudioStreaming interface、alternate setting、class-specific control、格式与 endpoint 协商。
+- Isochronous streaming：帧/微帧 packetization、URB 队列深度、提交/回收、完成状态、错误包和热插拔取消。
+- Clock synchronization：同步/自适应/异步 endpoint 行为、feedback endpoint、时钟漂移估计与安全修正。
+- Buffer management：PCM 环形缓冲、水位、预缓冲、underrun/overrun、实时线程、背压和恢复策略。
+- 可观测性：实际 packet/URB 统计、buffer 水位、feedback、漂移、underrun、设备错误、CPU、温升和功耗。
+
+该模块具有显著兼容性、安全、许可证和维护成本，只有在 Android 14+ 路径完成、设备矩阵成熟且用户价值被验证后才启动。初始实验应先限定 UAC1 PCM 和少量参考 DAC，之后再评估 UAC2、异步 feedback、多声道与 DSD/DoP。整个路径不得依赖 Root、系统补丁或私有厂商音频接口。
 
 ### F11：轻量端侧音频智能（实验性可选模块）
 
@@ -374,7 +453,7 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 
 ### 9.4 查看链路证据
 
-1. 用户点击永久 `Chain` 导航，或从 mini-player / Now 的状态入口直达同一页面。
+1. 用户点击永久 `Chain` 导航，或从 mini-player / Now 的明确入口进入播放信息 Dashboard；M2 验证后还可以使用不与系统返回或歌词冲突的手势进入。
 2. 用户先看到当前声明、输出摘要和需要处理的问题，再按需展开源、解码、处理、系统路由和 DAC 五层信息。
 3. 用户主动进入高级视图后，才打开实时指标、调整刷新率并固定关心的指标或图表。
 4. 用户可以保存高级布局，或主动录制并导出经过隐私清理且保留可信度标签的诊断报告。
@@ -457,6 +536,7 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 - 歌曲、专辑、艺术家和文件夹浏览。
 - FLAC、ALAC、WAV、AIFF 和常用有损格式播放。
 - 标签、封面、队列、后台播放和媒体通知。
+- 曲库列表与 Now 的基础源音频标签、位深/采样率参数和静态/平均码率。
 - 基础无缝播放和音频焦点处理。
 - 普通系统输出：扬声器、蓝牙、3.5 mm 和系统 USB 路由。
 - `The Quiet Signal` 深浅主题、Twin Paths 标识、紧凑曲目列表、mini-player、完整 Now 页和 `Library / Now / Chain` 导航基线。
@@ -466,6 +546,7 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 - 核心格式测试样本全部通过。
 - 8 小时连续播放和基础交互压力测试通过。
 - 断开耳机、蓝牙和 USB 时没有崩溃或错误状态。
+- `LOSSLESS SOURCE`、`HI-RES SOURCE`、位深、采样率和平均码率使用已确认的源文件数据，不能暗示最终输出质量。
 - 新用户在首启授权后能从 Library 完成“选择歌曲 → mini-player 控制 → Now 播放 → Chain 查看声明”的路径，无死路或含义不明的主要按钮。
 - 深浅主题、文字缩放、TalkBack、48 dp 触控目标和减少动效回退通过对应的 UI/可访问性检查。
 
@@ -476,6 +557,8 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 范围：
 
 - 源文件、解码器、解码输出和处理链展示。
+- 从 Now 进入的播放信息 Dashboard、非整页翻页式连续动画和始终存在的可点击入口；最终手势方向在 M2 确认。
+- 根据 USB、3.5 mm、Bluetooth Classic/LE Audio 和内置扬声器动态加载对应 route 详情。
 - `PlaybackTelemetry` Module、统一 `TelemetrySnapshot` 和 `MEASURED`/`DERIVED`/`ESTIMATED`/`UNAVAILABLE` 可信度模型。
 - 实时码率、进程 CPU、内存、缓冲、underrun、thermal 和可取得的功耗/SoC 指标。
 - 指标选择、排序、固定、图表、刷新率、布局保存和按需诊断录制。
@@ -488,6 +571,8 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 
 - 不再把源文件参数直接标记为最终输出参数。
 - 实时码率和所有推导/估算指标可以追溯原始数据、时间窗口和计算方式。
+- Dashboard 切换输出路由时信息正确更新，主次层级和播放控制保持稳定，不表现为整页翻页。
+- 蓝牙 codec/采样率/位深/声道/bitrate 只在当前公开接口和权限确实提供时展示；支持能力与当前配置明确分开。
 - 不支持的 SoC、decoder 或功耗数据明确显示 `UNAVAILABLE`，不伪造统一设备指标。
 - 页面关闭后采样停止；默认与高频刷新模式的性能开销完成基准测试且不会导致可归因的 underrun。
 - 用户布局、刷新率与重置操作在进程重启后行为一致。
@@ -544,7 +629,8 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 
 - CUE、APE、WavPack。
 - DSD/DoP 可行性与兼容矩阵。
-- DSP 模式：ReplayGain、EQ、crossfeed、crossfade。
+- 连续倍速：0.50×–2.00×、保持音调、快捷值、1.00× 吸附、独立重置和可选的跨会话记忆。
+- DSP 模式：参数 EQ、预设、preamp/headroom、恢复平直、ReplayGain、crossfeed、crossfade。
 - NAS/SMB/WebDAV 本地网络曲库，可作为独立扩展。
 - DAC 实验室和社区能力报告。
 
@@ -552,6 +638,9 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 
 - 每项能力独立评估体积、功耗和许可证成本。
 - DSP 与 bit-perfect 状态严格互斥。
+- 倍速重置在触控、TalkBack 和异常状态下都能恢复 1.00×；EQ 一次操作即可恢复平直并完全旁路。
+- 0.50×、1.00×、2.00× 和若干中间速度完成音调、seek、切歌、gapless、后台和输出切换测试。
+- EQ 与倍速关闭后不保留处理链，Dashboard 能准确显示当前是否旁路。
 - 未启用功能不增加后台负担。
 
 ### M6：渐进式自研播放内核（条件性里程碑）
@@ -598,16 +687,34 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 启动前置条件：
 
 - M3、M4 已完成。
+- M6 已至少完成 M7 所需的 App-owned PCM 路径：本地数据源、目标格式 extractor/software decoder、PCM 输出 Seam 和可测试的 `DirectUsbHostAdapter` 接入点；不要求 M6 的所有候选格式或优化全部完成。
 - 有明确用户需求和目标 DAC 集合。
 - 可以持续维护真机和 DAC 测试矩阵。
+- 已在参考 Android 8–13 设备上完成 native isochronous transport 技术验证，确认无需 Root 且能安全使用应用获得授权的 USB device connection。
+- native 依赖、内核交互、许可证、安全和目标分发渠道完成专项审查；不得仅凭其他商业播放器存在就推断 Vesqen 的实现可直接分发。
 
 候选范围：
 
 - 实现与 M3 相同 USB 输出 Interface 的 `DirectUsbHostAdapter`，由同一个 `UsbOutputStrategyResolver` 选择。
+- 建立首批严格数据链：FLAC/WAV 本地文件读取、App-controlled software decode、确定性 PCM 格式、环形缓冲、clock/packetizer 和 native USB transport；随后再评估 ALAC 与其他格式。
+- 严格路径运行时验证音频数据未创建或写入 `AudioTrack`、AAudio/OpenSL ES，且未进入 AudioFlinger/OEM Audio HAL 输出链。
 - USB Host 权限和设备生命周期。
-- UAC1 PCM 格式协商与传输。
-- 缓冲、时钟、反馈、错误恢复和热插拔。
-- 后续再评估 UAC2、异步传输、多声道与 DSD/DoP。
+- Java/Kotlin 控制面：raw descriptor、interface/alternate setting、endpoint、UAC1 class-specific control 和 PCM 格式协商。
+- `NativeIsochronousTransportAdapter` 数据面：等时 OUT packetization、URB 队列、完成回收、取消和设备断开。
+- PCM 环形缓冲、预缓冲、水位、背压、underrun/overrun 和错误恢复。
+- 同步/自适应/异步 clock 模式、feedback endpoint、漂移测量和长期稳定性。
+- Audio Proof 中展示 transport、packet、buffer、feedback、clock drift、错误和性能状态。
+- 后续再评估 UAC2、更复杂的异步 feedback、多声道与 DSD/DoP。
+
+完成条件：
+
+- 至少一台 API 26–33 手机与一款目标 UAC1 DAC 完成 16/24-bit、44.1/48/96 kHz 参考矩阵；每项结果绑定手机、ROM、内核、DAC 和应用版本。
+- 参考组合连续输出 2 小时，无未恢复 underrun/overrun、爆音、失控漂移或 USB 资源泄漏。
+- 完成 50 次授权、启动、停止、插拔和异常恢复，不崩溃且不会错误保留直出状态。
+- transport 关闭或失败时 fail closed；兼容系统输出只能由用户明确选择，不能在同一声明下静默回退。
+- CPU、内存、温升、功耗和 packet/URB 错误率完成基准，并证明高规格 PCM 在参考设备上具有足够余量。
+- 使用可审计的运行时事件和集成测试证明目标格式遵循 `file → extractor → software decoder → PCM buffer → packetizer → native USB transport`，没有回落到系统音频输出。
+- 在发布任何 bit-perfect 声明前，仍需对精确参考组合完成数字链路验证；用户态传输成功本身不是位级一致证明。
 
 该阶段是实验性能力，不承诺一定进入稳定版。
 
@@ -657,10 +764,16 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 | 厂商未实现 API 34 bit-perfect HAL flag | 功能在部分手机不可用 | 运行时能力检测、设备矩阵、禁止统一承诺 |
 | Direct Playback 被误解为 bit-perfect | 产生错误宣传 | 独立状态模型和证据说明 |
 | USB DAC 组合高度碎片化 | 插拔、格式和时钟问题 | 限定参考设备、自动诊断、分级兼容列表 |
+| Android 公开 USB 接口不支持 isochronous 数据面 | M7 无法只靠 Java USB Host API 完成 UAC 播放 | 独立 native transport 技术验证、参考内核矩阵和明确停止条件 |
+| native usbfs/libusb 路径受 ROM、内核或分发环境限制 | 旧系统直出兼容性和发布范围不稳定 | 不依赖 Root、专项安全/许可证/渠道审查、按设备 fail closed |
 | 自研播放内核形成两套长期实现 | 测试翻倍、状态漂移和维护成本失控 | 统一 Interface、按能力渐进替换、保留短期回退并删除被替换路径 |
 | 自研编解码或 USB 引擎使应用变重 | 偏离轻量目标 | 可选模块、体积预算、按测量决定实现 |
 | 实时信息采样反而增加耗电或 underrun | 观测功能干扰播放结果 | 按需采样、聚合快照、开销基准和自动降频 |
 | SoC、码率或功耗指标被过度解读 | 用户得到错误的性能或音质结论 | 展示来源、窗口与可信度；不可取得时显示 `UNAVAILABLE` |
+| 蓝牙设备支持能力被误报为当前 codec 配置 | 用户误解实际无线输出链 | 区分 connected/active/supported/negotiated，受限数据标记 `UNAVAILABLE` |
+| `HI-RES SOURCE` 被误解为 bit-perfect 输出 | 源文件标签造成音质宣传越界 | 标签明确写 SOURCE，并与输出声明分区显示 |
+| 用户忘记倍速或无法拖回 1.00× | 播放长期处于非预期速度 | 标准速度吸附、持续状态提示和独立重置按钮 |
+| EQ 增益造成削波或重置不彻底 | 失真或处理链状态不可信 | preamp/headroom、削波提示、恢复平直和完全旁路测试 |
 | DSP 与直出同时开启 | 破坏位级一致性 | 模式互斥和统一播放状态机 |
 | 高级格式许可证不兼容 | 阻碍 Apache-2.0 分发 | 引入前完成许可证审计 |
 | AI 功能喧宾夺主 | 增加体积、耗电和维护成本 | 最后阶段、可卸载、播放链隔离 |
@@ -685,6 +798,8 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 - M6 的首个自研替换点，以及触发替换所需的性能或兼容性证据阈值。
 - bit-perfect 验证使用的参考手机、ROM、USB DAC 和采集设备。
 - 首批有损格式是否全部进入 M1。
+- `HI-RES SOURCE` 最终阈值、文字风格和商标审查；初始候选为无损、至少 24-bit/88.2 kHz。
+- Now 到 Dashboard 的最终手势方向、歌词入口关系和动画方案，在 M2 原型测试后确定。
 - 核心安装体积 30 MB 预算是否需要进一步收紧。
 - M5 之后优先选择高级格式、DAC 实验室、NAS 还是端侧 AI。
 
@@ -694,6 +809,12 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 - `AudioMixerAttributes.MIXER_BEHAVIOR_BIT_PERFECT`（API 34）：<https://developer.android.com/reference/android/media/AudioMixerAttributes>
 - `AudioManager.getDirectPlaybackSupport()`（API 33）和 mixer attribute API：<https://developer.android.com/reference/android/media/AudioManager>
 - Android USB Host API：<https://developer.android.com/develop/connectivity/usb/host>
+- `UsbEndpoint`（公开文档注明 isochronous endpoint 当前不受支持）：<https://developer.android.com/reference/android/hardware/usb/UsbEndpoint>
+- `UsbRequest`（公开异步请求覆盖 bulk/interrupt）：<https://developer.android.com/reference/android/hardware/usb/UsbRequest>
+- `UsbDeviceConnection`（control/bulk、raw descriptors 和授权连接 file descriptor）：<https://developer.android.com/reference/android/hardware/usb/UsbDeviceConnection>
 - Android API level 与 `minSdkVersion` 定义：<https://developer.android.com/guide/topics/manifest/uses-sdk-element>
 - Google Play target API 要求：<https://developer.android.com/google/play/requirements/target-sdk>
 - Media3 release notes（1.9.0 起 `minSdk 23`）：<https://developer.android.com/jetpack/androidx/releases/media3>
+- Android Bluetooth A2DP 状态与权限：<https://developer.android.com/reference/android/bluetooth/BluetoothA2dp>
+- Android Bluetooth codec 配置数据：<https://developer.android.com/reference/android/bluetooth/BluetoothCodecConfig>
+- Android 音频输出设备类型：<https://developer.android.com/reference/android/media/AudioDeviceInfo>
