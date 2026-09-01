@@ -62,8 +62,12 @@ class VesqenAppTest {
 
         composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
         composeRule.onNodeWithTag("vesqen.nav.now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.empty").assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.now_empty_title)).assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.browse_library)).performClick()
+        composeRule.onAllNodesWithText(context.getString(R.string.browse_library)).assertCountEquals(0)
+        composeRule.onAllNodesWithTag("vesqen.now.orientation-toggle").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.nav.now").assertIsSelected()
+        composeRule.onNodeWithTag("vesqen.nav.library").performClick()
         composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
@@ -72,6 +76,26 @@ class VesqenAppTest {
         composeRule.onNodeWithText(context.getString(R.string.chain_empty_title)).assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.browse_library)).performClick()
         composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
+    }
+
+    @Test
+    fun settings_opens_a_real_about_surface_with_the_build_version() {
+        render(grantedState(), versionName = "0.1.0", versionCode = 1)
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.settings_version, "0.1.0"))
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.settings.about").performClick()
+
+        composeRule.onNodeWithTag("vesqen.about").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.about_version_value, "0.1.0", 1))
+            .assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.about_license_value)).assertIsDisplayed()
+        composeRule.onAllNodesWithTag("vesqen.nav.settings").assertCountEquals(0)
+
+        composeRule.onNodeWithTag("vesqen.about.back").performClick()
+        composeRule.onNodeWithTag("vesqen.settings").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.nav.settings").assertIsSelected()
     }
 
     @Test
@@ -111,6 +135,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.progress").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.playback-order").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.info").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.orientation-toggle").assertIsDisplayed()
         val outputDescription = "${context.getString(R.string.output_status_description, context.getString(R.string.system_mixed))}. " +
             context.getString(R.string.open_playback_chain)
         composeRule.onNodeWithContentDescription(outputDescription).assertIsDisplayed()
@@ -1037,6 +1062,8 @@ class VesqenAppTest {
         fontScale: Float? = null,
         darkTheme: Boolean = true,
         motionPolicy: VesqenMotionPolicy = VesqenMotionPolicy(reduceMotion = true),
+        versionName: String = BuildConfig.VERSION_NAME,
+        versionCode: Int = BuildConfig.VERSION_CODE,
     ) {
         composeRule.setContent {
             VesqenTheme(darkTheme = darkTheme) {
@@ -1055,6 +1082,8 @@ class VesqenAppTest {
                         onCyclePlaybackOrder = onCyclePlaybackOrder,
                         onRefreshConnectedOutputs = {},
                         motionPolicy = motionPolicy,
+                        versionName = versionName,
+                        versionCode = versionCode,
                     )
                 }
                 val renderWithinSize: @Composable () -> Unit = {

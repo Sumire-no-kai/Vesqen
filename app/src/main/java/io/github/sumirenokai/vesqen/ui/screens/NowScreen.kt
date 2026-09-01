@@ -44,6 +44,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -94,7 +95,6 @@ import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.components.PlaybackControls
 import io.github.sumirenokai.vesqen.ui.components.TrackDetailsSheet
-import io.github.sumirenokai.vesqen.ui.components.VesqenEmptyState
 import io.github.sumirenokai.vesqen.ui.formatDuration
 import io.github.sumirenokai.vesqen.ui.theme.FocusedPlayerMaterial
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
@@ -144,11 +144,14 @@ fun NowScreen(
     onNext: () -> Unit,
     onSeek: (Long) -> Unit,
     onPlayTrack: (AudioTrack) -> Unit,
+    onToggleOrientation: () -> Unit,
+    showOrientationToggle: Boolean,
+    isLandscape: Boolean,
     motionPolicy: VesqenMotionPolicy,
     modifier: Modifier = Modifier,
 ) {
     if (!snapshot.hasActiveTrack) {
-        NowEmptyScreen(onBackToLibrary = onBackToLibrary, modifier = modifier)
+        NowEmbeddedEmptyState(modifier = modifier)
         return
     }
 
@@ -262,6 +265,9 @@ fun NowScreen(
                 Column(modifier = Modifier.fillMaxSize()) {
                     NowHeader(
                         onBack = onBackToLibrary,
+                        onToggleOrientation = onToggleOrientation,
+                        showOrientationToggle = showOrientationToggle,
+                        isLandscape = isLandscape,
                         modifier = Modifier.statusBarsPadding(),
                     )
                     NowPlayerPage(
@@ -1285,7 +1291,13 @@ private fun NowInfoButton(
 }
 
 @Composable
-private fun NowHeader(onBack: () -> Unit, modifier: Modifier = Modifier) {
+private fun NowHeader(
+    onBack: () -> Unit,
+    onToggleOrientation: () -> Unit,
+    showOrientationToggle: Boolean,
+    isLandscape: Boolean,
+    modifier: Modifier = Modifier,
+) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1312,7 +1324,26 @@ private fun NowHeader(onBack: () -> Unit, modifier: Modifier = Modifier) {
             softWrap = false,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.size(48.dp))
+        if (showOrientationToggle) {
+            IconButton(
+                onClick = onToggleOrientation,
+                modifier = Modifier.size(48.dp).testTag("vesqen.now.orientation-toggle"),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.ScreenRotation,
+                    contentDescription = stringResource(
+                        if (isLandscape) {
+                            R.string.switch_to_portrait
+                        } else {
+                            R.string.switch_to_landscape
+                        },
+                    ),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        } else {
+            Spacer(Modifier.size(48.dp))
+        }
     }
 }
 
@@ -1463,19 +1494,31 @@ private fun PlaybackProgress(
 }
 
 @Composable
-private fun NowEmptyScreen(onBackToLibrary: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.fillMaxSize()) {
+private fun NowEmbeddedEmptyState(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .testTag("vesqen.now.empty"),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 420.dp)
+                .padding(horizontal = VesqenSpacing.lg),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xs),
+        ) {
         Text(
-            text = stringResource(R.string.destination_now),
-            style = MaterialTheme.typography.headlineLarge,
-            modifier = Modifier.padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.md),
+                text = stringResource(R.string.now_empty_title),
+                style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center,
         )
-        VesqenEmptyState(
-            title = stringResource(R.string.now_empty_title),
-            body = stringResource(R.string.now_empty_body),
-            actionLabel = stringResource(R.string.browse_library),
-            onAction = onBackToLibrary,
-            modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
-        )
+            Text(
+                text = stringResource(R.string.now_empty_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }

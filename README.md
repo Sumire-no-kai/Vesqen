@@ -6,6 +6,8 @@ The repository now contains the M1-A local-playback and visual/navigation baseli
 
 The formal Vesqen visual baseline is documented in [DESIGN.md](DESIGN.md) and the [visual identity guide](docs/brand/VISUAL_IDENTITY.md). Its Twin Paths mark, adaptive launcher icon, light/dark palette, and component tokens are versioned with the application instead of being maintained as detached mockups.
 
+The installable app version is managed from the repository-level [`version.properties`](version.properties). See the [versioning guide](docs/VERSIONING.md) before preparing a release.
+
 ## Development baseline
 
 - Android 8.0+ (`minSdk 26`)

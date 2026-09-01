@@ -12,6 +12,7 @@ enum class VesqenDestination(
     NOW(R.string.destination_now, "vesqen.nav.now"),
     SETTINGS(R.string.destination_settings, "vesqen.nav.settings"),
     CHAIN(R.string.destination_chain, "vesqen.nav.chain-detail"),
+    ABOUT(R.string.settings_about, "vesqen.nav.about-detail"),
 }
 
 internal val TopLevelDestinations = listOf(
@@ -19,3 +20,6 @@ internal val TopLevelDestinations = listOf(
     VesqenDestination.NOW,
     VesqenDestination.SETTINGS,
 )
+
+internal val VesqenDestination.isSecondaryDetail: Boolean
+    get() = this == VesqenDestination.CHAIN || this == VesqenDestination.ABOUT

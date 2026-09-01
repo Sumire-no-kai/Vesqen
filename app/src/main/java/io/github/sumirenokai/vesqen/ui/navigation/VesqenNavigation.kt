@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -121,4 +122,5 @@ private val VesqenDestination.icon: ImageVector
         VesqenDestination.NOW -> Icons.Filled.PlayCircle
         VesqenDestination.SETTINGS -> Icons.Filled.Settings
         VesqenDestination.CHAIN -> Icons.Filled.AccountTree
+        VesqenDestination.ABOUT -> Icons.Filled.Info
     }

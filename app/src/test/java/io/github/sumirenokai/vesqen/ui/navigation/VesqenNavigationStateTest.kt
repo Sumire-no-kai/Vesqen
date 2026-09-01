@@ -32,4 +32,15 @@ class VesqenNavigationStateTest {
         assertEquals(VesqenDestination.SETTINGS, settings.destination)
         assertEquals(VesqenDestination.LIBRARY, settings.back().destination)
     }
+
+    @Test
+    fun `about opened from settings returns to settings then library`() {
+        val about = VesqenNavigationState()
+            .selectTopLevel(VesqenDestination.SETTINGS)
+            .openAbout()
+
+        val settings = about.back()
+        assertEquals(VesqenDestination.SETTINGS, settings.destination)
+        assertEquals(VesqenDestination.LIBRARY, settings.back().destination)
+    }
 }

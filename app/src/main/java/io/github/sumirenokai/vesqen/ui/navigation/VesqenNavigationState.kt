@@ -3,8 +3,8 @@ package io.github.sumirenokai.vesqen.ui.navigation
 /**
  * Small, pure navigation reducer shared by toolbar and Android Back behavior.
  *
- * Full-player expansion is a focused detour from Library. Playback Chain is a secondary detail
- * route and returns to whichever top-level surface opened it.
+ * Full-player expansion is a focused detour from Library. Playback Chain and About are secondary
+ * detail routes and return to whichever top-level surface opened them.
  */
 data class VesqenNavigationState(
     val destination: VesqenDestination = VesqenDestination.LIBRARY,
@@ -15,10 +15,17 @@ data class VesqenNavigationState(
         returnDestination = VesqenDestination.LIBRARY,
     )
 
-    fun openChain(): VesqenNavigationState = copy(
-        destination = VesqenDestination.CHAIN,
-        returnDestination = destination,
-    )
+    fun openDetail(destination: VesqenDestination): VesqenNavigationState {
+        require(destination.isSecondaryDetail) { "$destination is not a secondary detail" }
+        return copy(
+            destination = destination,
+            returnDestination = this.destination,
+        )
+    }
+
+    fun openChain(): VesqenNavigationState = openDetail(VesqenDestination.CHAIN)
+
+    fun openAbout(): VesqenNavigationState = openDetail(VesqenDestination.ABOUT)
 
     fun back(): VesqenNavigationState = if (destination == VesqenDestination.LIBRARY) {
         this
