@@ -6,6 +6,32 @@ import org.junit.Test
 
 class AlbumArtworkLoaderTest {
     @Test
+    fun `legacy provider decode sampling caps the longest decoded edge`() {
+        assertEquals(1, calculateLegacyArtworkSampleSize(512, 512, 256))
+        assertEquals(2, calculateLegacyArtworkSampleSize(1024, 640, 256))
+        assertEquals(8, calculateLegacyArtworkSampleSize(4000, 3000, 256))
+        assertEquals(16, calculateLegacyArtworkSampleSize(8000, 1000, 256))
+    }
+
+    @Test
+    fun `id3 helpers reject unsafe sizes and locate a bounded APIC image`() {
+        assertEquals(1_448_542, decodeSynchsafeInt(byteArrayOf(0x00, 0x58, 0x34, 0x5e), 0))
+        assertEquals(1_446_484, decodeBigEndianInt(byteArrayOf(0x00, 0x16, 0x12, 0x54), 0))
+        assertEquals(null, decodeSynchsafeInt(byteArrayOf(0x00, 0x58, 0x34, 0x80.toByte()), 0))
+
+        val apic = byteArrayOf(
+            0x00,
+            *"image/jpeg".toByteArray(),
+            0x00,
+            0x03,
+            0x00,
+            0xff.toByte(),
+            0xd8.toByte(),
+        )
+        assertEquals(14, findId3ApicImageOffset(apic))
+    }
+
+    @Test
     fun `album thumbnail cache is shared within a scan and refreshed by revision`() {
         val track = AudioTrack(
             id = 1,

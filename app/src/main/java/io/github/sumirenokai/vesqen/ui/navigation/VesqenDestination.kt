@@ -10,5 +10,12 @@ enum class VesqenDestination(
 ) {
     LIBRARY(R.string.destination_library, "vesqen.nav.library"),
     NOW(R.string.destination_now, "vesqen.nav.now"),
-    CHAIN(R.string.destination_chain, "vesqen.nav.chain"),
+    SETTINGS(R.string.destination_settings, "vesqen.nav.settings"),
+    CHAIN(R.string.destination_chain, "vesqen.nav.chain-detail"),
 }
+
+internal val TopLevelDestinations = listOf(
+    VesqenDestination.LIBRARY,
+    VesqenDestination.NOW,
+    VesqenDestination.SETTINGS,
+)

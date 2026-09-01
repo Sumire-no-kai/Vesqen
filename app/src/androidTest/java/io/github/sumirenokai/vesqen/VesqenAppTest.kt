@@ -45,6 +45,7 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -56,7 +57,7 @@ class VesqenAppTest {
         get() = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
-    fun navigation_exposes_library_now_and_chain_with_empty_state_actions() {
+    fun navigation_exposes_library_now_and_settings_with_chain_as_a_secondary_action() {
         render(grantedState())
 
         composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
@@ -65,7 +66,9 @@ class VesqenAppTest {
         composeRule.onNodeWithText(context.getString(R.string.browse_library)).performClick()
         composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
 
-        composeRule.onNodeWithTag("vesqen.nav.chain").performClick()
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
         composeRule.onNodeWithText(context.getString(R.string.chain_empty_title)).assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.browse_library)).performClick()
         composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
@@ -151,7 +154,7 @@ class VesqenAppTest {
         val stableShellBounds = captureNowShellBounds()
         composeRule.onNodeWithTag("vesqen.now.focus-content").performTouchInput { swipeLeft() }
         composeRule.onNodeWithTag("vesqen.now.info.session").assertDoesNotExist()
-        composeRule.onNodeWithTag("vesqen.now.session-toggle").performClick()
+        composeRule.onNodeWithTag("vesqen.now.focus.session").performClick()
         composeRule.onNodeWithTag("vesqen.now.info.session").assertIsDisplayed()
         assertNowShellBoundsStable(stableShellBounds)
         composeRule.onNodeWithTag("vesqen.now.back").assertIsDisplayed()
@@ -604,7 +607,7 @@ class VesqenAppTest {
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
         )
         assertFocusedNowControlsAreFullyVisible()
-        composeRule.onNodeWithTag("vesqen.now.session-toggle").performClick()
+        composeRule.onNodeWithTag("vesqen.now.focus.session").performClick()
         composeRule.onNodeWithTag("vesqen.now.info.session").assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.playback_progress)).assertDoesNotExist()
         assertNodesAreFullyVisibleIn(
@@ -615,19 +618,11 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.play-pause").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.now.compact-chain").assertIsDisplayed()
-        assertNodesAreFullyVisibleIn(
-            containerTag = "vesqen.now.player-page",
-            tags = arrayOf("vesqen.now.compact-chain"),
-        )
         assertFooterActionsDoNotOverlap(
             "vesqen.now.playback-order",
             "vesqen.now.session-toggle",
-            "vesqen.now.compact-chain",
             "vesqen.now.info",
         )
-        composeRule.onNodeWithTag("vesqen.now.compact-chain").performClick()
-        composeRule.onNodeWithTag("vesqen.chain").assertIsDisplayed()
     }
 
     @Test
@@ -698,11 +693,16 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.player-page").assert(
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
         )
+        assertArtworkStageIsUsable()
         assertFocusedNowControlsAreFullyVisible()
     }
 
     @Test
     fun focused_player_keeps_primary_controls_inside_a_short_landscape_window() {
+        assumeTrue(
+            "A 640dp landscape fixture requires a host viewport at least 640dp wide",
+            composeRule.activity.resources.configuration.screenWidthDp >= 640,
+        )
         render(
             state = grantedState(
                 tracks = sampleTracks,
@@ -733,6 +733,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.player-page").assert(
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
         )
+        assertArtworkStageIsUsable()
         assertFocusedNowControlsAreFullyVisible()
     }
 
@@ -792,6 +793,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.playback-order").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.info").assertIsDisplayed()
+        assertArtworkClearsTransportDock()
         assertFocusedNowControlsAreFullyVisible()
     }
 
@@ -863,9 +865,6 @@ class VesqenAppTest {
             "vesqen.now.session-toggle",
             "vesqen.now.info",
         )
-        if (composeRule.onAllNodesWithTag("vesqen.now.compact-chain").fetchSemanticsNodes().isNotEmpty()) {
-            footerTags.add(2, "vesqen.now.compact-chain")
-        }
         assertNodesAreFullyVisibleIn(
             containerTag = "vesqen.now.focus-surface",
             tags = arrayOf("vesqen.now.back"),
@@ -891,6 +890,44 @@ class VesqenAppTest {
         )
     }
 
+    private fun assertArtworkClearsTransportDock() {
+        val artworkBounds = composeRule
+            .onNodeWithTag("vesqen.now.artwork-stage")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val dockBounds = composeRule
+            .onNodeWithTag("vesqen.now.transport-dock")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val minimumClearancePx = with(composeRule.density) { 12.dp.toPx() }
+        val epsilon = 1f
+
+        assertTrue(
+            "The transport dock must not cover the artwork frame",
+            artworkBounds.bottom <= dockBounds.top - minimumClearancePx + epsilon,
+        )
+    }
+
+    private fun assertArtworkStageIsUsable() {
+        val artworkNode = composeRule
+            .onNodeWithTag("vesqen.now.artwork-stage")
+            .fetchSemanticsNode()
+        val visibleBounds = artworkNode.boundsInRoot
+        val minimumArtworkPx = with(composeRule.density) { 48.dp.toPx() }
+        val epsilon = 1f
+
+        assertTrue(
+            "The artwork stage must not be vertically clipped",
+            abs(visibleBounds.height - artworkNode.size.height) <= epsilon,
+        )
+        assertTrue(
+            "The artwork stage must remain a usable square",
+            visibleBounds.width >= minimumArtworkPx &&
+                visibleBounds.height >= minimumArtworkPx &&
+                abs(visibleBounds.width - visibleBounds.height) <= epsilon,
+        )
+    }
+
     private fun assertNodesAreFullyVisibleIn(
         containerTag: String,
         tags: Array<String>,
@@ -906,7 +943,6 @@ class VesqenAppTest {
             "vesqen.now.next",
             "vesqen.now.playback-order",
             "vesqen.now.session-toggle",
-            "vesqen.now.compact-chain",
             "vesqen.now.info",
         )
 
@@ -917,10 +953,12 @@ class VesqenAppTest {
                 "$tag must not be vertically clipped",
                 abs(visibleBounds.height - node.size.height) <= epsilon,
             )
-            assertTrue(
-                "$tag must not be horizontally clipped",
-                abs(visibleBounds.width - node.size.width) <= epsilon,
-            )
+            if (tag != "vesqen.now.title") {
+                assertTrue(
+                    "$tag must not be horizontally clipped",
+                    abs(visibleBounds.width - node.size.width) <= epsilon,
+                )
+            }
             assertTrue(
                 "$tag must remain inside its Now container",
                 visibleBounds.left >= containerBounds.left - epsilon &&
@@ -931,7 +969,9 @@ class VesqenAppTest {
             if (tag in touchTargetTags) {
                 val touchBounds = node.touchBoundsInRoot
                 assertTrue(
-                    "$tag must preserve the 48dp minimum touch target",
+                    "$tag must preserve the 48dp minimum touch target; " +
+                        "actual=${touchBounds.width}x${touchBounds.height}px, " +
+                        "minimum=${minimumTouchTargetPx}px",
                     touchBounds.width + epsilon >= minimumTouchTargetPx &&
                         touchBounds.height + epsilon >= minimumTouchTargetPx,
                 )

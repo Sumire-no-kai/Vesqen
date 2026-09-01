@@ -22,6 +22,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -29,6 +30,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -39,9 +41,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.FormatListNumbered
-import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
@@ -78,6 +78,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
@@ -237,8 +238,11 @@ fun NowScreen(
                 // it for transport rather than letting artist and route metadata clip the dock.
                 val isExtremeText = configuration.fontScale >= 2f || maxHeight < 480.dp
                 val isTallScreen = maxHeight >= 760.dp && configuration.fontScale <= 1.15f
+                val isCompactLandscape = maxWidth > maxHeight && maxHeight < 600.dp
                 val artworkSize = minOf(
                     when {
+                        isCompactLandscape ->
+                            (maxHeight - 160.dp).coerceIn(64.dp, 160.dp)
                         maxHeight < 480.dp ||
                             (maxHeight < 640.dp && configuration.fontScale >= 1.8f) ||
                             isExtremeText -> 64.dp
@@ -271,6 +275,7 @@ fun NowScreen(
                         isUltraCompact = isUltraCompact,
                         isExtremeText = isExtremeText,
                         isTallScreen = isTallScreen,
+                        isCompactLandscape = isCompactLandscape,
                         onOpenChain = onOpenChain,
                         onCyclePlaybackOrder = requestPlaybackOrder,
                         onPrevious = requestPrevious,
@@ -497,6 +502,7 @@ private fun NowPlayerPage(
     isUltraCompact: Boolean,
     isExtremeText: Boolean,
     isTallScreen: Boolean,
+    isCompactLandscape: Boolean,
     onOpenChain: () -> Unit,
     onCyclePlaybackOrder: () -> Unit,
     onPrevious: () -> Unit,
@@ -508,18 +514,13 @@ private fun NowPlayerPage(
     canOpenDetails: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val focusStageHeight = when {
-        isExtremeText -> 112.dp
-        isUltraCompact -> 152.dp
-        isShortScreen -> 224.dp
-        else -> 320.dp
+    val focusStageTopPadding = when {
+        isUltraCompact -> VesqenSpacing.xxs
+        isTallScreen -> VesqenSpacing.lg
+        else -> VesqenSpacing.sm
     }
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .clipToBounds()
-            .testTag("vesqen.now.player-page")
-    ) {
+    val focusStageBottomPadding = if (isUltraCompact) VesqenSpacing.xxs else VesqenSpacing.sm
+    val focusStage: @Composable (Modifier) -> Unit = { stageModifier ->
         NowFocusStage(
             focusContent = focusContent,
             snapshot = snapshot,
@@ -529,15 +530,10 @@ private fun NowPlayerPage(
             compact = isUltraCompact,
             isExtremeText = isExtremeText,
             motionPolicy = motionPolicy,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = when {
-                    isUltraCompact -> VesqenSpacing.xxs
-                    isTallScreen -> VesqenSpacing.lg
-                    else -> VesqenSpacing.sm
-                })
-                .height(focusStageHeight),
+            modifier = stageModifier,
         )
+    }
+    val transportDock: @Composable (Modifier) -> Unit = { dockModifier ->
         NowTransportDock(
             snapshot = snapshot,
             trackPresentation = trackPresentation,
@@ -556,9 +552,44 @@ private fun NowPlayerPage(
             canOpenDetails = canOpenDetails,
             focusContent = focusContent,
             onToggleFocusContent = onToggleFocusContent,
-            modifier = Modifier
-                .align(Alignment.BottomCenter),
+            modifier = dockModifier,
         )
+    }
+    val pageModifier = modifier
+        .fillMaxSize()
+        .clipToBounds()
+        .testTag("vesqen.now.player-page")
+
+    if (isCompactLandscape) {
+        Row(modifier = pageModifier) {
+            focusStage(
+                Modifier
+                    .weight(.36f)
+                    .fillMaxHeight()
+                    .padding(
+                        start = VesqenSpacing.lg,
+                        end = VesqenSpacing.sm,
+                        bottom = VesqenSpacing.sm,
+                    ),
+            )
+            transportDock(
+                Modifier
+                    .weight(.64f)
+                    .fillMaxHeight(),
+            )
+        }
+        return
+    }
+
+    Column(
+        modifier = pageModifier,
+    ) {
+        focusStage(
+            Modifier
+                .weight(1f)
+                .padding(top = focusStageTopPadding, bottom = focusStageBottomPadding),
+        )
+        transportDock(Modifier)
     }
 }
 
@@ -601,6 +632,8 @@ private fun NowFocusStage(
                         artworkTrack = presentation.artworkTrack,
                         artworkSize = artworkSize,
                         compact = compact,
+                        isPlaying = snapshot.isPlaying,
+                        motionPolicy = motionPolicy,
                     )
                 }
 
@@ -639,12 +672,25 @@ private fun PlayerArtworkStage(
     artworkTrack: AudioTrack?,
     artworkSize: androidx.compose.ui.unit.Dp,
     compact: Boolean,
+    isPlaying: Boolean,
+    motionPolicy: VesqenMotionPolicy,
     modifier: Modifier = Modifier,
 ) {
     val framePadding = if (compact) VesqenSpacing.xxs else VesqenSpacing.xs
+    val artworkScale by animateFloatAsState(
+        // The cover settles when playback pauses and returns to its full presence on play. This
+        // is a one-shot state transition, not a battery-costly decorative loop.
+        targetValue = if (motionPolicy.reduceMotion || isPlaying) 1f else .985f,
+        animationSpec = tween(motionPolicy.stateChangeMillis, easing = TrackTransitionEasing),
+        label = "vesqen.now.artwork-play-state",
+    )
     Surface(
         modifier = modifier
             .size(artworkSize + framePadding * 2)
+            .graphicsLayer {
+                scaleX = artworkScale
+                scaleY = artworkScale
+            }
             .testTag("vesqen.now.artwork-stage"),
         shape = RoundedCornerShape(VesqenRadii.surface),
         color = FocusedPlayerMaterial.ArtworkFrame,
@@ -759,11 +805,9 @@ private fun NowTransportDock(
                 snapshot = snapshot,
                 focusContent = focusContent,
                 onToggleFocusContent = onToggleFocusContent,
-                onOpenChain = onOpenChain,
                 onCyclePlaybackOrder = onCyclePlaybackOrder,
                 onOpenDetails = onOpenDetails,
                 canOpenDetails = canOpenDetails,
-                isExtremeText = isExtremeText,
                 motionPolicy = motionPolicy,
             )
         }
@@ -863,11 +907,9 @@ private fun NowInfoFooter(
     snapshot: PlaybackSnapshot,
     focusContent: NowFocusContent,
     onToggleFocusContent: () -> Unit,
-    onOpenChain: () -> Unit,
     onCyclePlaybackOrder: () -> Unit,
     onOpenDetails: () -> Unit,
     canOpenDetails: Boolean,
-    isExtremeText: Boolean,
     motionPolicy: VesqenMotionPolicy,
 ) {
     val controlsEnabled = snapshot.isControllerReady
@@ -887,13 +929,6 @@ private fun NowInfoFooter(
             R.string.playback_session
         } else {
             R.string.album_artwork
-        },
-    )
-    val focusAction = stringResource(
-        if (focusContent == NowFocusContent.SESSION) {
-            R.string.show_album_artwork
-        } else {
-            R.string.show_playback_session
         },
     )
     val inactiveModeColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -918,78 +953,39 @@ private fun NowInfoFooter(
             .fillMaxWidth()
             .height(48.dp),
     ) {
-        val useIconOnlyFooter = isExtremeText || maxWidth < 300.dp
-        if (useIconOnlyFooter) {
-            Row(
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                NowPlaybackOrderButton(
-                    onClick = onCyclePlaybackOrder,
-                    enabled = controlsEnabled,
-                    mode = playbackOrderMode,
-                    state = playbackOrderState,
-                    tint = playbackOrderTint,
-                    disabledTint = disabledModeColor,
-                    iconScale = playbackOrderIconScale,
-                    motionPolicy = motionPolicy,
-                    modifier = Modifier.size(48.dp),
-                )
-                NowFocusToggleButton(
-                    onClick = onToggleFocusContent,
-                    action = focusAction,
-                    state = focusState,
-                    iconOnly = true,
-                    motionPolicy = motionPolicy,
-                    modifier = Modifier.size(48.dp),
-                )
-                if (isExtremeText) {
-                    NowCompactChainButton(
-                        onClick = onOpenChain,
-                        modifier = Modifier.size(48.dp),
-                    )
-                }
-                NowInfoButton(
-                    onClick = onOpenDetails,
-                    enabled = canOpenDetails,
-                    modifier = Modifier.size(48.dp),
-                )
-            }
-        } else {
-            Box(modifier = Modifier.fillMaxSize()) {
-                NowPlaybackOrderButton(
-                    onClick = onCyclePlaybackOrder,
-                    enabled = controlsEnabled,
-                    mode = playbackOrderMode,
-                    state = playbackOrderState,
-                    tint = playbackOrderTint,
-                    disabledTint = disabledModeColor,
-                    iconScale = playbackOrderIconScale,
-                    motionPolicy = motionPolicy,
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .size(48.dp),
-                )
-                NowFocusToggleButton(
-                    onClick = onToggleFocusContent,
-                    action = focusAction,
-                    state = focusState,
-                    iconOnly = false,
-                    motionPolicy = motionPolicy,
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .width(96.dp)
-                        .height(48.dp),
-                )
-                NowInfoButton(
-                    onClick = onOpenDetails,
-                    enabled = canOpenDetails,
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .size(48.dp),
-                )
-            }
+        val focusControlWidth = (maxWidth - 96.dp).coerceAtMost(208.dp)
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            NowPlaybackOrderButton(
+                onClick = onCyclePlaybackOrder,
+                enabled = controlsEnabled,
+                mode = playbackOrderMode,
+                state = playbackOrderState,
+                tint = playbackOrderTint,
+                disabledTint = disabledModeColor,
+                iconScale = playbackOrderIconScale,
+                motionPolicy = motionPolicy,
+                modifier = Modifier.size(48.dp),
+            )
+            NowFocusSegmentedControl(
+                focusContent = focusContent,
+                onSelect = { target ->
+                    if (target != focusContent) onToggleFocusContent()
+                },
+                state = focusState,
+                motionPolicy = motionPolicy,
+                modifier = Modifier
+                    .width(focusControlWidth)
+                    .height(48.dp),
+            )
+            NowInfoButton(
+                onClick = onOpenDetails,
+                enabled = canOpenDetails,
+                modifier = Modifier.size(48.dp),
+            )
         }
     }
 }
@@ -1174,67 +1170,95 @@ private fun NowPlaybackOrderIcon(mode: PlaybackOrderMode, iconScale: Float) {
 }
 
 @Composable
-private fun NowFocusToggleButton(
-    onClick: () -> Unit,
-    action: String,
+private fun NowFocusSegmentedControl(
+    focusContent: NowFocusContent,
+    onSelect: (NowFocusContent) -> Unit,
     state: String,
-    iconOnly: Boolean,
     motionPolicy: VesqenMotionPolicy,
     modifier: Modifier = Modifier,
 ) {
-    IconButton(
-        onClick = onClick,
+    Surface(
         modifier = modifier
             .testTag("vesqen.now.session-toggle")
             .semantics {
-                contentDescription = action
                 stateDescription = state
             },
-        colors = IconButtonDefaults.iconButtonColors(
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
+        shape = RoundedCornerShape(VesqenRadii.control),
+        color = FocusedPlayerMaterial.Raised,
     ) {
-        if (iconOnly) {
-            Icon(
-                imageVector = Icons.Filled.GraphicEq,
-                contentDescription = null,
+        Row(
+            modifier = Modifier.padding(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            NowFocusSegment(
+                text = stringResource(R.string.focus_artwork_short),
+                selected = focusContent == NowFocusContent.ARTWORK,
+                onClick = { onSelect(NowFocusContent.ARTWORK) },
+                motionPolicy = motionPolicy,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .testTag("vesqen.now.focus.artwork"),
             )
-        } else {
-            AnimatedContent(
-                targetState = state,
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(motionPolicy.modeChangeMillis)) togetherWith
-                        fadeOut(animationSpec = tween(motionPolicy.modeChangeMillis * 3 / 4))
-                },
-                label = "vesqen.now.session-toggle-label",
-            ) { label ->
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            NowFocusSegment(
+                text = stringResource(R.string.focus_session_short),
+                selected = focusContent == NowFocusContent.SESSION,
+                onClick = { onSelect(NowFocusContent.SESSION) },
+                motionPolicy = motionPolicy,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .testTag("vesqen.now.focus.session"),
+            )
         }
     }
 }
 
 @Composable
-private fun NowCompactChainButton(
+private fun NowFocusSegment(
+    text: String,
+    selected: Boolean,
     onClick: () -> Unit,
+    motionPolicy: VesqenMotionPolicy,
     modifier: Modifier = Modifier,
 ) {
-    IconButton(
-        onClick = onClick,
-        modifier = modifier.testTag("vesqen.now.compact-chain"),
-        colors = IconButtonDefaults.iconButtonColors(
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    val background by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            androidx.compose.ui.graphics.Color.Transparent
+        },
+        animationSpec = tween(motionPolicy.modeChangeMillis),
+        label = "vesqen.now.focus-segment.background",
+    )
+    val foreground by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(motionPolicy.modeChangeMillis),
+        label = "vesqen.now.focus-segment.foreground",
+    )
+    Surface(
+        modifier = modifier.selectable(
+            selected = selected,
+            onClick = onClick,
+            role = Role.Tab,
         ),
+        shape = RoundedCornerShape(VesqenRadii.control - 2.dp),
+        color = background,
+        contentColor = foreground,
     ) {
-        Icon(
-            imageVector = Icons.Filled.AccountTree,
-            contentDescription = stringResource(R.string.open_playback_chain),
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -1376,48 +1400,52 @@ private fun PlaybackProgress(
     val progressContentDescription = stringResource(R.string.playback_progress)
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Slider(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp)
                 .testTag("vesqen.now.progress")
-                .semantics {
+                .semantics(mergeDescendants = true) {
                     contentDescription = progressContentDescription
                     stateDescription = positionLabel
                 },
-            value = seekPosition.coerceIn(0f, snapshot.durationMs.toFloat()),
-            onValueChange = {
-                isSeeking = true
-                seekPosition = it
-            },
-            onValueChangeFinished = {
-                onSeek(seekPosition.toLong())
-                isSeeking = false
-            },
-            valueRange = 0f..snapshot.durationMs.toFloat(),
-            enabled = snapshot.isControllerReady,
-            colors = colors,
-            interactionSource = interactionSource,
-            thumb = {
-                SliderDefaults.Thumb(
-                    interactionSource = interactionSource,
-                    colors = colors,
-                    enabled = snapshot.isControllerReady,
-                    thumbSize = DpSize(12.dp, 12.dp),
-                )
-            },
-            track = { sliderState ->
-                SliderDefaults.Track(
-                    sliderState = sliderState,
-                    modifier = Modifier.height(4.dp),
-                    enabled = snapshot.isControllerReady,
-                    colors = colors,
-                    drawStopIndicator = null,
-                    thumbTrackGapSize = 0.dp,
-                    trackInsideCornerSize = 2.dp,
-                )
-            },
-        )
+        ) {
+            Slider(
+                modifier = Modifier.fillMaxSize(),
+                value = seekPosition.coerceIn(0f, snapshot.durationMs.toFloat()),
+                onValueChange = {
+                    isSeeking = true
+                    seekPosition = it
+                },
+                onValueChangeFinished = {
+                    onSeek(seekPosition.toLong())
+                    isSeeking = false
+                },
+                valueRange = 0f..snapshot.durationMs.toFloat(),
+                enabled = snapshot.isControllerReady,
+                colors = colors,
+                interactionSource = interactionSource,
+                thumb = {
+                    SliderDefaults.Thumb(
+                        interactionSource = interactionSource,
+                        colors = colors,
+                        enabled = snapshot.isControllerReady,
+                        thumbSize = DpSize(12.dp, 12.dp),
+                    )
+                },
+                track = { sliderState ->
+                    SliderDefaults.Track(
+                        sliderState = sliderState,
+                        modifier = Modifier.height(4.dp),
+                        enabled = snapshot.isControllerReady,
+                        colors = colors,
+                        drawStopIndicator = null,
+                        thumbTrackGapSize = 0.dp,
+                        trackInsideCornerSize = 2.dp,
+                    )
+                },
+            )
+        }
         Row(modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = formatDuration(seekPosition.toLong()),

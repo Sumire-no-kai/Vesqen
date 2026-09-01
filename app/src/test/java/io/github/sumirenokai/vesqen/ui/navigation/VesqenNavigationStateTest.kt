@@ -15,7 +15,7 @@ class VesqenNavigationStateTest {
     fun `back from chain opened in player returns to player then library`() {
         val chain = VesqenNavigationState()
             .selectTopLevel(VesqenDestination.NOW)
-            .openChainFromNow()
+            .openChain()
 
         val now = chain.back()
         assertEquals(VesqenDestination.NOW, now.destination)
@@ -23,9 +23,13 @@ class VesqenNavigationStateTest {
     }
 
     @Test
-    fun `top level chain returns to library`() {
-        val chain = VesqenNavigationState().selectTopLevel(VesqenDestination.CHAIN)
+    fun `chain opened from settings returns to settings then library`() {
+        val chain = VesqenNavigationState()
+            .selectTopLevel(VesqenDestination.SETTINGS)
+            .openChain()
 
-        assertEquals(VesqenDestination.LIBRARY, chain.back().destination)
+        val settings = chain.back()
+        assertEquals(VesqenDestination.SETTINGS, settings.destination)
+        assertEquals(VesqenDestination.LIBRARY, settings.back().destination)
     }
 }
