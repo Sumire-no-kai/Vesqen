@@ -179,7 +179,7 @@ class VesqenAppTest {
         val stableShellBounds = captureNowShellBounds()
         composeRule.onNodeWithTag("vesqen.now.focus-content").performTouchInput { swipeLeft() }
         composeRule.onNodeWithTag("vesqen.now.info.session").assertDoesNotExist()
-        composeRule.onNodeWithTag("vesqen.now.focus.session").performClick()
+        composeRule.onNodeWithTag("vesqen.now.session-toggle").performClick()
         composeRule.onNodeWithTag("vesqen.now.info.session").assertIsDisplayed()
         assertNowShellBoundsStable(stableShellBounds)
         composeRule.onNodeWithTag("vesqen.now.back").assertIsDisplayed()
@@ -632,7 +632,7 @@ class VesqenAppTest {
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
         )
         assertFocusedNowControlsAreFullyVisible()
-        composeRule.onNodeWithTag("vesqen.now.focus.session").performClick()
+        composeRule.onNodeWithTag("vesqen.now.session-toggle").performClick()
         composeRule.onNodeWithTag("vesqen.now.info.session").assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.playback_progress)).assertDoesNotExist()
         assertNodesAreFullyVisibleIn(
@@ -747,6 +747,8 @@ class VesqenAppTest {
         )
 
         composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.landscape-player").assertIsDisplayed()
+        composeRule.onAllNodesWithText(context.getString(R.string.destination_now)).assertCountEquals(0)
         composeRule.onNodeWithTag("vesqen.now.back").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.title").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.progress").assertIsDisplayed()
