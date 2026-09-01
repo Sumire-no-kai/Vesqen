@@ -709,7 +709,11 @@ private fun NowLandscapePlayerPage(
                             .fillMaxSize()
                             .padding(
                                 start = VesqenSpacing.lg,
-                                top = VesqenSpacing.sm,
+                                // The title previously shared the very top command band with the
+                                // orientation action. Give the listening identity a deliberate
+                                // first beat below that edge without stealing any fixed transport
+                                // space on short or accessibility-scaled landscapes.
+                                top = if (isExtremeText) VesqenSpacing.sm else VesqenSpacing.xl,
                                 end = VesqenSpacing.lg,
                                 bottom = VesqenSpacing.xs,
                             ),

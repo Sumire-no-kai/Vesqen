@@ -762,6 +762,7 @@ class VesqenAppTest {
         )
         assertArtworkStageIsUsable()
         assertFocusedNowControlsAreFullyVisible()
+        assertLandscapeIdentityStartsBelowTheCommandBand()
     }
 
     @Test
@@ -932,6 +933,23 @@ class VesqenAppTest {
         assertTrue(
             "The transport dock must not cover the artwork frame",
             artworkBounds.bottom <= dockBounds.top - minimumClearancePx + epsilon,
+        )
+    }
+
+    private fun assertLandscapeIdentityStartsBelowTheCommandBand() {
+        val controlsBounds = composeRule
+            .onNodeWithTag("vesqen.now.landscape-controls")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val titleBounds = composeRule
+            .onNodeWithTag("vesqen.now.title")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val minimumTopBeatPx = with(composeRule.density) { 24.dp.toPx() }
+
+        assertTrue(
+            "Landscape track identity must clear the top command band",
+            titleBounds.top >= controlsBounds.top + minimumTopBeatPx,
         )
     }
 
