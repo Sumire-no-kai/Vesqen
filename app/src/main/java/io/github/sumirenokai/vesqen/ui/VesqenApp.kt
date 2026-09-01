@@ -15,6 +15,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -384,6 +385,10 @@ private fun VesqenDestinationFrame(
     } else {
         VesqenSpacing.md
     }
+    val playerExpandContentMillis =
+        (motionPolicy.playerExpandMillis - motionPolicy.playerHandoffDelayMillis).coerceAtLeast(1)
+    val playerReturnContentMillis =
+        (motionPolicy.playerCollapseMillis - motionPolicy.playerReturnRevealDelayMillis).coerceAtLeast(1)
     val currentTrack = state.playback.trackId?.takeIf {
         state.library.musicAccess == MusicAccess.GRANTED
     }?.let { id ->
@@ -406,12 +411,54 @@ private fun VesqenDestinationFrame(
                 ScaffoldDefaults.contentWindowInsets
             },
             bottomBar = {
-                if (showCompactNavigation) {
-                    VesqenNavigation(
-                        selectedDestination = destination,
-                        onDestinationSelected = onDestinationSelected,
-                        useNavigationRail = false,
-                    )
+                if (showNavigation && !destination.isSecondaryDetail) {
+                    // Keep the compact navigation in composition until its exit completes. The
+                    // focused player can then take over the window without the shell snapping
+                    // away one frame before the player starts moving.
+                    AnimatedVisibility(
+                        visible = showCompactNavigation,
+                        enter = if (motionPolicy.reduceMotion) {
+                            fadeIn(animationSpec = tween(motionPolicy.stateChangeMillis))
+                        } else {
+                            fadeIn(
+                                animationSpec = tween(
+                                    durationMillis = playerReturnContentMillis,
+                                    delayMillis = motionPolicy.playerReturnRevealDelayMillis,
+                                    easing = FocusedPlayerEasing,
+                                ),
+                            ) + slideInVertically(
+                                animationSpec = tween(
+                                    durationMillis = playerReturnContentMillis,
+                                    delayMillis = motionPolicy.playerReturnRevealDelayMillis,
+                                    easing = FocusedPlayerEasing,
+                                ),
+                                initialOffsetY = { height -> height / 2 },
+                            )
+                        },
+                        exit = if (motionPolicy.reduceMotion) {
+                            fadeOut(animationSpec = tween(motionPolicy.stateChangeMillis))
+                        } else {
+                            fadeOut(
+                                animationSpec = tween(
+                                    durationMillis = motionPolicy.stateChangeMillis,
+                                    easing = FocusedPlayerEasing,
+                                ),
+                            ) + slideOutVertically(
+                                animationSpec = tween(
+                                    durationMillis = motionPolicy.stateChangeMillis,
+                                    easing = FocusedPlayerEasing,
+                                ),
+                                targetOffsetY = { height -> height / 2 },
+                            )
+                        },
+                        label = "vesqen.compact-navigation-visibility",
+                    ) {
+                        VesqenNavigation(
+                            selectedDestination = destination,
+                            onDestinationSelected = onDestinationSelected,
+                            useNavigationRail = false,
+                        )
+                    }
                 }
             },
         ) { innerPadding ->
@@ -432,58 +479,83 @@ private fun VesqenDestinationFrame(
                         opensFocusedPlayer -> {
                             (fadeIn(
                                 animationSpec = tween(
-                                    motionPolicy.playerExpandMillis,
+                                    durationMillis = playerExpandContentMillis,
+                                    delayMillis = motionPolicy.playerHandoffDelayMillis,
                                     easing = FocusedPlayerEasing,
                                 ),
                             ) + slideInVertically(
                                 animationSpec = tween(
-                                    motionPolicy.playerExpandMillis,
+                                    durationMillis = playerExpandContentMillis,
+                                    delayMillis = motionPolicy.playerHandoffDelayMillis,
                                     easing = FocusedPlayerEasing,
                                 ),
-                                initialOffsetY = { height -> height / 10 },
+                                initialOffsetY = { height -> height / 6 },
                             ) + scaleIn(
-                                initialScale = .985f,
+                                initialScale = .94f,
                                 animationSpec = tween(
-                                    motionPolicy.playerExpandMillis,
+                                    durationMillis = playerExpandContentMillis,
+                                    delayMillis = motionPolicy.playerHandoffDelayMillis,
                                     easing = FocusedPlayerEasing,
                                 ),
                             )) togetherWith
                                 (fadeOut(
                                     animationSpec = tween(
-                                        motionPolicy.playerCollapseMillis,
+                                        durationMillis = motionPolicy.stateChangeMillis,
                                         easing = FocusedPlayerEasing,
                                     ),
+                                ) + slideOutVertically(
+                                    animationSpec = tween(
+                                        durationMillis = motionPolicy.stateChangeMillis,
+                                        easing = FocusedPlayerEasing,
+                                    ),
+                                    targetOffsetY = { height -> -height / 24 },
                                 ) + scaleOut(
                                     targetScale = .99f,
                                     animationSpec = tween(
-                                        motionPolicy.playerCollapseMillis,
+                                        durationMillis = motionPolicy.stateChangeMillis,
                                         easing = FocusedPlayerEasing,
                                     ),
                                 ))
                         }
 
                         closesFocusedPlayer -> {
-                            fadeIn(
+                            (fadeIn(
                                 animationSpec = tween(
-                                    motionPolicy.stateChangeMillis,
+                                    durationMillis = playerReturnContentMillis,
+                                    delayMillis = motionPolicy.playerReturnRevealDelayMillis,
                                     easing = FocusedPlayerEasing,
                                 ),
-                            ) togetherWith
+                            ) + slideInVertically(
+                                animationSpec = tween(
+                                    durationMillis = playerReturnContentMillis,
+                                    delayMillis = motionPolicy.playerReturnRevealDelayMillis,
+                                    easing = FocusedPlayerEasing,
+                                ),
+                                initialOffsetY = { height -> -height / 28 },
+                            ) + scaleIn(
+                                initialScale = .99f,
+                                animationSpec = tween(
+                                    durationMillis = playerReturnContentMillis,
+                                    delayMillis = motionPolicy.playerReturnRevealDelayMillis,
+                                    easing = FocusedPlayerEasing,
+                                ),
+                            )) togetherWith
                                 (fadeOut(
                                     animationSpec = tween(
-                                        motionPolicy.playerCollapseMillis,
+                                        durationMillis = motionPolicy.playerCollapseMillis -
+                                            motionPolicy.playerHandoffDelayMillis,
                                         easing = FocusedPlayerEasing,
                                     ),
                                 ) + slideOutVertically(
                                     animationSpec = tween(
-                                        motionPolicy.playerCollapseMillis,
+                                        durationMillis = motionPolicy.playerCollapseMillis,
                                         easing = FocusedPlayerEasing,
                                     ),
-                                    targetOffsetY = { height -> height / 12 },
+                                    targetOffsetY = { height -> height / 6 },
                                 ) + scaleOut(
-                                    targetScale = .985f,
+                                    targetScale = .94f,
                                     animationSpec = tween(
-                                        motionPolicy.playerCollapseMillis,
+                                        durationMillis = motionPolicy.playerCollapseMillis,
                                         easing = FocusedPlayerEasing,
                                     ),
                                 ))
@@ -566,14 +638,11 @@ private fun VesqenDestinationFrame(
                 }
             }
         }
-        if (showMiniPlayer) {
-            MiniPlayer(
-                snapshot = state.playback,
-                currentTrack = artworkTrack,
-                onOpenNow = { onDestinationSelected(VesqenDestination.NOW) },
-                onPrevious = onPrevious,
-                onPlayPause = onPlayPause,
-                onNext = onNext,
+        if (state.playback.hasActiveTrack && !destination.isSecondaryDetail) {
+            // Mirror the full-player handoff: on close the mini-player waits until the outgoing
+            // surface has meaningfully receded, avoiding the previous double-player ghost frame.
+            AnimatedVisibility(
+                visible = showMiniPlayer,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
@@ -582,7 +651,64 @@ private fun VesqenDestinationFrame(
                         end = VesqenSpacing.md,
                         bottom = miniPlayerBottomPadding,
                     ),
-            )
+                enter = if (motionPolicy.reduceMotion) {
+                    fadeIn(animationSpec = tween(motionPolicy.stateChangeMillis))
+                } else {
+                    fadeIn(
+                        animationSpec = tween(
+                            durationMillis = playerReturnContentMillis,
+                            delayMillis = motionPolicy.playerReturnRevealDelayMillis,
+                            easing = FocusedPlayerEasing,
+                        ),
+                    ) + slideInVertically(
+                        animationSpec = tween(
+                            durationMillis = playerReturnContentMillis,
+                            delayMillis = motionPolicy.playerReturnRevealDelayMillis,
+                            easing = FocusedPlayerEasing,
+                        ),
+                        initialOffsetY = { height -> height / 2 },
+                    ) + scaleIn(
+                        initialScale = .96f,
+                        animationSpec = tween(
+                            durationMillis = playerReturnContentMillis,
+                            delayMillis = motionPolicy.playerReturnRevealDelayMillis,
+                            easing = FocusedPlayerEasing,
+                        ),
+                    )
+                },
+                exit = if (motionPolicy.reduceMotion) {
+                    fadeOut(animationSpec = tween(motionPolicy.stateChangeMillis))
+                } else {
+                    fadeOut(
+                        animationSpec = tween(
+                            durationMillis = motionPolicy.stateChangeMillis,
+                            easing = FocusedPlayerEasing,
+                        ),
+                    ) + slideOutVertically(
+                        animationSpec = tween(
+                            durationMillis = motionPolicy.stateChangeMillis,
+                            easing = FocusedPlayerEasing,
+                        ),
+                        targetOffsetY = { height -> height / 2 },
+                    ) + scaleOut(
+                        targetScale = .96f,
+                        animationSpec = tween(
+                            durationMillis = motionPolicy.stateChangeMillis,
+                            easing = FocusedPlayerEasing,
+                        ),
+                    )
+                },
+                label = "vesqen.mini-player-visibility",
+            ) {
+                MiniPlayer(
+                    snapshot = state.playback,
+                    currentTrack = artworkTrack,
+                    onOpenNow = { onDestinationSelected(VesqenDestination.NOW) },
+                    onPrevious = onPrevious,
+                    onPlayPause = onPlayPause,
+                    onNext = onNext,
+                )
+            }
         }
     }
 }

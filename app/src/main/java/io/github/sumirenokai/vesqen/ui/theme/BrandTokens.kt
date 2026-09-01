@@ -23,6 +23,10 @@ object VesqenMotion {
     const val StateChangeMillis = 180
     const val PlayerExpandMillis = 240
     const val PlayerCollapseMillis = 180
+    // The focused player hands off to and from the compact shell without showing both complete
+    // surfaces at once. These delays are part of the 240ms / 180ms total transitions above.
+    const val PlayerHandoffDelayMillis = 24
+    const val PlayerReturnRevealDelayMillis = 72
     const val TrackChangeMillis = 220
     const val ReducedMotionMillis = 80
 }

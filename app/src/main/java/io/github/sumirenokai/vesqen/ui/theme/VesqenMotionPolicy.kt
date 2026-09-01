@@ -21,6 +21,12 @@ data class VesqenMotionPolicy(
     val playerCollapseMillis: Int
         get() = if (reduceMotion) VesqenMotion.ReducedMotionMillis else VesqenMotion.PlayerCollapseMillis
 
+    val playerHandoffDelayMillis: Int
+        get() = if (reduceMotion) 0 else VesqenMotion.PlayerHandoffDelayMillis
+
+    val playerReturnRevealDelayMillis: Int
+        get() = if (reduceMotion) 0 else VesqenMotion.PlayerReturnRevealDelayMillis
+
     val trackChangeMillis: Int
         get() = if (reduceMotion) VesqenMotion.ReducedMotionMillis else VesqenMotion.TrackChangeMillis
 }
