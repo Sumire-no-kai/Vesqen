@@ -94,9 +94,107 @@ class VesqenAppTest {
 
         composeRule.onNodeWithTag("vesqen.permission.request").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.library.add-folder").assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.add_music_folder)).performClick()
+        composeRule.onNodeWithTag("vesqen.library.add-folder").performClick()
 
         composeRule.runOnIdle { assertEquals(1, addFolderCalls) }
+    }
+
+    @Test
+    fun compact_library_search_and_notices_preserve_touch_targets_on_narrow_window() {
+        var appSettingsCalls = 0
+        var notificationSettingsCalls = 0
+        render(
+            state = VesqenUiState(
+                library = LibraryUiState(
+                    musicAccess = MusicAccess.DENIED,
+                    notificationsAllowed = false,
+                    tracks = sampleTracks,
+                ),
+                playback = PlaybackSnapshot(trackId = sampleTracks.first().id),
+            ),
+            onOpenAppSettings = { appSettingsCalls++ },
+            onOpenNotificationSettings = { notificationSettingsCalls++ },
+            containerWidth = 320.dp,
+            containerHeight = 480.dp,
+        )
+
+        composeRule.onNodeWithTag("vesqen.library.music-access-notice")
+            .assertHeightIsEqualTo(48.dp)
+        composeRule.onNodeWithTag("vesqen.library.notifications-notice")
+            .assertHeightIsEqualTo(48.dp)
+        composeRule.onNodeWithTag("vesqen.library.search").assertHeightIsEqualTo(48.dp)
+        composeRule.onNodeWithTag("vesqen.permission.request").assertHeightIsEqualTo(48.dp)
+        composeRule.onNodeWithTag("vesqen.library.notifications.settings").assertHeightIsEqualTo(48.dp)
+
+        val musicAccessBounds = composeRule.onNodeWithTag("vesqen.library.music-access-notice")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val notificationsBounds = composeRule.onNodeWithTag("vesqen.library.notifications-notice")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val searchBounds = composeRule.onNodeWithTag("vesqen.library.search")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        assertTrue(
+            "Compact library controls must retain vertical separation",
+            musicAccessBounds.bottom <= notificationsBounds.top &&
+                notificationsBounds.bottom <= searchBounds.top,
+        )
+
+        composeRule.onNodeWithTag("vesqen.permission.request").performClick()
+        composeRule.onNodeWithTag("vesqen.library.notifications.settings").performClick()
+        composeRule.runOnIdle {
+            assertEquals(1, appSettingsCalls)
+            assertEquals(1, notificationSettingsCalls)
+        }
+    }
+
+    @Test
+    fun empty_library_does_not_reserve_search_space() {
+        render(grantedState())
+
+        composeRule.onAllNodesWithTag("vesqen.library.search").assertCountEquals(0)
+    }
+
+    @Test
+    fun compact_library_controls_can_expand_without_overlap_at_large_font() {
+        render(
+            state = VesqenUiState(
+                library = LibraryUiState(
+                    musicAccess = MusicAccess.DENIED,
+                    notificationsAllowed = false,
+                    tracks = sampleTracks,
+                ),
+                playback = PlaybackSnapshot(trackId = sampleTracks.first().id),
+            ),
+            containerWidth = 320.dp,
+            containerHeight = 720.dp,
+            fontScale = 2f,
+        )
+
+        val musicAccessBounds = composeRule.onNodeWithTag("vesqen.library.music-access-notice")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val notificationsBounds = composeRule.onNodeWithTag("vesqen.library.notifications-notice")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val searchBounds = composeRule.onNodeWithTag("vesqen.library.search")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val minimumTouchTargetPx = with(composeRule.density) { 48.dp.toPx() }
+
+        assertTrue(
+            "The device-music action must retain a 48dp target at large font",
+            composeRule.onNodeWithTag("vesqen.permission.request")
+                .fetchSemanticsNode()
+                .boundsInRoot
+                .height >= minimumTouchTargetPx,
+        )
+        assertTrue(
+            "Large-font library controls must stay in reading order without overlap",
+            musicAccessBounds.bottom <= notificationsBounds.top &&
+                notificationsBounds.bottom <= searchBounds.top,
+        )
     }
 
     @Test
@@ -1157,6 +1255,9 @@ class VesqenAppTest {
         onPlayPause: () -> Unit = {},
         onNext: () -> Unit = {},
         onCyclePlaybackOrder: () -> Unit = {},
+        onRequestMusicAccess: () -> Unit = {},
+        onOpenAppSettings: () -> Unit = {},
+        onOpenNotificationSettings: () -> Unit = {},
         onAddLibraryFolder: () -> Unit = {},
         onRemoveLibraryFolder: (String) -> Unit = {},
         onResumeLibraryScan: () -> Unit = {},
@@ -1173,9 +1274,9 @@ class VesqenAppTest {
                 val app: @Composable () -> Unit = {
                     VesqenAppContent(
                         state = state,
-                        onRequestMusicAccess = {},
-                        onOpenAppSettings = {},
-                        onOpenNotificationSettings = {},
+                        onRequestMusicAccess = onRequestMusicAccess,
+                        onOpenAppSettings = onOpenAppSettings,
+                        onOpenNotificationSettings = onOpenNotificationSettings,
                         onRescan = {},
                         onTrackSelected = {},
                         onPrevious = onPrevious,

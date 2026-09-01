@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.CreateNewFolder
@@ -22,7 +23,6 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,8 +31,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +42,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
@@ -122,7 +123,6 @@ private fun LibraryContent(
                 denied = state.musicAccess == MusicAccess.DENIED,
                 onRequestMusicAccess = onRequestMusicAccess,
                 onOpenAppSettings = onOpenAppSettings,
-                onAddLibraryFolder = onAddLibraryFolder,
             )
         }
         if (
@@ -138,10 +138,12 @@ private fun LibraryContent(
                 onResumeLibraryScan = onResumeLibraryScan,
             )
         }
-        if (!state.notificationsAllowed) {
+        if (!state.notificationsAllowed && playback.hasActiveTrack) {
             NotificationNotice(onOpenNotificationSettings = onOpenNotificationSettings)
         }
-        LibrarySearchField(query = query, onQueryChange = { query = it })
+        if (state.tracks.isNotEmpty()) {
+            LibrarySearchField(query = query, onQueryChange = { query = it })
+        }
         Box(modifier = Modifier.weight(1f)) {
             when {
                 state.isLoading && state.tracks.isEmpty() -> LibraryLoading()
@@ -220,7 +222,7 @@ private fun LibraryHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.md),
+            .padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -256,41 +258,58 @@ private fun DeviceMusicAccessNotice(
     denied: Boolean,
     onRequestMusicAccess: () -> Unit,
     onOpenAppSettings: () -> Unit,
-    onAddLibraryFolder: () -> Unit,
 ) {
-    Surface(
+    val title = stringResource(R.string.device_music_access_compact)
+    val detail = stringResource(R.string.device_music_access_body)
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.xs),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            .padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.xxs),
     ) {
-        Column(modifier = Modifier.padding(VesqenSpacing.md)) {
-            Text(
-                text = stringResource(R.string.device_music_access),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Spacer(Modifier.height(VesqenSpacing.xxs))
-            Text(
-                text = stringResource(R.string.device_music_access_body),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(VesqenSpacing.sm))
-            Row(horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.xs)) {
-                Button(
-                    onClick = onRequestMusicAccess,
-                    modifier = Modifier.testTag("vesqen.permission.request"),
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .testTag("vesqen.library.music-access-notice")
+                .semantics { contentDescription = "$title. $detail" },
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .padding(start = VesqenSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.FolderOpen,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.width(VesqenSpacing.xs))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    onClick = if (denied) onOpenAppSettings else onRequestMusicAccess,
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("vesqen.permission.request"),
+                    contentPadding = PaddingValues(horizontal = VesqenSpacing.sm),
                 ) {
-                    Text(stringResource(if (denied) R.string.try_again else R.string.grant_music_access))
-                }
-                TextButton(onClick = onAddLibraryFolder) {
-                    Text(stringResource(R.string.add_music_folder))
-                }
-            }
-            if (denied) {
-                TextButton(onClick = onOpenAppSettings) {
-                    Text(stringResource(R.string.open_app_settings))
+                    Text(
+                        text = stringResource(
+                            if (denied) R.string.destination_settings else R.string.allow_music_access_short,
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
         }
@@ -510,69 +529,132 @@ private fun sourceStatusText(source: LibrarySource): String = when {
 
 @Composable
 private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
-    TextField(
+    val searchLabel = stringResource(R.string.search_local_music)
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = VesqenSpacing.md)
-            .testTag("vesqen.library.search"),
-        value = query,
-        onValueChange = onQueryChange,
-        singleLine = true,
-        label = { Text(stringResource(R.string.search_local_music)) },
-        leadingIcon = {
-            Icon(imageVector = Icons.Filled.Search, contentDescription = null)
-        },
-        trailingIcon = if (query.isBlank()) {
-            null
-        } else {
-            {
-                IconButton(onClick = { onQueryChange("") }) {
-                    Icon(
-                        imageVector = Icons.Filled.Clear,
-                        contentDescription = stringResource(R.string.clear_search),
-                    )
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .testTag("vesqen.library.search"),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ) {
+            BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .semantics { contentDescription = searchLabel },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    color = MaterialTheme.colorScheme.onSurface,
+                ),
+                decorationBox = { innerTextField ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .padding(start = VesqenSpacing.sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(VesqenSpacing.xs))
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            if (query.isBlank()) {
+                                Text(
+                                    text = searchLabel,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            innerTextField()
+                        }
+                        if (query.isNotBlank()) {
+                            IconButton(
+                                onClick = { onQueryChange("") },
+                                modifier = Modifier.size(48.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Clear,
+                                    contentDescription = stringResource(R.string.clear_search),
+                                )
+                            }
+                        }
+                    }
                 }
-            }
-        },
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
-        colors = TextFieldDefaults.colors(
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-            focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-        ),
-    )
+            )
+        }
+    }
 }
 
 @Composable
 private fun NotificationNotice(onOpenNotificationSettings: () -> Unit) {
     val warning = if (androidx.compose.foundation.isSystemInDarkTheme()) WarningAmberBright else WarningAmberDeep
-    Surface(
+    val title = stringResource(R.string.notifications_disabled_compact)
+    val detail = stringResource(R.string.notifications_disabled)
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.sm),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
-        color = warning.copy(alpha = .16f),
-        contentColor = MaterialTheme.colorScheme.onSurface,
+            .padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.xxs),
     ) {
-        Row(
-            modifier = Modifier.padding(VesqenSpacing.sm),
-            verticalAlignment = Alignment.Top,
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .testTag("vesqen.library.notifications-notice")
+                .semantics { contentDescription = "$title. $detail" },
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
+            color = warning.copy(alpha = .12f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
         ) {
-            Icon(
-                imageVector = Icons.Filled.WarningAmber,
-                contentDescription = null,
-                tint = warning,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(VesqenSpacing.xs))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.notifications_disabled),
-                    style = MaterialTheme.typography.bodySmall,
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .padding(start = VesqenSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.WarningAmber,
+                    contentDescription = null,
+                    tint = warning,
+                    modifier = Modifier.size(20.dp),
                 )
-                TextButton(onClick = onOpenNotificationSettings) {
-                    Text(stringResource(R.string.open_app_settings))
+                Spacer(Modifier.width(VesqenSpacing.xs))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    onClick = onOpenNotificationSettings,
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("vesqen.library.notifications.settings"),
+                    contentPadding = PaddingValues(horizontal = VesqenSpacing.sm),
+                ) {
+                    Text(
+                        text = stringResource(R.string.destination_settings),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
         }

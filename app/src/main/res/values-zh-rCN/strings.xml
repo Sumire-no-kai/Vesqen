@@ -1,8 +1,7 @@
 <resources>
     <string name="app_name">Vesqen</string>
-    <string name="grant_music_access">允许访问音乐</string>
+    <string name="allow_music_access_short">允许</string>
     <string name="try_again">重试</string>
-    <string name="open_app_settings">打开应用设置</string>
     <string name="system_mixed">SYSTEM MIXED</string>
     <string name="system_mixed_explanation">Android 会选择当前路由，并且可能发生混音、重采样或系统处理。</string>
     <string name="connected_outputs">已连接的输出类型：%1$s</string>
@@ -12,7 +11,8 @@
     <string name="output_other">其他输出</string>
     <string name="output_none_detected">未检测到输出</string>
     <string name="notifications_disabled">通知已关闭。播放仍可继续，但 Android 可能不会在通知栏显示媒体控制。</string>
-    <string name="device_music_access">设备音乐访问权限</string>
+    <string name="notifications_disabled_compact">播放通知已关闭</string>
+    <string name="device_music_access_compact">允许访问设备音乐</string>
     <string name="device_music_access_body">授予 Android 媒体访问权限即可纳入系统已索引的音乐。你仍可以在下方单独添加文件夹。</string>
     <string name="music_sources">音乐来源</string>
     <string name="add_music_folder">添加音乐文件夹</string>
