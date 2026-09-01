@@ -411,3 +411,37 @@ M1-A 只实现本地媒体库到系统混音播放的最小闭环：
 1. 在可稳定部署测试 APK 的空闲模拟器或设备取得 `connectedDebugAndroidTest` 的完整 runner 报告。
 2. 在深浅系统、字体缩放、TalkBack、减少动效和宽窗口上补充本轮紧凑导航、悬浮 mini-player 和提示位置的设备级证据。
 3. 继续把 `SYSTEM MIXED` 限定为 M1 的事实性系统混音声明，不由更精致的交互或材质推出 direct、独占、无损或 bit-perfect 结论。
+
+## 2026-09-01 · P0 曲库来源与可恢复扫描基础
+
+### 范围
+
+本轮只补齐 M1 曲库的第一项 P0 基础能力：多文件夹 SAF 持久授权、耐久目录、增量变化检测，以及大曲库扫描的暂停／继续和中断恢复。专辑／艺术家／文件夹浏览、播放列表、完整格式矩阵和长期可靠性验收仍不属于本轮完成范围。
+
+### 设计与实现决策
+
+| 决策 / 问题 | 处理与理由 |
+| --- | --- |
+| 如何避免将 SAF、MediaStore 和播放层耦合 | 新增只向 ViewModel 暴露快照、添加／移除来源、暂停／继续和刷新操作的 `LibraryCatalog` 小接口。MediaStore ID、SAF document ID、URI 授权与增量细节留在内部；给 UI 和 Media3 的仍是目录私有的稳定数值曲目 ID。 |
+| 目录和扫描进度如何在重启后恢复 | 使用私有 SQLite 保存来源、曲目元数据、扫描 epoch、指纹和 MediaStore generation；不复制音频、封面或真实文件路径。启动时将未完成的 `SCANNING` 标记为 `INTERRUPTED`，缓存曲目保持可见。 |
+| 如何区分真正空曲库和 provider 故障 | 只有完整扫描完成后才按 epoch 删除未见曲目；暂停、异常或 provider 返回空游标时均保留缓存并标记可恢复失败，不能把故障清空误写成正常增量删除。 |
+| 增量策略 | API 30+ 的 MediaStore generation 未变化时跳过逐行枚举；其他来源按稳定 remote ID + 完整边界指纹仅改写已变化记录。SAF 递归使用官方 DocumentsContract URI，不解析成文件系统路径。 |
+| 大曲库暂停／继续 | 扫描器在 provider 行之间检查暂停请求并先关闭 cursor；暂停不会 prune 缓存。继续会从耐久目录安全地重新枚举未完成来源，完整完成后才做 reconciliation。 |
+| 无宽泛媒体权限时的可发现性 | 曲库不再跳到独立“无播放”页。设备音乐访问改为曲库内的紧凑提示，SAF 添加入口始终存在；已有 SAF 曲目可以在 MediaStore 权限缺失时继续显示。 |
+| 来源管理视觉层级 | 曲库 header 保留可发现的“添加音乐文件夹”图标；已有来源时卡片只保留一个“管理音乐来源”动作，添加／移除集中在 bottom sheet。移除最后一个来源会收起该 sheet，避免空抽屉。 |
+
+### 验证记录
+
+| 检查 | 结果 |
+| --- | --- |
+| 最终本地质量门禁 | `./gradlew.bat testDebugUnitTest lintDebug assembleDebug :app:compileDebugAndroidTestKotlin --console=plain` **已通过**：33 个 JVM 测试，0 failures、0 errors；Android Compose 测试源码可编译；lint 为 0 errors、26 条既有 SDK／依赖／历史资源提醒；最终 Debug APK SHA-256 为 `4D8793E17293A2E263FC55F0FC5E09CAF0EC53E187C6FA991F281068DD29907F`。 |
+| iQOO Android 15 手动 QA | **已通过（本轮 SAF/UI 范围）**：设备安装的 `base.apk` 与上述最终 APK 哈希一致；在系统 DocumentsUI 中明确授权一个空的 `Alarms` 目录后，来源卡显示、管理 sheet 和原有 MediaStore 曲目均正常；强制停止并重启后授权来源仍存在；移除最后一个来源后 sheet 自动收起，重启后来源卡不再存在。测试没有读取或改动用户音乐文件，也没有改变设备全局设置。 |
+| 大曲库暂停／继续 | **实现和 UI 回归已编译，真实大曲库时序待补证**：JVM 覆盖来源身份、保守音频识别和无碰撞指纹；Compose 用例覆盖暂停时缓存行继续可见、继续动作和移除最后来源的状态。空目录扫描过快，不能将此次手动检查写成大曲库暂停时序已实测。 |
+| Compose 仪器 runner | **未获得有效完成报告 / 不计为通过**：本轮只编译测试 APK；既有设备 runner 限制仍存在。源码编译、JVM 和手动 QA 不替代独立 runner 结果。 |
+| Honor 真机 | **未执行 / 不计为通过**：本轮连接检查仅发现 iQOO；Honor 未在 ADB 设备列表中出现。 |
+
+### 后续步骤
+
+1. 在可稳定部署测试 APK 的空闲设备或模拟器取得 `connectedDebugAndroidTest` 完整 runner 报告。
+2. 用真实大曲库补充暂停／继续、取消、媒体新增／删除／移动和扫描期间播放连续性的设备级证据。
+3. 继续实现 M1 余项：专辑／艺术家／文件夹浏览、播放列表、格式兼容与可靠性门禁；本节不把曲库基础实现表述为完整 M1 完成。

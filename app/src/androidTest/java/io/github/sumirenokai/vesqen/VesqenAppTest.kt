@@ -33,6 +33,10 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.library.LibraryScanProgress
+import io.github.sumirenokai.vesqen.library.LibraryScanState
+import io.github.sumirenokai.vesqen.library.LibrarySource
+import io.github.sumirenokai.vesqen.library.LibrarySourceKind
 import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode
@@ -76,6 +80,82 @@ class VesqenAppTest {
         composeRule.onNodeWithText(context.getString(R.string.chain_empty_title)).assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.browse_library)).performClick()
         composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
+    }
+
+    @Test
+    fun denied_device_permission_keeps_SAF_folder_import_embedded_in_library() {
+        var addFolderCalls = 0
+        render(
+            state = VesqenUiState(
+                library = LibraryUiState(musicAccess = MusicAccess.DENIED),
+            ),
+            onAddLibraryFolder = { addFolderCalls++ },
+        )
+
+        composeRule.onNodeWithTag("vesqen.permission.request").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.library.add-folder").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.add_music_folder)).performClick()
+
+        composeRule.runOnIdle { assertEquals(1, addFolderCalls) }
+    }
+
+    @Test
+    fun paused_library_scan_keeps_cached_rows_visible_and_offers_resume() {
+        var resumeCalls = 0
+        val folder = LibrarySource(
+            id = "tree:test",
+            kind = LibrarySourceKind.FOLDER,
+            displayName = "Test music",
+            scanState = LibraryScanState.PAUSED,
+            trackCount = 1,
+        )
+        render(
+            state = VesqenUiState(
+                library = LibraryUiState(
+                    musicAccess = MusicAccess.GRANTED,
+                    tracks = sampleTracks.take(1),
+                    sources = listOf(folder),
+                    scanProgress = LibraryScanProgress(
+                        sourceId = folder.id,
+                        sourceName = folder.displayName,
+                        scannedTrackCount = 42,
+                        isPaused = true,
+                    ),
+                ),
+            ),
+            onResumeLibraryScan = { resumeCalls++ },
+        )
+
+        composeRule.onNodeWithTag("vesqen.library.track.1").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.library.resume-scan").performClick()
+
+        composeRule.runOnIdle { assertEquals(1, resumeCalls) }
+    }
+
+    @Test
+    fun removing_the_last_folder_closes_the_source_manager() {
+        var removedSourceId: String? = null
+        val folder = LibrarySource(
+            id = "tree:test",
+            kind = LibrarySourceKind.FOLDER,
+            displayName = "Test music",
+        )
+        render(
+            state = VesqenUiState(
+                library = LibraryUiState(
+                    musicAccess = MusicAccess.GRANTED,
+                    sources = listOf(folder),
+                ),
+            ),
+            onRemoveLibraryFolder = { removedSourceId = it },
+        )
+
+        composeRule.onNodeWithTag("vesqen.library.sources.manage").performClick()
+        composeRule.onNodeWithTag("vesqen.library.source-manager").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.library.source.tree:test.remove").performClick()
+
+        composeRule.runOnIdle { assertEquals(folder.id, removedSourceId) }
+        composeRule.onNodeWithTag("vesqen.library.source-manager").assertDoesNotExist()
     }
 
     @Test
@@ -1077,6 +1157,9 @@ class VesqenAppTest {
         onPlayPause: () -> Unit = {},
         onNext: () -> Unit = {},
         onCyclePlaybackOrder: () -> Unit = {},
+        onAddLibraryFolder: () -> Unit = {},
+        onRemoveLibraryFolder: (String) -> Unit = {},
+        onResumeLibraryScan: () -> Unit = {},
         containerWidth: Dp? = null,
         containerHeight: Dp = 720.dp,
         fontScale: Float? = null,
@@ -1101,6 +1184,9 @@ class VesqenAppTest {
                         onSeek = {},
                         onCyclePlaybackOrder = onCyclePlaybackOrder,
                         onRefreshConnectedOutputs = {},
+                        onAddLibraryFolder = onAddLibraryFolder,
+                        onRemoveLibraryFolder = onRemoveLibraryFolder,
+                        onResumeLibraryScan = onResumeLibraryScan,
                         motionPolicy = motionPolicy,
                         versionName = versionName,
                         versionCode = versionCode,

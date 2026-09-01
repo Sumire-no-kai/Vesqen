@@ -125,6 +125,11 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
             notificationLauncher.launch(notificationPermission)
         }
     }
+    val musicFolderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { treeUri ->
+        treeUri?.let(viewModel::addLibraryFolder)
+    }
 
     val syncPermissions = {
         viewModel.initialisePermissions(
@@ -169,6 +174,10 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
             )
         },
         onRescan = viewModel::refreshLibrary,
+        onAddLibraryFolder = { musicFolderLauncher.launch(null) },
+        onRemoveLibraryFolder = viewModel::removeLibraryFolder,
+        onPauseLibraryScan = viewModel::pauseLibraryScan,
+        onResumeLibraryScan = viewModel::resumeLibraryScan,
         onTrackSelected = viewModel::play,
         onPrevious = viewModel::skipToPrevious,
         onPlayPause = viewModel::togglePlayback,
@@ -198,6 +207,10 @@ fun VesqenAppContent(
     onSeek: (Long) -> Unit,
     onCyclePlaybackOrder: () -> Unit,
     onRefreshConnectedOutputs: () -> Unit,
+    onAddLibraryFolder: () -> Unit = {},
+    onRemoveLibraryFolder: (String) -> Unit = {},
+    onPauseLibraryScan: () -> Unit = {},
+    onResumeLibraryScan: () -> Unit = {},
     modifier: Modifier = Modifier,
     motionPolicy: VesqenMotionPolicy? = null,
     managePhoneOrientation: Boolean = false,
@@ -299,6 +312,10 @@ fun VesqenAppContent(
                 onOpenAppSettings = onOpenAppSettings,
                 onOpenNotificationSettings = onOpenNotificationSettings,
                 onRescan = onRescan,
+                onAddLibraryFolder = onAddLibraryFolder,
+                onRemoveLibraryFolder = onRemoveLibraryFolder,
+                onPauseLibraryScan = onPauseLibraryScan,
+                onResumeLibraryScan = onResumeLibraryScan,
                 onTrackSelected = onTrackSelected,
                 onPrevious = onPrevious,
                 onPlayPause = onPlayPause,
@@ -327,6 +344,10 @@ fun VesqenAppContent(
             onOpenAppSettings = onOpenAppSettings,
             onOpenNotificationSettings = onOpenNotificationSettings,
             onRescan = onRescan,
+            onAddLibraryFolder = onAddLibraryFolder,
+            onRemoveLibraryFolder = onRemoveLibraryFolder,
+            onPauseLibraryScan = onPauseLibraryScan,
+            onResumeLibraryScan = onResumeLibraryScan,
             onTrackSelected = onTrackSelected,
             onPrevious = onPrevious,
             onPlayPause = onPlayPause,
@@ -357,6 +378,10 @@ private fun VesqenDestinationFrame(
     onOpenAppSettings: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
     onRescan: () -> Unit,
+    onAddLibraryFolder: () -> Unit,
+    onRemoveLibraryFolder: (String) -> Unit,
+    onPauseLibraryScan: () -> Unit,
+    onResumeLibraryScan: () -> Unit,
     onTrackSelected: (AudioTrack) -> Unit,
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
@@ -591,6 +616,10 @@ private fun VesqenDestinationFrame(
                         onOpenAppSettings = onOpenAppSettings,
                         onOpenNotificationSettings = onOpenNotificationSettings,
                         onRescan = onRescan,
+                        onAddLibraryFolder = onAddLibraryFolder,
+                        onRemoveLibraryFolder = onRemoveLibraryFolder,
+                        onPauseLibraryScan = onPauseLibraryScan,
+                        onResumeLibraryScan = onResumeLibraryScan,
                         onTrackSelected = onTrackSelected,
                         modifier = destinationModifier,
                     )

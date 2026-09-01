@@ -17,7 +17,7 @@ import java.util.concurrent.FutureTask
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Reads artwork only through a MediaStore provider-owned content URI.
+ * Reads artwork only through a provider-owned content URI.
  *
  * The cache is process-local and bounded: user artwork is never copied to disk. Artwork is
  * optional presentation data, so a missing provider row or permission change always falls back
