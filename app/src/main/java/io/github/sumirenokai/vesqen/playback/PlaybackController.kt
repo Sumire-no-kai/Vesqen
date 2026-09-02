@@ -2,11 +2,12 @@ package io.github.sumirenokai.vesqen.playback
 
 import android.content.ComponentName
 import android.content.Context
-import android.net.Uri
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -20,17 +21,24 @@ import androidx.compose.runtime.setValue
 class PlaybackController(
     context: Context,
     private val onSnapshotChanged: (PlaybackSnapshot) -> Unit = {},
+    private val onPlaybackStarted: (Long) -> Unit = {},
 ) {
     private val appContext = context.applicationContext
     private val executor = ContextCompat.getMainExecutor(appContext)
     private val tracksById = mutableMapOf<String, AudioTrack>()
+    private val availableTracksById = mutableMapOf<String, AudioTrack>()
+    private val stateStore = PlaybackStateStore(appContext)
     private val controllerFuture: ListenableFuture<MediaController> = MediaController.Builder(
         appContext,
         SessionToken(appContext, ComponentName(appContext, PlaybackService::class.java)),
     ).buildAsync()
     private var controller: MediaController? = null
     private var pendingQueue: PendingQueue? = null
+    private var pendingLibrary: List<AudioTrack>? = null
     private var isApplyingPlaybackOrder = false
+    private var currentProblem: PlaybackProblem? = null
+    private var lastCountedTrackId: Long? = null
+    private var lastPersistedSignature: String? = null
 
     var snapshot by mutableStateOf(PlaybackSnapshot())
         private set
@@ -40,6 +48,27 @@ class PlaybackController(
             // Applying one listener-visible mode can require two Media3 setters. Do not expose
             // their valid-but-transient intermediate state to Compose between those setters.
             if (!isApplyingPlaybackOrder) publish(player)
+        }
+
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            lastCountedTrackId = null
+            controller?.let(::recordCurrentPlaybackIfNeeded)
+        }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (isPlaying) controller?.let(::recordCurrentPlaybackIfNeeded)
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_READY && currentProblem != null) {
+                currentProblem = null
+                controller?.let(::publish)
+            }
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            currentProblem = error.toPlaybackProblem()
+            controller?.let(::publish)
         }
     }
 
@@ -54,6 +83,10 @@ class PlaybackController(
                         pendingQueue?.let { queue ->
                             pendingQueue = null
                             startQueue(resolvedController, queue.tracks, queue.startIndex)
+                        }
+                        pendingLibrary?.let { tracks ->
+                            pendingLibrary = null
+                            synchronizeLibrary(resolvedController, tracks)
                         }
                     }
                     .onFailure {
@@ -75,22 +108,118 @@ class PlaybackController(
         startQueue(activeController, tracks, startIndex)
     }
 
-    private fun startQueue(activeController: MediaController, tracks: List<AudioTrack>, startIndex: Int) {
+    fun syncLibrary(tracks: List<AudioTrack>) {
+        availableTracksById.clear()
+        tracks.forEach { track -> availableTracksById[track.id.toString()] = track }
+        val activeController = controller
+        if (activeController == null) {
+            pendingLibrary = tracks
+        } else {
+            synchronizeLibrary(activeController, tracks)
+        }
+    }
+
+    private fun startQueue(
+        activeController: MediaController,
+        tracks: List<AudioTrack>,
+        startIndex: Int,
+        positionMs: Long = C.TIME_UNSET,
+        playWhenReady: Boolean = true,
+        shuffleEnabled: Boolean = false,
+        repeatMode: PlaybackRepeatMode = PlaybackRepeatMode.OFF,
+    ) {
         tracksById.clear()
         tracks.forEach { track -> tracksById[track.id.toString()] = track }
         activeController.setMediaItems(
             tracks.map { it.toMediaItem() },
             startIndex,
-            C.TIME_UNSET,
+            positionMs,
         )
+        activeController.shuffleModeEnabled = shuffleEnabled
+        activeController.repeatMode = repeatMode.toMedia3RepeatMode()
         activeController.prepare()
-        activeController.play()
+        if (playWhenReady) activeController.play() else activeController.pause()
         publish(activeController)
+    }
+
+    fun playNext(track: AudioTrack) {
+        controller?.let { player ->
+            tracksById[track.id.toString()] = track
+            availableTracksById[track.id.toString()] = track
+            val insertionIndex = (player.currentMediaItemIndex + 1).coerceIn(0, player.mediaItemCount)
+            player.addMediaItem(insertionIndex, track.toMediaItem())
+            publish(player)
+        }
+    }
+
+    fun addToQueue(track: AudioTrack) {
+        controller?.let { player ->
+            tracksById[track.id.toString()] = track
+            availableTracksById[track.id.toString()] = track
+            player.addMediaItem(track.toMediaItem())
+            publish(player)
+        }
+    }
+
+    fun playQueueIndex(index: Int) {
+        controller?.takeIf { index in 0 until it.mediaItemCount }?.let { player ->
+            player.seekToDefaultPosition(index)
+            player.play()
+            publish(player)
+        }
+    }
+
+    fun removeQueueItem(index: Int) {
+        controller?.takeIf { index in 0 until it.mediaItemCount }?.let { player ->
+            player.removeMediaItem(index)
+            if (player.mediaItemCount == 0) {
+                stateStore.clear()
+                currentProblem = null
+            }
+            publish(player)
+        }
+    }
+
+    fun moveQueueItem(fromIndex: Int, toIndex: Int) {
+        controller?.let { player ->
+            if (fromIndex !in 0 until player.mediaItemCount || toIndex !in 0 until player.mediaItemCount) return
+            player.moveMediaItem(fromIndex, toIndex)
+            publish(player)
+        }
+    }
+
+    fun clearQueue() {
+        controller?.let { player ->
+            player.stop()
+            player.clearMediaItems()
+            tracksById.clear()
+            currentProblem = null
+            stateStore.clear()
+            lastPersistedSignature = null
+            updateSnapshot(PlaybackSnapshot(isControllerReady = true))
+        }
+    }
+
+    fun retryPlayback() {
+        controller?.let { player ->
+            currentProblem = null
+            player.prepare()
+            player.play()
+            publish(player)
+        }
     }
 
     fun togglePlayback() {
         controller?.let { activeController ->
-            if (activeController.isPlaying) activeController.pause() else activeController.play()
+            if (activeController.isPlaying) {
+                activeController.pause()
+            } else {
+                if (activeController.playbackState == Player.STATE_ENDED && activeController.mediaItemCount > 0) {
+                    activeController.seekToDefaultPosition(activeController.currentMediaItemIndex.coerceAtLeast(0))
+                    activeController.prepare()
+                }
+                activeController.play()
+            }
             publish(activeController)
         }
     }
@@ -138,6 +267,7 @@ class PlaybackController(
     }
 
     fun release() {
+        controller?.let { persist(it, force = true) }
         controller?.removeListener(playerListener)
         controller = null
         MediaController.releaseFuture(controllerFuture)
@@ -147,6 +277,17 @@ class PlaybackController(
         val item = player.currentMediaItem
         val track = item?.mediaId?.let(tracksById::get)
         val metadata = item?.mediaMetadata
+        val queue = (0 until player.mediaItemCount).mapNotNull { index ->
+            val queueItem = player.getMediaItemAt(index)
+            val queueTrack = tracksById[queueItem.mediaId] ?: availableTracksById[queueItem.mediaId]
+            val queueTrackId = queueItem.mediaId.toLongOrNull() ?: return@mapNotNull null
+            PlaybackQueueItem(
+                trackId = queueTrackId,
+                title = queueTrack?.title ?: queueItem.mediaMetadata.title?.toString().orEmpty(),
+                artist = queueTrack?.artist ?: queueItem.mediaMetadata.artist?.toString().orEmpty(),
+                isCurrent = index == player.currentMediaItemIndex,
+            )
+        }
         updateSnapshot(
             PlaybackSnapshot(
             isControllerReady = true,
@@ -176,8 +317,11 @@ class PlaybackController(
             repeatMode = player.repeatMode.toPlaybackRepeatMode(),
             queueIndex = player.currentMediaItemIndex.coerceAtLeast(0),
             queueSize = player.mediaItemCount,
+            queue = queue,
+            problem = currentProblem,
             ),
         )
+        persist(player)
     }
 
     private fun updateSnapshot(updated: PlaybackSnapshot) {
@@ -190,7 +334,12 @@ class PlaybackController(
             .setTitle(title)
             .setArtist(artist)
             .setAlbumTitle(album)
-        albumArtworkUri?.takeIf(String::isNotBlank)?.let { metadata.setArtworkUri(Uri.parse(it)) }
+            .setAlbumArtist(albumArtist.takeIf(String::isNotBlank))
+            .setTrackNumber(trackNumber)
+            .setDiscNumber(discNumber)
+            .setRecordingYear(year)
+            .setGenre(genre.takeIf(String::isNotBlank))
+        albumArtworkUri?.takeIf(String::isNotBlank)?.let { metadata.setArtworkUri(it.toUri()) }
         return MediaItem.Builder()
             .setMediaId(id.toString())
             .setUri(contentUri)
@@ -267,6 +416,84 @@ class PlaybackController(
         val tracks: List<AudioTrack>,
         val startIndex: Int,
     )
+
+    private fun synchronizeLibrary(player: MediaController, tracks: List<AudioTrack>) {
+        tracks.forEach { track -> availableTracksById[track.id.toString()] = track }
+        if (player.mediaItemCount > 0) {
+            (0 until player.mediaItemCount).forEach { index ->
+                val mediaId = player.getMediaItemAt(index).mediaId
+                availableTracksById[mediaId]?.let { tracksById[mediaId] = it }
+            }
+            publish(player)
+            return
+        }
+        val restored = stateStore.load()?.restoreAgainst(tracks) ?: run {
+            publish(player)
+            return
+        }
+        startQueue(
+            activeController = player,
+            tracks = restored.tracks,
+            startIndex = restored.startIndex,
+            positionMs = restored.positionMs,
+            playWhenReady = false,
+            shuffleEnabled = restored.shuffleEnabled,
+            repeatMode = restored.repeatMode,
+        )
+    }
+
+    private fun recordCurrentPlaybackIfNeeded(player: Player) {
+        if (!player.isPlaying) return
+        val trackId = player.currentMediaItem?.mediaId?.toLongOrNull() ?: return
+        if (lastCountedTrackId == trackId) return
+        lastCountedTrackId = trackId
+        onPlaybackStarted(trackId)
+    }
+
+    private fun persist(player: Player, force: Boolean = false) {
+        val queueTrackIds = (0 until player.mediaItemCount).mapNotNull { index ->
+            player.getMediaItemAt(index).mediaId.toLongOrNull()
+        }
+        if (queueTrackIds.isEmpty()) {
+            if (force || lastPersistedSignature != null) stateStore.clear()
+            lastPersistedSignature = null
+            return
+        }
+        val currentTrackId = player.currentMediaItem?.mediaId?.toLongOrNull()
+        val signature = buildString {
+            append(queueTrackIds.joinToString(","))
+            append('|').append(currentTrackId)
+            append('|').append(player.currentPosition.coerceAtLeast(0) / POSITION_SAVE_BUCKET_MS)
+            append('|').append(player.isPlaying)
+            append('|').append(player.shuffleModeEnabled)
+            append('|').append(player.repeatMode)
+        }
+        if (!force && signature == lastPersistedSignature) return
+        lastPersistedSignature = signature
+        stateStore.save(
+            PersistedPlaybackState(
+                queueTrackIds = queueTrackIds,
+                currentTrackId = currentTrackId,
+                positionMs = player.currentPosition.coerceAtLeast(0),
+                shuffleEnabled = player.shuffleModeEnabled,
+                repeatMode = player.repeatMode.toPlaybackRepeatMode(),
+            ),
+        )
+    }
+
+    private companion object {
+        const val POSITION_SAVE_BUCKET_MS = 5_000L
+    }
+}
+
+private fun PlaybackException.toPlaybackProblem(): PlaybackProblem {
+    val name = errorCodeName.uppercase()
+    return when {
+        "FILE_NOT_FOUND" in name || "NO_PERMISSION" in name -> PlaybackProblem.SOURCE_UNAVAILABLE
+        "UNSUPPORTED" in name || "PARSING" in name -> PlaybackProblem.UNSUPPORTED_FORMAT
+        "DECOD" in name || "AUDIO_TRACK" in name -> PlaybackProblem.DECODER_FAILURE
+        else -> PlaybackProblem.UNKNOWN
+    }
 }
 
 /**

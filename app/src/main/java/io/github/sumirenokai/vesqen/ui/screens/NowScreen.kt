@@ -56,8 +56,10 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
@@ -90,10 +92,12 @@ import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
+import io.github.sumirenokai.vesqen.playback.PlaybackProblem
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.components.PlaybackControls
+import io.github.sumirenokai.vesqen.ui.components.QueueSheet
 import io.github.sumirenokai.vesqen.ui.components.TrackDetailsSheet
 import io.github.sumirenokai.vesqen.ui.formatDuration
 import io.github.sumirenokai.vesqen.ui.theme.FocusedPlayerMaterial
@@ -147,6 +151,11 @@ fun NowScreen(
     onNext: () -> Unit,
     onSeek: (Long) -> Unit,
     onPlayTrack: (AudioTrack) -> Unit,
+    onPlayQueueIndex: (Int) -> Unit,
+    onRemoveQueueItem: (Int) -> Unit,
+    onMoveQueueItem: (Int, Int) -> Unit,
+    onClearQueue: () -> Unit,
+    onRetryPlayback: () -> Unit,
     onToggleOrientation: () -> Unit,
     showOrientationToggle: Boolean,
     isLandscape: Boolean,
@@ -159,6 +168,7 @@ fun NowScreen(
     }
 
     var showDetails by remember { mutableStateOf(false) }
+    var showQueue by remember { mutableStateOf(false) }
     var trackTransitionDirection by remember { mutableStateOf(TrackTransitionDirection.FORWARD) }
     var focusContent by remember { mutableStateOf(NowFocusContent.ARTWORK) }
     val trackPresentation = NowTrackPresentation(
@@ -295,6 +305,7 @@ fun NowScreen(
                                 NowFocusContent.ARTWORK
                             }
                         },
+                        onOpenQueue = { showQueue = true },
                         canOpenDetails = currentTrack != null,
                         onBack = onBackToLibrary,
                         onToggleOrientation = onToggleOrientation,
@@ -334,6 +345,7 @@ fun NowScreen(
                                     NowFocusContent.ARTWORK
                                 }
                             },
+                            onOpenQueue = { showQueue = true },
                             canOpenDetails = currentTrack != null,
                             modifier = Modifier.weight(1f),
                         )
@@ -347,6 +359,16 @@ fun NowScreen(
                         .then(if (useLandscapeLayout) Modifier else Modifier.statusBarsPadding())
                         .padding(top = if (useLandscapeLayout) 12.dp else if (isUltraCompact) 56.dp else 72.dp),
                 )
+                snapshot.problem?.let { problem ->
+                    PlaybackProblemBanner(
+                        problem = problem,
+                        onRetry = onRetryPlayback,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .then(if (useLandscapeLayout) Modifier else Modifier.statusBarsPadding())
+                            .padding(top = if (useLandscapeLayout) 68.dp else 112.dp),
+                    )
+                }
             }
         }
 
@@ -358,6 +380,16 @@ fun NowScreen(
                     onPlayTrack(currentTrack)
                     showDetails = false
                 },
+            )
+        }
+        if (showQueue) {
+            QueueSheet(
+                snapshot = snapshot,
+                onDismiss = { showQueue = false },
+                onPlayItem = onPlayQueueIndex,
+                onRemoveItem = onRemoveQueueItem,
+                onMoveItem = onMoveQueueItem,
+                onClearQueue = onClearQueue,
             )
         }
     }
@@ -581,6 +613,7 @@ private fun NowPlayerPage(
     onSeek: (Long) -> Unit,
     onOpenDetails: () -> Unit,
     onToggleFocusContent: () -> Unit,
+    onOpenQueue: () -> Unit,
     canOpenDetails: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -600,6 +633,7 @@ private fun NowPlayerPage(
             compact = isUltraCompact,
             isExtremeText = isExtremeText,
             motionPolicy = motionPolicy,
+            onOpenQueue = onOpenQueue,
             modifier = stageModifier,
         )
     }
@@ -660,6 +694,7 @@ private fun NowLandscapePlayerPage(
     onSeek: (Long) -> Unit,
     onOpenDetails: () -> Unit,
     onToggleFocusContent: () -> Unit,
+    onOpenQueue: () -> Unit,
     canOpenDetails: Boolean,
     onBack: () -> Unit,
     onToggleOrientation: () -> Unit,
@@ -685,6 +720,7 @@ private fun NowLandscapePlayerPage(
                 compact = true,
                 isExtremeText = isExtremeText,
                 motionPolicy = motionPolicy,
+                onOpenQueue = onOpenQueue,
                 modifier = Modifier
                     .weight(.43f)
                     .fillMaxHeight()
@@ -793,6 +829,7 @@ private fun NowFocusStage(
     compact: Boolean,
     isExtremeText: Boolean,
     motionPolicy: VesqenMotionPolicy,
+    onOpenQueue: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -830,6 +867,7 @@ private fun NowFocusStage(
                     snapshot = snapshot,
                     compact = compact,
                     showProgress = !isExtremeText,
+                    onOpenQueue = onOpenQueue,
                 )
             }
         }
@@ -1008,6 +1046,7 @@ private fun NowSessionStage(
     snapshot: PlaybackSnapshot,
     compact: Boolean,
     showProgress: Boolean,
+    onOpenQueue: () -> Unit,
 ) {
     val queueLabel = snapshot.queuePosition?.let { position ->
         stringResource(R.string.queue_position, position, snapshot.queueSize)
@@ -1015,6 +1054,7 @@ private fun NowSessionStage(
     val remaining = (snapshot.durationMs - snapshot.positionMs).coerceAtLeast(0)
 
     Surface(
+        onClick = onOpenQueue,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = if (compact) VesqenSpacing.md else VesqenSpacing.lg)
@@ -1064,6 +1104,12 @@ private fun NowSessionStage(
                 value = queueLabel,
                 compact = compact,
             )
+            Text(
+                text = stringResource(R.string.manage_queue),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.align(Alignment.End),
+            )
         }
     }
 }
@@ -1088,6 +1134,36 @@ private fun NowInfoLine(label: String, value: String, compact: Boolean) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+@Composable
+private fun PlaybackProblemBanner(
+    problem: PlaybackProblem,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val message = stringResource(
+        when (problem) {
+            PlaybackProblem.SOURCE_UNAVAILABLE -> R.string.playback_problem_source
+            PlaybackProblem.UNSUPPORTED_FORMAT -> R.string.playback_problem_format
+            PlaybackProblem.DECODER_FAILURE -> R.string.playback_problem_decoder
+            PlaybackProblem.UNKNOWN -> R.string.playback_problem_unknown
+        },
+    )
+    Snackbar(
+        modifier = modifier
+            .padding(horizontal = VesqenSpacing.md)
+            .widthIn(max = 420.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite }
+            .testTag("vesqen.now.playback-problem"),
+        action = {
+            TextButton(onClick = onRetry) {
+                Text(stringResource(R.string.retry_playback))
+            }
+        },
+    ) {
+        Text(message, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 

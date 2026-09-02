@@ -5,14 +5,18 @@ import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import androidx.core.database.sqlite.transaction
 
 /**
  * Private, small SQLite store for the discoverable catalog. It contains only metadata and opaque
  * content URIs; no audio, artwork, or filesystem paths are copied into app storage.
  */
-internal class LibraryCatalogStore(context: Context) : SQLiteOpenHelper(
+internal class LibraryCatalogStore(
+    context: Context,
+    databaseName: String = DATABASE_NAME,
+) : SQLiteOpenHelper(
     context.applicationContext,
-    DATABASE_NAME,
+    databaseName,
     null,
     DATABASE_VERSION,
 ) {
@@ -52,6 +56,21 @@ internal class LibraryCatalogStore(context: Context) : SQLiteOpenHelper(
                 $TRACK_DATE_MODIFIED_SECONDS INTEGER NOT NULL DEFAULT 0,
                 $TRACK_SIZE_BYTES INTEGER NOT NULL DEFAULT 0,
                 $TRACK_MIME_TYPE TEXT NOT NULL DEFAULT '',
+                $TRACK_ALBUM_ARTIST TEXT NOT NULL DEFAULT '',
+                $TRACK_NUMBER INTEGER,
+                $TRACK_DISC_NUMBER INTEGER,
+                $TRACK_YEAR INTEGER,
+                $TRACK_GENRE TEXT NOT NULL DEFAULT '',
+                $TRACK_FILE_NAME TEXT NOT NULL DEFAULT '',
+                $TRACK_FOLDER_NAME TEXT NOT NULL DEFAULT '',
+                $TRACK_CODEC TEXT NOT NULL DEFAULT '',
+                $TRACK_CHANNEL_COUNT INTEGER,
+                $TRACK_BIT_DEPTH INTEGER,
+                $TRACK_SAMPLE_RATE_HZ INTEGER,
+                $TRACK_BITRATE INTEGER,
+                $TRACK_IS_FAVORITE INTEGER NOT NULL DEFAULT 0,
+                $TRACK_LAST_PLAYED_AT_MS INTEGER NOT NULL DEFAULT 0,
+                $TRACK_PLAY_COUNT INTEGER NOT NULL DEFAULT 0,
                 $TRACK_FINGERPRINT TEXT NOT NULL,
                 $TRACK_ARTWORK_REVISION INTEGER NOT NULL DEFAULT 0,
                 $TRACK_SEEN_EPOCH INTEGER NOT NULL DEFAULT 0,
@@ -67,9 +86,19 @@ internal class LibraryCatalogStore(context: Context) : SQLiteOpenHelper(
         db.execSQL(
             "CREATE INDEX index_library_tracks_title ON $TRACKS_TABLE($TRACK_TITLE)",
         )
+        db.execSQL("CREATE INDEX index_library_tracks_album ON $TRACKS_TABLE($TRACK_ALBUM)")
+        db.execSQL("CREATE INDEX index_library_tracks_artist ON $TRACKS_TABLE($TRACK_ARTIST)")
+        db.execSQL("CREATE INDEX index_library_tracks_folder ON $TRACKS_TABLE($TRACK_FOLDER_NAME)")
+        db.execSQL("CREATE INDEX index_library_tracks_recent ON $TRACKS_TABLE($TRACK_LAST_PLAYED_AT_MS)")
+        createPlaylistTables(db)
+        // Force one bounded reconciliation so existing v1 rows receive the new metadata fields.
+        db.execSQL("UPDATE $SOURCES_TABLE SET $SOURCE_GENERATION = NULL")
+        db.execSQL("UPDATE $TRACKS_TABLE SET $TRACK_FINGERPRINT = ''")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) migrateToVersion2(db)
+    }
 
     fun ensureDeviceSource(): StoredLibrarySource {
         findSource(LibrarySourceId.DEVICE)?.let { return it }
@@ -150,6 +179,137 @@ internal class LibraryCatalogStore(context: Context) : SQLiteOpenHelper(
             buildList {
                 while (cursor.moveToNext()) add(cursor.toAudioTrack())
             }
+        }
+    }
+
+    fun setFavorite(trackId: Long, favorite: Boolean) {
+        writableDatabase.update(
+            TRACKS_TABLE,
+            ContentValues().apply { put(TRACK_IS_FAVORITE, if (favorite) 1 else 0) },
+            "$TRACK_ID = ?",
+            arrayOf(trackId.toString()),
+        )
+    }
+
+    fun recordPlayback(trackId: Long, playedAtMs: Long) {
+        writableDatabase.execSQL(
+            """
+            UPDATE $TRACKS_TABLE
+               SET $TRACK_PLAY_COUNT = $TRACK_PLAY_COUNT + 1,
+                   $TRACK_LAST_PLAYED_AT_MS = ?
+             WHERE $TRACK_ID = ?
+            """.trimIndent(),
+            arrayOf(playedAtMs, trackId),
+        )
+    }
+
+    fun readPlaylists(): List<LibraryPlaylist> = readableDatabase.query(
+        PLAYLISTS_TABLE,
+        arrayOf(PLAYLIST_ID, PLAYLIST_NAME, PLAYLIST_CREATED_AT_MS, PLAYLIST_UPDATED_AT_MS),
+        null,
+        null,
+        null,
+        null,
+        "$PLAYLIST_NAME COLLATE NOCASE ASC, $PLAYLIST_ID ASC",
+    ).use { cursor ->
+        buildList {
+            while (cursor.moveToNext()) {
+                val playlistId = cursor.getLong(cursor.getColumnIndexOrThrow(PLAYLIST_ID))
+                add(
+                    LibraryPlaylist(
+                        id = playlistId,
+                        name = cursor.getString(cursor.getColumnIndexOrThrow(PLAYLIST_NAME)),
+                        trackIds = readPlaylistTrackIds(playlistId),
+                        createdAtMs = cursor.getLong(cursor.getColumnIndexOrThrow(PLAYLIST_CREATED_AT_MS)),
+                        updatedAtMs = cursor.getLong(cursor.getColumnIndexOrThrow(PLAYLIST_UPDATED_AT_MS)),
+                    ),
+                )
+            }
+        }
+    }
+
+    fun createPlaylist(name: String): Long? {
+        val normalized = name.trim().takeIf(String::isNotEmpty) ?: return null
+        val now = System.currentTimeMillis()
+        return writableDatabase.insertWithOnConflict(
+            PLAYLISTS_TABLE,
+            null,
+            ContentValues().apply {
+                put(PLAYLIST_NAME, normalized)
+                put(PLAYLIST_CREATED_AT_MS, now)
+                put(PLAYLIST_UPDATED_AT_MS, now)
+            },
+            SQLiteDatabase.CONFLICT_IGNORE,
+        ).takeIf { it >= 0 }
+    }
+
+    fun renamePlaylist(playlistId: Long, name: String) {
+        val normalized = name.trim().takeIf(String::isNotEmpty) ?: return
+        writableDatabase.updateWithOnConflict(
+            PLAYLISTS_TABLE,
+            ContentValues().apply {
+                put(PLAYLIST_NAME, normalized)
+                put(PLAYLIST_UPDATED_AT_MS, System.currentTimeMillis())
+            },
+            "$PLAYLIST_ID = ?",
+            arrayOf(playlistId.toString()),
+            SQLiteDatabase.CONFLICT_IGNORE,
+        )
+    }
+
+    fun deletePlaylist(playlistId: Long) {
+        writableDatabase.delete(PLAYLISTS_TABLE, "$PLAYLIST_ID = ?", arrayOf(playlistId.toString()))
+    }
+
+    fun addTrackToPlaylist(playlistId: Long, trackId: Long) {
+        val database = writableDatabase
+        val nextPosition = database.rawQuery(
+            "SELECT COALESCE(MAX($PLAYLIST_ITEM_POSITION), -1) + 1 FROM $PLAYLIST_ITEMS_TABLE WHERE $PLAYLIST_ITEM_PLAYLIST_ID = ?",
+            arrayOf(playlistId.toString()),
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getInt(0) else 0 }
+        val inserted = database.insertWithOnConflict(
+            PLAYLIST_ITEMS_TABLE,
+            null,
+            ContentValues().apply {
+                put(PLAYLIST_ITEM_PLAYLIST_ID, playlistId)
+                put(PLAYLIST_ITEM_TRACK_ID, trackId)
+                put(PLAYLIST_ITEM_POSITION, nextPosition)
+                put(PLAYLIST_ITEM_ADDED_AT_MS, System.currentTimeMillis())
+            },
+            SQLiteDatabase.CONFLICT_IGNORE,
+        )
+        if (inserted >= 0) touchPlaylist(database, playlistId)
+    }
+
+    fun removeTrackFromPlaylist(playlistId: Long, trackId: Long) {
+        val database = writableDatabase
+        database.transaction {
+            database.delete(
+                PLAYLIST_ITEMS_TABLE,
+                "$PLAYLIST_ITEM_PLAYLIST_ID = ? AND $PLAYLIST_ITEM_TRACK_ID = ?",
+                arrayOf(playlistId.toString(), trackId.toString()),
+            )
+            normalizePlaylistPositions(database, playlistId)
+            touchPlaylist(database, playlistId)
+        }
+    }
+
+    fun movePlaylistTrack(playlistId: Long, fromIndex: Int, toIndex: Int) {
+        val trackIds = readPlaylistTrackIds(playlistId).toMutableList()
+        if (fromIndex !in trackIds.indices || toIndex !in trackIds.indices || fromIndex == toIndex) return
+        val moved = trackIds.removeAt(fromIndex)
+        trackIds.add(toIndex, moved)
+        val database = writableDatabase
+        database.transaction {
+            trackIds.forEachIndexed { index, trackId ->
+                database.update(
+                    PLAYLIST_ITEMS_TABLE,
+                    ContentValues().apply { put(PLAYLIST_ITEM_POSITION, index) },
+                    "$PLAYLIST_ITEM_PLAYLIST_ID = ? AND $PLAYLIST_ITEM_TRACK_ID = ?",
+                    arrayOf(playlistId.toString(), trackId.toString()),
+                )
+            }
+            touchPlaylist(database, playlistId)
         }
     }
 
@@ -316,6 +476,23 @@ internal class LibraryCatalogStore(context: Context) : SQLiteOpenHelper(
         albumArtworkUri = getStringOrNull(TRACK_ALBUM_ARTWORK_URI),
         dateModifiedSeconds = getLong(getColumnIndexOrThrow(TRACK_DATE_MODIFIED_SECONDS)),
         artworkRevision = getLong(getColumnIndexOrThrow(TRACK_ARTWORK_REVISION)),
+        albumArtist = getString(getColumnIndexOrThrow(TRACK_ALBUM_ARTIST)),
+        trackNumber = getIntOrNull(TRACK_NUMBER),
+        discNumber = getIntOrNull(TRACK_DISC_NUMBER),
+        year = getIntOrNull(TRACK_YEAR),
+        genre = getString(getColumnIndexOrThrow(TRACK_GENRE)),
+        fileName = getString(getColumnIndexOrThrow(TRACK_FILE_NAME)),
+        folderName = getString(getColumnIndexOrThrow(TRACK_FOLDER_NAME)),
+        fileSizeBytes = getLong(getColumnIndexOrThrow(TRACK_SIZE_BYTES)),
+        mimeType = getString(getColumnIndexOrThrow(TRACK_MIME_TYPE)),
+        codec = getString(getColumnIndexOrThrow(TRACK_CODEC)),
+        channelCount = getIntOrNull(TRACK_CHANNEL_COUNT),
+        bitDepth = getIntOrNull(TRACK_BIT_DEPTH),
+        sampleRateHz = getIntOrNull(TRACK_SAMPLE_RATE_HZ),
+        bitrate = getIntOrNull(TRACK_BITRATE),
+        isFavorite = getInt(getColumnIndexOrThrow(TRACK_IS_FAVORITE)) != 0,
+        lastPlayedAtMs = getLong(getColumnIndexOrThrow(TRACK_LAST_PLAYED_AT_MS)),
+        playCount = getInt(getColumnIndexOrThrow(TRACK_PLAY_COUNT)),
     )
 
     private fun LibraryTrackCandidate.toContentValues(session: SourceScanSession): ContentValues = ContentValues().apply {
@@ -330,6 +507,18 @@ internal class LibraryCatalogStore(context: Context) : SQLiteOpenHelper(
         put(TRACK_DATE_MODIFIED_SECONDS, dateModifiedSeconds)
         put(TRACK_SIZE_BYTES, sizeBytes)
         put(TRACK_MIME_TYPE, mimeType)
+        put(TRACK_ALBUM_ARTIST, albumArtist)
+        putNullableInt(TRACK_NUMBER, trackNumber)
+        putNullableInt(TRACK_DISC_NUMBER, discNumber)
+        putNullableInt(TRACK_YEAR, year)
+        put(TRACK_GENRE, genre)
+        put(TRACK_FILE_NAME, fileName)
+        put(TRACK_FOLDER_NAME, folderName)
+        put(TRACK_CODEC, codec)
+        putNullableInt(TRACK_CHANNEL_COUNT, channelCount)
+        putNullableInt(TRACK_BIT_DEPTH, bitDepth)
+        putNullableInt(TRACK_SAMPLE_RATE_HZ, sampleRateHz)
+        putNullableInt(TRACK_BITRATE, bitrate)
         put(TRACK_FINGERPRINT, fingerprint)
         put(TRACK_ARTWORK_REVISION, session.epoch)
         put(TRACK_SEEN_EPOCH, session.epoch)
@@ -345,6 +534,11 @@ internal class LibraryCatalogStore(context: Context) : SQLiteOpenHelper(
         return if (isNull(index)) null else getLong(index)
     }
 
+    private fun Cursor.getIntOrNull(column: String): Int? {
+        val index = getColumnIndexOrThrow(column)
+        return if (isNull(index)) null else getInt(index)
+    }
+
     private fun ContentValues.putNullableString(key: String, value: String?) {
         if (value == null) putNull(key) else put(key, value)
     }
@@ -353,9 +547,118 @@ internal class LibraryCatalogStore(context: Context) : SQLiteOpenHelper(
         if (value == null) putNull(key) else put(key, value)
     }
 
+    private fun ContentValues.putNullableInt(key: String, value: Int?) {
+        if (value == null) putNull(key) else put(key, value)
+    }
+
+    private fun readPlaylistTrackIds(playlistId: Long): List<Long> = readableDatabase.query(
+        PLAYLIST_ITEMS_TABLE,
+        arrayOf(PLAYLIST_ITEM_TRACK_ID),
+        "$PLAYLIST_ITEM_PLAYLIST_ID = ?",
+        arrayOf(playlistId.toString()),
+        null,
+        null,
+        "$PLAYLIST_ITEM_POSITION ASC, $PLAYLIST_ITEM_ADDED_AT_MS ASC",
+    ).use { cursor ->
+        buildList {
+            while (cursor.moveToNext()) add(cursor.getLong(0))
+        }
+    }
+
+    private fun normalizePlaylistPositions(database: SQLiteDatabase, playlistId: Long) {
+        val ids = database.query(
+            PLAYLIST_ITEMS_TABLE,
+            arrayOf(PLAYLIST_ITEM_TRACK_ID),
+            "$PLAYLIST_ITEM_PLAYLIST_ID = ?",
+            arrayOf(playlistId.toString()),
+            null,
+            null,
+            "$PLAYLIST_ITEM_POSITION ASC, $PLAYLIST_ITEM_ADDED_AT_MS ASC",
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add(cursor.getLong(0))
+            }
+        }
+        ids.forEachIndexed { index, trackId ->
+            database.update(
+                PLAYLIST_ITEMS_TABLE,
+                ContentValues().apply { put(PLAYLIST_ITEM_POSITION, index) },
+                "$PLAYLIST_ITEM_PLAYLIST_ID = ? AND $PLAYLIST_ITEM_TRACK_ID = ?",
+                arrayOf(playlistId.toString(), trackId.toString()),
+            )
+        }
+    }
+
+    private fun touchPlaylist(database: SQLiteDatabase, playlistId: Long) {
+        database.update(
+            PLAYLISTS_TABLE,
+            ContentValues().apply { put(PLAYLIST_UPDATED_AT_MS, System.currentTimeMillis()) },
+            "$PLAYLIST_ID = ?",
+            arrayOf(playlistId.toString()),
+        )
+    }
+
+    private fun migrateToVersion2(db: SQLiteDatabase) {
+        listOf(
+            "$TRACK_ALBUM_ARTIST TEXT NOT NULL DEFAULT ''",
+            "$TRACK_NUMBER INTEGER",
+            "$TRACK_DISC_NUMBER INTEGER",
+            "$TRACK_YEAR INTEGER",
+            "$TRACK_GENRE TEXT NOT NULL DEFAULT ''",
+            "$TRACK_FILE_NAME TEXT NOT NULL DEFAULT ''",
+            "$TRACK_FOLDER_NAME TEXT NOT NULL DEFAULT ''",
+            "$TRACK_CODEC TEXT NOT NULL DEFAULT ''",
+            "$TRACK_CHANNEL_COUNT INTEGER",
+            "$TRACK_BIT_DEPTH INTEGER",
+            "$TRACK_SAMPLE_RATE_HZ INTEGER",
+            "$TRACK_BITRATE INTEGER",
+            "$TRACK_IS_FAVORITE INTEGER NOT NULL DEFAULT 0",
+            "$TRACK_LAST_PLAYED_AT_MS INTEGER NOT NULL DEFAULT 0",
+            "$TRACK_PLAY_COUNT INTEGER NOT NULL DEFAULT 0",
+        ).forEach { definition ->
+            db.execSQL("ALTER TABLE $TRACKS_TABLE ADD COLUMN $definition")
+        }
+        db.execSQL("CREATE INDEX index_library_tracks_album ON $TRACKS_TABLE($TRACK_ALBUM)")
+        db.execSQL("CREATE INDEX index_library_tracks_artist ON $TRACKS_TABLE($TRACK_ARTIST)")
+        db.execSQL("CREATE INDEX index_library_tracks_folder ON $TRACKS_TABLE($TRACK_FOLDER_NAME)")
+        db.execSQL("CREATE INDEX index_library_tracks_recent ON $TRACKS_TABLE($TRACK_LAST_PLAYED_AT_MS)")
+        createPlaylistTables(db)
+    }
+
+    private fun createPlaylistTables(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $PLAYLISTS_TABLE (
+                $PLAYLIST_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                $PLAYLIST_NAME TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                $PLAYLIST_CREATED_AT_MS INTEGER NOT NULL,
+                $PLAYLIST_UPDATED_AT_MS INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $PLAYLIST_ITEMS_TABLE (
+                $PLAYLIST_ITEM_PLAYLIST_ID INTEGER NOT NULL,
+                $PLAYLIST_ITEM_TRACK_ID INTEGER NOT NULL,
+                $PLAYLIST_ITEM_POSITION INTEGER NOT NULL,
+                $PLAYLIST_ITEM_ADDED_AT_MS INTEGER NOT NULL,
+                PRIMARY KEY ($PLAYLIST_ITEM_PLAYLIST_ID, $PLAYLIST_ITEM_TRACK_ID),
+                FOREIGN KEY ($PLAYLIST_ITEM_PLAYLIST_ID) REFERENCES $PLAYLISTS_TABLE($PLAYLIST_ID)
+                    ON DELETE CASCADE,
+                FOREIGN KEY ($PLAYLIST_ITEM_TRACK_ID) REFERENCES $TRACKS_TABLE($TRACK_ID)
+                    ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_playlist_items_order ON $PLAYLIST_ITEMS_TABLE($PLAYLIST_ITEM_PLAYLIST_ID, $PLAYLIST_ITEM_POSITION)",
+        )
+    }
+
     companion object {
         private const val DATABASE_NAME = "library-catalog.db"
-        private const val DATABASE_VERSION = 1
+        private const val DATABASE_VERSION = 2
         private const val DEVICE_SOURCE_NAME = "Device music"
 
         private const val SOURCES_TABLE = "library_sources"
@@ -382,9 +685,36 @@ internal class LibraryCatalogStore(context: Context) : SQLiteOpenHelper(
         private const val TRACK_DATE_MODIFIED_SECONDS = "date_modified_seconds"
         private const val TRACK_SIZE_BYTES = "size_bytes"
         private const val TRACK_MIME_TYPE = "mime_type"
+        private const val TRACK_ALBUM_ARTIST = "album_artist"
+        private const val TRACK_NUMBER = "track_number"
+        private const val TRACK_DISC_NUMBER = "disc_number"
+        private const val TRACK_YEAR = "year"
+        private const val TRACK_GENRE = "genre"
+        private const val TRACK_FILE_NAME = "file_name"
+        private const val TRACK_FOLDER_NAME = "folder_name"
+        private const val TRACK_CODEC = "codec"
+        private const val TRACK_CHANNEL_COUNT = "channel_count"
+        private const val TRACK_BIT_DEPTH = "bit_depth"
+        private const val TRACK_SAMPLE_RATE_HZ = "sample_rate_hz"
+        private const val TRACK_BITRATE = "bitrate"
+        private const val TRACK_IS_FAVORITE = "is_favorite"
+        private const val TRACK_LAST_PLAYED_AT_MS = "last_played_at_ms"
+        private const val TRACK_PLAY_COUNT = "play_count"
         private const val TRACK_FINGERPRINT = "fingerprint"
         private const val TRACK_ARTWORK_REVISION = "artwork_revision"
         private const val TRACK_SEEN_EPOCH = "seen_epoch"
+
+        private const val PLAYLISTS_TABLE = "library_playlists"
+        private const val PLAYLIST_ID = "playlist_id"
+        private const val PLAYLIST_NAME = "name"
+        private const val PLAYLIST_CREATED_AT_MS = "created_at_ms"
+        private const val PLAYLIST_UPDATED_AT_MS = "updated_at_ms"
+
+        private const val PLAYLIST_ITEMS_TABLE = "library_playlist_items"
+        private const val PLAYLIST_ITEM_PLAYLIST_ID = "playlist_id"
+        private const val PLAYLIST_ITEM_TRACK_ID = "track_id"
+        private const val PLAYLIST_ITEM_POSITION = "position"
+        private const val PLAYLIST_ITEM_ADDED_AT_MS = "added_at_ms"
 
         private val SOURCE_COLUMNS = arrayOf(
             SOURCE_ID,
@@ -406,6 +736,23 @@ internal class LibraryCatalogStore(context: Context) : SQLiteOpenHelper(
             TRACK_ALBUM_ARTWORK_URI,
             TRACK_DATE_MODIFIED_SECONDS,
             TRACK_ARTWORK_REVISION,
+            TRACK_SIZE_BYTES,
+            TRACK_MIME_TYPE,
+            TRACK_ALBUM_ARTIST,
+            TRACK_NUMBER,
+            TRACK_DISC_NUMBER,
+            TRACK_YEAR,
+            TRACK_GENRE,
+            TRACK_FILE_NAME,
+            TRACK_FOLDER_NAME,
+            TRACK_CODEC,
+            TRACK_CHANNEL_COUNT,
+            TRACK_BIT_DEPTH,
+            TRACK_SAMPLE_RATE_HZ,
+            TRACK_BITRATE,
+            TRACK_IS_FAVORITE,
+            TRACK_LAST_PLAYED_AT_MS,
+            TRACK_PLAY_COUNT,
         )
     }
 }

@@ -22,6 +22,22 @@ interface LibraryCatalog {
 
     fun resume()
 
+    fun setFavorite(trackId: Long, favorite: Boolean)
+
+    fun recordPlayback(trackId: Long, playedAtMs: Long = System.currentTimeMillis())
+
+    fun createPlaylist(name: String): Long?
+
+    fun renamePlaylist(playlistId: Long, name: String)
+
+    fun deletePlaylist(playlistId: Long)
+
+    fun addTrackToPlaylist(playlistId: Long, trackId: Long)
+
+    fun removeTrackFromPlaylist(playlistId: Long, trackId: Long)
+
+    fun movePlaylistTrack(playlistId: Long, fromIndex: Int, toIndex: Int)
+
     suspend fun refresh(
         includeDeviceLibrary: Boolean,
         onProgress: suspend (LibraryScanProgress) -> Unit,
@@ -36,7 +52,7 @@ internal class AndroidLibraryCatalog(
     private val contentResolver: ContentResolver = appContext.contentResolver
     private val mediaStore = MediaStoreAudioRepository(appContext, contentResolver)
     private val treeScanner = TreeAudioScanner(contentResolver)
-    private val treeMetadataReader = SafAudioMetadataReader(appContext)
+    private val metadataReader = LocalAudioMetadataReader(appContext)
     private val scanGate = LibraryScanGate()
 
     @Volatile
@@ -81,6 +97,25 @@ internal class AndroidLibraryCatalog(
         resumePausedSourcesRequested = true
         scanGate.resume()
     }
+
+    override fun setFavorite(trackId: Long, favorite: Boolean) = store.setFavorite(trackId, favorite)
+
+    override fun recordPlayback(trackId: Long, playedAtMs: Long) = store.recordPlayback(trackId, playedAtMs)
+
+    override fun createPlaylist(name: String): Long? = store.createPlaylist(name)
+
+    override fun renamePlaylist(playlistId: Long, name: String) = store.renamePlaylist(playlistId, name)
+
+    override fun deletePlaylist(playlistId: Long) = store.deletePlaylist(playlistId)
+
+    override fun addTrackToPlaylist(playlistId: Long, trackId: Long) =
+        store.addTrackToPlaylist(playlistId, trackId)
+
+    override fun removeTrackFromPlaylist(playlistId: Long, trackId: Long) =
+        store.removeTrackFromPlaylist(playlistId, trackId)
+
+    override fun movePlaylistTrack(playlistId: Long, fromIndex: Int, toIndex: Int) =
+        store.movePlaylistTrack(playlistId, fromIndex, toIndex)
 
     override suspend fun refresh(
         includeDeviceLibrary: Boolean,
@@ -145,7 +180,7 @@ internal class AndroidLibraryCatalog(
             shouldPause = scanGate::isPaused,
         ) { candidate ->
             if (!store.markSeenIfFingerprintMatches(session, candidate.remoteId, candidate.fingerprint)) {
-                store.upsertTrack(session, candidate)
+                store.upsertTrack(session, metadataReader.enrich(candidate))
             }
         }
         finishIteration(
@@ -180,7 +215,7 @@ internal class AndroidLibraryCatalog(
             shouldPause = scanGate::isPaused,
         ) { document ->
             if (!store.markSeenIfFingerprintMatches(session, document.documentId, document.fingerprint)) {
-                store.upsertTrack(session, treeMetadataReader.read(document))
+                store.upsertTrack(session, metadataReader.enrich(document.toTrackCandidate()))
             }
         }
         finishIteration(
@@ -245,6 +280,7 @@ internal class AndroidLibraryCatalog(
         return LibraryCatalogSnapshot(
             tracks = store.readTracks(visibleSourceIds),
             sources = sources,
+            playlists = store.readPlaylists(),
         )
     }
 

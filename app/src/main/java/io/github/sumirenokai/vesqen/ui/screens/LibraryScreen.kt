@@ -17,18 +17,36 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,9 +66,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.library.LibraryBrowseMode
+import io.github.sumirenokai.vesqen.library.LibraryCollection
+import io.github.sumirenokai.vesqen.library.LibraryPlaylist
 import io.github.sumirenokai.vesqen.library.LibraryScanState
+import io.github.sumirenokai.vesqen.library.LibrarySortOrder
 import io.github.sumirenokai.vesqen.library.LibrarySource
 import io.github.sumirenokai.vesqen.library.LibrarySourceKind
+import io.github.sumirenokai.vesqen.library.buildLibraryCollections
+import io.github.sumirenokai.vesqen.library.sortLibraryTracks
+import io.github.sumirenokai.vesqen.library.sortLibraryCollections
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.LibraryUiState
 import io.github.sumirenokai.vesqen.ui.MusicAccess
@@ -72,6 +97,18 @@ fun LibraryScreen(
     onRescan: () -> Unit,
     onTrackSelected: (AudioTrack) -> Unit,
     modifier: Modifier = Modifier,
+    onPlayQueue: (List<AudioTrack>, Int) -> Unit = { tracks, index ->
+        tracks.getOrNull(index)?.let(onTrackSelected)
+    },
+    onToggleFavorite: (Long, Boolean) -> Unit = { _, _ -> },
+    onPlayNext: (AudioTrack) -> Unit = {},
+    onAddToQueue: (AudioTrack) -> Unit = {},
+    onCreatePlaylist: (String) -> Unit = {},
+    onRenamePlaylist: (Long, String) -> Unit = { _, _ -> },
+    onDeletePlaylist: (Long) -> Unit = {},
+    onAddTrackToPlaylist: (Long, Long) -> Unit = { _, _ -> },
+    onRemoveTrackFromPlaylist: (Long, Long) -> Unit = { _, _ -> },
+    onMovePlaylistTrack: (Long, Int, Int) -> Unit = { _, _, _ -> },
     onAddLibraryFolder: () -> Unit = {},
     onRemoveLibraryFolder: (String) -> Unit = {},
     onPauseLibraryScan: () -> Unit = {},
@@ -89,6 +126,16 @@ fun LibraryScreen(
         onPauseLibraryScan = onPauseLibraryScan,
         onResumeLibraryScan = onResumeLibraryScan,
         onTrackSelected = onTrackSelected,
+        onPlayQueue = onPlayQueue,
+        onToggleFavorite = onToggleFavorite,
+        onPlayNext = onPlayNext,
+        onAddToQueue = onAddToQueue,
+        onCreatePlaylist = onCreatePlaylist,
+        onRenamePlaylist = onRenamePlaylist,
+        onDeletePlaylist = onDeletePlaylist,
+        onAddTrackToPlaylist = onAddTrackToPlaylist,
+        onRemoveTrackFromPlaylist = onRemoveTrackFromPlaylist,
+        onMovePlaylistTrack = onMovePlaylistTrack,
         modifier = modifier,
     )
 }
@@ -106,11 +153,36 @@ private fun LibraryContent(
     onPauseLibraryScan: () -> Unit,
     onResumeLibraryScan: () -> Unit,
     onTrackSelected: (AudioTrack) -> Unit,
+    onPlayQueue: (List<AudioTrack>, Int) -> Unit,
+    onToggleFavorite: (Long, Boolean) -> Unit,
+    onPlayNext: (AudioTrack) -> Unit,
+    onAddToQueue: (AudioTrack) -> Unit,
+    onCreatePlaylist: (String) -> Unit,
+    onRenamePlaylist: (Long, String) -> Unit,
+    onDeletePlaylist: (Long) -> Unit,
+    onAddTrackToPlaylist: (Long, Long) -> Unit,
+    onRemoveTrackFromPlaylist: (Long, Long) -> Unit,
+    onMovePlaylistTrack: (Long, Int, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var detailsTrack by remember { mutableStateOf<AudioTrack?>(null) }
-    val visibleTracks = filterTracks(state.tracks, query)
+    var browseModeName by rememberSaveable { mutableStateOf(LibraryBrowseMode.SONGS.name) }
+    var sortOrderName by rememberSaveable { mutableStateOf(LibrarySortOrder.TITLE.name) }
+    var favoritesOnly by rememberSaveable { mutableStateOf(false) }
+    var selectedCollectionKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var showCreatePlaylist by rememberSaveable { mutableStateOf(false) }
+    var playlistToEdit by remember { mutableStateOf<LibraryPlaylist?>(null) }
+    val browseMode = LibraryBrowseMode.valueOf(browseModeName)
+    val sortOrder = LibrarySortOrder.valueOf(sortOrderName)
+    val searchedTracks = filterTracks(state.tracks, query)
+    val filteredTracks = searchedTracks.filter { !favoritesOnly || it.isFavorite }
+    val visibleTracks = sortLibraryTracks(filteredTracks, sortOrder)
+    val collections = sortLibraryCollections(
+        buildLibraryCollections(browseMode, filteredTracks, state.playlists),
+        sortOrder,
+    )
+    val selectedCollection = collections.firstOrNull { it.key == selectedCollectionKey }
 
     Column(modifier = modifier.fillMaxSize()) {
         LibraryHeader(
@@ -143,6 +215,17 @@ private fun LibraryContent(
         }
         if (state.tracks.isNotEmpty()) {
             LibrarySearchField(query = query, onQueryChange = { query = it })
+            LibraryBrowseBar(
+                browseMode = browseMode,
+                sortOrder = sortOrder,
+                favoritesOnly = favoritesOnly,
+                onBrowseModeChanged = { mode ->
+                    browseModeName = mode.name
+                    selectedCollectionKey = null
+                },
+                onSortOrderChanged = { sortOrderName = it.name },
+                onToggleFavorites = { favoritesOnly = !favoritesOnly },
+            )
         }
         Box(modifier = Modifier.weight(1f)) {
             when {
@@ -169,7 +252,15 @@ private fun LibraryContent(
                     modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
                 )
 
-                visibleTracks.isEmpty() -> VesqenEmptyState(
+                browseMode == LibraryBrowseMode.PLAYLISTS && state.playlists.isEmpty() -> VesqenEmptyState(
+                    title = stringResource(R.string.library_playlists),
+                    body = stringResource(R.string.no_local_music_body),
+                    actionLabel = stringResource(R.string.create_playlist),
+                    onAction = { showCreatePlaylist = true },
+                    modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
+                )
+
+                visibleTracks.isEmpty() && browseMode != LibraryBrowseMode.PLAYLISTS -> VesqenEmptyState(
                     title = stringResource(R.string.no_search_results),
                     body = stringResource(R.string.no_search_results_body),
                     actionLabel = stringResource(R.string.clear_search),
@@ -177,40 +268,507 @@ private fun LibraryContent(
                     modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
                 )
 
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = VesqenSpacing.md,
-                        end = VesqenSpacing.md,
-                        top = VesqenSpacing.xs,
-                        bottom = VesqenSpacing.md,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs),
-                ) {
-                    items(items = visibleTracks, key = AudioTrack::id) { track ->
-                        TrackRow(
-                            track = track,
-                            isCurrent = track.id == playback.trackId,
-                            isPlaying = playback.isPlaying,
-                            onPlay = { onTrackSelected(track) },
-                            onMore = { detailsTrack = track },
-                        )
-                    }
-                }
+                selectedCollection != null -> CollectionTrackList(
+                    collection = selectedCollection,
+                    playback = playback,
+                    onBack = { selectedCollectionKey = null },
+                    onPlayQueue = onPlayQueue,
+                    onTrackSelected = { track ->
+                        onPlayQueue(selectedCollection.tracks, selectedCollection.tracks.indexOf(track))
+                    },
+                    onTrackMore = { detailsTrack = it },
+                    onEditPlaylist = selectedCollection.playlistId?.let { playlistId ->
+                        { playlistToEdit = state.playlists.firstOrNull { it.id == playlistId } }
+                    },
+                )
+
+                browseMode == LibraryBrowseMode.SONGS -> TrackList(
+                    tracks = visibleTracks,
+                    playback = playback,
+                    onTrackSelected = { track ->
+                        onPlayQueue(visibleTracks, visibleTracks.indexOf(track))
+                    },
+                    onTrackMore = { detailsTrack = it },
+                )
+
+                else -> CollectionList(
+                    mode = browseMode,
+                    collections = collections,
+                    onCollectionSelected = { selectedCollectionKey = it.key },
+                    onCreatePlaylist = if (browseMode == LibraryBrowseMode.PLAYLISTS) {
+                        { showCreatePlaylist = true }
+                    } else {
+                        null
+                    },
+                )
             }
         }
     }
 
     detailsTrack?.let { track ->
+        val playlistId = selectedCollection?.playlistId
+        val playlistTrackIndex = selectedCollection?.tracks?.indexOfFirst { it.id == track.id } ?: -1
         TrackDetailsSheet(
             track = track,
+            playlists = state.playlists,
             onDismiss = { detailsTrack = null },
             onPlay = {
-                onTrackSelected(track)
+                if (selectedCollection != null) {
+                    onPlayQueue(selectedCollection.tracks, selectedCollection.tracks.indexOf(track))
+                } else {
+                    onTrackSelected(track)
+                }
                 detailsTrack = null
+            },
+            onToggleFavorite = {
+                onToggleFavorite(track.id, !track.isFavorite)
+                detailsTrack = null
+            },
+            onPlayNext = {
+                onPlayNext(track)
+                detailsTrack = null
+            },
+            onAddToQueue = {
+                onAddToQueue(track)
+                detailsTrack = null
+            },
+            onAddToPlaylist = { targetPlaylistId ->
+                onAddTrackToPlaylist(targetPlaylistId, track.id)
+                detailsTrack = null
+            },
+            onRemoveFromPlaylist = playlistId?.let {
+                {
+                    onRemoveTrackFromPlaylist(it, track.id)
+                    detailsTrack = null
+                }
+            },
+            onMoveUp = if (playlistId != null && playlistTrackIndex > 0) {
+                {
+                    onMovePlaylistTrack(playlistId, playlistTrackIndex, playlistTrackIndex - 1)
+                    detailsTrack = null
+                }
+            } else null,
+            onMoveDown = if (
+                playlistId != null &&
+                playlistTrackIndex >= 0 &&
+                playlistTrackIndex < selectedCollection.tracks.lastIndex
+            ) {
+                {
+                    onMovePlaylistTrack(playlistId, playlistTrackIndex, playlistTrackIndex + 1)
+                    detailsTrack = null
+                }
+            } else null,
+        )
+    }
+
+    if (showCreatePlaylist) {
+        PlaylistNameDialog(
+            title = stringResource(R.string.create_playlist),
+            initialName = "",
+            confirmLabel = stringResource(R.string.create),
+            onDismiss = { showCreatePlaylist = false },
+            onConfirm = { name ->
+                onCreatePlaylist(name)
+                showCreatePlaylist = false
             },
         )
     }
+    playlistToEdit?.let { playlist ->
+        PlaylistEditDialog(
+            playlist = playlist,
+            onDismiss = { playlistToEdit = null },
+            onRename = { name ->
+                onRenamePlaylist(playlist.id, name)
+                playlistToEdit = null
+            },
+            onDelete = {
+                onDeletePlaylist(playlist.id)
+                selectedCollectionKey = null
+                playlistToEdit = null
+            },
+        )
+    }
+}
+
+@Composable
+private fun LibraryBrowseBar(
+    browseMode: LibraryBrowseMode,
+    sortOrder: LibrarySortOrder,
+    favoritesOnly: Boolean,
+    onBrowseModeChanged: (LibraryBrowseMode) -> Unit,
+    onSortOrderChanged: (LibrarySortOrder) -> Unit,
+    onToggleFavorites: () -> Unit,
+) {
+    var showSortMenu by remember { mutableStateOf(false) }
+    val modes = LibraryBrowseMode.entries
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = VesqenSpacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PrimaryScrollableTabRow(
+            selectedTabIndex = modes.indexOf(browseMode),
+            modifier = Modifier.weight(1f),
+            edgePadding = 0.dp,
+            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+            divider = {},
+        ) {
+            modes.forEach { mode ->
+                Tab(
+                    selected = mode == browseMode,
+                    onClick = { onBrowseModeChanged(mode) },
+                    text = {
+                        Text(
+                            text = stringResource(mode.labelResource()),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    modifier = Modifier.testTag("vesqen.library.mode.${mode.name.lowercase()}"),
+                )
+            }
+        }
+        IconButton(
+            onClick = onToggleFavorites,
+            modifier = Modifier.testTag("vesqen.library.favorites"),
+        ) {
+            Icon(
+                imageVector = if (favoritesOnly) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                contentDescription = stringResource(
+                    if (favoritesOnly) R.string.show_all_music else R.string.show_favorites,
+                ),
+                tint = if (favoritesOnly) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Box {
+            IconButton(
+                onClick = { showSortMenu = true },
+                modifier = Modifier.testTag("vesqen.library.sort"),
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Sort,
+                    contentDescription = stringResource(R.string.sort_library),
+                )
+            }
+            DropdownMenu(
+                expanded = showSortMenu,
+                onDismissRequest = { showSortMenu = false },
+            ) {
+                LibrarySortOrder.entries.forEach { order ->
+                    DropdownMenuItem(
+                        text = { Text(stringResource(order.labelResource())) },
+                        onClick = {
+                            onSortOrderChanged(order)
+                            showSortMenu = false
+                        },
+                        leadingIcon = if (order == sortOrder) {
+                            { Icon(Icons.Filled.MusicNote, contentDescription = null) }
+                        } else null,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackList(
+    tracks: List<AudioTrack>,
+    playback: PlaybackSnapshot,
+    onTrackSelected: (AudioTrack) -> Unit,
+    onTrackMore: (AudioTrack) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = VesqenSpacing.md,
+            end = VesqenSpacing.md,
+            top = VesqenSpacing.xs,
+            bottom = VesqenSpacing.md,
+        ),
+        verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs),
+    ) {
+        items(items = tracks, key = AudioTrack::id) { track ->
+            TrackRow(
+                track = track,
+                isCurrent = track.id == playback.trackId,
+                isPlaying = playback.isPlaying,
+                onPlay = { onTrackSelected(track) },
+                onMore = { onTrackMore(track) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun CollectionList(
+    mode: LibraryBrowseMode,
+    collections: List<LibraryCollection>,
+    onCollectionSelected: (LibraryCollection) -> Unit,
+    onCreatePlaylist: (() -> Unit)?,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = VesqenSpacing.md,
+            end = VesqenSpacing.md,
+            top = VesqenSpacing.xs,
+            bottom = VesqenSpacing.md,
+        ),
+        verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xs),
+    ) {
+        onCreatePlaylist?.let { create ->
+            item(key = "create-playlist") {
+                Surface(
+                    onClick = create,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp)
+                        .testTag("vesqen.library.playlist.create"),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = VesqenSpacing.md),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = null)
+                        Spacer(Modifier.width(VesqenSpacing.sm))
+                        Text(stringResource(R.string.create_playlist), style = MaterialTheme.typography.titleSmall)
+                    }
+                }
+            }
+        }
+        items(items = collections, key = LibraryCollection::key) { collection ->
+            CollectionRow(
+                mode = mode,
+                collection = collection,
+                onClick = { onCollectionSelected(collection) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun CollectionRow(
+    mode: LibraryBrowseMode,
+    collection: LibraryCollection,
+    onClick: () -> Unit,
+) {
+    val title = collection.title.ifBlank {
+        stringResource(
+            when (mode) {
+                LibraryBrowseMode.ALBUMS -> R.string.unknown_album
+                LibraryBrowseMode.ARTISTS -> R.string.unknown_artist
+                LibraryBrowseMode.FOLDERS -> R.string.unknown_folder
+                LibraryBrowseMode.GENRES -> R.string.unknown_genre
+                LibraryBrowseMode.PLAYLISTS -> R.string.unknown_playlist
+                LibraryBrowseMode.SONGS -> R.string.unknown_title
+            },
+        )
+    }
+    val subtitle = when (mode) {
+        LibraryBrowseMode.ALBUMS -> collection.subtitle.ifBlank {
+            pluralStringResource(R.plurals.collection_track_count, collection.tracks.size, collection.tracks.size)
+        }
+        LibraryBrowseMode.ARTISTS -> pluralStringResource(
+            R.plurals.collection_album_count,
+            collection.subtitle.toIntOrNull() ?: 0,
+            collection.subtitle.toIntOrNull() ?: 0,
+        )
+        else -> pluralStringResource(
+            R.plurals.collection_track_count,
+            collection.tracks.size,
+            collection.tracks.size,
+        )
+    }
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 64.dp)
+            .testTag("vesqen.library.collection.${collection.key}"),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = when (mode) {
+                    LibraryBrowseMode.ALBUMS -> Icons.Filled.Album
+                    LibraryBrowseMode.ARTISTS -> Icons.Filled.Person
+                    LibraryBrowseMode.FOLDERS -> Icons.Filled.FolderOpen
+                    LibraryBrowseMode.GENRES -> Icons.Filled.MusicNote
+                    LibraryBrowseMode.PLAYLISTS -> Icons.AutoMirrored.Filled.QueueMusic
+                    LibraryBrowseMode.SONGS -> Icons.Filled.MusicNote
+                },
+                contentDescription = null,
+                modifier = Modifier.size(32.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(VesqenSpacing.sm))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CollectionTrackList(
+    collection: LibraryCollection,
+    playback: PlaybackSnapshot,
+    onBack: () -> Unit,
+    onPlayQueue: (List<AudioTrack>, Int) -> Unit,
+    onTrackSelected: (AudioTrack) -> Unit,
+    onTrackMore: (AudioTrack) -> Unit,
+    onEditPlaylist: (() -> Unit)?,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .padding(horizontal = VesqenSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+            }
+            Text(
+                text = collection.title.ifBlank { stringResource(R.string.unknown_title) },
+                style = MaterialTheme.typography.titleLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            onEditPlaylist?.let { edit ->
+                IconButton(onClick = edit) {
+                    Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.edit_playlist))
+                }
+            }
+            IconButton(
+                onClick = { onPlayQueue(collection.tracks, 0) },
+                enabled = collection.tracks.isNotEmpty(),
+            ) {
+                Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.play_all))
+            }
+        }
+        if (collection.tracks.isEmpty()) {
+            VesqenEmptyState(
+                title = collection.title,
+                body = stringResource(R.string.no_local_music_body),
+                actionLabel = stringResource(R.string.back),
+                onAction = onBack,
+                modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
+            )
+        } else {
+            Box(modifier = Modifier.weight(1f)) {
+                TrackList(collection.tracks, playback, onTrackSelected, onTrackMore)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaylistNameDialog(
+    title: String,
+    initialName: String,
+    confirmLabel: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var name by remember(initialName) { mutableStateOf(initialName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                singleLine = true,
+                label = { Text(stringResource(R.string.playlist_name)) },
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) {
+                Text(confirmLabel)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun PlaylistEditDialog(
+    playlist: LibraryPlaylist,
+    onDismiss: () -> Unit,
+    onRename: (String) -> Unit,
+    onDelete: () -> Unit,
+) {
+    var name by remember(playlist.id) { mutableStateOf(playlist.name) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.edit_playlist)) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                singleLine = true,
+                label = { Text(stringResource(R.string.playlist_name)) },
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onRename(name) }, enabled = name.isNotBlank()) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onDelete) {
+                    Icon(Icons.Filled.Delete, contentDescription = null)
+                    Spacer(Modifier.width(VesqenSpacing.xxs))
+                    Text(stringResource(R.string.delete_playlist))
+                }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            }
+        },
+    )
+}
+
+private fun LibraryBrowseMode.labelResource(): Int = when (this) {
+    LibraryBrowseMode.SONGS -> R.string.library_songs
+    LibraryBrowseMode.ALBUMS -> R.string.library_albums
+    LibraryBrowseMode.ARTISTS -> R.string.library_artists
+    LibraryBrowseMode.FOLDERS -> R.string.library_folders
+    LibraryBrowseMode.GENRES -> R.string.library_genres
+    LibraryBrowseMode.PLAYLISTS -> R.string.library_playlists
+}
+
+private fun LibrarySortOrder.labelResource(): Int = when (this) {
+    LibrarySortOrder.TITLE -> R.string.sort_title
+    LibrarySortOrder.ARTIST -> R.string.sort_artist
+    LibrarySortOrder.ALBUM -> R.string.sort_album
+    LibrarySortOrder.RECENTLY_ADDED -> R.string.sort_recently_added
+    LibrarySortOrder.RECENTLY_PLAYED -> R.string.sort_recently_played
+    LibrarySortOrder.MOST_PLAYED -> R.string.sort_most_played
 }
 
 @Composable
@@ -703,6 +1261,11 @@ internal fun filterTracks(tracks: List<AudioTrack>, query: String): List<AudioTr
     return tracks.filter { track ->
         track.title.contains(normalizedQuery, ignoreCase = true) ||
             track.artist.contains(normalizedQuery, ignoreCase = true) ||
-            track.album.contains(normalizedQuery, ignoreCase = true)
+            track.album.contains(normalizedQuery, ignoreCase = true) ||
+            track.albumArtist.contains(normalizedQuery, ignoreCase = true) ||
+            track.genre.contains(normalizedQuery, ignoreCase = true) ||
+            track.folderName.contains(normalizedQuery, ignoreCase = true) ||
+            track.fileName.contains(normalizedQuery, ignoreCase = true) ||
+            track.codec.contains(normalizedQuery, ignoreCase = true)
     }
 }

@@ -22,7 +22,8 @@ internal class MediaStoreAudioRepository(
         shouldPause: () -> Boolean,
         onTrack: (LibraryTrackCandidate) -> Unit,
     ): ScanIterationResult {
-        val projection = arrayOf(
+        val projection = buildList {
+            addAll(arrayOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
@@ -32,7 +33,12 @@ internal class MediaStoreAudioRepository(
             MediaStore.Audio.Media.DATE_MODIFIED,
             MediaStore.Audio.Media.SIZE,
             MediaStore.Audio.Media.MIME_TYPE,
-        )
+            MediaStore.Audio.Media.DISPLAY_NAME,
+            ))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                add(MediaStore.Audio.Media.RELATIVE_PATH)
+            }
+        }.toTypedArray()
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} > 0"
         val sortOrder = "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
 
@@ -53,6 +59,12 @@ internal class MediaStoreAudioRepository(
             val dateModifiedIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
             val sizeIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
             val mimeTypeIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
+            val displayNameIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+            val relativePathIndex = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                cursor.getColumnIndex(MediaStore.Audio.Media.RELATIVE_PATH)
+            } else {
+                -1
+            }
 
             var processedTrackCount = 0
             while (cursor.moveToNext()) {
@@ -72,6 +84,12 @@ internal class MediaStoreAudioRepository(
                 val dateModifiedSeconds = cursor.getLong(dateModifiedIndex)
                 val sizeBytes = cursor.getLong(sizeIndex)
                 val mimeType = cursor.getString(mimeTypeIndex).orEmpty()
+                val fileName = cursor.getString(displayNameIndex).orEmpty()
+                val folderName = if (relativePathIndex >= 0) {
+                    cursor.getString(relativePathIndex).orEmpty().trimEnd('/')
+                } else {
+                    ""
+                }
                 onTrack(
                     LibraryTrackCandidate(
                         remoteId = id.toString(),
@@ -90,6 +108,8 @@ internal class MediaStoreAudioRepository(
                         dateModifiedSeconds = dateModifiedSeconds,
                         sizeBytes = sizeBytes,
                         mimeType = mimeType,
+                        fileName = fileName,
+                        folderName = folderName,
                         fingerprint = libraryFingerprint(
                             "media",
                             id,
@@ -102,6 +122,8 @@ internal class MediaStoreAudioRepository(
                             dateModifiedSeconds,
                             sizeBytes,
                             mimeType,
+                            fileName,
+                            folderName,
                         ),
                     ),
                 )

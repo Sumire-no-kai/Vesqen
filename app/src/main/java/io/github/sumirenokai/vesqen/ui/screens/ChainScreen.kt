@@ -66,6 +66,18 @@ fun ChainScreen(
             AudioOutputType.OTHER -> other
         }
     }
+    val currentTrack = snapshot.trackId?.let { trackId ->
+        library.tracks.firstOrNull { it.id == trackId }
+    }
+    val sourceFacts = currentTrack?.let { track ->
+        listOf(
+            track.codec,
+            track.sampleRateHz?.takeIf { it > 0 }?.let { "${it / 1_000f} kHz" }.orEmpty(),
+            track.bitDepth?.takeIf { it > 0 }?.let { "$it-bit" }.orEmpty(),
+            track.channelCount?.takeIf { it > 0 }?.let { "$it ch" }.orEmpty(),
+            track.bitrate?.takeIf { it > 0 }?.let { "${it / 1_000} kbps" }.orEmpty(),
+        ).filter(String::isNotBlank).joinToString(" · ")
+    }.orEmpty()
 
     LazyColumn(
         modifier = modifier
@@ -86,11 +98,20 @@ fun ChainScreen(
         item {
             EvidencePanel(
                 icon = { Icon(imageVector = Icons.Filled.Route, contentDescription = null) },
+                title = stringResource(R.string.chain_active_system_route),
+                body = library.activeRoute?.let { route ->
+                    stringResource(R.string.chain_active_system_route_value, route.name)
+                } ?: stringResource(R.string.chain_active_system_route_unknown),
+            )
+        }
+        item {
+            EvidencePanel(
+                icon = { Icon(imageVector = Icons.Filled.Route, contentDescription = null) },
                 title = stringResource(R.string.chain_detected_outputs),
                 body = if (outputLabels.isEmpty()) {
                     stringResource(R.string.output_none_detected)
                 } else {
-                    stringResource(R.string.detected_output_types, outputLabels.joinToString())
+                    stringResource(R.string.detected_output_types_live, outputLabels.joinToString())
                 },
             )
         }
@@ -98,7 +119,11 @@ fun ChainScreen(
             EvidencePanel(
                 icon = { Icon(imageVector = Icons.Filled.FolderOpen, contentDescription = null) },
                 title = stringResource(R.string.chain_source_details),
-                body = stringResource(R.string.chain_source_details_body),
+                body = if (sourceFacts.isBlank()) {
+                    stringResource(R.string.chain_source_details_body)
+                } else {
+                    stringResource(R.string.chain_source_details_available, sourceFacts)
+                },
             )
         }
         item {
