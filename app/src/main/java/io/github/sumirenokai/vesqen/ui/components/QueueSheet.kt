@@ -54,7 +54,7 @@ fun QueueSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = VesqenSpacing.md)
-                .padding(bottom = VesqenSpacing.xl),
+                .padding(bottom = VesqenSpacing.xs),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
