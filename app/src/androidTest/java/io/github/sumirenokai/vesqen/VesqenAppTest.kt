@@ -17,6 +17,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
@@ -34,10 +35,12 @@ import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.library.LibraryScanProgress
+import io.github.sumirenokai.vesqen.library.LibraryPlaylist
 import io.github.sumirenokai.vesqen.library.LibraryScanState
 import io.github.sumirenokai.vesqen.library.LibrarySource
 import io.github.sumirenokai.vesqen.library.LibrarySourceKind
 import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
+import io.github.sumirenokai.vesqen.playback.PlaybackQueueItem
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode
 import io.github.sumirenokai.vesqen.ui.LibraryUiState
@@ -1065,6 +1068,74 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.transport-dock").assertIsDisplayed()
     }
 
+    @Test
+    fun library_album_browse_plays_the_visible_collection_as_its_queue() {
+        var queuedTrackIds = emptyList<Long>()
+        render(
+            state = grantedState(tracks = sampleTracks),
+            onPlayQueue = { tracks, _ -> queuedTrackIds = tracks.map(AudioTrack::id) },
+        )
+
+        composeRule.onNodeWithTag("vesqen.library.mode.albums").performClick()
+        composeRule.onNodeWithText("Quiet Rooms").performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.play_all)).performClick()
+
+        assertEquals(listOf(1L, 2L), queuedTrackIds)
+    }
+
+    @Test
+    fun playlist_creation_stays_embedded_in_library() {
+        var createdName = ""
+        render(
+            state = grantedState(tracks = sampleTracks).copy(
+                library = LibraryUiState(
+                    musicAccess = MusicAccess.GRANTED,
+                    tracks = sampleTracks,
+                    playlists = listOf(LibraryPlaylist(1, "Existing", emptyList(), 1, 1)),
+                ),
+            ),
+            onCreatePlaylist = { createdName = it },
+        )
+
+        composeRule.onNodeWithTag("vesqen.library.mode.playlists").performClick()
+        composeRule.onNodeWithTag("vesqen.library.playlist.create").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.playlist_name)).performTextInput("Night")
+        composeRule.onNodeWithText(context.getString(R.string.create)).performClick()
+
+        assertEquals("Night", createdName)
+        composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
+    }
+
+    @Test
+    fun playback_session_exposes_an_editable_queue_sheet() {
+        render(
+            state = grantedState(
+                tracks = sampleTracks,
+                playback = PlaybackSnapshot(
+                    isControllerReady = true,
+                    trackId = 1,
+                    title = "Dawn Signal",
+                    artist = "Mori",
+                    durationMs = 245_000,
+                    queueIndex = 0,
+                    queueSize = 2,
+                    queue = listOf(
+                        PlaybackQueueItem(1, "Dawn Signal", "Mori", true),
+                        PlaybackQueueItem(2, "Long Light", "Mori", false),
+                    ),
+                ),
+            ),
+        )
+
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.session-toggle").performClick()
+        composeRule.onNodeWithTag("vesqen.now.info.session").performClick()
+
+        composeRule.onNodeWithTag("vesqen.queue.sheet").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.queue.item.0").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.queue.item.1").assertIsDisplayed()
+    }
+
     private fun assertFocusedNowControlsAreFullyVisible() {
         val footerTags = mutableListOf(
             "vesqen.now.playback-order",
@@ -1259,6 +1330,8 @@ class VesqenAppTest {
         onOpenAppSettings: () -> Unit = {},
         onOpenNotificationSettings: () -> Unit = {},
         onAddLibraryFolder: () -> Unit = {},
+        onPlayQueue: (List<AudioTrack>, Int) -> Unit = { _, _ -> },
+        onCreatePlaylist: (String) -> Unit = {},
         onRemoveLibraryFolder: (String) -> Unit = {},
         onResumeLibraryScan: () -> Unit = {},
         containerWidth: Dp? = null,
@@ -1279,6 +1352,8 @@ class VesqenAppTest {
                         onOpenNotificationSettings = onOpenNotificationSettings,
                         onRescan = {},
                         onTrackSelected = {},
+                        onPlayQueue = onPlayQueue,
+                        onCreatePlaylist = onCreatePlaylist,
                         onPrevious = onPrevious,
                         onPlayPause = onPlayPause,
                         onNext = onNext,

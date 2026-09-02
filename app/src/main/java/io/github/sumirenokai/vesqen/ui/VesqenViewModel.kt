@@ -16,6 +16,7 @@ import io.github.sumirenokai.vesqen.library.LibraryScanProgress
 import io.github.sumirenokai.vesqen.library.LibraryScanState
 import io.github.sumirenokai.vesqen.library.LibrarySource
 import io.github.sumirenokai.vesqen.library.LibrarySourceKind
+import io.github.sumirenokai.vesqen.library.LibraryPlaylist
 import io.github.sumirenokai.vesqen.playback.PlaybackController
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import kotlinx.coroutines.Dispatchers
@@ -35,9 +36,13 @@ data class LibraryUiState(
     val notificationsAllowed: Boolean = true,
     val isLoading: Boolean = false,
     val tracks: List<AudioTrack> = emptyList(),
+    val playlists: List<LibraryPlaylist> = emptyList(),
     val sources: List<LibrarySource> = emptyList(),
     val scanProgress: LibraryScanProgress? = null,
     val connectedOutputs: Set<AudioOutputType> = emptySet(),
+    val activeRoute: ActiveAudioRoute? = null,
+    val outputRouteRevision: Long = 0,
+    val outputRouteChangedAtMs: Long = 0,
     val loadingFailed: Boolean = false,
 ) {
     val isScanPaused: Boolean
@@ -61,6 +66,19 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     var uiState by mutableStateOf(VesqenUiState())
         private set
+
+    init {
+        connectedOutputs.start { routeState ->
+            updateLibrary { state ->
+                state.copy(
+                    connectedOutputs = routeState.connectedOutputs,
+                    activeRoute = routeState.activeRoute,
+                    outputRouteRevision = state.outputRouteRevision + 1,
+                    outputRouteChangedAtMs = System.currentTimeMillis(),
+                )
+            }
+        }
+    }
 
     fun initialisePermissions(musicGranted: Boolean, notificationsGranted: Boolean) {
         val firstPermissionSync = !permissionsInitialised
@@ -172,11 +190,15 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                 it.copy(
                     isLoading = false,
                     tracks = snapshot?.tracks ?: it.tracks,
+                    playlists = snapshot?.playlists ?: it.playlists,
                     sources = snapshot?.sources ?: it.sources,
                     scanProgress = it.scanProgress?.takeIf(LibraryScanProgress::isPaused)
                         ?: snapshot?.pausedProgress(),
                     loadingFailed = result.getOrNull()?.hadFailure ?: result.isFailure,
                 )
+            }
+            result.getOrNull()?.snapshot?.let { snapshot ->
+                playbackController().syncLibrary(snapshot.tracks)
             }
             activeLibraryScan = null
             refreshQueuedLibrary()
@@ -225,6 +247,52 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         playbackController().playQueue(uiState.library.tracks, uiState.library.tracks.indexOf(track))
     }
 
+    fun playQueue(tracks: List<AudioTrack>, startIndex: Int = 0) {
+        playbackController().playQueue(tracks, startIndex)
+    }
+
+    fun playNext(track: AudioTrack) = playbackController().playNext(track)
+
+    fun addToQueue(track: AudioTrack) = playbackController().addToQueue(track)
+
+    fun playQueueIndex(index: Int) = playbackController?.playQueueIndex(index)
+
+    fun removeQueueItem(index: Int) = playbackController?.removeQueueItem(index)
+
+    fun moveQueueItem(fromIndex: Int, toIndex: Int) = playbackController?.moveQueueItem(fromIndex, toIndex)
+
+    fun clearQueue() = playbackController?.clearQueue()
+
+    fun retryPlayback() = playbackController?.retryPlayback()
+
+    fun setFavorite(trackId: Long, favorite: Boolean) {
+        mutateCatalog { catalog.setFavorite(trackId, favorite) }
+    }
+
+    fun createPlaylist(name: String) {
+        mutateCatalog { catalog.createPlaylist(name) }
+    }
+
+    fun renamePlaylist(playlistId: Long, name: String) {
+        mutateCatalog { catalog.renamePlaylist(playlistId, name) }
+    }
+
+    fun deletePlaylist(playlistId: Long) {
+        mutateCatalog { catalog.deletePlaylist(playlistId) }
+    }
+
+    fun addTrackToPlaylist(playlistId: Long, trackId: Long) {
+        mutateCatalog { catalog.addTrackToPlaylist(playlistId, trackId) }
+    }
+
+    fun removeTrackFromPlaylist(playlistId: Long, trackId: Long) {
+        mutateCatalog { catalog.removeTrackFromPlaylist(playlistId, trackId) }
+    }
+
+    fun movePlaylistTrack(playlistId: Long, fromIndex: Int, toIndex: Int) {
+        mutateCatalog { catalog.movePlaylistTrack(playlistId, fromIndex, toIndex) }
+    }
+
     fun togglePlayback() = playbackController?.togglePlayback()
 
     fun skipToPrevious() = playbackController?.skipToPrevious()
@@ -238,10 +306,19 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     fun refreshPlaybackPosition() = playbackController?.refreshPosition()
 
     fun refreshConnectedOutputs() {
-        updateLibrary { it.copy(connectedOutputs = connectedOutputs.read()) }
+        val routeState = connectedOutputs.readState()
+        updateLibrary {
+            it.copy(
+                connectedOutputs = routeState.connectedOutputs,
+                activeRoute = routeState.activeRoute,
+                outputRouteRevision = it.outputRouteRevision + 1,
+                outputRouteChangedAtMs = System.currentTimeMillis(),
+            )
+        }
     }
 
     override fun onCleared() {
+        connectedOutputs.stop()
         playbackController?.release()
         super.onCleared()
     }
@@ -249,6 +326,12 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     private fun playbackController(): PlaybackController = playbackController ?: PlaybackController(
         context = getApplication(),
         onSnapshotChanged = { snapshot -> uiState = uiState.copy(playback = snapshot) },
+        onPlaybackStarted = { trackId ->
+            viewModelScope.launch {
+                withContext(Dispatchers.IO) { catalog.recordPlayback(trackId) }
+                loadCachedLibrary()
+            }
+        },
     ).also { controller ->
         playbackController = controller
     }
@@ -281,9 +364,18 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         updateLibrary { current ->
             current.copy(
                 tracks = snapshot.tracks,
+                playlists = snapshot.playlists,
                 sources = snapshot.sources,
                 scanProgress = snapshot.pausedProgress() ?: current.scanProgress?.takeIf(LibraryScanProgress::isPaused),
             )
+        }
+        playbackController().syncLibrary(snapshot.tracks)
+    }
+
+    private fun mutateCatalog(action: () -> Unit) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { action() }
+            loadCachedLibrary()
         }
     }
 }

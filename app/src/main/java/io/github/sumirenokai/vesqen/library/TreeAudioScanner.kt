@@ -1,8 +1,6 @@
 package io.github.sumirenokai.vesqen.library
 
 import android.content.ContentResolver
-import android.content.Context
-import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.DocumentsContract
 
@@ -39,8 +37,13 @@ internal class TreeAudioScanner(
         shouldPause: () -> Boolean,
         onAudioDocument: (TreeAudioDocument) -> Unit,
     ): ScanIterationResult {
-        val pendingDirectories = ArrayDeque<String>().apply {
-            add(DocumentsContract.getTreeDocumentId(treeUri))
+        val pendingDirectories = ArrayDeque<DirectoryToScan>().apply {
+            add(
+                DirectoryToScan(
+                    documentId = DocumentsContract.getTreeDocumentId(treeUri),
+                    displayPath = displayName(treeUri),
+                ),
+            )
         }
         val visitedDirectories = mutableSetOf<String>()
         var processedTrackCount = 0
@@ -48,7 +51,8 @@ internal class TreeAudioScanner(
             if (shouldPause()) {
                 return ScanIterationResult(completed = false, processedTrackCount = processedTrackCount)
             }
-            val parentDocumentId = pendingDirectories.removeFirst()
+            val directory = pendingDirectories.removeFirst()
+            val parentDocumentId = directory.documentId
             if (!visitedDirectories.add(parentDocumentId)) continue
             val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocumentId)
             val cursor = contentResolver.query(
@@ -58,42 +62,75 @@ internal class TreeAudioScanner(
                 null,
                 null,
             ) ?: throw IllegalStateException("Documents provider returned no cursor")
-            cursor.use { cursor ->
+            val entries = cursor.use { cursor ->
                 val documentIdIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
                 val displayNameIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
                 val mimeTypeIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
                 val lastModifiedIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
                 val sizeIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
-                while (cursor.moveToNext()) {
-                    if (shouldPause()) {
-                        return ScanIterationResult(completed = false, processedTrackCount = processedTrackCount)
-                    }
-                    val documentId = cursor.getString(documentIdIndex) ?: continue
-                    val displayName = if (displayNameIndex < 0) "" else {
-                        cursor.getString(displayNameIndex).orEmpty()
-                    }
-                    val mimeType = cursor.getString(mimeTypeIndex).orEmpty()
-                    if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
-                        pendingDirectories.add(documentId)
-                    } else if (isSupportedAudioDocument(mimeType, displayName)) {
-                        val lastModifiedMs = if (lastModifiedIndex < 0 || cursor.isNull(lastModifiedIndex)) 0 else {
-                            cursor.getLong(lastModifiedIndex)
+                buildList {
+                    while (cursor.moveToNext()) {
+                        if (shouldPause()) {
+                            return ScanIterationResult(completed = false, processedTrackCount = processedTrackCount)
                         }
-                        val sizeBytes = if (sizeIndex < 0 || cursor.isNull(sizeIndex)) 0 else {
-                            cursor.getLong(sizeIndex)
+                        val documentId = cursor.getString(documentIdIndex) ?: continue
+                        val displayName = if (displayNameIndex < 0) "" else {
+                            cursor.getString(displayNameIndex).orEmpty()
                         }
-                        onAudioDocument(
-                            TreeAudioDocument(
+                        val mimeType = cursor.getString(mimeTypeIndex).orEmpty()
+                        add(
+                            ProviderDocument(
                                 documentId = documentId,
-                                contentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId),
                                 displayName = displayName,
                                 mimeType = mimeType,
-                                lastModifiedMs = lastModifiedMs,
-                                sizeBytes = sizeBytes,
+                                lastModifiedMs = if (
+                                    lastModifiedIndex < 0 || cursor.isNull(lastModifiedIndex)
+                                ) 0 else cursor.getLong(lastModifiedIndex),
+                                sizeBytes = if (sizeIndex < 0 || cursor.isNull(sizeIndex)) {
+                                    0
+                                } else {
+                                    cursor.getLong(sizeIndex)
+                                },
                             ),
                         )
-                        processedTrackCount++
                     }
+                }
+            }
+            val artworkDocument = entries.firstOrNull { entry ->
+                isSameDirectoryCover(entry.mimeType, entry.displayName)
+            }
+            val artworkUri = artworkDocument?.let { entry ->
+                DocumentsContract.buildDocumentUriUsingTree(treeUri, entry.documentId)
+            }
+            val artworkFingerprint = artworkDocument?.let { entry ->
+                libraryFingerprint(entry.documentId, entry.lastModifiedMs, entry.sizeBytes)
+            }.orEmpty()
+            entries.forEach { entry ->
+                if (entry.mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
+                    val childPath = listOf(directory.displayPath, entry.displayName)
+                        .filter(String::isNotBlank)
+                        .joinToString("/")
+                    pendingDirectories.add(
+                        DirectoryToScan(
+                            documentId = entry.documentId,
+                            displayPath = childPath,
+                        ),
+                    )
+                } else if (isSupportedAudioDocument(entry.mimeType, entry.displayName)) {
+                    onAudioDocument(
+                        TreeAudioDocument(
+                            documentId = entry.documentId,
+                            contentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, entry.documentId),
+                            displayName = entry.displayName,
+                            folderName = directory.displayPath,
+                            mimeType = entry.mimeType,
+                            lastModifiedMs = entry.lastModifiedMs,
+                            sizeBytes = entry.sizeBytes,
+                            albumArtworkUri = artworkUri,
+                            albumArtworkFingerprint = artworkFingerprint,
+                        ),
+                    )
+                    processedTrackCount++
                 }
             }
         }
@@ -116,9 +153,12 @@ internal data class TreeAudioDocument(
     val documentId: String,
     val contentUri: Uri,
     val displayName: String,
+    val folderName: String,
     val mimeType: String,
     val lastModifiedMs: Long,
     val sizeBytes: Long,
+    val albumArtworkUri: Uri? = null,
+    val albumArtworkFingerprint: String = "",
 ) {
     val fingerprint: String = libraryFingerprint(
         "tree",
@@ -128,74 +168,65 @@ internal data class TreeAudioDocument(
         mimeType,
         lastModifiedMs,
         sizeBytes,
+        albumArtworkUri,
+        albumArtworkFingerprint,
     )
 }
 
-/** Reads only metadata for a new or changed SAF document; playback remains independent of tags. */
-internal class SafAudioMetadataReader(private val context: Context) {
-    fun read(document: TreeAudioDocument): LibraryTrackCandidate {
-        val retriever = MediaMetadataRetriever()
-        val metadata = try {
-            retriever.setDataSource(context, document.contentUri)
-            RetrievedMetadata(
-                title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE),
-                artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST),
-                album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM),
-                durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                    ?.toLongOrNull()
-                    ?.coerceAtLeast(0)
-                    ?: 0,
-            )
-        } catch (_: SecurityException) {
-            RetrievedMetadata()
-        } catch (_: IllegalArgumentException) {
-            RetrievedMetadata()
-        } catch (_: RuntimeException) {
-            RetrievedMetadata()
-        } finally {
-            runCatching { retriever.release() }
-        }
-        return LibraryTrackCandidate(
-            remoteId = document.documentId,
-            contentUri = document.contentUri.toString(),
-            title = metadata.title?.takeIf(String::isNotBlank) ?: document.displayName.toTrackTitleFallback(),
-            artist = metadata.artist.orEmpty(),
-            album = metadata.album.orEmpty(),
-            durationMs = metadata.durationMs,
-            dateModifiedSeconds = document.lastModifiedMs / 1_000,
-            sizeBytes = document.sizeBytes,
-            mimeType = document.mimeType,
-            fingerprint = document.fingerprint,
-        )
-    }
-}
-
-private data class RetrievedMetadata(
-    val title: String? = null,
-    val artist: String? = null,
-    val album: String? = null,
-    val durationMs: Long = 0,
+internal fun TreeAudioDocument.toTrackCandidate(): LibraryTrackCandidate = LibraryTrackCandidate(
+    remoteId = documentId,
+    contentUri = contentUri.toString(),
+    title = displayName.toTrackTitleFallback(),
+    artist = "",
+    album = "",
+    durationMs = 0,
+    albumArtworkUri = albumArtworkUri?.toString(),
+    dateModifiedSeconds = lastModifiedMs / 1_000,
+    sizeBytes = sizeBytes,
+    mimeType = mimeType,
+    fileName = displayName,
+    folderName = folderName,
+    fingerprint = fingerprint,
 )
 
 internal fun isSupportedAudioDocument(mimeType: String?, displayName: String): Boolean {
     if (mimeType?.startsWith("audio/", ignoreCase = true) == true) return true
     return displayName.substringAfterLast('.', missingDelimiterValue = "")
         .lowercase()
-        .let(SUPPORTED_AUDIO_EXTENSIONS::contains)
+        .let(M1_AUDIO_EXTENSIONS::contains)
 }
 
 private fun String.toTrackTitleFallback(): String = substringBeforeLast('.', missingDelimiterValue = this)
     .ifBlank { this }
 
-private val SUPPORTED_AUDIO_EXTENSIONS = setOf(
-    "aac",
-    "aif",
-    "aiff",
-    "alac",
-    "flac",
-    "m4a",
-    "mp3",
-    "ogg",
-    "opus",
-    "wav",
+private fun isSameDirectoryCover(mimeType: String, displayName: String): Boolean {
+    val extension = displayName.substringAfterLast('.', "").lowercase()
+    if (!mimeType.startsWith("image/", ignoreCase = true) && extension !in COVER_EXTENSIONS) return false
+    val baseName = displayName.substringBeforeLast('.', displayName).lowercase()
+        .replace("_", "")
+        .replace("-", "")
+        .replace(" ", "")
+    return baseName in COVER_FILE_NAMES
+}
+
+private data class DirectoryToScan(
+    val documentId: String,
+    val displayPath: String,
+)
+
+private data class ProviderDocument(
+    val documentId: String,
+    val displayName: String,
+    val mimeType: String,
+    val lastModifiedMs: Long,
+    val sizeBytes: Long,
+)
+
+private val COVER_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp")
+private val COVER_FILE_NAMES = setOf(
+    "cover",
+    "folder",
+    "front",
+    "albumart",
+    "albumartsmall",
 )

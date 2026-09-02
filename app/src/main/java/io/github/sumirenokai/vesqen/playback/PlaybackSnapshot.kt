@@ -6,6 +6,20 @@ enum class PlaybackRepeatMode {
     ONE,
 }
 
+enum class PlaybackProblem {
+    SOURCE_UNAVAILABLE,
+    UNSUPPORTED_FORMAT,
+    DECODER_FAILURE,
+    UNKNOWN,
+}
+
+data class PlaybackQueueItem(
+    val trackId: Long,
+    val title: String,
+    val artist: String,
+    val isCurrent: Boolean,
+)
+
 /**
  * The listener-facing play order used by Vesqen's single footer control.
  *
@@ -106,6 +120,8 @@ data class PlaybackSnapshot(
     /** Zero-based media item index and item count reported by the active Media3 player. */
     val queueIndex: Int = 0,
     val queueSize: Int = 0,
+    val queue: List<PlaybackQueueItem> = emptyList(),
+    val problem: PlaybackProblem? = null,
     val declaration: OutputDeclaration = OutputDeclaration.SYSTEM_MIXED,
 ) {
     val hasActiveTrack: Boolean

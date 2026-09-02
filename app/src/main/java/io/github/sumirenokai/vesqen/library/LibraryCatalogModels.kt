@@ -40,7 +40,19 @@ data class LibraryScanProgress(
 data class LibraryCatalogSnapshot(
     val tracks: List<AudioTrack>,
     val sources: List<LibrarySource>,
+    val playlists: List<LibraryPlaylist> = emptyList(),
 )
+
+data class LibraryPlaylist(
+    val id: Long,
+    val name: String,
+    val trackIds: List<Long>,
+    val createdAtMs: Long,
+    val updatedAtMs: Long,
+) {
+    val trackCount: Int
+        get() = trackIds.size
+}
 
 data class LibraryRefreshResult(
     val snapshot: LibraryCatalogSnapshot,
@@ -70,6 +82,18 @@ internal data class LibraryTrackCandidate(
     val dateModifiedSeconds: Long = 0,
     val sizeBytes: Long = 0,
     val mimeType: String = "",
+    val albumArtist: String = "",
+    val trackNumber: Int? = null,
+    val discNumber: Int? = null,
+    val year: Int? = null,
+    val genre: String = "",
+    val fileName: String = "",
+    val folderName: String = "",
+    val codec: String = "",
+    val channelCount: Int? = null,
+    val bitDepth: Int? = null,
+    val sampleRateHz: Int? = null,
+    val bitrate: Int? = null,
     val fingerprint: String,
 )
 

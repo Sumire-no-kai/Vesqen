@@ -18,4 +18,20 @@ class LibraryFilteringTest {
         assertEquals(listOf(tracks[1]), filterTracks(tracks, "NARI"))
         assertEquals(listOf(tracks[0]), filterTracks(tracks, "quiet"))
     }
+
+    @Test
+    fun `filter also searches rich local metadata`() {
+        val rich = tracks[0].copy(
+            albumArtist = "The Collective",
+            genre = "Ambient",
+            folderName = "Music/Night",
+            fileName = "signal.flac",
+            codec = "FLAC",
+        )
+        val source = listOf(rich, tracks[1])
+
+        listOf("collective", "ambient", "night", "signal.flac", "flac").forEach { query ->
+            assertEquals(listOf(rich), filterTracks(source, query))
+        }
+    }
 }
