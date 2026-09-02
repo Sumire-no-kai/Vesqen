@@ -511,3 +511,42 @@ M1-A 只实现本地媒体库到系统混音播放的最小闭环：
 ### 尚未执行的真机验收
 
 本轮按用户要求没有连接、安装或改动 iQOO、Honor 或其他手机，也没有运行 `connectedDebugAndroidTest`。核心格式实播、已知无缝样本、8 小时连续播放、24/96 两小时、100 次交互、耳机／蓝牙／USB 断开与 USB 50 次插拔、大曲库并行扫描、TalkBack／字号／主题／减少动效和跨 Android 版本矩阵仍是 M1 的最终门禁。完整步骤与证据字段见 `docs/M1_DEVICE_ACCEPTANCE.md`；这些结果通过前不得把 `0.3.0-beta.1` 表述为完整 M1。
+
+## 2026-09-02 · 旧系统封面分层兼容与曲库滚动优化
+
+### 问题定位与版本
+
+本轮版本提升为 `0.3.0-beta.2`（versionCode `5`）。Honor STF-AL00（Android 9 / API 28）能够扫描到新增歌曲，目录数据库也保存了正确的 MediaStore 专辑标识；系统专辑缩略图文件经只读提取验证为有效 JPEG。缺图不是音乐文件没有封面，而是该 ROM 的 MediaProvider 对普通第三方应用存在两处不兼容：把 `audio/albums/{id}` 元数据 URI 当图片流打开时会在 provider 内部因缺少 `_data` 列失败；标准 `audio/albumart/{id}` 图片流又要求应用持有写入存储权限。系统音乐拥有额外系统能力，因此它能显示同一缩略图。
+
+修复没有新增写入存储权限，也没有依赖厂商私有路径或机型白名单。旧版 provider 明确拒绝某个存储卷的标准封面流后，本进程会按卷停止重复失败，直接进入受限的音频内嵌封面回退；SAF 图片 URI、其他存储卷和后续清缓存重新探测不受影响。
+
+### 分层兼容矩阵
+
+| 层级 | 实现与边界 |
+| --- | --- |
+| Android 10+ 系统层 | 优先调用 `ContentResolver.loadThumbnail`；专辑缩略图和媒体条目缩略图均失败时，不再直接显示占位图，而是继续进入容器回退。 |
+| Android 8/9 provider 层 | 区分 `albums/{id}` 元数据 URI 与标准 `albumart/{id}` 图片流；保留 provider 缩略图列兼容，同时对明确的按卷权限拒绝熔断，避免每个列表项重复触发同一异常。 |
+| 音频内嵌层 | 全 Android 版本提供有界、流式解析：ID3v2.2／v2.3／v2.4 的 MP3／原始 AAC，FLAC `PICTURE`，M4A／ALAC／AAC 的 MP4 `covr`，Ogg Vorbis／Opus 注释，WAV／AIFF 的 ID3 chunk。MP4 多元数据容器、ID3 扩展头、标签级 unsynchronisation 和非内容状态标记均有覆盖。 |
+| SAF 目录层 | 继续优先使用同目录 `cover`、`folder`、`front`、`albumart` 等授权图片；不会把文件系统路径写入 UI 或缓存键。 |
+| 资源边界 | 单张编码封面上限 8 MiB，FLAC／Ogg 元数据扫描上限 32 MiB，MP4 原子深度与数量、Ogg 页／包／注释数、RIFF／AIFF chunk 数均受限；不读取音频帧到内存，不调用无界 `embeddedPicture`。 |
+
+### 曲库滚动路径
+
+- 搜索、收藏过滤、排序、集合构建和当前集合查找改为按真实输入变化记忆，不再因播放进度等无关状态反复遍历整份曲库。
+- LazyColumn 曲目与集合提供稳定 key 和 content type；48 dp 行封面直接使用已知像素目标，避免每一行额外的约束子组合。
+- provider／容器封面任务限制为两个后台工人；离屏且尚未开始的任务可以在解码前取消，内存正／负缓存和同键请求合并继续生效。
+
+### 自动化与实机证据
+
+| 检查 | 结果 |
+| --- | --- |
+| JVM 回归 | `testDebugUnitTest` **通过**：50 个测试，0 failures、0 errors。新增覆盖旧版 albumart URI 映射、FLAC 长度边界、ID3v2.2／扩展头、MP4 多容器、Ogg／Opus、WAV／AIFF 及畸形输入失败关闭。 |
+| Android 测试源码 | `:app:compileDebugAndroidTestKotlin` **通过**；这里只证明测试源码可编译，不等于 connected runner 已执行。 |
+| 静态检查 | `lintDebug` **通过**：0 errors、26 条既有提醒；未用 baseline 隐藏问题。 |
+| 构建 | `assembleDebug` **通过**；APK 23,037,281 bytes，SHA-256 `991801B52AAD6C6188FD267C579CCDE98C1E6A7D087DD9B79B57A357954F2412`。`assembleRelease` **通过**；未签名 APK 15,356,676 bytes，SHA-256 `12DF1979A6CD767A0079A281A2D230439AB3D2F268CD5E473AA581A6AD7C7FF5`。 |
+| Honor 安装 | 保留数据覆盖安装 `0.3.0-beta.2` 后，设备端 base.apk SHA-256 与本地 Debug APK 完全一致。全新进程重新扫描期间已出现的曲目封面正常，扫描结束后首屏曲目与迷你播放器均显示真实封面，崩溃缓冲区为空；本轮没有修改音乐文件。 |
+| Honor 滚动代理 | 优化前未缓存快速往返为 111 帧／84 janky（75.68%，p50 32 ms、p95 117 ms、慢位图上传 4）；优化后同类冷态记录为 323 帧／90 janky（27.86%，p50 9 ms、p95 53 ms、慢位图上传 2）。最终暖态且迷你播放器可见的独立复核为 417 帧／147 janky（35.25%，p50 13 ms、p95 29 ms、慢位图上传 0）。不同 UI／缓存状态不能直接混合比较。 |
+
+### 仍待设备门禁
+
+iQOO 在本轮验证期间未连接，因此曲库滚动优化尚无 iQOO 前后对照，不能写成 iQOO 已验收。除 Honor 上真实 FLAC 封面外，其余容器目前是合成夹具自动化证据，仍需在 M1 格式真机矩阵中以真实样本逐项实播和重启复核。上述限制不影响本次兼容修复交付，但继续保留为 M1 真机验收项。

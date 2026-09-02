@@ -71,7 +71,7 @@ fun MiniPlayer(
                     .clickable(onClick = onOpenNow),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AlbumArtwork(track = currentTrack, modifier = Modifier.size(48.dp))
+                AlbumArtwork(track = currentTrack, targetSize = 48.dp, modifier = Modifier.size(48.dp))
                 Spacer(Modifier.width(8.dp))
                 Column(
                     modifier = Modifier.weight(1f),

@@ -29,7 +29,7 @@ fun VesqenEmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        AlbumArtwork(modifier = Modifier.size(72.dp), emphasized = true)
+        AlbumArtwork(modifier = Modifier.size(72.dp), targetSize = 72.dp, emphasized = true)
         Spacer(Modifier.height(VesqenSpacing.lg))
         Text(
             text = title,

@@ -49,8 +49,9 @@ class AlbumArtworkLoader(context: Context) {
         ) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 loadMediaStoreThumbnail(track.contentUri, requestedSize)
+                    ?: loadEmbeddedArtwork(track, requestedSize)
             } else {
-                loadLegacyEmbeddedId3Artwork(Uri.parse(track.contentUri), requestedSize)
+                loadEmbeddedArtwork(track, requestedSize)
             }
         }
     }
@@ -118,7 +119,30 @@ class AlbumArtworkLoader(context: Context) {
      * unbounded embedded APIC byte array.
      */
     private fun loadLegacyProviderArtwork(uri: Uri, targetPx: Int): Bitmap? {
-        decodeLegacyArtwork(targetPx) { contentResolver.openInputStream(uri) }?.let { return it }
+        val albumArtStreamUri = legacyAlbumArtStreamUri(uri.toString())
+        // A MediaStore `albums/{id}` URI is a metadata row, not an image stream. Opening it as a
+        // stream crashes inside some old OEM providers before returning to the app. Directly
+        // decode non-album URIs (including SAF cover images), but use the standard singular
+        // `albumart/{id}` stream for MediaStore album rows.
+        if (albumArtStreamUri == null) {
+            decodeLegacyArtwork(targetPx) { contentResolver.openInputStream(uri) }?.let { return it }
+        }
+        val mediaVolume = albumArtStreamUri?.let(::legacyMediaVolume)
+        val shouldAttemptAlbumProvider = mediaVolume == null || mediaVolume !in blockedLegacyAlbumVolumes
+        if (shouldAttemptAlbumProvider) albumArtStreamUri?.let { streamUri ->
+            decodeLegacyArtwork(targetPx) {
+                try {
+                    contentResolver.openInputStream(Uri.parse(streamUri))
+                } catch (denied: SecurityException) {
+                    mediaVolume?.let(blockedLegacyAlbumVolumes::add)
+                    throw denied
+                }
+            }?.let { return it }
+        }
+        // Once a volume has explicitly denied its canonical album-art stream, avoid repeating
+        // the same provider query and filesystem failure for every row. The first denied request
+        // still gets one ALBUM_ART path attempt for ROMs that expose only that legacy column.
+        if (!shouldAttemptAlbumProvider) return null
         val providerArtworkPath = resolveLegacyAlbumArtworkPath(uri) ?: return null
         return decodeLegacyArtwork(targetPx) { FileInputStream(providerArtworkPath) }
     }
@@ -189,50 +213,18 @@ class AlbumArtworkLoader(context: Context) {
     }
 
     /**
-     * Final Android 8/9 fallback for MP3 files whose ROM keeps artwork only inside ID3 metadata.
-     * The parser reads frame headers as a stream and refuses oversized tags or APIC frames before
-     * allocating their payload, unlike MediaMetadataRetriever.embeddedPicture.
+     * Final fallback on every Android version when MediaStore or an OEM provider withholds its
+     * thumbnail. The container reader is stream-based and enforces a shared image-size boundary.
      */
-    private fun loadLegacyEmbeddedId3Artwork(mediaUri: Uri, targetPx: Int): Bitmap? = try {
-        contentResolver.openAssetFileDescriptor(mediaUri, "r")?.use { descriptor ->
+    private fun loadEmbeddedArtwork(track: AudioTrack, targetPx: Int): Bitmap? = try {
+        contentResolver.openAssetFileDescriptor(Uri.parse(track.contentUri), "r")?.use { descriptor ->
             descriptor.createInputStream().use { input ->
-                val header = input.readExactly(ID3_HEADER_BYTES) ?: return null
-                if (!header.copyOfRange(0, 3).contentEquals(byteArrayOf('I'.code.toByte(), 'D'.code.toByte(), '3'.code.toByte()))) {
-                    return null
+                extractBoundedEmbeddedArtwork(
+                    input = input,
+                    declaredLength = descriptor.length.takeIf { it > 0 } ?: track.fileSizeBytes.takeIf { it > 0 },
+                )?.let { picture ->
+                    decodeArtworkBytes(picture, 0, picture.size, targetPx)
                 }
-                val majorVersion = header[3].toInt() and 0xff
-                if (majorVersion !in 3..4 || (header[5].toInt() and ID3_UNSYNCHRONISATION_FLAG) != 0) {
-                    return null
-                }
-                val tagSize = decodeSynchsafeInt(header, 6) ?: return null
-                if (tagSize <= 0 || tagSize > MAX_ID3_TAG_BYTES) return null
-
-                var remaining = tagSize
-                while (remaining >= ID3_FRAME_HEADER_BYTES) {
-                    val frameHeader = input.readExactly(ID3_FRAME_HEADER_BYTES) ?: return null
-                    remaining -= ID3_FRAME_HEADER_BYTES
-                    if (frameHeader.take(4).all { it == 0.toByte() }) return null
-
-                    val frameId = String(frameHeader, 0, 4, Charsets.US_ASCII)
-                    val frameSize = when (majorVersion) {
-                        4 -> decodeSynchsafeInt(frameHeader, 4)
-                        else -> decodeBigEndianInt(frameHeader, 4)
-                    } ?: return null
-                    if (frameSize <= 0 || frameSize > remaining) return null
-
-                    val hasUnsupportedFlags = frameHeader[8] != 0.toByte() || frameHeader[9] != 0.toByte()
-                    if (frameId == "APIC" && !hasUnsupportedFlags) {
-                        if (frameSize > MAX_EMBEDDED_ART_FRAME_BYTES) return null
-                        val frame = input.readExactly(frameSize) ?: return null
-                        val imageOffset = findId3ApicImageOffset(frame) ?: return null
-                        val imageSize = frame.size - imageOffset
-                        if (imageSize <= 0 || imageSize > MAX_EMBEDDED_ART_BYTES) return null
-                        return decodeArtworkBytes(frame, imageOffset, imageSize, targetPx)
-                    }
-                    if (!input.skipExactly(frameSize)) return null
-                    remaining -= frameSize
-                }
-                null
             }
         }
     } catch (_: IOException) {
@@ -276,18 +268,12 @@ class AlbumArtworkLoader(context: Context) {
         private const val MIN_ARTWORK_SIZE_PX = 32
         private const val MAX_ARTWORK_SIZE_PX = 512
         private const val MAX_CACHE_BYTES = 16 * 1024 * 1024
-        private const val ID3_HEADER_BYTES = 10
-        private const val ID3_FRAME_HEADER_BYTES = 10
-        private const val ID3_UNSYNCHRONISATION_FLAG = 0x80
-        private const val MAX_ID3_TAG_BYTES = 16 * 1024 * 1024
-        private const val MAX_EMBEDDED_ART_FRAME_BYTES = 8 * 1024 * 1024 + 4096
-        private const val MAX_EMBEDDED_ART_BYTES = 8 * 1024 * 1024
-
         private val artworkCache = object : LruCache<String, Bitmap>(MAX_CACHE_BYTES) {
             override fun sizeOf(key: String, value: Bitmap): Int = value.allocationByteCount
         }
         private val unavailableArtworkKeys = LruCache<String, Boolean>(256)
         private val inFlightLoads = ConcurrentHashMap<String, FutureTask<Bitmap?>>()
+        private val blockedLegacyAlbumVolumes = ConcurrentHashMap.newKeySet<String>()
         private val cacheEpoch = AtomicLong()
 
         /** Clears only process memory; original artwork remains owned by MediaStore or the file. */
@@ -295,12 +281,86 @@ class AlbumArtworkLoader(context: Context) {
             cacheEpoch.incrementAndGet()
             artworkCache.evictAll()
             unavailableArtworkKeys.evictAll()
+            blockedLegacyAlbumVolumes.clear()
             // Do not try to cancel platform MediaStore/metadata reads. Clearing the map lets a
             // subsequent generation start an independent request; the epoch prevents the old one
             // from storing an obsolete positive or negative result when it eventually completes.
             inFlightLoads.clear()
         }
     }
+}
+
+internal const val MAX_EMBEDDED_ART_BYTES = 8 * 1024 * 1024
+private const val MAX_FLAC_METADATA_BYTES = 32 * 1024 * 1024
+private const val MAX_FLAC_PICTURE_OVERHEAD_BYTES = 128 * 1024
+private const val MAX_FLAC_MIME_BYTES = 1_024
+private const val MAX_FLAC_DESCRIPTION_BYTES = 64 * 1024
+
+/**
+ * Extracts one bounded FLAC PICTURE block. The caller owns the returned byte array; malformed or
+ * adversarial lengths fail closed without reading audio frames or allocating their declared size.
+ */
+internal fun extractBoundedFlacPicture(
+    input: InputStream,
+    maxPictureBytes: Int = MAX_EMBEDDED_ART_BYTES,
+    maxMetadataBytes: Int = MAX_FLAC_METADATA_BYTES,
+): ByteArray? {
+    if (maxPictureBytes <= 0 || maxMetadataBytes <= 0) return null
+    val magic = input.readExactly(4) ?: return null
+    if (!magic.contentEquals(byteArrayOf('f'.code.toByte(), 'L'.code.toByte(), 'a'.code.toByte(), 'C'.code.toByte()))) {
+        return null
+    }
+
+    var scannedBytes = 4L
+    while (scannedBytes <= maxMetadataBytes.toLong()) {
+        val header = input.readExactly(4) ?: return null
+        scannedBytes += header.size
+        val isLast = (header[0].toInt() and 0x80) != 0
+        val blockType = header[0].toInt() and 0x7f
+        val blockLength = ((header[1].toInt() and 0xff) shl 16) or
+            ((header[2].toInt() and 0xff) shl 8) or
+            (header[3].toInt() and 0xff)
+        scannedBytes += blockLength.toLong()
+        if (scannedBytes > maxMetadataBytes.toLong()) return null
+
+        if (blockType == 6) {
+            if (blockLength.toLong() > maxPictureBytes.toLong() + MAX_FLAC_PICTURE_OVERHEAD_BYTES) return null
+            val block = input.readExactly(blockLength) ?: return null
+            extractFlacPictureBlock(block, maxPictureBytes)?.let { return it }
+        } else if (!input.skipExactly(blockLength)) {
+            return null
+        }
+        if (isLast) return null
+    }
+    return null
+}
+
+internal fun extractFlacPictureBlock(block: ByteArray, maxPictureBytes: Int): ByteArray? {
+    var cursor = 0
+    fun readInt(): Int? {
+        val value = decodeBigEndianInt(block, cursor) ?: return null
+        cursor += 4
+        return value
+    }
+    fun skipBounded(length: Int, maximum: Int): Boolean {
+        if (length < 0 || length > maximum) return false
+        val next = cursor.toLong() + length.toLong()
+        if (next > block.size.toLong()) return false
+        cursor = next.toInt()
+        return true
+    }
+
+    readInt() ?: return null // picture type
+    val mimeLength = readInt() ?: return null
+    if (!skipBounded(mimeLength, MAX_FLAC_MIME_BYTES)) return null
+    val descriptionLength = readInt() ?: return null
+    if (!skipBounded(descriptionLength, MAX_FLAC_DESCRIPTION_BYTES)) return null
+    repeat(4) { readInt() ?: return null } // width, height, depth, indexed colours
+    val pictureLength = readInt() ?: return null
+    if (pictureLength <= 0 || pictureLength > maxPictureBytes) return null
+    val pictureEnd = cursor.toLong() + pictureLength.toLong()
+    if (pictureEnd > block.size.toLong()) return null
+    return block.copyOfRange(cursor, pictureEnd.toInt())
 }
 
 private fun InputStream.readExactly(size: Int): ByteArray? {
@@ -384,6 +444,28 @@ internal fun calculateLegacyArtworkSampleSize(width: Int, height: Int, targetPx:
         sampleSize *= 2
     }
     return sampleSize
+}
+
+/**
+ * Android 8/9 MediaProvider exposes album artwork streams from the singular `albumart`
+ * collection, while album metadata is queried from the plural `albums` collection. Several OEM
+ * providers, including older Huawei builds, reject `openInputStream()` on the metadata URI even
+ * though the matching artwork stream exists. Keep the volume segment so adopted storage volumes
+ * are not silently redirected to the primary external volume.
+ */
+internal fun legacyAlbumArtStreamUri(albumMetadataUri: String): String? {
+    val prefix = "content://media/"
+    if (!albumMetadataUri.startsWith(prefix)) return null
+    val segments = albumMetadataUri.removePrefix(prefix).trim('/').split('/')
+    if (segments.size != 4 || segments[1] != "audio" || segments[2] != "albums") return null
+    val albumId = segments[3].toLongOrNull()?.takeIf { it > 0 } ?: return null
+    return "$prefix${segments[0]}/audio/albumart/$albumId"
+}
+
+private fun legacyMediaVolume(mediaUri: String): String? {
+    val prefix = "content://media/"
+    if (!mediaUri.startsWith(prefix)) return null
+    return mediaUri.removePrefix(prefix).substringBefore('/').takeIf(String::isNotBlank)
 }
 
 internal object AlbumArtworkCacheKey {

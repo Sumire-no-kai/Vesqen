@@ -23,6 +23,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.library.AlbumArtworkLoader
 import io.github.sumirenokai.vesqen.library.AudioTrack
@@ -38,61 +39,99 @@ import kotlinx.coroutines.withContext
 fun AlbumArtwork(
     modifier: Modifier = Modifier,
     track: AudioTrack? = null,
+    targetSize: Dp? = null,
     emphasized: Boolean = false,
     fallbackContainerColor: Color? = null,
     showFallback: Boolean = true,
     loadedArtworkModifier: Modifier = Modifier,
 ) {
-    BoxWithConstraints(modifier = modifier) {
-        val appContext = LocalContext.current.applicationContext
-        val loader = remember(appContext) { AlbumArtworkLoader(appContext) }
-        val targetPx = with(LocalDensity.current) {
-            maxWidth.coerceAtLeast(32.dp).coerceAtMost(512.dp).roundToPx()
+    val density = LocalDensity.current
+    if (targetSize != null) {
+        val targetPx = with(density) {
+            targetSize.coerceAtLeast(32.dp).coerceAtMost(512.dp).roundToPx()
         }
-        val bitmap by produceState<android.graphics.Bitmap?>(
-            initialValue = null,
-            track?.contentUri,
-            track?.albumArtworkUri,
-            track?.dateModifiedSeconds,
-            track?.artworkRevision,
-            targetPx,
-        ) {
-            // produceState retains its State object across key changes. Clear the old bitmap
-            // synchronously so a rescan, track change, or permission revoke cannot flash the
-            // previous listener's artwork while the new provider request is in flight.
-            value = null
-            value = track?.let { requestedTrack ->
-                withContext(Dispatchers.IO) { loader.load(requestedTrack, targetPx) }
+        AlbumArtworkContent(
+            modifier = modifier,
+            track = track,
+            targetPx = targetPx,
+            emphasized = emphasized,
+            fallbackContainerColor = fallbackContainerColor,
+            showFallback = showFallback,
+            loadedArtworkModifier = loadedArtworkModifier,
+        )
+    } else {
+        BoxWithConstraints(modifier = modifier) {
+            val targetPx = with(density) {
+                maxWidth.coerceAtLeast(32.dp).coerceAtMost(512.dp).roundToPx()
             }
-        }
-        val shape = RoundedCornerShape(VesqenRadii.album)
-
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            shape = shape,
-            color = fallbackContainerColor ?: if (emphasized) {
-                MaterialTheme.colorScheme.tertiaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerHigh
-            },
-        ) {
-            val artworkBitmap = bitmap
-            if (artworkBitmap == null && showFallback) {
-                TwinPathsPlaceholder(emphasized = emphasized)
-            } else if (artworkBitmap != null) {
-                Image(
-                    bitmap = artworkBitmap.asImageBitmap(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(shape)
-                        .then(loadedArtworkModifier),
-                )
-            }
+            AlbumArtworkContent(
+                modifier = Modifier.fillMaxSize(),
+                track = track,
+                targetPx = targetPx,
+                emphasized = emphasized,
+                fallbackContainerColor = fallbackContainerColor,
+                showFallback = showFallback,
+                loadedArtworkModifier = loadedArtworkModifier,
+            )
         }
     }
 }
+
+@Composable
+private fun AlbumArtworkContent(
+    modifier: Modifier,
+    track: AudioTrack?,
+    targetPx: Int,
+    emphasized: Boolean,
+    fallbackContainerColor: Color?,
+    showFallback: Boolean,
+    loadedArtworkModifier: Modifier,
+) {
+    val appContext = LocalContext.current.applicationContext
+    val loader = remember(appContext) { AlbumArtworkLoader(appContext) }
+    val bitmap by produceState<android.graphics.Bitmap?>(
+        initialValue = null,
+        track?.contentUri,
+        track?.albumArtworkUri,
+        track?.dateModifiedSeconds,
+        track?.artworkRevision,
+        targetPx,
+    ) {
+        // Cancellation happens before queued off-screen work reaches the two-worker decoder.
+        value = null
+        value = track?.let { requestedTrack ->
+            withContext(ArtworkLoadDispatcher) { loader.load(requestedTrack, targetPx) }
+        }
+    }
+    val shape = remember { RoundedCornerShape(VesqenRadii.album) }
+
+    Surface(
+        modifier = modifier,
+        shape = shape,
+        color = fallbackContainerColor ?: if (emphasized) {
+            MaterialTheme.colorScheme.tertiaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        },
+    ) {
+        val artworkBitmap = bitmap
+        if (artworkBitmap == null && showFallback) {
+            TwinPathsPlaceholder(emphasized = emphasized)
+        } else if (artworkBitmap != null) {
+            Image(
+                bitmap = artworkBitmap.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(shape)
+                    .then(loadedArtworkModifier),
+            )
+        }
+    }
+}
+
+private val ArtworkLoadDispatcher = Dispatchers.IO.limitedParallelism(2)
 
 @Composable
 private fun TwinPathsPlaceholder(emphasized: Boolean) {

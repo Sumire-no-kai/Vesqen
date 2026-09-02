@@ -175,14 +175,22 @@ private fun LibraryContent(
     var playlistToEdit by remember { mutableStateOf<LibraryPlaylist?>(null) }
     val browseMode = LibraryBrowseMode.valueOf(browseModeName)
     val sortOrder = LibrarySortOrder.valueOf(sortOrderName)
-    val searchedTracks = filterTracks(state.tracks, query)
-    val filteredTracks = searchedTracks.filter { !favoritesOnly || it.isFavorite }
-    val visibleTracks = sortLibraryTracks(filteredTracks, sortOrder)
-    val collections = sortLibraryCollections(
-        buildLibraryCollections(browseMode, filteredTracks, state.playlists),
-        sortOrder,
-    )
-    val selectedCollection = collections.firstOrNull { it.key == selectedCollectionKey }
+    val searchedTracks = remember(state.tracks, query) { filterTracks(state.tracks, query) }
+    val filteredTracks = remember(searchedTracks, favoritesOnly) {
+        if (favoritesOnly) searchedTracks.filter(AudioTrack::isFavorite) else searchedTracks
+    }
+    val visibleTracks = remember(filteredTracks, sortOrder) {
+        sortLibraryTracks(filteredTracks, sortOrder)
+    }
+    val collections = remember(browseMode, filteredTracks, state.playlists, sortOrder) {
+        sortLibraryCollections(
+            buildLibraryCollections(browseMode, filteredTracks, state.playlists),
+            sortOrder,
+        )
+    }
+    val selectedCollection = remember(collections, selectedCollectionKey) {
+        collections.firstOrNull { it.key == selectedCollectionKey }
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         LibraryHeader(
@@ -489,7 +497,11 @@ private fun TrackList(
         ),
         verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs),
     ) {
-        items(items = tracks, key = AudioTrack::id) { track ->
+        items(
+            items = tracks,
+            key = AudioTrack::id,
+            contentType = { "track" },
+        ) { track ->
             TrackRow(
                 track = track,
                 isCurrent = track.id == playback.trackId,
@@ -540,7 +552,11 @@ private fun CollectionList(
                 }
             }
         }
-        items(items = collections, key = LibraryCollection::key) { collection ->
+        items(
+            items = collections,
+            key = LibraryCollection::key,
+            contentType = { "collection" },
+        ) { collection ->
             CollectionRow(
                 mode = mode,
                 collection = collection,
