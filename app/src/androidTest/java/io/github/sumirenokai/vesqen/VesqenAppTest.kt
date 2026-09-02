@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.swipeLeft
@@ -290,6 +291,33 @@ class VesqenAppTest {
         composeRule.onNodeWithText("Quiet Rooms").assertIsDisplayed()
         composeRule.onNodeWithText("4:05").assertIsDisplayed()
         composeRule.onAllNodesWithText("96 kHz").assertCountEquals(0)
+    }
+
+    @Test
+    fun track_details_keeps_its_header_stable_and_does_not_end_in_an_oversized_blank_region() {
+        render(grantedState(tracks = sampleTracks), containerHeight = 640.dp)
+
+        composeRule.onNodeWithTag("vesqen.library.track.1.more").performClick()
+        val headerBefore = composeRule.onNodeWithTag("vesqen.track-details.header")
+            .fetchSemanticsNode().boundsInRoot
+
+        composeRule.onNodeWithTag("vesqen.track-details.add-to-queue").performScrollTo()
+        composeRule.waitForIdle()
+
+        val headerAfter = composeRule.onNodeWithTag("vesqen.track-details.header")
+            .fetchSemanticsNode().boundsInRoot
+        val viewportBottom = composeRule.onNodeWithTag("vesqen.track-details.content")
+            .fetchSemanticsNode().boundsInRoot.bottom
+        val finalActionBottom = composeRule.onNodeWithTag("vesqen.track-details.add-to-queue")
+            .fetchSemanticsNode().boundsInRoot.bottom
+        val maximumBottomGap = with(composeRule.density) { 16.dp.toPx() }
+
+        assertEquals("The details title must stay fixed while metadata scrolls", headerBefore, headerAfter)
+        assertTrue(
+            "The final details action must end near the sheet bottom; " +
+                "gap=${viewportBottom - finalActionBottom}px",
+            viewportBottom - finalActionBottom <= maximumBottomGap,
+        )
     }
 
     @Test

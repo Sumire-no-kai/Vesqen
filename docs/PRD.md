@@ -455,7 +455,7 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 
 - MediaStore/SAF 导入和增量曲库。
 - 歌曲、专辑、艺术家和文件夹浏览。
-- FLAC、ALAC、WAV、AIFF 和常用有损格式播放。
+- FLAC、ALAC、WAV、AIFF，以及 MP3、AAC/M4A、Ogg Vorbis 和 Opus 播放。
 - 标签、封面、队列、后台播放和媒体通知。
 - 基础无缝播放和音频焦点处理。
 - 普通系统输出：扬声器、蓝牙、3.5 mm 和系统 USB 路由。
@@ -684,7 +684,7 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 - 核心解码策略：平台/Media3 优先，哪些格式需要独立 native decoder。
 - M6 的首个自研替换点，以及触发替换所需的性能或兼容性证据阈值。
 - bit-perfect 验证使用的参考手机、ROM、USB DAC 和采集设备。
-- 首批有损格式是否全部进入 M1。
+- M1 首批有损格式已确定为 MP3、AAC/M4A、Ogg Vorbis 和 Opus；APE、WavPack 与 CUE 等保留在 M5 评估。
 - 核心安装体积 30 MB 预算是否需要进一步收紧。
 - M5 之后优先选择高级格式、DAC 实验室、NAS 还是端侧 AI。
 
