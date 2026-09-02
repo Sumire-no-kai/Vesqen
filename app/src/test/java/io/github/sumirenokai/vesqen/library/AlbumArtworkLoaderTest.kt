@@ -1,10 +1,52 @@
 package io.github.sumirenokai.vesqen.library
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 
 class AlbumArtworkLoaderTest {
+
+    @Test
+    fun legacyAlbumMetadataUriMapsToProviderArtworkStream() {
+        assertEquals(
+            "content://media/external/audio/albumart/106",
+            legacyAlbumArtStreamUri("content://media/external/audio/albums/106"),
+        )
+        assertEquals(
+            "content://media/0123-4567/audio/albumart/9",
+            legacyAlbumArtStreamUri("content://media/0123-4567/audio/albums/9"),
+        )
+        assertEquals(null, legacyAlbumArtStreamUri("content://media/external/audio/media/106"))
+        assertEquals(null, legacyAlbumArtStreamUri("content://media/external/audio/albums/0"))
+        assertEquals(null, legacyAlbumArtStreamUri("file:///storage/emulated/0/cover.jpg"))
+    }
+
+    @Test
+    fun boundedFlacPictureParserExtractsImageWithoutReadingAudioFrames() {
+        val picture = byteArrayOf(0xff.toByte(), 0xd8.toByte(), 0x01, 0x02, 0xff.toByte(), 0xd9.toByte())
+        val stream = ByteArrayInputStream(flacWithPicture(picture))
+
+        assertArrayEquals(picture, extractBoundedFlacPicture(stream))
+        assertEquals(0, stream.available())
+    }
+
+    @Test
+    fun boundedFlacPictureParserRejectsOversizedAndMalformedMetadata() {
+        val picture = byteArrayOf(1, 2, 3, 4)
+        assertNull(extractBoundedFlacPicture(ByteArrayInputStream(flacWithPicture(picture)), maxPictureBytes = 3))
+        assertNull(extractBoundedFlacPicture(ByteArrayInputStream("not-flac".toByteArray())))
+        assertNull(
+            extractBoundedFlacPicture(
+                ByteArrayInputStream(byteArrayOf('f'.code.toByte(), 'L'.code.toByte(), 'a'.code.toByte(), 'C'.code.toByte(), 0x86.toByte(), 0x7f, 0xff.toByte(), 0xff.toByte())),
+                maxMetadataBytes = 1_024,
+            ),
+        )
+    }
+
     @Test
     fun `legacy provider decode sampling caps the longest decoded edge`() {
         assertEquals(1, calculateLegacyArtworkSampleSize(512, 512, 256))
@@ -69,5 +111,36 @@ class AlbumArtworkLoaderTest {
         assertNotEquals(base, AlbumArtworkCacheKey.mediaThumbnail(track.copy(dateModifiedSeconds = 101), 96))
         assertNotEquals(base, AlbumArtworkCacheKey.mediaThumbnail(track.copy(artworkRevision = 2), 96))
         assertNotEquals(base, AlbumArtworkCacheKey.mediaThumbnail(track, 192))
+    }
+
+    private fun flacWithPicture(picture: ByteArray): ByteArray {
+        val mime = "image/jpeg".toByteArray()
+        val block = ByteArrayOutputStream().apply {
+            writeBigEndianInt(3)
+            writeBigEndianInt(mime.size)
+            write(mime)
+            writeBigEndianInt(0)
+            writeBigEndianInt(720)
+            writeBigEndianInt(720)
+            writeBigEndianInt(24)
+            writeBigEndianInt(0)
+            writeBigEndianInt(picture.size)
+            write(picture)
+        }.toByteArray()
+        return ByteArrayOutputStream().apply {
+            write("fLaC".toByteArray())
+            write(0x86)
+            write((block.size ushr 16) and 0xff)
+            write((block.size ushr 8) and 0xff)
+            write(block.size and 0xff)
+            write(block)
+        }.toByteArray()
+    }
+
+    private fun ByteArrayOutputStream.writeBigEndianInt(value: Int) {
+        write((value ushr 24) and 0xff)
+        write((value ushr 16) and 0xff)
+        write((value ushr 8) and 0xff)
+        write(value and 0xff)
     }
 }
