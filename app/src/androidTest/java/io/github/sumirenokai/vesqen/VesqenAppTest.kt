@@ -20,6 +20,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
@@ -36,7 +37,6 @@ import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.library.LibraryScanProgress
-import io.github.sumirenokai.vesqen.library.LibraryPlaylist
 import io.github.sumirenokai.vesqen.library.LibraryScanState
 import io.github.sumirenokai.vesqen.library.LibrarySource
 import io.github.sumirenokai.vesqen.library.LibrarySourceKind
@@ -287,7 +287,15 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.library.track.1.more").performClick()
 
         composeRule.onNodeWithText(context.getString(R.string.track_details)).assertIsDisplayed()
-        composeRule.onNodeWithText("Dawn Signal").assertIsDisplayed()
+        val detailsContentBounds = composeRule.onNodeWithTag("vesqen.track-details.content")
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "The details title must be rendered inside the sheet content viewport",
+            composeRule.onAllNodesWithText("Dawn Signal").fetchSemanticsNodes().any { node ->
+                node.boundsInRoot.top >= detailsContentBounds.top &&
+                    node.boundsInRoot.bottom <= detailsContentBounds.bottom
+            },
+        )
         composeRule.onNodeWithText("Quiet Rooms").assertIsDisplayed()
         composeRule.onNodeWithText("4:05").assertIsDisplayed()
         composeRule.onAllNodesWithText("96 kHz").assertCountEquals(0)
@@ -295,13 +303,31 @@ class VesqenAppTest {
 
     @Test
     fun track_details_keeps_its_header_stable_and_does_not_end_in_an_oversized_blank_region() {
-        render(grantedState(tracks = sampleTracks), containerHeight = 640.dp)
+        val detailedTrack = sampleTracks.first().copy(
+            albumArtist = "Mori",
+            trackNumber = 3,
+            discNumber = 1,
+            year = 2026,
+            genre = "Ambient",
+            fileName = "dawn-signal.flac",
+            folderName = "Music/Quiet Rooms",
+            fileSizeBytes = 42_000_000,
+            mimeType = "audio/flac",
+            codec = "FLAC",
+            channelCount = 2,
+            bitDepth = 24,
+            sampleRateHz = 96_000,
+            bitrate = 4_608_000,
+            playCount = 5,
+        )
+        render(grantedState(tracks = listOf(detailedTrack)), containerHeight = 640.dp)
 
         composeRule.onNodeWithTag("vesqen.library.track.1.more").performClick()
         val headerBefore = composeRule.onNodeWithTag("vesqen.track-details.header")
             .fetchSemanticsNode().boundsInRoot
 
         composeRule.onNodeWithTag("vesqen.track-details.add-to-queue").performScrollTo()
+        composeRule.onNodeWithTag("vesqen.track-details.content").performTouchInput { swipeUp() }
         composeRule.waitForIdle()
 
         val headerAfter = composeRule.onNodeWithTag("vesqen.track-details.header")
@@ -1119,14 +1145,16 @@ class VesqenAppTest {
                 library = LibraryUiState(
                     musicAccess = MusicAccess.GRANTED,
                     tracks = sampleTracks,
-                    playlists = listOf(LibraryPlaylist(1, "Existing", emptyList(), 1, 1)),
+                    playlists = emptyList(),
                 ),
             ),
             onCreatePlaylist = { createdName = it },
         )
 
-        composeRule.onNodeWithTag("vesqen.library.mode.playlists").performClick()
-        composeRule.onNodeWithTag("vesqen.library.playlist.create").performClick()
+        composeRule.onNodeWithTag("vesqen.library.mode.playlists").performScrollTo().performClick()
+        composeRule.onNodeWithText(context.getString(R.string.no_playlists_body)).assertIsDisplayed()
+        composeRule.onAllNodesWithText(context.getString(R.string.no_local_music_body)).assertCountEquals(0)
+        composeRule.onNodeWithText(context.getString(R.string.create_playlist)).performClick()
         composeRule.onNodeWithText(context.getString(R.string.playlist_name)).performTextInput("Night")
         composeRule.onNodeWithText(context.getString(R.string.create)).performClick()
 

@@ -6,6 +6,7 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import androidx.core.database.sqlite.transaction
+import java.io.Closeable
 
 /**
  * Private, small SQLite store for the discoverable catalog. It contains only metadata and opaque
@@ -19,7 +20,7 @@ internal class LibraryCatalogStore(
     databaseName,
     null,
     DATABASE_VERSION,
-) {
+), Closeable {
     override fun onConfigure(db: SQLiteDatabase) {
         super.onConfigure(db)
         db.setForeignKeyConstraintsEnabled(true)

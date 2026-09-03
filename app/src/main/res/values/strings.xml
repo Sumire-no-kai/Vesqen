@@ -157,6 +157,8 @@
     <string name="unknown_playlist">Untitled playlist</string>
     <string name="play_all">Play all</string>
     <string name="create_playlist">Create playlist</string>
+    <string name="no_playlists_body">Create a playlist to organise tracks from your local library.</string>
+    <string name="empty_playlist_body">This playlist is empty. Add tracks from a song’s details.</string>
     <string name="playlist_name">Playlist name</string>
     <string name="create">Create</string>
     <string name="cancel">Cancel</string>

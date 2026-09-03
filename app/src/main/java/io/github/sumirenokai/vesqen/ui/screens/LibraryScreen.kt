@@ -262,7 +262,7 @@ private fun LibraryContent(
 
                 browseMode == LibraryBrowseMode.PLAYLISTS && state.playlists.isEmpty() -> VesqenEmptyState(
                     title = stringResource(R.string.library_playlists),
-                    body = stringResource(R.string.no_local_music_body),
+                    body = stringResource(R.string.no_playlists_body),
                     actionLabel = stringResource(R.string.create_playlist),
                     onAction = { showCreatePlaylist = true },
                     modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
@@ -688,7 +688,13 @@ private fun CollectionTrackList(
         if (collection.tracks.isEmpty()) {
             VesqenEmptyState(
                 title = collection.title,
-                body = stringResource(R.string.no_local_music_body),
+                body = stringResource(
+                    if (collection.playlistId != null) {
+                        R.string.empty_playlist_body
+                    } else {
+                        R.string.no_local_music_body
+                    },
+                ),
                 actionLabel = stringResource(R.string.back),
                 onAction = onBack,
                 modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
