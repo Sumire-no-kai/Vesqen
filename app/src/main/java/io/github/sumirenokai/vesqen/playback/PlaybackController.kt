@@ -13,6 +13,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.telemetry.TelemetryMediaItemExtras
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -339,6 +340,7 @@ class PlaybackController(
             .setDiscNumber(discNumber)
             .setRecordingYear(year)
             .setGenre(genre.takeIf(String::isNotBlank))
+            .setExtras(TelemetryMediaItemExtras.from(this))
         albumArtworkUri?.takeIf(String::isNotBlank)?.let { metadata.setArtworkUri(it.toUri()) }
         return MediaItem.Builder()
             .setMediaId(id.toString())

@@ -38,6 +38,7 @@ enum class TelemetrySection {
     PROCESSING,
     PLAYBACK,
     PROCESS,
+    POWER,
     ROUTE,
     USB,
 }
@@ -53,6 +54,7 @@ enum class TelemetryUnit {
     PERCENT,
     COUNT,
     CELSIUS,
+    VOLTS,
     MILLIAMPERES,
     MILLIWATTS,
 }
@@ -91,14 +93,21 @@ enum class TelemetryConfidence {
 data class TelemetryWindow(
     val startedAtEpochMs: Long,
     val endedAtEpochMs: Long,
+    /** Monotonic time used for all duration and rate calculations. */
+    val startedAtElapsedRealtimeMs: Long = startedAtEpochMs,
+    val endedAtElapsedRealtimeMs: Long = endedAtEpochMs,
 ) {
     init {
         require(startedAtEpochMs >= 0) { "Telemetry window start cannot be negative" }
-        require(endedAtEpochMs > startedAtEpochMs) { "Telemetry windows must have positive duration" }
+        require(endedAtEpochMs >= 0) { "Telemetry window end cannot be negative" }
+        require(startedAtElapsedRealtimeMs >= 0) { "Telemetry monotonic window start cannot be negative" }
+        require(endedAtElapsedRealtimeMs > startedAtElapsedRealtimeMs) {
+            "Telemetry windows must have positive monotonic duration"
+        }
     }
 
     val durationMs: Long
-        get() = endedAtEpochMs - startedAtEpochMs
+        get() = endedAtElapsedRealtimeMs - startedAtElapsedRealtimeMs
 }
 
 enum class TelemetryUnavailableReason {
@@ -108,6 +117,10 @@ enum class TelemetryUnavailableReason {
     UNSUPPORTED_ANDROID_VERSION,
     UNSUPPORTED_DEVICE,
     PERMISSION_NOT_GRANTED,
+    WARMING_UP,
+    SOURCE_DID_NOT_REPORT,
+    NOT_APPLICABLE,
+    TEMPORARILY_UNAVAILABLE,
     UNKNOWN,
 }
 
@@ -119,17 +132,20 @@ sealed interface TelemetryEvidence {
     val confidence: TelemetryConfidence
     val source: TelemetryDataSource?
     val observedAtEpochMs: Long
+    val observedAtElapsedRealtimeMs: Long
     val reading: TelemetryReading?
 
     data class Measured(
         override val reading: TelemetryReading,
         override val source: TelemetryDataSource,
         override val observedAtEpochMs: Long,
+        override val observedAtElapsedRealtimeMs: Long = observedAtEpochMs,
     ) : TelemetryEvidence {
         override val confidence: TelemetryConfidence = TelemetryConfidence.MEASURED
 
         init {
             require(observedAtEpochMs >= 0) { "Telemetry timestamps cannot be negative" }
+            require(observedAtElapsedRealtimeMs >= 0) { "Telemetry monotonic timestamps cannot be negative" }
         }
     }
 
@@ -138,15 +154,26 @@ sealed interface TelemetryEvidence {
         override val source: TelemetryDataSource,
         override val observedAtEpochMs: Long,
         val window: TelemetryWindow,
-        val calculation: String,
+        val calculationId: String,
+        val inputMetricIds: Set<TelemetryMetricId>,
+        val operands: Map<String, Double>,
+        override val observedAtElapsedRealtimeMs: Long = observedAtEpochMs,
     ) : TelemetryEvidence {
         override val confidence: TelemetryConfidence = TelemetryConfidence.DERIVED
 
         init {
             require(observedAtEpochMs >= 0) { "Telemetry timestamps cannot be negative" }
-            require(calculation.isNotBlank()) { "Derived telemetry must explain its calculation" }
-            require(observedAtEpochMs >= window.endedAtEpochMs) {
-                "Derived telemetry cannot be observed before its source window ends"
+            require(observedAtElapsedRealtimeMs >= 0) { "Telemetry monotonic timestamps cannot be negative" }
+            require(calculationId.matches(IDENTIFIER_PATTERN)) {
+                "Derived telemetry must use a stable calculation id"
+            }
+            require(inputMetricIds.isNotEmpty()) { "Derived telemetry must identify its input metrics" }
+            require(operands.isNotEmpty()) { "Derived telemetry must retain its raw operands" }
+            require(operands.all { (name, value) ->
+                name.matches(IDENTIFIER_PATTERN) && value.isFinite()
+            }) { "Derived telemetry operands must use stable ids and finite values" }
+            require(observedAtElapsedRealtimeMs >= window.endedAtElapsedRealtimeMs) {
+                "Derived telemetry cannot be observed before its monotonic source window ends"
             }
         }
     }
@@ -155,13 +182,18 @@ sealed interface TelemetryEvidence {
         override val reading: TelemetryReading,
         override val source: TelemetryDataSource,
         override val observedAtEpochMs: Long,
-        val method: String,
+        val methodId: String,
+        val inputMetricIds: Set<TelemetryMetricId> = emptySet(),
+        override val observedAtElapsedRealtimeMs: Long = observedAtEpochMs,
     ) : TelemetryEvidence {
         override val confidence: TelemetryConfidence = TelemetryConfidence.ESTIMATED
 
         init {
             require(observedAtEpochMs >= 0) { "Telemetry timestamps cannot be negative" }
-            require(method.isNotBlank()) { "Estimated telemetry must explain its method" }
+            require(observedAtElapsedRealtimeMs >= 0) { "Telemetry monotonic timestamps cannot be negative" }
+            require(methodId.matches(IDENTIFIER_PATTERN)) {
+                "Estimated telemetry must use a stable method id"
+            }
         }
     }
 
@@ -170,12 +202,14 @@ sealed interface TelemetryEvidence {
         override val observedAtEpochMs: Long,
         override val source: TelemetryDataSource? = null,
         val detail: String? = null,
+        override val observedAtElapsedRealtimeMs: Long = observedAtEpochMs,
     ) : TelemetryEvidence {
         override val confidence: TelemetryConfidence = TelemetryConfidence.UNAVAILABLE
         override val reading: TelemetryReading? = null
 
         init {
             require(observedAtEpochMs >= 0) { "Telemetry timestamps cannot be negative" }
+            require(observedAtElapsedRealtimeMs >= 0) { "Telemetry monotonic timestamps cannot be negative" }
             require(detail == null || detail.isNotBlank()) { "Unavailable detail cannot be blank" }
         }
     }
@@ -185,7 +219,11 @@ data class TelemetryMetric(
     val id: TelemetryMetricId,
     val section: TelemetrySection,
     val evidence: TelemetryEvidence,
-)
+) {
+    init {
+        TelemetryMetricCatalog.requireValid(this)
+    }
+}
 
 enum class TelemetryEventKind {
     PLAYBACK_STATE_CHANGED,
@@ -193,6 +231,12 @@ enum class TelemetryEventKind {
     ROUTE_CHANGED,
     UNDERRUN,
     SEEK_COMPLETED,
+    DECODER_INITIALIZED,
+    OUTPUT_INITIALIZED,
+    USB_ATTACHED,
+    USB_DETACHED,
+    DIAGNOSTIC_RECORDING_STARTED,
+    DIAGNOSTIC_RECORDING_STOPPED,
     ERROR,
 }
 
@@ -208,25 +252,34 @@ data class TelemetryEvent(
     val kind: TelemetryEventKind,
     val severity: TelemetryEventSeverity,
     val occurredAtEpochMs: Long,
+    val occurredAtElapsedRealtimeMs: Long = occurredAtEpochMs,
     /** Stable, localizable code; raw exceptions and file paths do not belong here. */
     val code: String,
+    val playbackSessionId: String? = null,
     val relatedMetricIds: Set<TelemetryMetricId> = emptySet(),
 ) {
     init {
         require(sequence >= 0) { "Telemetry event sequence cannot be negative" }
         require(occurredAtEpochMs >= 0) { "Telemetry event timestamps cannot be negative" }
+        require(occurredAtElapsedRealtimeMs >= 0) { "Telemetry monotonic event timestamps cannot be negative" }
         require(code.matches(IDENTIFIER_PATTERN)) { "Telemetry event codes must be stable identifiers" }
+        require(playbackSessionId == null || playbackSessionId.isNotBlank()) {
+            "Telemetry event playback session id cannot be blank"
+        }
+        relatedMetricIds.forEach(TelemetryMetricCatalog::requireKnown)
     }
 }
 
 data class TelemetrySnapshot(
     val capturedAtEpochMs: Long,
+    val capturedAtElapsedRealtimeMs: Long = capturedAtEpochMs,
     val playbackSessionId: String? = null,
     val metrics: List<TelemetryMetric> = emptyList(),
     val recentEvents: List<TelemetryEvent> = emptyList(),
 ) {
     init {
         require(capturedAtEpochMs >= 0) { "Telemetry snapshot timestamps cannot be negative" }
+        require(capturedAtElapsedRealtimeMs >= 0) { "Telemetry snapshot monotonic timestamps cannot be negative" }
         require(playbackSessionId == null || playbackSessionId.isNotBlank()) {
             "Playback session id cannot be blank"
         }
@@ -236,8 +289,21 @@ data class TelemetrySnapshot(
         require(recentEvents.zipWithNext().all { (first, second) -> first.sequence < second.sequence }) {
             "Telemetry events must have a strictly increasing sequence"
         }
-        require(recentEvents.all { event -> event.occurredAtEpochMs <= capturedAtEpochMs }) {
+        require(recentEvents.all { event ->
+            event.occurredAtElapsedRealtimeMs <= capturedAtElapsedRealtimeMs
+        }) {
             "Telemetry events cannot occur after their containing snapshot"
+        }
+        val availableMetricIds = metrics.mapTo(mutableSetOf(), TelemetryMetric::id)
+        metrics.forEach { metric ->
+            val inputs = when (val evidence = metric.evidence) {
+                is TelemetryEvidence.Derived -> evidence.inputMetricIds
+                is TelemetryEvidence.Estimated -> evidence.inputMetricIds
+                else -> emptySet()
+            }
+            require(inputs.all(availableMetricIds::contains)) {
+                "Derived and estimated telemetry inputs must be retained in the same snapshot"
+            }
         }
     }
 
@@ -246,8 +312,12 @@ data class TelemetrySnapshot(
     fun metricsIn(section: TelemetrySection): List<TelemetryMetric> = metrics.filter { it.section == section }
 
     companion object {
-        fun empty(capturedAtEpochMs: Long = 0): TelemetrySnapshot = TelemetrySnapshot(
+        fun empty(
+            capturedAtEpochMs: Long = 0,
+            capturedAtElapsedRealtimeMs: Long = capturedAtEpochMs,
+        ): TelemetrySnapshot = TelemetrySnapshot(
             capturedAtEpochMs = capturedAtEpochMs,
+            capturedAtElapsedRealtimeMs = capturedAtElapsedRealtimeMs,
         )
     }
 }

@@ -19,7 +19,7 @@ class FakePlaybackTelemetryTest {
             derivedWindowMs = 2_000,
             powerMode = TelemetryPowerMode.STANDARD,
             selection = TelemetryMetricSelection.Explicit(
-                setOf(TelemetryMetricId("playback.buffered_bytes")),
+                setOf(TelemetryMetricCatalog.PLAYBACK_BUFFERED_DURATION),
             ),
         )
         val received = mutableListOf<TelemetrySnapshot>()
