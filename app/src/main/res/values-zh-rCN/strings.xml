@@ -154,6 +154,8 @@
     <string name="unknown_playlist">未命名播放列表</string>
     <string name="play_all">全部播放</string>
     <string name="create_playlist">新建播放列表</string>
+    <string name="no_playlists_body">新建播放列表，将本地曲库中的歌曲整理到一起。</string>
+    <string name="empty_playlist_body">这个播放列表还没有歌曲，可从歌曲详情中添加。</string>
     <string name="playlist_name">播放列表名称</string>
     <string name="create">创建</string>
     <string name="cancel">取消</string>

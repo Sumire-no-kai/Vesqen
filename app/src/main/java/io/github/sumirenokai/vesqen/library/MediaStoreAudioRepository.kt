@@ -37,6 +37,9 @@ internal class MediaStoreAudioRepository(
             ))
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 add(MediaStore.Audio.Media.RELATIVE_PATH)
+            } else {
+                @Suppress("DEPRECATION")
+                add(MediaStore.Audio.Media.DATA)
             }
         }.toTypedArray()
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} > 0"
@@ -65,6 +68,12 @@ internal class MediaStoreAudioRepository(
             } else {
                 -1
             }
+            @Suppress("DEPRECATION")
+            val legacyDataIndex = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
+            } else {
+                -1
+            }
 
             var processedTrackCount = 0
             while (cursor.moveToNext()) {
@@ -85,10 +94,12 @@ internal class MediaStoreAudioRepository(
                 val sizeBytes = cursor.getLong(sizeIndex)
                 val mimeType = cursor.getString(mimeTypeIndex).orEmpty()
                 val fileName = cursor.getString(displayNameIndex).orEmpty()
-                val folderName = if (relativePathIndex >= 0) {
-                    cursor.getString(relativePathIndex).orEmpty().trimEnd('/')
-                } else {
-                    ""
+                val folderName = when {
+                    relativePathIndex >= 0 ->
+                        cursor.getString(relativePathIndex).orEmpty().trimEnd('/')
+                    legacyDataIndex >= 0 ->
+                        legacyMediaFolderName(cursor.getString(legacyDataIndex).orEmpty())
+                    else -> ""
                 }
                 onTrack(
                     LibraryTrackCandidate(
@@ -134,4 +145,14 @@ internal class MediaStoreAudioRepository(
             cursor.close()
         }
     }
+}
+
+/**
+ * Android 8/9 expose only the deprecated absolute DATA column. Keep the raw path inside the
+ * MediaStore adapter and persist only its immediate parent label.
+ */
+internal fun legacyMediaFolderName(dataPath: String): String {
+    val normalized = dataPath.replace('\\', '/').trimEnd('/')
+    val parent = normalized.substringBeforeLast('/', missingDelimiterValue = "")
+    return parent.substringAfterLast('/', missingDelimiterValue = "")
 }

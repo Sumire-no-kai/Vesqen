@@ -585,3 +585,45 @@ iQOO 在本轮验证期间未连接，因此曲库滚动优化尚无 iQOO 前后
 | 构建产物 | Debug APK 为 22,933,453 bytes，SHA-256 `99FE85DED830F6AF73303A96F0381236F9BC3AAD50031B8112A3234FCC4917F8`；未签名 Release APK 为 15,356,676 bytes，SHA-256 `D6B542EC4F404512882B9298F6909DC597DF3B63F27946FDECF434CA571DB07C`。 |
 | Honor UI 回归 | Honor STF-AL00（Android 9）保留数据覆盖安装 `0.3.0-beta.3`，设备端 base.apk 与本地 Debug APK 哈希一致。详情滚到底后标题边界保持 `[72,249][864,328]`，滚动视口为 `[0,360][1080,1920]`，末按钮底部为 y=1896，即 3× 密度下只剩 8 dp；队列 sheet 也不再出现 32 dp 尾带，崩溃缓冲为空。 |
 | 证据边界 | 本轮 Honor 只完成详情／队列布局回归；未运行 `connectedDebugAndroidTest`，未执行格式、耐久、路由、无障碍或多设备完整矩阵，因此不计为 M1 真机验收。 |
+
+## 2026-09-03 · Honor M1 设备回归与 Android 9 目录兼容
+
+### 修复与版本
+
+本轮以 Honor STF-AL00（序列号 `8BNDU18223001915`、Android 9 / API 28、EMUI `STF-AL00 9.1.0.225(C00E125R1P9)`、1080×1920 / 360×640 dp）作为唯一目标设备，版本提升为 `0.3.0-beta.4`（versionCode `7`）。修改仍是跨版本能力分支，不含机型白名单或固定屏幕坐标：
+
+- Android 10+ 继续读取 `RELATIVE_PATH`；Android 8/9 的 MediaStore 查询额外读取旧版 `DATA`，只在 repository 边界提取父目录名称，不向 UI 或持久目录暴露完整路径。Honor 的 37 首媒体因此从“未知文件夹”恢复为 `Music`。
+- `LibraryCatalogStore` 明确实现 `Closeable`，避免 Android 9 运行时把 Kotlin `use` 路径解析为不兼容的 `AutoCloseable` 接口；目录重开、丰富元数据、历史与播放列表持久化的设备测试可正常执行。
+- 空播放列表总览和已选空列表分别使用“新建播放列表”和“从歌曲详情添加”的语义，不再错误提示重新授予音乐权限或添加文件夹。
+- 收紧三个失真的 Compose 夹具：详情长内容使用真正可滚动元数据、窄屏播放列表入口主动滚入可见区、详情断言只限定 sheet 内节点；播放列表空状态用例不再同时预置一个已有列表。
+
+### 自动化与构建证据
+
+| 检查 | 结果 |
+| --- | --- |
+| 本地质量门禁 | `testDebugUnitTest lintDebug assembleDebug assembleRelease assembleDebugAndroidTest` **通过**：51 个 JVM 测试，0 failures、0 errors；lint 为 0 errors、21 warnings；Debug、未签名 Release 和 Android 测试 APK 均成功构建。 |
+| 构建产物 | Debug APK 22,934,541 bytes，SHA-256 `A2EE98F951F237FBE01FEF164375437742EC0894FED38FDC13E273700399E624`；设备端 `base.apk` 哈希一致。未签名 Release APK 15,357,768 bytes，SHA-256 `E268A14C99991D44731F3E4907D5CF59AFD72F19C02174020423DC8F2B033182`；Android 测试 APK 1,133,792 bytes，SHA-256 `E941EBFE3D4219D124A03B9714B75E27EC7ADCF02F2017E668304F7E3BBEEDD7`。 |
+| 最终设备 runner | 为避免再次清除主应用私有数据，使用保留安装的同一最终 APK 直接执行 AndroidJUnitRunner。竖屏套件报告 `OK (32 tests)`，其中短横屏用例按宿主方向产生 1 次 assumption skip；把真实设备临时旋转为横屏后，该用例独立报告 `OK (1 test)`。因此 32 个唯一测试均取得设备通过结果，但这不替代验收文档明确要求的最终 `connectedDebugAndroidTest` 命令报告。 |
+| connected 任务边界 | 首次从 `0.3.0-beta.3` 基线运行 Gradle connected 任务时，真实暴露了 4 个兼容／夹具问题并在结束阶段卸载主应用，清除了曲库缓存、播放偏好、SAF 授权及应用内播放列表；设备音乐文件未被修改。上述问题均已修复并由最终 runner 回归，但为避免重复数据损失没有对 beta.4 再执行同一会卸载流程，故正式 connected 门禁仍记为 **OPEN**。 |
+
+### Honor 真机功能与 UI 结果
+
+| 检查 | 结果 |
+| --- | --- |
+| 曲库与封面 | 重装后 MediaStore 自动恢复 37 首歌曲；真实清单为 31 个 FLAC、6 个 MP3。旧 ROM provider 拒绝第三方读取系统 albumart 流后，有界内嵌封面回退能显示真实封面；冷态首屏约需 10 秒完成后台提取，播放不受阻。Android 9 文件夹浏览显示 `Music · 37 首曲目`，不再出现“未知文件夹”。 |
+| 真实播放与恢复 | FLAC `Aira`（设备可读元数据为 48.0 kHz / 16-bit）和 MP3 `Magic Mullet` 均可启动、暂停和 seek；Aira 后台播放时进度继续前进。强制停止并重启后，37 首队列与约 51 秒位置恢复，最终保持暂停且没有意外自动播放，crash buffer 为空。 |
+| 播放列表 CRUD | 临时创建 `Vesqen_M1_QA`，进程重启后仍存在；加入 Aira 后显示 1 首，重命名为 `M1_QA_Renamed`，移除曲目后显示正确空列表说明，最后删除测试列表。测试结束后没有遗留 QA 播放列表。 |
+| 100 次控制压力 | 对真实 37 首队列执行 20 轮“暂停、播放、下一首、上一首、进度跳转”，共 100 次。最终 MediaSession 为播放状态、曲目回到 Aira、队列仍为 37、无 error，crash buffer 为空。 |
+| 自适应与主题 | 在 360×640 dp 传统 16:9 屏幕检查曲库、文件夹、播放列表、详情、Now、设置与关于，无裁切、重叠或不可达主要操作；深色／浅色和字体 1.0×、1.3×、1.5×、2.0×均完成实机检查。关于页显示 `0.3.0-beta.4`。横屏短窗口专项通过。 |
+| 减少动效 | 临时将系统三项动画比例设为 0，冷启后展开 Now 并返回曲库，界面稳定且无崩溃；测试后已恢复原值 `1.0 / 1.0 / 1.0`。 |
+| 曲库滚动代理 | Debug 构建、封面暖态、30 次 100 ms ADB 快速往返：548 帧／198 janky（36.13%），p50 15 ms、p90 57 ms、p95 81 ms、p99 105 ms，慢位图上传 0；PSS 192,158 KiB。结果与上一版 Honor 暖态 35.25% 同量级，没有证明回退，也仍不足以关闭用户报告的 iQOO 掉帧，必须在 iQOO 上用同一脚本做前后对照。 |
+
+### M1 仍未关闭的门禁
+
+- 本机只有真实 FLAC 16/48 与 MP3，尚不能替代 FLAC 16/44.1、FLAC 24/96、ALAC、WAV 16/24/32、AIFF 16/24/32、AAC/M4A、Ogg Vorbis、Opus、损坏封面和已知无缝边界的完整夹具矩阵。
+- 8 小时连续播放、24/96 两小时、已知无缝样本、大型曲库并行扫描，以及 Android 13、Android 14 和当前稳定版本设备尚未执行。
+- 当前未检测到 3.5 mm 或蓝牙输出。真实来电和 USB 音频／50 次插拔因现有设备无 SIM 卡、无对应 USB 音频硬件，按用户确认延期；导航提示、耳机按键、3.5 mm 和蓝牙断开仍待具备硬件时执行。
+- TalkBack 尚未由真人逐项收听；Compose 语义、48 dp 契约和 UI runner 只是前置证据，不能替代该门禁。
+- iQOO 本轮未连接，长屏 UI 与滚动性能不能据 Honor 结果代验；最终 Gradle connected 报告也仍为 OPEN。
+
+结论：beta.4 已关闭本轮 Honor 上发现的 Android 9 目录、资源关闭、空播放列表语义和设备 runner 夹具问题，并通过当前可安全执行的功能／UI／压力回归；完整 M1 仍不得标记完成。
