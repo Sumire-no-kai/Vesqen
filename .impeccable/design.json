@@ -246,8 +246,8 @@
       "name": "Dark Bottom Navigation",
       "kind": "nav",
       "refersTo": "bottom-navigation-dark",
-      "description": "Library, Now, and Chain on the dark surface system.",
-      "html": "<nav class=\"ds-nav-dark\"><button class=\"active\">Library</button><button>Now</button><button>Chain</button></nav>",
+      "description": "Library, Now, and Settings on the dark surface system; Chain remains secondary.",
+      "html": "<nav class=\"ds-nav-dark\"><button class=\"active\">Library</button><button>Now</button><button>Settings</button></nav>",
       "css": ".ds-nav-dark{height:80px;padding:8px 12px;display:flex;align-items:center;justify-content:space-around;background:#0F0F0F;font-family:Roboto,sans-serif}.ds-nav-dark button{min-width:72px;height:56px;border:0;border-radius:12px;background:transparent;color:#C8C9BE;font:600 12px/16px Roboto,sans-serif}.ds-nav-dark button.active{color:#BFD66B;background:#23261E}.ds-nav-dark button:focus-visible{outline:3px solid rgba(159,191,75,.38);outline-offset:2px}"
     },
     {
@@ -255,7 +255,7 @@
       "kind": "nav",
       "refersTo": "bottom-navigation-light",
       "description": "Exact daylight counterpart to the dark top-level navigation.",
-      "html": "<nav class=\"ds-nav-light\"><button class=\"active\">Library</button><button>Now</button><button>Chain</button></nav>",
+      "html": "<nav class=\"ds-nav-light\"><button class=\"active\">Library</button><button>Now</button><button>Settings</button></nav>",
       "css": ".ds-nav-light{height:80px;padding:8px 12px;display:flex;align-items:center;justify-content:space-around;background:#FFFFFF;font-family:Roboto,sans-serif}.ds-nav-light button{min-width:72px;height:56px;border:0;border-radius:12px;background:transparent;color:#5E6056;font:600 12px/16px Roboto,sans-serif}.ds-nav-light button.active{color:#536B1E;background:#F6F7F2}.ds-nav-light button:focus-visible{outline:3px solid rgba(83,107,30,.35);outline-offset:2px}"
     }
   ],
@@ -270,11 +270,11 @@
       "Familiar Android navigation and controls, with advanced evidence one deliberate tap away."
     ],
     "rules": [
-      { "name": "The Three-Destination Rule", "body": "Top-level navigation is Library, Now, and Chain. Settings and track details are secondary destinations and never become additional permanent tabs.", "section": "components" },
+      { "name": "The Three-Destination Rule", "body": "Top-level navigation is Library, Now, and Settings. Chain, About, and track details are secondary destinations and never become additional permanent tabs.", "section": "components" },
       { "name": "The Progressive Proof Rule", "body": "The track list contains title, artist, artwork, playback state, and overflow only. Format, path, source parameters, route evidence, and live metrics belong in track details, Now, or Chain.", "section": "components" },
       { "name": "The Evidence Hierarchy Rule", "body": "SYSTEM MIXED and DIRECT SUPPORTED use neutral chips. AVAILABLE uses a Moss outline and open icon, ACTIVE uses a filled Moss chip and activity dot, and VERIFIED uses an outlined or tonal badge with a shield and exact device-matrix context. Color never promotes evidence by itself.", "section": "colors" },
       { "name": "The Chain Empty-State Rule", "body": "Without a playback session, Chain explains that evidence appears after playback starts and offers one primary action back to Library.", "section": "components" },
-      { "name": "The Localized Navigation Rule", "body": "Library, Now, and Chain are stable semantic IDs. English uses those labels; Simplified Chinese displays 曲库, 正在播放, and 链路.", "section": "components" },
+      { "name": "The Localized Navigation Rule", "body": "Library, Now, and Settings are stable semantic IDs. English uses those labels; Simplified Chinese displays 曲库, 正在播放, and 设置. Chain remains a secondary evidence destination.", "section": "components" },
       { "name": "The Signal Budget Rule", "body": "Signal Moss occupies no more than roughly 10% of an ordinary screen. Its rarity creates recognition and makes active state unambiguous.", "section": "colors" },
       { "name": "The Stable Truth Rule", "body": "Android dynamic color is not enabled in the v1.0 baseline. If it is added later, output states keep fixed semantic roles: brand, warning, error, and proof meanings never inherit an arbitrary wallpaper hue.", "section": "colors" },
       { "name": "The One-Family Rule", "body": "UI labels, buttons, track metadata, and navigation use the same sans-serif family. Monospace never leaks into the ordinary library or primary controls.", "section": "typography" },
@@ -284,7 +284,7 @@
       { "name": "The Single Player Lift Rule", "body": "The Now transport dock is separated by one 20dp ambient-plus-spot shadow only. It has no hard divider, border, glow, gradient, glass treatment, or competing elevation cue.", "section": "elevation" }
     ],
     "dos": [
-      "Do keep Library, Now, and Chain stable across themes and window sizes.",
+      "Do keep Library, Now, and Settings stable across themes and window sizes, with Chain consistently presented as a secondary evidence destination.",
       "Do keep Signal Moss below roughly 10% of ordinary screen area and reserve it for identity, focus, selection, and positive evidence above neutral playback states.",
       "Do maintain at least WCAG 2.2 AA contrast, 48dp touch targets, TalkBack labels, scalable text, and reduced-motion behavior.",
       "Do use soft tonal transitions, restrained artwork light, and platform blur only when they clarify elevation or playback context.",

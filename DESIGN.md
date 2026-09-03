@@ -175,7 +175,7 @@ components:
 
 Vesqen should feel like a listening instrument used in a dim train carriage, a quiet study, or a softly lit room: the screen recedes until a meaningful state changes. The dark experience is the primary expression, while the light experience is a complete daylight counterpart—not a separate brand. The protected full player uses a single Nocturne Graphite material ladder; album artwork may cast one restrained reflection into it, but navigation, text, and evidence labels remain stable and legible.
 
-The information architecture is fixed around three destinations: **Library**, **Now**, and **Chain**. Library is the beginner's starting point, Now is the focused playback surface, and Chain progressively exposes output and evidence. Technical density belongs behind explicit disclosure, not in the track list.
+The top-level information architecture is fixed around **Library**, **Now**, and **Settings**. Library is the beginner's starting point, Now is the focused playback surface, and Settings is the account-free management destination. **Chain** is a secondary evidence surface reached deliberately from Now or Settings. Technical density belongs behind explicit disclosure, not in the track list.
 
 **Key Characteristics:**
 
@@ -185,7 +185,7 @@ The information architecture is fixed around three destinations: **Library**, **
 - Album-derived atmosphere only on the full player and only behind protected contrast layers.
 - Familiar Android navigation and controls, with advanced evidence one deliberate tap away.
 
-**The Three-Destination Rule.** Top-level navigation is Library, Now, and Chain. Settings and track details are secondary destinations and never become additional permanent tabs.
+**The Three-Destination Rule.** Top-level navigation is Library, Now, and Settings. Chain, About, and track details are secondary destinations and never become additional permanent tabs.
 
 **The Progressive Proof Rule.** The track list contains title, artist, artwork, playback state, and overflow only. Format, path, source parameters, route evidence, and live metrics belong in track details, Now, or Chain.
 
@@ -321,8 +321,8 @@ Translucency is purposeful. The full player may use a protected, low-frequency a
 
 ### Navigation
 
-- **Destinations:** Library, Now, and Chain, each with a familiar icon and persistent text label.
-- **Localization:** `Library`, `Now`, and `Chain` are stable semantic IDs, not forced English display strings. English uses those labels; Simplified Chinese uses `曲库`, `正在播放`, and `链路`.
+- **Destinations:** Library, Now, and Settings, each with a familiar icon and persistent text label. Chain remains one deliberate action away from Now and Settings.
+- **Localization:** `Library`, `Now`, and `Settings` are stable semantic IDs, not forced English display strings. English uses those labels; Simplified Chinese uses `曲库`, `正在播放`, and `设置`.
 - **Compact shell:** Compact windows use a 64dp text-labelled navigation bar before the system navigation inset. The bar continues the page canvas instead of introducing a second near-white surface; labels remain one line and may ellipsize rather than wrap or clip.
 - **Default:** First launch and ordinary cold launch begin in Library. Now without a track explains the single next action: choose a track from Library.
 - **Adaptive:** Compact windows use bottom navigation; medium and expanded windows use a navigation rail while preserving the same order and labels.
@@ -338,7 +338,7 @@ Translucency is purposeful. The full player may use a protected, low-frequency a
 
 ### Do
 
-- **Do** keep Library, Now, and Chain stable across themes and window sizes.
+- **Do** keep Library, Now, and Settings stable across themes and window sizes, with Chain consistently presented as a secondary evidence destination.
 - **Do** keep Signal Moss below roughly 10% of ordinary screen area and reserve it for identity, focus, selection, and positive evidence above neutral playback states.
 - **Do** maintain at least WCAG 2.2 AA contrast, 48dp touch targets, TalkBack labels, scalable text, and reduced-motion behavior.
 - **Do** use soft tonal transitions, restrained artwork light, and platform blur only when they clarify elevation or playback context.

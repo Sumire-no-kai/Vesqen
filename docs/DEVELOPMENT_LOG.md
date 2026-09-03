@@ -627,3 +627,37 @@ iQOO 在本轮验证期间未连接，因此曲库滚动优化尚无 iQOO 前后
 - iQOO 本轮未连接，长屏 UI 与滚动性能不能据 Honor 结果代验；最终 Gradle connected 报告也仍为 OPEN。
 
 结论：beta.4 已关闭本轮 Honor 上发现的 Android 9 目录、资源关闭、空播放列表语义和设备 runner 夹具问题，并通过当前可安全执行的功能／UI／压力回归；完整 M1 仍不得标记完成。
+
+## 2026-09-03 · M2 Audio Proof 范围、领域模型与 Fake Adapter
+
+### 范围校准与版本
+
+本轮从同步的远端 `master` 建立 `feature/m2-telemetry-foundation`，开始 M2 的非 UI 基础切片。版本提升为 `0.4.0-alpha.1`（versionCode `8`），只表示 M2 开发已经开始，不表示 Audio Proof 或 M2 已完成。PRD、路线图、README、视觉规范与设计系统统一以 `Library / Now / Settings` 作为顶层导航，Chain 保持从 Now 或 Settings 到达的二级证据页；历史开发日志不追溯改写。
+
+### 领域模型与模块边界
+
+| 能力 | 实现与边界 |
+| --- | --- |
+| 统一快照 | 新增 `TelemetrySnapshot`，以同一采集时刻承载播放会话、指标和近期事件；指标 ID 与来源 ID 使用稳定的点分标识符，避免把本地化展示文字当持久标识。 |
+| 证据可信度 | `MEASURED`、`DERIVED`、`ESTIMATED` 与 `UNAVAILABLE` 被建模为封闭类型。不可得证据不能携带陈旧读数；推导值必须保留来源、时间窗口和计算说明；估算值必须保留方法。 |
+| 指标与事件 | 指标按 Source、Decoder、Processing、Playback、Process、Route、USB 分区，数值携带单位；事件要求会话内序号严格递增，且不能晚于其所在快照。 |
+| 单一模块接口 | `PlaybackTelemetry.observe()` 是 UI／领域层唯一外部接缝。Flow 开始收集时建立采样需求，取消收集时释放；接口禁止 UI 直接轮询播放器或 Android 系统对象。 |
+| 采样请求 | 只开放 250 ms、500 ms、1 s、2 s 和 5 s 五档刷新率，默认 1 s；派生窗口必须为正，显式指标集合不能为空，并预留标准／低功耗模式。 |
+| Fake Adapter | Debug source set 提供可发布快照、记录请求并暴露活动订阅数的 `FakePlaybackTelemetry`，供 JVM、预览与仪器测试使用；Release APK 不包含该实现。 |
+| 统一语言 | 根目录新增 `CONTEXT.md`，明确 Source Fact、Decoder Fact、Processing Fact、Observable Output、Output Declaration、Evidence Confidence、Telemetry Snapshot、Diagnostic Recording 与 Chain，防止把源参数或可观察路由升级成最终输出证明。 |
+
+### 验证记录
+
+| 检查 | 结果 |
+| --- | --- |
+| JVM 回归 | `testDebugUnitTest` **通过**：58 个测试，0 failures、0 errors、0 skipped。新增 7 个契约测试覆盖证据不可变量、唯一指标、事件顺序、刷新率、稳定 ID 和 Fake Adapter 的订阅／释放生命周期。 |
+| 静态检查 | `lintDebug` **通过**：0 errors、21 warnings；未建立 baseline 掩盖问题。 |
+| 构建 | `assembleDebug`、`assembleRelease` 与 `assembleDebugAndroidTest` **通过**。Debug APK 为 22,967,368 bytes，SHA-256 `58F2EA629773D72C64F95866EEF95D170630BAB06CD7CA88954C0137880E4060`；未签名 Release APK 为 15,374,148 bytes，SHA-256 `73A3656D97020BC5DE99A2AE8702BBC12FB710FF589C69CA54607B2AAA8F8DEA`；Android 测试 APK 为 1,133,778 bytes，SHA-256 `CC76421196E8A7F353681668DA4C140F372A21DB68BB45B3BBFBF35F21E0C24D`。 |
+| 工作区检查 | 设计系统 JSON 可解析；规范文档中的现行导航定义一致；`git diff --check` 无空白错误。 |
+
+### 明确保留给后续 M2 切片
+
+- 尚未实现真实 Media3、进程／系统、thermal／power 或 USB 采样 Adapter，也没有把新模块接入 Chain UI；现有 Chain 展示仍不能算 M2 遥测交付。
+- 尚未实现图表、指标固定／排序、布局持久化、诊断录制与隐私清理导出。
+- 尚未进行 250 ms 高频模式性能基准、采样停止仪器验证、长时稳定性或真实输出切换一致性测试。
+- M3 的 USB mixer attribute 控制和 bit-perfect 决策不属于本切片；任何系统路由、源格式或 DAC 能力信息仍不得写成端到端 bit-perfect 证明。
