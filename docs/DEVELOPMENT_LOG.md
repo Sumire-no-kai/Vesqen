@@ -2,6 +2,8 @@
 
 本文件记录 Vesqen 的实现、验证和设计决策。目标是让后续开发、复盘和对外材料都能追溯到可复核的依据，而不是把计划或局部检查当作交付结论。
 
+学习与面试复盘入口：[问题与修复案例集](ENGINEERING_CASEBOOK.md)。案例集整理背景、根因、解决方案、取舍与回归设计；本日志保留逐次执行证据。
+
 ## 记录约定
 
 - **已验证**：附带执行环境或命令；仅在该范围内成立。
@@ -590,7 +592,7 @@ iQOO 在本轮验证期间未连接，因此曲库滚动优化尚无 iQOO 前后
 
 ### 修复与版本
 
-本轮以 Honor STF-AL00（序列号 `8BNDU18223001915`、Android 9 / API 28、EMUI `STF-AL00 9.1.0.225(C00E125R1P9)`、1080×1920 / 360×640 dp）作为唯一目标设备，版本提升为 `0.3.0-beta.4`（versionCode `7`）。修改仍是跨版本能力分支，不含机型白名单或固定屏幕坐标：
+本轮以 Honor STF-AL00（Android 9 / API 28、EMUI `STF-AL00 9.1.0.225(C00E125R1P9)`、1080×1920 / 360×640 dp）作为唯一目标设备，版本提升为 `0.3.0-beta.4`（versionCode `7`）。修改仍是跨版本能力分支，不含机型白名单或固定屏幕坐标：
 
 - Android 10+ 继续读取 `RELATIVE_PATH`；Android 8/9 的 MediaStore 查询额外读取旧版 `DATA`，只在 repository 边界提取父目录名称，不向 UI 或持久目录暴露完整路径。Honor 的 37 首媒体因此从“未知文件夹”恢复为 `Music`。
 - `LibraryCatalogStore` 明确实现 `Closeable`，避免 Android 9 运行时把 Kotlin `use` 路径解析为不兼容的 `AutoCloseable` 接口；目录重开、丰富元数据、历史与播放列表持久化的设备测试可正常执行。
@@ -661,3 +663,174 @@ iQOO 在本轮验证期间未连接，因此曲库滚动优化尚无 iQOO 前后
 - 尚未实现图表、指标固定／排序、布局持久化、诊断录制与隐私清理导出。
 - 尚未进行 250 ms 高频模式性能基准、采样停止仪器验证、长时稳定性或真实输出切换一致性测试。
 - M3 的 USB mixer attribute 控制和 bit-perfect 决策不属于本切片；任何系统路由、源格式或 DAC 能力信息仍不得写成端到端 bit-perfect 证明。
+
+## 2026-09-05 · 架构审查与状态边界修复
+
+- 本次以 `feature/m2-audio-proof` 的既有未提交工作区为基线做架构审查，保留原有 M1/M2 变更。产品定位、职责图、后续风险和待定问题见 [架构审查报告](ARCHITECTURE_REVIEW.md)。
+- 保留 Media3、单个 `app` module 与 `PlaybackTelemetry.observe()` 边界；在 PRD 中明确 M3 的输出执行、失败处理与声明由服务侧统一拥有，M6 复用该契约。
+- 修复重复曲目恢复到错误队列位置、缓冲/抑制时无法暂停、idle 队列未准备、MediaStore 缓存未包含数据库 version/实际存储卷、曲库缓存过期结果覆盖，以及 Now 退后台仍刷进度的问题。旧播放恢复记录保持可读。
+- 新增简明根目录 `AGENTS.md`，记录产品证据、模块所有权、验证和工作区保护规则。
+- 最终本地 `testDebugUnitTest`、`lintDebug`、`assembleDebug`、`assembleRelease`、`assembleDebugAndroidTest` 全部通过。JVM 166 tests，0 failures/errors/skipped；lint 0 errors、14 warnings。新增 Android 回归已编译，未在设备执行。
+- 已复核本次增量 diff，`git diff --check` 通过。未提交、推送、合并、安装或发布；本记录不代表 M1/M2 设备验收完成。
+
+## 2026-09-07 · 曲库与播放体验补充、蓝牙观测需求入库
+
+### 本轮范围与状态
+
+本轮先更新需求与验收文档，保留 `feature/m2-audio-proof` 的既有未提交实现。PRD 更新为 Draft v0.7；应用版本不变。以下功能／修复均为已接收、待实现或待复现，不能把本文当作 APK 交付或设备验收结果。
+
+| 用户要求 | 需求落点与默认方案 |
+| --- | --- |
+| 每轮回复说明模型版本 | 项目 AGENTS.md 末尾新增规则；只报告会话明确提供的版本，不猜测子版本。 |
+| 右侧 ABC/# 快捷访问 | PRD F1.1：仅全部歌曲标题升序且无搜索时默认开、可关闭；收藏／歌单等集合内部不显示。索引和标题排序共用键，中英混排与无障碍均有验收。 |
+| 收藏与自建歌单手动排序 | PRD F1.2：独立持久顺序、明确编辑入口、拖动与上移／下移，保留旧数据；集合编辑不自动改写当前播放队列。 |
+| 播放／暂停封面变化过小 | PRD F3／DESIGN：首个目标从当前 1.5% 差异提高到约 5%，约 220 ms 单次变化，最终真机确认，减少动效关闭缩放。 |
+| 进度圆点错位 | PRD F3／M1 门禁：先截图复现，再校正圆点、轨道和 seek 的共同几何契约，不做机型像素补丁。 |
+| 全部曲库快速滑动卡顿 | PRD 10.3／M1 门禁：以报告设备上的同条件 trace 和前后重复测量推动修复，分析思路见下。 |
+| 蓝牙设备和传输信息 | PRD F6.5／M2 门禁：补充现有路由与遥测；区分设备、能力、协商参数、配置码率和实际传输码率，公开接口缺失时保留原因。 |
+
+### 源码线索与待复现事项
+
+- `PlayerArtworkStage` 当前目标为播放 1.00、暂停 0.985，支持用户关于变化过小的反馈；这里只确认参数，尚未做新动效真机对比。
+- `PlaybackProgress` 使用 48 dp 容器、自定义 12 dp Thumb、4 dp Track 和零 thumb/track gap。下一步先截图区分垂直中心错位、轨道终点偏差或触控映射问题，再核对安装版本的 Material3 布局／绘制实现；仅凭这些尺寸不能断定根因。
+- `LibraryScreen` 已对搜索、收藏过滤、排序和集合投影使用 remember；封面已有后台两工人限制、缓存与同键合并。因此不把“缺少缓存”或“所有封面在主线程解码”当作已确认原因。
+- 优先验证三类滚动热点：播放／曲库快照或不稳定参数导致的多余重组和布局；快速滑动中的封面任务切换、缓存命中与位图上传／GC；扫描或集合投影导致的竞争与主线程工作。用 Perfetto／帧数据定位具体耗时，区别 UI 线程和 RenderThread，新增字母索引也纳入开关对照。
+- 实验遵循“基线测量 → 单一假设 → 单变量改动 → 同条件重复测量 → 保留或撤回”。记录曲库规模、设备刷新率、温度、构建类型、封面缓存状态、播放状态、扫描状态和滑动脚本；每组至少三次，报告分位帧时间和超帧预算比例。原有 Honor 局部优化记录不能关闭 iQOO 或本次报告设备的问题。
+- 自建歌单已有 `movePlaylistTrack` 和持久 position；收藏目前是布尔标记与列表过滤。实施时复用歌单现有顺序能力，补足收藏顺序及明确交互，避免另造一套曲库／播放队列。
+
+### 用户补充：iQOO 同机滚动体验对照
+
+- 用户说明该 iQOO 使用 Snapdragon 8 Gen 1，游戏运行能力正常；在同一手机上，网易云音乐快速滑动歌单没有明显卡顿，但 Vesqen 全部曲库快速滑动有明显卡顿感。这是用户观察，尚未由本轮设备测量或硬件识别复核。
+- 因此优先排查 Vesqen 自身的滚动、重组、数据更新与封面渲染路径，不以“设备性能不足”结束分析。较强 CPU／GPU 不能排除主线程阻塞、频繁布局、位图上传或 GC，具体原因仍须 trace 证明。
+- 后续先保留同机两款应用的体验对照，记录刷新率、温度、曲库规模、封面缓存和播放状态；正式修复结论仍使用 Vesqen 自身同条件的前后数据。网易云的内部实现和工作负载不同，同机流畅不能替代 Vesqen 的根因定位，也不能要求为对照修改用户在网易云中的歌单或数据。
+
+### 蓝牙公开接口核查
+
+Android `AudioDeviceInfo` 提供公开的端点名称／类型／能力，但能力并不代表正在协商的 codec。AOSP `BluetoothA2dp.getCodecStatus()` 当前带 `@hide`／`@SystemApi`，不能仅凭存在该方法就承诺普通应用跨设备可读。实时空口码率也不能从文件码率或 PCM 格式计算。需求据此采用“基础设备信息 + 条件性协商／传输证据 + 明确不可用原因”，技术来源列于 PRD 第 16 节，实施时仍需按安装 SDK、系统版本与目标 ROM 验证。
+
+### 验证边界
+
+本轮没有修改应用源码、数据库或 Manifest，没有构建、安装、运行设备测试或采集截图／性能数据。已扩展 M1/M2 验收步骤；此前 166 个 JVM 测试和构建通过记录不能覆盖本次尚未实现的新增需求。
+
+## 2026-09-07 · M1 新增功能实现候选与滚动路径优化
+
+### 实现结果
+
+- 全部歌曲增加可持久关闭的 A-Z/# 索引，仅无搜索且标题升序时显示。复用系统 ICU AlphabeticIndex 的中文拼音分组与 collation，忽略拉丁大小写，稳定 ID 作为同键次序；索引和标题排序在后台一次构建，避免把 ICU 计算放入滚动帧。空间不足、大字号或 TalkBack 时使用 48 dp 字母选择器。
+- 收藏增加 favorite_position，私有目录从 v3 无损迁移至 v4；旧收藏按统一标题序初始化，已有歌单顺序保持不变。重复收藏不重置位置，新成员追加末尾，取消后再收藏追加末尾。迁移直接使用升级事务传入的数据库，不递归打开 SQLiteOpenHelper。
+- 收藏及自建歌单增加“编辑顺序”底部面板，支持拖动手柄、边缘自动滚动、上移／下移、取消和显式保存。保存时按稳定曲目 ID 合并，仅重排提交的现存成员，保留未显示／并发新增成员；一次事务写入，失败保留编辑草稿并提示重试。搜索视图不允许重排，集合顺序不会直接改写活动播放队列。
+- 旧歌单详情上移／下移动作改为映射原始歌单成员位置，避免不可访问成员导致可见列表索引与持久顺序错位。
+- Now 播放／暂停封面缩放从 1.00/0.985 调整为 1.00/0.95，单次 220 ms，减少动效时关闭缩放。进度圆点改为固定 12 dp 圆形，4 dp 轨道统一绘制并按 Slider 状态映射进度，保留 48 dp 交互高度、禁用状态与 RTL；不增加机型像素偏移。尚未用设备截图确认原始错位形态及修复观感。
+
+### 滚动路径分析与本轮改动
+
+- 源码可确认：旧 AlbumArtwork 在曲目重新进入组合时先产生空 bitmap，再通过后台队列读取缓存。即使封面已有热缓存，也会经过占位图到真实图的状态更新。本轮增加仅访问内存的 peek，热缓存直接作为初值；请求键变化产生独立图片状态，过期加载不能污染新曲目。
+- 新解码 bitmap 在后台调用 prepareToDraw，提前准备绘制；仍保留有界缓存和两工人限制，没有增加全库预解码、无限缓存或并发量。
+- AudioTrack 的字段均不可变，明确标为 Compose Immutable；曲目行只接收与自身相关的播放状态，并按 artist/album 记忆副标题。TrackList 不再接收整个 PlaybackSnapshot，减少无关播放快照带来的列表工作。
+- 以上是可定位的渲染路径改进，不构成“iQOO 卡顿已经修复”的结论。iQOO 未连接，本轮未采集帧时间、GC、RenderThread 或对比录像，也没有用另一台测试机替代该问题的复现证据。关闭此项仍需连接报告问题的 iQOO，进行同条件前后测量并继续修复实际热点。
+
+### 本地检查与交付边界
+
+- 使用 JDK 21 与仓库 Gradle wrapper；最终 `:app:assembleDebug :app:compileReleaseKotlin --console=plain` 为 BUILD SUCCESSFUL。Debug APK 已生成，Release 只检查 Kotlin 编译，不表述为 Release APK 已构建或已发布。
+- 已检查本轮代码差异与空白错误；保留工作区原有 M1/M2 改动。应用版本未变，未提交、推送或合并。
+- 按用户要求，本轮不编写／运行测试、不安装 APK、不操作当前连接测试机；未执行 lint 或数据库迁移、字母分组、手势的运行时验收。编译成功不代表这些行为已实测。
+- 功能开发候选已补齐；M1 仍有 iQOO 性能问题待定位关闭，整体设备验收另行安排。M2 蓝牙需求本轮没有实施。
+
+技术参考：[Android ICU AlphabeticIndex](https://developer.android.com/reference/android/icu/text/AlphabeticIndex)、[Material3 Slider 源码](https://android.googlesource.com/platform/frameworks/support/+/54b89d351d6f13c7426bba49f8597ecbfd458d60/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/Slider.kt)。
+
+## 2026-09-07 iQOO evidence and revised interaction candidate
+
+- Connected target: V2171A / Android 15 / SM8450. Existing application data was backed up privately under ignored `build/qa/iqoo-m1m2-20260907`; upgrades used `adb install -r -t`, not the connected Gradle runner or app-data clearing.
+- Old and initial candidate Now screenshots both showed a vertically displaced scrubber thumb. Reading the installed Material3 Slider layout established the small-thumb/minimum-track-height mismatch. Centering the 12 dp visible thumb inside a 48 dp thumb container corrected the observed midpoint geometry. New paused/playing screenshots show the intended 0.95/1.0 cover-size change.
+- Scroll measurements are not an acceptance pass: old warm 60 Hz alternating-swipe samples reported about 0.4%-0.9% janky frames; fresh candidate samples varied roughly 1%-8%, with higher legacy deadline misses. Disabling the alphabet rail did not eliminate them. A 15-second Perfetto trace was captured, but no completed trace attribution is claimed. JIT/warmup, list composition and OEM refresh policy remain investigation variables, not proven root causes. Do not blame SM8450 hardware performance or declare this fixed.
+- Bluetooth supplement: publicly enumerated audio endpoint names/types are separate from selected/predicted routes. Negotiated codec, configuration, configured bitrate and over-the-air bitrate are separately unavailable when public APIs do not expose them. Hearing aids and LE types are included; selected speaker state takes precedence over a conflicting predicted Bluetooth route. Device names are redacted on export. No new Bluetooth scanning permission, reflection, active codec setting or bit-perfect claim was added.
+- Connected speaker-only Chain screenshots confirmed `none` for connected Bluetooth endpoints and `not applicable` for Bluetooth transport rate. This does not validate actual Bluetooth hardware switching.
+- Review fixed details-sheet playback using a different order from the displayed library. Migration expectations now require schema v4; regressions cover partial/concurrent ordering, duplicate rejection, pinyin grouping, persisted favorites, route applicability and Bluetooth export redaction.
+- User rejected a separate order sheet and oversized dashboard cards. The order sheet was removed in favor of handles on the original list, edge scrolling, save/cancel and accessible move actions. Advanced Chain was redesigned around a compact toolbar and evidence rows, with secondary settings disclosed inline and event/recording content after readings. These are explicitly revised product requirements, not changes to telemetry meaning.
+- Local gate: 173 unit tests passed, 0 failures/errors/skips; Debug lint completed with 0 errors and 19 warnings; Debug/Release and instrumentation APKs assembled. These do not establish device acceptance.
+- Instrumentation attempt is invalid: OEM rejected the new test APK (`INSTALL_FAILED_ABORTED: User rejected permissions`); the shell then accidentally ran an older installed test APK and produced constructor ABI mismatch failures. Do not count these as valid product regressions or passes. Further test commands must stop immediately if installation fails. Updating the test APK awaits device approval; no security setting was disabled.
+- M1 is not formally closed: scroll acceptance and updated device tests remain open. M2 implementation candidates are not full device acceptance; Honor, route hardware and endurance coverage remain pending. Private screenshots/traces/logs are local QA artifacts, not published releases.
+
+### 2026-09-07 follow-up visual and in-place order confirmation
+
+- Viewed the final advanced Chain screen on iQOO: compact view/cadence toolbar, flat aligned readings, reduced title size, secondary settings disclosure, and expandable method details. Unavailable reasons remain visible without requiring expansion. Screenshot: `final-dashboard.png` in the ignored QA folder.
+- A real browse-to-edit transition exposed a stale local function reference: its equality prevented `rememberUpdatedState` from refreshing a captured `editing=false` callback. Replaced the reference with a lambda and changed the UI regression to enter edit mode after first rendering the browsing list. Drag events are handled in stationary list coordinates; normal browsing does not allocate the editing graphics layers.
+- iQOO manual pass: dragged Aira below Alive in the original Favorites list, saved, force-stopped and relaunched the app, and observed Alive followed by Aira. The two temporary favorites were removed afterward, restoring the initially empty Favorites membership. Screenshot: `verified-inline-reordered.png`; persistence observations: `verified-persisted.xml`. This is a two-track manual pass, not a hundreds-of-tracks edge-scroll or custom-playlist acceptance pass.
+- Final local gate after the callback fix and dashboard polish: 173 unit tests, Debug lint (0 errors, 19 warnings), Debug/Release assembly and instrumentation compilation succeeded. The matching instrumentation APK has not been successfully installed/executed. No claim of full M1/M2 acceptance or exhaustive all-code review is made; scroll-jank attribution, large-list editing, Honor and route-hardware checks remain open.
+
+## 2026-09-07 · Review 四项修复、收藏导航与核心链路重设计
+
+### 背景与方案
+
+- 本次处理 review 的 4 个 P2：标题索引重建卸载列表、同曲目重新点播漏记、队列重复 URI 污染字节归属、冻结解码样本无界保留。背景、因果链、方案与面试讨论点集中记录在 [案例集 R01–R04](ENGINEERING_CASEBOOK.md)。
+- 曲库排序 key 仅包含 ID/title。索引重建时保持列表挂载，旧顺序映射最新曲目对象，删除/新增内容及时反映；旧索引的位置在重建期不用于字母跳转。
+- 新建 MediaItem 时分配 occurrence token，catalog 元数据同步保留 token；服务侧不再仅靠相同 track ID 抑制历史。事件实际开始后才计数。
+- Analytics timeline 更新后重验 URI 唯一性；归属丢失时本次 occurrence 失效，不因后续删除重复曲目而追认历史字节。
+- 样本同单调时间合并、乱序不加入；保留窗口按 capture 时间推进，速率仍使用源观察时间；各缓冲有 4096 条上限。
+- Now 顶部加入真实收藏切换，播放器详情补接收藏回调，横竖屏均有入口。Chain 概览和高级页复用核心参数面板；保留不可用原因、confidence、观察时间和点击展开的来源/窗口。
+
+### 被否定的 UI 迭代与调整
+
+- 第一版把“全部曲库 / 我的喜欢”做成两块等宽筛选按钮。用户在真机上明确否定：它与下方“歌曲”重复，搜索/大按钮/分类堆叠，抢占了歌曲首屏面积。本日志保留这次失败，而不把第一次截图标记为用户验收。
+- 第二版删除整排按钮，页头改为“曲库 + 爱心/我的喜欢文字导航 + 选项菜单”；目录/重扫进入菜单，分类独立且仅当前项强调。收藏进入独立标题/返回语境，显示数量；空状态解释如何在播放页添加收藏。
+- 使用 impeccable 的 product/layout 规则处理结构和密度，不把换色、加圆角或纯粹增大控件当作导航设计。大字体允许页头动作另起一行，维持触控尺寸。
+
+### 本地执行证据
+
+- 定向运行 PlaybackControllerPolicyTest、CurrentMediaTransferAttributionTest、TelemetryRateTrackerTest、LibraryTitleProjectionTest，通过。
+- 共享播放/遥测改动完整门禁：180 项 JVM tests，0 failures/errors；Debug lint 0 errors、22 warnings；Debug、Release、AndroidTest APK 构建通过，耗时 1m40s。
+- 第二版首页重设计后再次运行 testDebugUnitTest、lintDebug、assembleDebug、assembleDebugAndroidTest，通过，耗时 1m6s。Release 的上述通过结果对应共享播放改动及第一版 UI，不冒称最后首页版本再次执行过 Release 构建。
+- 首轮定向编译曾发现 AnalyticsListener.onTimelineChanged 的实际签名不带 Timeline 参数、Long 比较需 0L、证据说明可空，以及样式补丁误匹配到无 pinned 参数的事件区域。这些是编译阶段发现并修正的问题，没有安装到设备；未屏蔽检查或修改依赖。
+
+### iQOO 手动与 instrumentation 边界
+
+- iQOO V2171A 在线，使用保留数据的 install -r -t；应用和匹配测试 APK 均返回 Success，没有清数据或关闭系统安全设置。
+- 播放器收藏一次后，曲库我的喜欢能看到对应歌曲；force-stop/relaunch 后仍存在。横屏截图确认收藏与播放控制均可用。检查结束后移除本轮临时收藏，恢复原会员状态；音乐最后暂停。
+- 曲库手动滚动检查：以 brave heart 为首个可见项的区域内点播春节序曲，再次点播同曲目，5 个可见更多操作节点的 y 坐标前后相同（796、1024、1252、1480、1708），未跳回顶部。这是该场景手动证据，不是所有快滑卡顿已关闭。
+- LibraryRefreshUiTest 与 LibraryOrderUiTest 的匹配 runner 启动后停在首个用例开始，没有完成结果。系统 resumed activity 为桌面，未见应用 FATAL EXCEPTION。主动停止本次测试进程后 runner 输出 Process crashed；这是人工停止的结果，不能记录成自发产品崩溃。两个用例均不计通过。
+- 新回归 LibraryRefreshUiTest 使用 150 首夹具，滚动到第 80 项后更新历史/收藏。其源码已编译，设备执行尚无有效结论。未通过删测试、延长等待、关闭检查或修改安全设置掩盖 runner 问题。
+- 私有截图/UI 树/执行日志位于 build/qa/review-fixes-20260907；原始指标、早期/最终截图分别命名，未作为发布产物上传。
+- M1/M2 整体验收仍开放：iQOO 快滑性能归因、Honor、真实 Bluetooth/USB 路由、长时间采样及完整 instrumentation。未执行提交、推送、合并或发布。
+### 第二版首页最终实机记录
+
+- 最终 Debug 更新安装返回 Success，实际查看 home-redesign-final.png：页头“曲库 / 我的喜欢 / 菜单”，下方搜索及独立分类栏；首个歌曲行从上一版 y=762 上移到 y=618（该 iQOO 配置下减少 144 px，即 48 dp 的按钮行），不是性能帧率数据。
+- 点击“我的喜欢”显示收藏标题、返回动作、0 首歌曲与添加说明；系统返回回到首页。临时收藏清理后的空状态截图为 favorites-redesign-final.png。
+- 曲库选项菜单实际显示“添加音乐文件夹”和“重新扫描曲库”，未触发新扫描。最终停留首页，播放暂停。
+- 第二版截图是实际安装产物，不是原型图；大字体/平板与完整 UI 自动化仍未作为本次真机通过项。用户尚未对第二版作最终视觉验收。
+
+## 2026-09-07 · 扬声器自动化与 M2 长时验收增量
+
+用户授权接入手机扬声器、切歌和其余可执行验收，暂缓 Bluetooth/USB/耳机外设。保留既有未提交工作区，不提交、推送、合并或发布。
+
+### 本轮修复
+
+- 收藏/歌单拖动：移动首个可见 key 时，LazyColumn 会跟随该 key，导致静止指针下列表自行滚动并连续错误换位。记录移动前的视口，在新 item provider 完成 composition 后恢复该视口；保留原有边缘滚动。100 曲目测试以帧推进真实拖动，验证向下换位、反向恢复完整顺序且没有点播。
+- 播放器横屏返回：旋转期间观察到的系统栏可见性可能仍是前一沉浸状态，恢复它会让普通页面残留隐藏的导航栏。退出播放器明确显示普通页面的系统栏，仍恢复颜色、对比度和外观配置。实际页面/旋转测试验证 status/navigation bars 分别可见。
+- 大字体高级页：两个加权 selector 与图标挤在同一行，2× 字体的标签严重碎裂。窄窗口或大字体时 selector 占满一行，图标自然换行；保留普通字体的紧凑工具栏。最终模拟器截图和 320×480 / 2× 定向回归通过；该最后修复尚未安装到真机，因为更新需要 vivo 指纹身份验证。
+
+### 测试与证据
+
+- `tools/run_device_tests.py` 对明确序列号执行已安装 APK 的 runner，保留非空原文、逐例状态和失败/跳过计数。vivo 的 startActivitySync 在无前台宿主时曾挂起；显式前台宿主选项只启动同一测试 Activity，并保留 single-top。没有重试断言、关闭系统保护或清空用户数据。白色 ComponentActivity 是部分界面测试的宿主，不是证明正常主界面崩溃的证据。
+- 修正与当前 lazy UI 不符的定位方式、不可绘图指标夹具、合并语义定位和小真机上的逻辑窗口密度。断言继续验证原有产品合同，没有跳过失败用例。长时采样与 Compose UI 测试分开，性能用实际墙钟；30 分钟 JSON 校验采用流式解析，避免测试自身复制整份报告。
+- 本地最终检查：180 单元测试，0 失败/跳过；Debug lint 0 errors / 21 warnings；Debug 与 androidTest APK 构建通过。未重复 Release/远端 CI；本轮生产修改限于 UI，未改共享播放或持久化存储实现。
+- 最终模拟器 UI 套件 46/46，0 跳过；存储/adapter 9/9；不同进程完整设置与默认恢复、真实 100 次 Chain 进出、录制前后台与旋转、接收器释放和 SAF 导出/取消分别取得结果。
+- iQOO 三个采样模式各完成至少 15 分钟；独立诊断录制完成 30 分钟及流式导出/隐私/释放断言。最初组合 runner 被主动中断，不计整套通过；不同 APK 的阶段结果分开记录，不伪装成最终产物同一轮全通过。详细哈希、时长、资源数值和限制见 [M2 验收记录](M2_DEVICE_ACCEPTANCE.md)。
+- 用户数据核对：109 条曲目、原收藏/播放次数/历史字段、歌单表保持；自动扫描只改变 source generation/scan 时间和 track seen_epoch。测试前备份和逐表/逐列比较保存在私有 QA 目录。
+
+M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他厂商真机、完整格式和适配/语音无障碍矩阵、高频 UI 帧时间归因及最终同一 APK 的性能门禁仍需各自证据。普通页面进入/返回和播放器出现/返回的动效强度没有在本轮重设计。
+
+收尾补充：真机已安装候选 UI 46/46、设置跨进程写入/读取/重置通过；100 次导航与录制旋转最终借助一次返回原任务操作通过，首次失败保留。源码修正了测试的前台返回方式，模拟器定向回归通过；真机新 APK 仍受身份验证阻挡。高级页三轮帧采样显示 250 ms 模式 jank 波动到 13.01%，性能门禁继续开放。设备恢复原曲库/暂停状态和系统设置，私有测试数据已清理。详细数字、APK 差异、启动辅助和剩余项均已写入 M2 验收记录。
+
+## 2026-09-08 · 双机验收、通知与当前音源
+
+用户授权把私有无损音源传到 Honor，补旧版本测试、按两机定位首页快滑，完善媒体通知和 Chain 当前音源，并执行推送、PR、CI 后合并。本轮保留之前的 M2 工作；没有提前实现 M3 或发布新 release。
+
+- 两机导入/保留三份 48/96 kHz、24-bit FLAC/WAV，哈希一致。Honor 初次实际测试暴露源位深误报：修复 MediaExtractor PCM encoding 与源容器位深混用；新增有界 FLAC/WAVE 头解析和 6 项 JVM 回归，revision 3 正常扫描更新缓存。
+- MediaSession 封面读取复用既有缩略图/内嵌封面路径，增加服务所有的后台 loader 并释放 executor；增加不可变的 Activity PendingIntent。两机通知标题/FLAC 封面/点击入口自动化通过，iQOO 展开、折叠和返回入口实际查看。OEM 折叠模板隐藏封面并保留箭头，明确记为平台限制。
+- 摘要和高级 Chain 首项显示“当前播放音源”，沿用曲目标题/现有文件名回退；设置与播放器两入口回归通过。Honor 实机摘要/高级截图确认，标题没有写入诊断。
+- 本地 186/186 JVM、lint 0 errors / 21 warnings、Debug/Release/instrumentation 构建通过。两机各 64 个不同用例获得通过，包括 UI 47、存储/遥测/设置 14、扬声器/生命周期 2、真实音源 1。执行跨多个明确的测试 APK 批次，保留首轮失败；没有把独立通过拼成一份全绿 runner。精确版本、时长和原失败原因见 M2 记录。
+- Honor 旧 route unknown、导航栏初始不可见和 Activity 重建期间测试引用失效分别按真实平台合同修正断言/同步；iQOO 宿主启动争用、无前台连接超时使用显式测试宿主隔离验证。没有把测试失败全部归为产品缺陷，也没有删断言或改系统策略求通过。
+- Library 使用 XML 确认的视口、固定 ADB 手势、三轮 gfxinfo 对照；iQOO Perfetto + 500 Hz Simpleperf、Honor 小 buffer atrace 获得有效数据。列表测量、文本布局、预取和 buffer 排队是下一步调查范围，强制 AOT 没有证明稳定收益，未假报修复。排查步骤、帧公式、线程时间线、调用栈及失效实验完整记录在单独的中文 ENGINEERING_CASEBOOK。
+- M3 六项主需求、API 技术验证顺序、严格模式状态/失败处理和两台现代手机 × 两款 DAC 验收已列清单；快滑、高频、转场、排版与外设/系统矩阵按优先级跟进。M2 仍部分验收，允许 M3 软件开发，不宣称 USB bit-perfect 可用。
+- 清理前归档诊断、数据库和偏好。原 ID/来源/收藏/歌单保留、播放计数未减少；Honor 37→40，iQOO 112→112。恢复原播放/浏览偏好、字体、方向、超时配置；两机 app files 中仅余原 profileInstalled，用户音源保留。Honor 后续覆盖安装恢复 run-from-apk，iQOO 为 verify；未留下强制 speed 的最终状态。
+- 私有音源、设备序列号、备份、trace 与原始通知不提交。当前源码与证据摘要通过 feature 分支交付；实际远端 CI/合并结果以 PR 状态为准，与本地及真机结果分别报告。

@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.library
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -29,5 +30,35 @@ class LibraryCatalogModelsTest {
             libraryFingerprint("a", "bc"),
             libraryFingerprint("ab", "c"),
         )
+    }
+
+    @Test
+    fun `provider generations include the app metadata revision`() {
+        val volume = MediaStoreVolumeVersion("external_primary", "db-v1", 42)
+        assertEquals(
+            libraryFingerprint(LIBRARY_METADATA_REVISION, libraryFingerprint("external_primary", "db-v1", 42)),
+            libraryScanGeneration(listOf(volume)),
+        )
+    }
+
+    @Test
+    fun `database rebuild invalidates a coincidentally equal generation`() {
+        val volume = MediaStoreVolumeVersion("external_primary", "db-v1", 42)
+        assertNotEquals(
+            libraryScanGeneration(listOf(volume)),
+            libraryScanGeneration(listOf(volume.copy(databaseVersion = "db-v2"))),
+        )
+    }
+
+    @Test
+    fun `mounted volume set and each volume generation invalidate the merged library`() {
+        val primary = MediaStoreVolumeVersion("external_primary", "primary-v1", 100)
+        val sdCard = MediaStoreVolumeVersion("sd-card", "card-v1", 42)
+        val baseline = libraryScanGeneration(listOf(primary, sdCard))
+
+        assertNotEquals(baseline, libraryScanGeneration(listOf(primary)))
+        assertNotEquals(baseline, libraryScanGeneration(listOf(primary, sdCard.copy(generation = 43))))
+        assertNotEquals(baseline, libraryScanGeneration(listOf(primary, sdCard.copy(volumeName = "other-card"))))
+        assertEquals(baseline, libraryScanGeneration(listOf(sdCard, primary)))
     }
 }

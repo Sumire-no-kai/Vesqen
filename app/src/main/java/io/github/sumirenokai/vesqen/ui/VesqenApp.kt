@@ -41,21 +41,36 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.sumirenokai.vesqen.BuildConfig
+import io.github.sumirenokai.vesqen.VesqenApplication
+import io.github.sumirenokai.vesqen.diagnostics.DiagnosticExportFailure
+import io.github.sumirenokai.vesqen.diagnostics.DiagnosticExportResult
+import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
+import io.github.sumirenokai.vesqen.diagnostics.exportTo
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import io.github.sumirenokai.vesqen.telemetry.PlaybackTelemetry
+import io.github.sumirenokai.vesqen.ui.chain.ChainDashboardPreferencesRepository
+import io.github.sumirenokai.vesqen.ui.chain.ChainDashboardPreferencesStore
+import io.github.sumirenokai.vesqen.ui.chain.InMemoryChainDashboardPreferencesRepository
+import io.github.sumirenokai.vesqen.ui.chain.DiagnosticExportFeedback
 import io.github.sumirenokai.vesqen.ui.components.MiniPlayer
 import io.github.sumirenokai.vesqen.ui.components.MiniPlayerHeight
 import io.github.sumirenokai.vesqen.ui.navigation.CompactNavigationBarContentHeight
@@ -73,6 +88,7 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 private val FocusedPlayerEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
@@ -95,10 +111,20 @@ internal fun requestedPhoneOrientation(
     }
 }
 
+/** The high-frequency progress cursor is useful only on the focused player surface. */
+internal fun shouldRefreshPlaybackPosition(
+    destination: VesqenDestination,
+    playback: PlaybackSnapshot,
+): Boolean = destination == VesqenDestination.NOW && playback.hasActiveTrack && playback.isPlaying
+
 /** Android boundary for real permissions, MediaStore, and Media3. */
 @Composable
 fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
     val context = LocalContext.current
+    val application = context.applicationContext as VesqenApplication
+    val chainPreferencesRepository = remember(application) {
+        ChainDashboardPreferencesStore(application)
+    }
     val lifecycleOwner = LocalLifecycleOwner.current
     val musicPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         Manifest.permission.READ_MEDIA_AUDIO
@@ -130,6 +156,34 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
     ) { treeUri ->
         treeUri?.let(viewModel::addLibraryFolder)
     }
+    val diagnosticRecorder = application.diagnosticRecorder
+    val diagnosticExportScope = rememberCoroutineScope()
+    var diagnosticExportFeedback by remember {
+        mutableStateOf(DiagnosticExportFeedback.NONE)
+    }
+    val diagnosticExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { destination ->
+        if (destination == null) {
+            diagnosticExportFeedback = DiagnosticExportFeedback.CANCELLED
+        } else {
+            diagnosticExportScope.launch {
+                diagnosticExportFeedback = DiagnosticExportFeedback.EXPORTING
+                diagnosticExportFeedback = when (
+                    val result = diagnosticRecorder.exportTo(context.contentResolver, destination)
+                ) {
+                    is DiagnosticExportResult.Success -> DiagnosticExportFeedback.SUCCESS
+                    is DiagnosticExportResult.Failure -> when (result.reason) {
+                        DiagnosticExportFailure.NO_STOPPED_RECORDING ->
+                            DiagnosticExportFeedback.NO_STOPPED_RECORDING
+                        DiagnosticExportFailure.DESTINATION_UNAVAILABLE ->
+                            DiagnosticExportFeedback.DESTINATION_UNAVAILABLE
+                        DiagnosticExportFailure.WRITE_FAILED -> DiagnosticExportFeedback.WRITE_FAILED
+                    }
+                }
+            }
+        }
+    }
 
     val syncPermissions = {
         viewModel.initialisePermissions(
@@ -147,15 +201,20 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
     }
 
     val state = viewModel.uiState
-    LaunchedEffect(state.playback.isPlaying) {
-        while (isActive && state.playback.isPlaying) {
-            delay(500)
-            viewModel.refreshPlaybackPosition()
-        }
-    }
 
     VesqenAppContent(
         state = state,
+        playbackTelemetry = application.playbackTelemetry,
+        chainPreferencesRepository = chainPreferencesRepository,
+        diagnosticRecorder = diagnosticRecorder,
+        diagnosticExportFeedback = diagnosticExportFeedback,
+        onRequestDiagnosticExport = {
+            diagnosticExportFeedback = DiagnosticExportFeedback.NONE
+            diagnosticExportLauncher.launch("vesqen-diagnostic-${System.currentTimeMillis()}.json")
+        },
+        onClearDiagnosticExportFeedback = {
+            diagnosticExportFeedback = DiagnosticExportFeedback.NONE
+        },
         onRequestMusicAccess = { musicLauncher.launch(musicPermission) },
         onOpenAppSettings = {
             context.startActivity(
@@ -189,6 +248,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
         onAddTrackToPlaylist = viewModel::addTrackToPlaylist,
         onRemoveTrackFromPlaylist = viewModel::removeTrackFromPlaylist,
         onMovePlaylistTrack = viewModel::movePlaylistTrack,
+        onSaveTrackOrder = viewModel::saveTrackOrder,
         onPlayQueueIndex = viewModel::playQueueIndex,
         onRemoveQueueItem = viewModel::removeQueueItem,
         onMoveQueueItem = viewModel::moveQueueItem,
@@ -198,8 +258,8 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
         onPlayPause = viewModel::togglePlayback,
         onNext = viewModel::skipToNext,
         onSeek = viewModel::seekTo,
+        onRefreshPlaybackPosition = viewModel::refreshPlaybackPosition,
         onCyclePlaybackOrder = viewModel::cyclePlaybackOrderMode,
-        onRefreshConnectedOutputs = viewModel::refreshConnectedOutputs,
         managePhoneOrientation = true,
     )
 }
@@ -229,6 +289,7 @@ fun VesqenAppContent(
     onAddTrackToPlaylist: (Long, Long) -> Unit = { _, _ -> },
     onRemoveTrackFromPlaylist: (Long, Long) -> Unit = { _, _ -> },
     onMovePlaylistTrack: (Long, Int, Int) -> Unit = { _, _, _ -> },
+    onSaveTrackOrder: suspend (Long?, List<Long>) -> Boolean = { _, _ -> false },
     onPlayQueueIndex: (Int) -> Unit = {},
     onRemoveQueueItem: (Int) -> Unit = {},
     onMoveQueueItem: (Int, Int) -> Unit = { _, _ -> },
@@ -238,8 +299,8 @@ fun VesqenAppContent(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onSeek: (Long) -> Unit,
+    onRefreshPlaybackPosition: () -> Unit = {},
     onCyclePlaybackOrder: () -> Unit,
-    onRefreshConnectedOutputs: () -> Unit,
     onAddLibraryFolder: () -> Unit = {},
     onRemoveLibraryFolder: (String) -> Unit = {},
     onPauseLibraryScan: () -> Unit = {},
@@ -248,16 +309,39 @@ fun VesqenAppContent(
     managePhoneOrientation: Boolean = false,
     versionName: String = BuildConfig.VERSION_NAME,
     versionCode: Int = BuildConfig.VERSION_CODE,
+    playbackTelemetry: PlaybackTelemetry? = null,
+    chainPreferencesRepository: ChainDashboardPreferencesRepository? = null,
+    diagnosticRecorder: DiagnosticRecorder? = null,
+    diagnosticExportFeedback: DiagnosticExportFeedback = DiagnosticExportFeedback.NONE,
+    onRequestDiagnosticExport: () -> Unit = {},
+    onClearDiagnosticExportFeedback: () -> Unit = {},
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
+    val appliedChainPreferencesRepository = chainPreferencesRepository ?: remember {
+        InMemoryChainDashboardPreferencesRepository()
+    }
     var destinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
     var returnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
+    var playerReturnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
     val navigationState = VesqenNavigationState(
         destination = VesqenDestination.valueOf(destinationName),
         returnDestination = VesqenDestination.valueOf(returnDestinationName),
+        playerReturnDestination = VesqenDestination.valueOf(playerReturnDestinationName),
     )
     val destination = navigationState.destination
     val hasFocusedPlayer = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
+    val refreshFocusedPlayerPosition = shouldRefreshPlaybackPosition(destination, state.playback)
+    val currentRefreshPlaybackPosition by rememberUpdatedState(onRefreshPlaybackPosition)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner, refreshFocusedPlayerPosition, state.playback.trackId) {
+        if (!refreshFocusedPlayerPosition) return@LaunchedEffect
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (isActive) {
+                currentRefreshPlaybackPosition()
+                delay(500)
+            }
+        }
+    }
     val configuration = LocalConfiguration.current
     val isPhone = configuration.smallestScreenWidthDp < 600
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -279,12 +363,16 @@ fun VesqenAppContent(
     // would split the transparent status bar between incompatible backgrounds and make one set of
     // system icons unreadable. Back remains the deliberate route to the stable top-level shell.
     val isSecondaryDetail = destination.isSecondaryDetail
-    val useNavigationRail = LocalConfiguration.current.screenWidthDp >= 600 &&
+    val windowWidth = with(LocalDensity.current) {
+        LocalWindowInfo.current.containerSize.width.toDp()
+    }
+    val useNavigationRail = windowWidth >= 600.dp &&
         !hasFocusedPlayer && !isSecondaryDetail
 
     fun applyNavigation(updated: VesqenNavigationState) {
         destinationName = updated.destination.name
         returnDestinationName = updated.returnDestination.name
+        playerReturnDestinationName = updated.playerReturnDestination.name
     }
 
     fun selectTopLevel(destination: VesqenDestination) {
@@ -315,12 +403,6 @@ fun VesqenAppContent(
         navigateBack()
     }
 
-    LaunchedEffect(destination) {
-        if (destination == VesqenDestination.CHAIN && state.playback.hasActiveTrack) {
-            onRefreshConnectedOutputs()
-        }
-    }
-
     if (useNavigationRail) {
         Row(modifier = modifier.fillMaxSize()) {
             VesqenNavigation(
@@ -336,6 +418,12 @@ fun VesqenAppContent(
                 destination = destination,
                 showNavigation = false,
                 motionPolicy = appliedMotionPolicy,
+                playbackTelemetry = playbackTelemetry,
+                chainPreferencesRepository = appliedChainPreferencesRepository,
+                diagnosticRecorder = diagnosticRecorder,
+                diagnosticExportFeedback = diagnosticExportFeedback,
+                onRequestDiagnosticExport = onRequestDiagnosticExport,
+                onClearDiagnosticExportFeedback = onClearDiagnosticExportFeedback,
                 onDestinationSelected = ::selectTopLevel,
                 onOpenChain = ::openChain,
                 onOpenAbout = ::openAbout,
@@ -359,6 +447,7 @@ fun VesqenAppContent(
                 onAddTrackToPlaylist = onAddTrackToPlaylist,
                 onRemoveTrackFromPlaylist = onRemoveTrackFromPlaylist,
                 onMovePlaylistTrack = onMovePlaylistTrack,
+                onSaveTrackOrder = onSaveTrackOrder,
                 onPlayQueueIndex = onPlayQueueIndex,
                 onRemoveQueueItem = onRemoveQueueItem,
                 onMoveQueueItem = onMoveQueueItem,
@@ -383,6 +472,12 @@ fun VesqenAppContent(
             destination = destination,
             showNavigation = true,
             motionPolicy = appliedMotionPolicy,
+            playbackTelemetry = playbackTelemetry,
+            chainPreferencesRepository = appliedChainPreferencesRepository,
+            diagnosticRecorder = diagnosticRecorder,
+            diagnosticExportFeedback = diagnosticExportFeedback,
+            onRequestDiagnosticExport = onRequestDiagnosticExport,
+            onClearDiagnosticExportFeedback = onClearDiagnosticExportFeedback,
             onDestinationSelected = ::selectTopLevel,
             onOpenChain = ::openChain,
             onOpenAbout = ::openAbout,
@@ -406,6 +501,7 @@ fun VesqenAppContent(
             onAddTrackToPlaylist = onAddTrackToPlaylist,
             onRemoveTrackFromPlaylist = onRemoveTrackFromPlaylist,
             onMovePlaylistTrack = onMovePlaylistTrack,
+            onSaveTrackOrder = onSaveTrackOrder,
             onPlayQueueIndex = onPlayQueueIndex,
             onRemoveQueueItem = onRemoveQueueItem,
             onMoveQueueItem = onMoveQueueItem,
@@ -432,6 +528,12 @@ private fun VesqenDestinationFrame(
     destination: VesqenDestination,
     showNavigation: Boolean,
     motionPolicy: VesqenMotionPolicy,
+    playbackTelemetry: PlaybackTelemetry?,
+    chainPreferencesRepository: ChainDashboardPreferencesRepository,
+    diagnosticRecorder: DiagnosticRecorder?,
+    diagnosticExportFeedback: DiagnosticExportFeedback,
+    onRequestDiagnosticExport: () -> Unit,
+    onClearDiagnosticExportFeedback: () -> Unit,
     onDestinationSelected: (VesqenDestination) -> Unit,
     onOpenChain: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -455,6 +557,7 @@ private fun VesqenDestinationFrame(
     onAddTrackToPlaylist: (Long, Long) -> Unit,
     onRemoveTrackFromPlaylist: (Long, Long) -> Unit,
     onMovePlaylistTrack: (Long, Int, Int) -> Unit,
+    onSaveTrackOrder: suspend (Long?, List<Long>) -> Boolean,
     onPlayQueueIndex: (Int) -> Unit,
     onRemoveQueueItem: (Int) -> Unit,
     onMoveQueueItem: (Int, Int) -> Unit,
@@ -491,19 +594,18 @@ private fun VesqenDestinationFrame(
         (motionPolicy.playerExpandMillis - motionPolicy.playerHandoffDelayMillis).coerceAtLeast(1)
     val playerReturnContentMillis =
         (motionPolicy.playerCollapseMillis - motionPolicy.playerReturnRevealDelayMillis).coerceAtLeast(1)
-    val currentTrack = state.playback.trackId?.takeIf {
-        state.library.musicAccess == MusicAccess.GRANTED
-    }?.let { id ->
-        state.library.tracks.firstOrNull { it.id == id }
+    val currentTrack = remember(state.playback.trackId, state.library.tracks) {
+        state.playback.trackId?.let { id ->
+            state.library.tracks.firstOrNull { it.id == id }
+        }
     }
     // The controller can reconnect before a freshly-scanned library has been delivered. Retain
     // Media3's opaque metadata in that brief state so the mini and focus player do not regress to
     // a branded placeholder merely because the UI map is still empty.
-    val artworkTrack = if (state.library.musicAccess == MusicAccess.GRANTED) {
-        currentTrack ?: state.playback.toArtworkTrackOrNull()
-    } else {
-        null
-    }
+    // A playing SAF item remains independently authorised by its persisted tree grant. Broad
+    // MediaStore permission is therefore not a valid gate for the MediaSession fallback; the
+    // loader itself safely handles a URI whose underlying grant has actually been revoked.
+    val artworkTrack = currentTrack ?: state.playback.toArtworkTrackOrNull()
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
@@ -708,10 +810,12 @@ private fun VesqenDestinationFrame(
                         onAddTrackToPlaylist = onAddTrackToPlaylist,
                         onRemoveTrackFromPlaylist = onRemoveTrackFromPlaylist,
                         onMovePlaylistTrack = onMovePlaylistTrack,
+                        onSaveTrackOrder = onSaveTrackOrder,
                         modifier = destinationModifier,
                     )
 
                     VesqenDestination.NOW -> NowScreen(
+                        onToggleFavorite = onToggleFavorite,
                         snapshot = state.playback,
                         currentTrack = currentTrack,
                         artworkTrack = artworkTrack,
@@ -743,8 +847,13 @@ private fun VesqenDestinationFrame(
                     )
 
                     VesqenDestination.CHAIN -> ChainScreen(
-                        library = state.library,
                         snapshot = state.playback,
+                        playbackTelemetry = playbackTelemetry,
+                        preferencesRepository = chainPreferencesRepository,
+                        diagnosticRecorder = diagnosticRecorder,
+                        diagnosticExportFeedback = diagnosticExportFeedback,
+                        onRequestDiagnosticExport = onRequestDiagnosticExport,
+                        onClearDiagnosticExportFeedback = onClearDiagnosticExportFeedback,
                         onBack = onNavigateBack,
                         onBrowseLibrary = { onDestinationSelected(VesqenDestination.LIBRARY) },
                         modifier = destinationModifier,

@@ -123,6 +123,8 @@ data class PlaybackSnapshot(
     val queue: List<PlaybackQueueItem> = emptyList(),
     val problem: PlaybackProblem? = null,
     val declaration: OutputDeclaration = OutputDeclaration.SYSTEM_MIXED,
+    /** Pause remains available during buffering or transient suppression of requested playback. */
+    val showsPauseAction: Boolean = isPlaying,
 ) {
     val hasActiveTrack: Boolean
         get() = trackId != null

@@ -17,14 +17,26 @@ class TelemetrySnapshotTest {
             reading = TelemetryReading.Integer(1_536_000, TelemetryUnit.BITS_PER_SECOND),
             source = playerSource,
             observedAtEpochMs = 6_000,
-            window = TelemetryWindow(startedAtEpochMs = 1_000, endedAtEpochMs = 6_000),
-            calculation = "compressed bytes read * 8 / window seconds",
+            observedAtElapsedRealtimeMs = 16_000,
+            window = TelemetryWindow(
+                startedAtEpochMs = 11_000,
+                endedAtEpochMs = 6_000,
+                startedAtElapsedRealtimeMs = 11_000,
+                endedAtElapsedRealtimeMs = 16_000,
+            ),
+            calculationId = "rate.bytes_per_window",
+            inputMetricIds = setOf(TelemetryMetricCatalog.PROCESS_DATA_SOURCE_BYTES_TRANSFERRED),
+            operands = mapOf(
+                "bytes.delta" to 960_000.0,
+                "window.seconds" to 5.0,
+            ),
         )
 
         assertEquals(TelemetryConfidence.DERIVED, evidence.confidence)
         assertEquals(5_000, evidence.window.durationMs)
         assertEquals("media3.player", evidence.source.id.value)
-        assertEquals("compressed bytes read * 8 / window seconds", evidence.calculation)
+        assertEquals("rate.bytes_per_window", evidence.calculationId)
+        assertEquals(960_000.0, evidence.operands.getValue("bytes.delta"), 0.0)
     }
 
     @Test
@@ -41,7 +53,7 @@ class TelemetrySnapshotTest {
 
     @Test
     fun `snapshot provides stable section lookup and rejects duplicate metric ids`() {
-        val metricId = TelemetryMetricId("source.sample_rate")
+        val metricId = TelemetryMetricCatalog.SOURCE_SAMPLE_RATE
         val metric = TelemetryMetric(
             id = metricId,
             section = TelemetrySection.SOURCE,
@@ -76,7 +88,11 @@ class TelemetrySnapshotTest {
             occurredAtEpochMs = 1_000,
             code = "playback.format_changed",
         )
-        val later = earlier.copy(sequence = 2, occurredAtEpochMs = 2_000)
+        val later = earlier.copy(
+            sequence = 2,
+            occurredAtEpochMs = 2_000,
+            occurredAtElapsedRealtimeMs = 2_000,
+        )
 
         assertThrows(IllegalArgumentException::class.java) {
             TelemetrySnapshot(capturedAtEpochMs = 2_000, recentEvents = listOf(later, earlier))
@@ -84,6 +100,78 @@ class TelemetrySnapshotTest {
         assertThrows(IllegalArgumentException::class.java) {
             TelemetrySnapshot(capturedAtEpochMs = 1_500, recentEvents = listOf(earlier, later))
         }
+    }
+
+    @Test
+    fun `monotonic time keeps windows valid when wall clock moves backwards`() {
+        val window = TelemetryWindow(
+            startedAtEpochMs = 20_000,
+            endedAtEpochMs = 10_000,
+            startedAtElapsedRealtimeMs = 1_000,
+            endedAtElapsedRealtimeMs = 2_500,
+        )
+
+        assertEquals(1_500, window.durationMs)
+    }
+
+    @Test
+    fun `metric schema rejects wrong sections units types and ranges`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            TelemetryMetric(
+                id = TelemetryMetricCatalog.SOURCE_SAMPLE_RATE,
+                section = TelemetrySection.PLAYBACK,
+                evidence = measured(TelemetryReading.Integer(48_000, TelemetryUnit.HERTZ)),
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            TelemetryMetric(
+                id = TelemetryMetricCatalog.SOURCE_SAMPLE_RATE,
+                section = TelemetrySection.SOURCE,
+                evidence = measured(TelemetryReading.Integer(48_000, TelemetryUnit.MILLISECONDS)),
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            TelemetryMetric(
+                id = TelemetryMetricCatalog.SOURCE_SAMPLE_RATE,
+                section = TelemetrySection.SOURCE,
+                evidence = measured(TelemetryReading.Text("48 kHz")),
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            TelemetryMetric(
+                id = TelemetryMetricCatalog.PROCESSING_PLAYER_VOLUME,
+                section = TelemetrySection.PROCESSING,
+                evidence = measured(TelemetryReading.Decimal(101.0, TelemetryUnit.PERCENT)),
+            )
+        }
+    }
+
+    @Test
+    fun `snapshot retains every input needed by a derived value`() {
+        val sourceBytes = TelemetryMetric(
+            id = TelemetryMetricCatalog.PROCESS_DATA_SOURCE_BYTES_TRANSFERRED,
+            section = TelemetrySection.PROCESS,
+            evidence = measured(TelemetryReading.Integer(1_024, TelemetryUnit.BYTES)),
+        )
+        val bitrate = TelemetryMetric(
+            id = TelemetryMetricCatalog.PROCESS_DATA_SOURCE_READ_THROUGHPUT,
+            section = TelemetrySection.PROCESS,
+            evidence = TelemetryEvidence.Derived(
+                reading = TelemetryReading.Decimal(8_192.0, TelemetryUnit.BITS_PER_SECOND),
+                source = playerSource,
+                observedAtEpochMs = 2_000,
+                observedAtElapsedRealtimeMs = 2_000,
+                window = TelemetryWindow(1_000, 2_000),
+                calculationId = "rate.bytes_per_window",
+                inputMetricIds = setOf(sourceBytes.id),
+                operands = mapOf("bytes.delta" to 1_024.0, "window.seconds" to 1.0),
+            ),
+        )
+
+        assertThrows(IllegalArgumentException::class.java) {
+            TelemetrySnapshot(capturedAtEpochMs = 2_000, metrics = listOf(bitrate))
+        }
+        TelemetrySnapshot(capturedAtEpochMs = 2_000, metrics = listOf(sourceBytes, bitrate))
     }
 
     @Test
@@ -99,6 +187,12 @@ class TelemetrySnapshotTest {
         assertThrows(IllegalArgumentException::class.java) {
             TelemetryObservation(derivedWindowMs = 0)
         }
+        assertThrows(IllegalArgumentException::class.java) {
+            TelemetryObservation(derivedWindowMs = 60_001)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            TelemetryMetricSelection.Explicit(setOf(TelemetryMetricId("unknown.metric")))
+        }
     }
 
     @Test
@@ -107,4 +201,10 @@ class TelemetrySnapshotTest {
         assertThrows(IllegalArgumentException::class.java) { TelemetryMetricId("source..rate") }
         assertThrows(IllegalArgumentException::class.java) { TelemetrySourceId("media3") }
     }
+
+    private fun measured(reading: TelemetryReading) = TelemetryEvidence.Measured(
+        reading = reading,
+        source = playerSource,
+        observedAtEpochMs = 1_000,
+    )
 }

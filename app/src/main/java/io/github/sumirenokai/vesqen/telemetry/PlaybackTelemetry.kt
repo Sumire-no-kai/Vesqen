@@ -22,6 +22,7 @@ sealed interface TelemetryMetricSelection {
     data class Explicit(val metricIds: Set<TelemetryMetricId>) : TelemetryMetricSelection {
         init {
             require(metricIds.isNotEmpty()) { "An explicit telemetry selection cannot be empty" }
+            metricIds.forEach(TelemetryMetricCatalog::requireKnown)
         }
     }
 }
@@ -33,7 +34,22 @@ data class TelemetryObservation(
     val selection: TelemetryMetricSelection = TelemetryMetricSelection.Default,
 ) {
     init {
-        require(derivedWindowMs > 0) { "A telemetry derivation window must be positive" }
+        val effectiveIntervalMs = when (powerMode) {
+            TelemetryPowerMode.STANDARD -> refreshInterval.milliseconds
+            TelemetryPowerMode.LOW_POWER -> maxOf(refreshInterval.milliseconds, LOW_POWER_MIN_INTERVAL_MS)
+        }
+        require(derivedWindowMs in MIN_DERIVATION_WINDOW_MS..MAX_DERIVATION_WINDOW_MS) {
+            "A telemetry derivation window must be between $MIN_DERIVATION_WINDOW_MS and $MAX_DERIVATION_WINDOW_MS ms"
+        }
+        require(derivedWindowMs >= effectiveIntervalMs) {
+            "A telemetry derivation window cannot be shorter than its effective sampling interval"
+        }
+    }
+
+    private companion object {
+        const val MIN_DERIVATION_WINDOW_MS = 250L
+        const val LOW_POWER_MIN_INTERVAL_MS = 2_000L
+        const val MAX_DERIVATION_WINDOW_MS = 60_000L
     }
 }
 

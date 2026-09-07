@@ -103,6 +103,23 @@ internal object LibrarySourceId {
     fun forTree(treeUri: String): String = "tree:$treeUri"
 }
 
+/** Bump when provider/container enrichment semantics change, invalidating scan cache keys. */
+internal const val LIBRARY_METADATA_REVISION = 3
+
+internal data class MediaStoreVolumeVersion(
+    val volumeName: String,
+    val databaseVersion: String,
+    val generation: Long,
+)
+
+/** The merged external library changes when any volume is changed, rebuilt, mounted or removed. */
+internal fun libraryScanGeneration(volumes: List<MediaStoreVolumeVersion>): String = libraryFingerprint(
+    LIBRARY_METADATA_REVISION,
+    *volumes.sortedBy(MediaStoreVolumeVersion::volumeName).map { volume ->
+        libraryFingerprint(volume.volumeName, volume.databaseVersion, volume.generation)
+    }.toTypedArray(),
+)
+
 /** Kept explicit rather than hashed: a collision must never make two audio documents one track. */
 internal fun libraryFingerprint(vararg fields: Any?): String = buildString {
     fields.forEach { field ->

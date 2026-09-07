@@ -71,8 +71,8 @@ fun PlaybackControls(
                 shape = androidx.compose.foundation.shape.CircleShape,
             ) {
                 Icon(
-                    imageVector = if (snapshot.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = stringResource(if (snapshot.isPlaying) R.string.pause else R.string.play),
+                    imageVector = if (snapshot.showsPauseAction) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    contentDescription = stringResource(if (snapshot.showsPauseAction) R.string.pause else R.string.play),
                     modifier = Modifier.size(if (compactTransport) 26.dp else 30.dp),
                 )
             }

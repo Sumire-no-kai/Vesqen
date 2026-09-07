@@ -10,7 +10,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -89,20 +88,17 @@ private fun AlbumArtworkContent(
 ) {
     val appContext = LocalContext.current.applicationContext
     val loader = remember(appContext) { AlbumArtworkLoader(appContext) }
-    val bitmap by produceState<android.graphics.Bitmap?>(
-        initialValue = null,
-        track?.contentUri,
-        track?.albumArtworkUri,
-        track?.dateModifiedSeconds,
-        track?.artworkRevision,
-        targetPx,
-    ) {
-        // Cancellation happens before queued off-screen work reaches the two-worker decoder.
-        value = null
-        value = track?.let { requestedTrack ->
-            withContext(ArtworkLoadDispatcher) { loader.load(requestedTrack, targetPx) }
+    val bitmapState = remember(track?.contentUri, track?.albumArtworkUri, track?.dateModifiedSeconds, track?.artworkRevision, targetPx) {
+        androidx.compose.runtime.mutableStateOf(track?.let { loader.peek(it, targetPx) })
+    }
+    androidx.compose.runtime.LaunchedEffect(bitmapState) {
+        if (bitmapState.value == null) {
+            bitmapState.value = track?.let { requestedTrack ->
+                withContext(ArtworkLoadDispatcher) { loader.load(requestedTrack, targetPx) }
+            }
         }
     }
+    val bitmap by bitmapState
     val shape = remember { RoundedCornerShape(VesqenRadii.album) }
 
     Surface(

@@ -28,6 +28,14 @@ import java.util.concurrent.atomic.AtomicLong
 class AlbumArtworkLoader(context: Context) {
     private val contentResolver = context.applicationContext.contentResolver
 
+    /** Memory only: list rows can reuse a warm image without a placeholder/IO round trip. */
+    fun peek(track: AudioTrack, targetPx: Int): Bitmap? {
+        val size = targetPx.coerceIn(MIN_ARTWORK_SIZE_PX, MAX_ARTWORK_SIZE_PX)
+        return track.albumArtworkUri?.let {
+            artworkCache.get(AlbumArtworkCacheKey.albumThumbnail(it, size, track.artworkRevision))
+        } ?: artworkCache.get(AlbumArtworkCacheKey.mediaThumbnail(track, size))
+    }
+
     fun load(track: AudioTrack, targetPx: Int): Bitmap? {
         val requestedSize = targetPx.coerceIn(MIN_ARTWORK_SIZE_PX, MAX_ARTWORK_SIZE_PX)
         track.albumArtworkUri?.takeIf(String::isNotBlank)?.let { artworkUri ->
@@ -68,6 +76,7 @@ class AlbumArtworkLoader(context: Context) {
 
         val task = FutureTask {
             loader().also { artwork ->
+                artwork?.prepareToDraw()
                 // A rescan or permission revoke can happen while the provider/decode request is
                 // running. That older result may still serve its original caller, but it must not
                 // repopulate the new cache generation after the UI has discarded its source.
@@ -139,10 +148,9 @@ class AlbumArtworkLoader(context: Context) {
                 }
             }?.let { return it }
         }
-        // Once a volume has explicitly denied its canonical album-art stream, avoid repeating
-        // the same provider query and filesystem failure for every row. The first denied request
-        // still gets one ALBUM_ART path attempt for ROMs that expose only that legacy column.
-        if (!shouldAttemptAlbumProvider) return null
+        // A denial of the volume-wide canonical stream says nothing about the per-album raw path.
+        // Older OEM providers can reject `albumart/{id}` while still publishing a valid ALBUM_ART
+        // value for each metadata row, so retain that bounded fallback for every album.
         val providerArtworkPath = resolveLegacyAlbumArtworkPath(uri) ?: return null
         return decodeLegacyArtwork(targetPx) { FileInputStream(providerArtworkPath) }
     }
@@ -370,8 +378,13 @@ private fun InputStream.readExactly(size: Int): ByteArray? {
     while (offset < size) {
         val read = read(bytes, offset, size - offset)
         if (read < 0) return null
-        if (read == 0) continue
-        offset += read
+        if (read == 0) {
+            val next = read()
+            if (next < 0) return null
+            bytes[offset++] = next.toByte()
+        } else {
+            offset += read
+        }
     }
     return bytes
 }

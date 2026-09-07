@@ -6,37 +6,47 @@ import android.content.Intent
 import android.net.Uri
 import androidx.core.net.toUri
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import java.io.Closeable
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Small ViewModel-facing seam for the durable local catalog. Provider-specific identities,
- * persisted SAF grants, delta detection, and reconciliation live behind this boundary.
+ * persisted SAF grants, delta detection, and reconciliation live behind this boundary. Stateful
+ * operations are suspending so the production adapter can serialize scans, snapshots, and edits;
+ * pause/resume remain immediate control signals observed between provider rows.
  */
-interface LibraryCatalog {
-    fun snapshot(includeDeviceLibrary: Boolean): LibraryCatalogSnapshot
+interface LibraryCatalog : Closeable {
+    suspend fun snapshot(includeDeviceLibrary: Boolean): LibraryCatalogSnapshot
 
-    fun addFolder(treeUri: Uri)
+    suspend fun addFolder(treeUri: Uri)
 
-    fun removeFolder(sourceId: String)
+    suspend fun removeFolder(sourceId: String)
 
     fun pause()
 
     fun resume()
 
-    fun setFavorite(trackId: Long, favorite: Boolean)
+    suspend fun setFavorite(trackId: Long, favorite: Boolean)
 
-    fun recordPlayback(trackId: Long, playedAtMs: Long = System.currentTimeMillis())
+    suspend fun saveTrackOrder(playlistId: Long?, trackIds: List<Long>)
 
-    fun createPlaylist(name: String): Long?
+    suspend fun createPlaylist(name: String): Long?
 
-    fun renamePlaylist(playlistId: Long, name: String)
+    suspend fun renamePlaylist(playlistId: Long, name: String)
 
-    fun deletePlaylist(playlistId: Long)
+    suspend fun deletePlaylist(playlistId: Long)
 
-    fun addTrackToPlaylist(playlistId: Long, trackId: Long)
+    suspend fun addTrackToPlaylist(playlistId: Long, trackId: Long)
 
-    fun removeTrackFromPlaylist(playlistId: Long, trackId: Long)
+    suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: Long)
 
-    fun movePlaylistTrack(playlistId: Long, fromIndex: Int, toIndex: Int)
+    suspend fun movePlaylistTrack(playlistId: Long, fromIndex: Int, toIndex: Int)
 
     suspend fun refresh(
         includeDeviceLibrary: Boolean,
@@ -54,19 +64,20 @@ internal class AndroidLibraryCatalog(
     private val treeScanner = TreeAudioScanner(contentResolver)
     private val metadataReader = LocalAudioMetadataReader(appContext)
     private val scanGate = LibraryScanGate()
+    private val operationGate = LibraryCatalogOperationGate()
+    private val closeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @Volatile
     private var interruptedStateReconciled = false
 
-    @Volatile
-    private var resumePausedSourcesRequested = false
+    private val resumePausedSourcesRequested = AtomicBoolean()
 
-    override fun snapshot(includeDeviceLibrary: Boolean): LibraryCatalogSnapshot {
+    override suspend fun snapshot(includeDeviceLibrary: Boolean): LibraryCatalogSnapshot = serialized {
         reconcileInterruptedStates()
-        return snapshotInternal(includeDeviceLibrary)
+        snapshotInternal(includeDeviceLibrary)
     }
 
-    override fun addFolder(treeUri: Uri) {
+    override suspend fun addFolder(treeUri: Uri): Unit = serialized {
         val persistedPermission = contentResolver.persistedUriPermissions.any {
             it.uri == treeUri && it.isReadPermission
         }
@@ -79,13 +90,18 @@ internal class AndroidLibraryCatalog(
         )
     }
 
-    override fun removeFolder(sourceId: String) {
-        val treeUri = store.removeFolderSource(sourceId) ?: return
-        runCatching {
+    override suspend fun removeFolder(sourceId: String): Unit = serialized {
+        val treeUri = store.removeFolderSource(sourceId) ?: return@serialized Unit
+        try {
             contentResolver.releasePersistableUriPermission(
                 treeUri.toUri(),
                 Intent.FLAG_GRANT_READ_URI_PERMISSION,
             )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: RuntimeException) {
+            // The provider may already have revoked or rejected the grant; the local source is
+            // still removed and no provider failure is allowed to resurrect it.
         }
     }
 
@@ -94,37 +110,45 @@ internal class AndroidLibraryCatalog(
     }
 
     override fun resume() {
-        resumePausedSourcesRequested = true
+        resumePausedSourcesRequested.set(true)
         scanGate.resume()
     }
 
-    override fun setFavorite(trackId: Long, favorite: Boolean) = store.setFavorite(trackId, favorite)
+    override suspend fun setFavorite(trackId: Long, favorite: Boolean) = serialized {
+        store.setFavorite(trackId, favorite)
+    }
 
-    override fun recordPlayback(trackId: Long, playedAtMs: Long) = store.recordPlayback(trackId, playedAtMs)
+    override suspend fun saveTrackOrder(playlistId: Long?, trackIds: List<Long>) = serialized {
+        store.saveTrackOrder(playlistId, trackIds)
+    }
 
-    override fun createPlaylist(name: String): Long? = store.createPlaylist(name)
+    override suspend fun createPlaylist(name: String): Long? = serialized { store.createPlaylist(name) }
 
-    override fun renamePlaylist(playlistId: Long, name: String) = store.renamePlaylist(playlistId, name)
+    override suspend fun renamePlaylist(playlistId: Long, name: String) = serialized {
+        store.renamePlaylist(playlistId, name)
+    }
 
-    override fun deletePlaylist(playlistId: Long) = store.deletePlaylist(playlistId)
+    override suspend fun deletePlaylist(playlistId: Long) = serialized { store.deletePlaylist(playlistId) }
 
-    override fun addTrackToPlaylist(playlistId: Long, trackId: Long) =
+    override suspend fun addTrackToPlaylist(playlistId: Long, trackId: Long) = serialized {
         store.addTrackToPlaylist(playlistId, trackId)
+    }
 
-    override fun removeTrackFromPlaylist(playlistId: Long, trackId: Long) =
+    override suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: Long) = serialized {
         store.removeTrackFromPlaylist(playlistId, trackId)
+    }
 
-    override fun movePlaylistTrack(playlistId: Long, fromIndex: Int, toIndex: Int) =
+    override suspend fun movePlaylistTrack(playlistId: Long, fromIndex: Int, toIndex: Int) = serialized {
         store.movePlaylistTrack(playlistId, fromIndex, toIndex)
+    }
 
     override suspend fun refresh(
         includeDeviceLibrary: Boolean,
         onProgress: suspend (LibraryScanProgress) -> Unit,
-    ): LibraryRefreshResult {
+    ): LibraryRefreshResult = serialized {
         reconcileInterruptedStates()
-        if (resumePausedSourcesRequested) {
+        if (resumePausedSourcesRequested.getAndSet(false)) {
             store.preparePausedSourcesForResume()
-            resumePausedSourcesRequested = false
         }
 
         var hadFailure = false
@@ -152,7 +176,7 @@ internal class AndroidLibraryCatalog(
                 }
         }
 
-        return LibraryRefreshResult(
+        LibraryRefreshResult(
             snapshot = snapshotInternal(includeDeviceLibrary),
             hadFailure = hadFailure,
         )
@@ -164,8 +188,8 @@ internal class AndroidLibraryCatalog(
         val source = store.ensureDeviceSource()
         if (source.scanState == LibraryScanState.PAUSED) return SourceScanOutcome.SKIPPED
         val currentGeneration = mediaStore.currentGeneration()
-        if (currentGeneration != null && source.generation == currentGeneration.toString()) {
-            store.finishSourceScan(source.id, generation = currentGeneration.toString())
+        if (currentGeneration != null && source.generation == currentGeneration) {
+            store.finishSourceScan(source.id, generation = currentGeneration)
             return SourceScanOutcome.COMPLETED
         }
         val session = store.beginSourceScan(source.id)
@@ -187,10 +211,11 @@ internal class AndroidLibraryCatalog(
             source = source,
             session = session,
             iteration = iteration,
-            generation = currentGeneration?.toString(),
+            generation = currentGeneration,
             onProgress = onProgress,
         )
     } catch (cancelled: CancellationException) {
+        store.markSourceInterrupted(LibrarySourceId.DEVICE)
         throw cancelled
     } catch (_: Exception) {
         store.markSourceFailed(LibrarySourceId.DEVICE)
@@ -226,6 +251,7 @@ internal class AndroidLibraryCatalog(
             onProgress = onProgress,
         )
     } catch (cancelled: CancellationException) {
+        store.markSourceInterrupted(source.id)
         throw cancelled
     } catch (_: Exception) {
         store.markSourceFailed(source.id)
@@ -251,8 +277,7 @@ internal class AndroidLibraryCatalog(
             )
             return SourceScanOutcome.PAUSED
         }
-        store.pruneUnseenTracks(session)
-        store.finishSourceScan(source.id, generation)
+        store.completeSourceScan(session, generation)
         return SourceScanOutcome.COMPLETED
     }
 
@@ -295,6 +320,61 @@ internal class AndroidLibraryCatalog(
             store.markInterruptedScans()
             interruptedStateReconciled = true
         }
+    }
+
+    override fun close() {
+        if (!operationGate.requestClose()) return
+        // ViewModel cancellation is asynchronous. Closing SQLite on the caller (normally main)
+        // thread can therefore race the cancelled scan while it unwinds its provider cursor and
+        // marks the source interrupted. Queue the close behind the same gate used by every catalog
+        // operation, without blocking the main thread.
+        closeScope.launch {
+            try {
+                operationGate.closeWhenIdle(store::close)
+            } finally {
+                closeScope.cancel()
+            }
+        }
+    }
+
+    private suspend fun <T> serialized(operation: suspend () -> T): T =
+        operationGate.withOpenCatalog { operation() }
+}
+
+/**
+ * Serializes catalog work and gives [Closeable.close] a non-blocking hand-off point.
+ *
+ * The open check is deliberately repeated after acquiring the mutex: an operation can begin
+ * waiting just before close is requested, but must never reach an already-closing store.
+ */
+internal class LibraryCatalogOperationGate {
+    private val mutex = Mutex()
+    private val closeRequested = AtomicBoolean()
+
+    suspend fun <T> withOpenCatalog(operation: suspend () -> T): T {
+        check(!closeRequested.get()) { CLOSED_MESSAGE }
+        mutex.lock()
+        return try {
+            check(!closeRequested.get()) { CLOSED_MESSAGE }
+            operation()
+        } finally {
+            mutex.unlock()
+        }
+    }
+
+    fun requestClose(): Boolean = closeRequested.compareAndSet(false, true)
+
+    suspend fun closeWhenIdle(closeAction: () -> Unit) {
+        mutex.lock()
+        try {
+            closeAction()
+        } finally {
+            mutex.unlock()
+        }
+    }
+
+    private companion object {
+        const val CLOSED_MESSAGE = "Library catalog is closing"
     }
 }
 

@@ -316,8 +316,13 @@ private fun InputStream.readArtworkExact(size: Int): ByteArray? {
     while (offset < size) {
         val read = read(bytes, offset, size - offset)
         if (read < 0) return null
-        if (read == 0) continue
-        offset += read
+        if (read == 0) {
+            val next = read()
+            if (next < 0) return null
+            bytes[offset++] = next.toByte()
+        } else {
+            offset += read
+        }
     }
     return bytes
 }

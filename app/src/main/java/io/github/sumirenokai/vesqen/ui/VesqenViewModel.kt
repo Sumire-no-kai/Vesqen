@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.sumirenokai.vesqen.VesqenApplication
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.library.AlbumArtworkLoader
 import io.github.sumirenokai.vesqen.library.AndroidLibraryCatalog
@@ -19,11 +20,12 @@ import io.github.sumirenokai.vesqen.library.LibrarySourceKind
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
 import io.github.sumirenokai.vesqen.playback.PlaybackController
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.concurrent.atomic.AtomicLong
 
 enum class MusicAccess {
     NEEDS_PERMISSION,
@@ -39,10 +41,6 @@ data class LibraryUiState(
     val playlists: List<LibraryPlaylist> = emptyList(),
     val sources: List<LibrarySource> = emptyList(),
     val scanProgress: LibraryScanProgress? = null,
-    val connectedOutputs: Set<AudioOutputType> = emptySet(),
-    val activeRoute: ActiveAudioRoute? = null,
-    val outputRouteRevision: Long = 0,
-    val outputRouteChangedAtMs: Long = 0,
     val loadingFailed: Boolean = false,
 ) {
     val isScanPaused: Boolean
@@ -56,53 +54,47 @@ data class VesqenUiState(
 
 class VesqenViewModel(application: Application) : AndroidViewModel(application) {
     private val catalog: LibraryCatalog = AndroidLibraryCatalog(application)
-    private val connectedOutputs = ConnectedAudioOutputs(application)
-    private val libraryRefreshEpoch = AtomicLong()
+    private val cachedLibraryReader = LibrarySnapshotReader()
+    private var libraryRefreshEpoch = 0L
     private var playbackController: PlaybackController? = null
     private var activeLibraryScan: Job? = null
     private var libraryRefreshQueued = false
-    private var permissionsInitialised = false
-    private var lastMusicPermissionGranted = false
+    private var lastMusicPermissionGranted: Boolean? = null
 
     var uiState by mutableStateOf(VesqenUiState())
         private set
 
     init {
-        connectedOutputs.start { routeState ->
-            updateLibrary { state ->
-                state.copy(
-                    connectedOutputs = routeState.connectedOutputs,
-                    activeRoute = routeState.activeRoute,
-                    outputRouteRevision = state.outputRouteRevision + 1,
-                    outputRouteChangedAtMs = System.currentTimeMillis(),
-                )
+        (application as? VesqenApplication)?.let { vesqenApplication ->
+            viewModelScope.launch {
+                vesqenApplication.playbackHistoryRecorder.recordedTrackIds.collect {
+                    loadCachedLibrary()
+                }
             }
         }
     }
 
     fun initialisePermissions(musicGranted: Boolean, notificationsGranted: Boolean) {
-        val firstPermissionSync = !permissionsInitialised
-        val musicPermissionChanged = permissionsInitialised && lastMusicPermissionGranted != musicGranted
+        val previousMusicPermission = lastMusicPermissionGranted
+        val firstPermissionSync = previousMusicPermission == null
+        val musicPermissionChanged = previousMusicPermission != null && previousMusicPermission != musicGranted
         applyPermissions(musicGranted, notificationsGranted, markDeniedWhenMissing = false)
-        permissionsInitialised = true
         lastMusicPermissionGranted = musicGranted
         if (firstPermissionSync) {
             restoreCatalogThenRefresh()
-        } else if (
-            musicPermissionChanged || musicGranted || uiState.library.sources.any {
-                it.kind == LibrarySourceKind.FOLDER && it.isAvailable
-            }
-        ) {
+        } else if (musicPermissionChanged) {
             refreshLibrary()
         } else {
+            // ON_RESUME is also used for ordinary navigation and system-dialog returns. Re-read
+            // the private catalog so revoked SAF grants are reflected, but do not rescan the full
+            // MediaStore/folder library on every resume when permissions are unchanged.
             refreshCachedLibrary()
         }
     }
 
     fun onMusicPermissionRequestResult(musicGranted: Boolean, notificationsGranted: Boolean) {
-        val musicPermissionChanged = !permissionsInitialised || lastMusicPermissionGranted != musicGranted
+        val musicPermissionChanged = lastMusicPermissionGranted != musicGranted
         applyPermissions(musicGranted, notificationsGranted, markDeniedWhenMissing = true)
-        permissionsInitialised = true
         lastMusicPermissionGranted = musicGranted
         if (musicGranted || musicPermissionChanged) {
             refreshLibrary()
@@ -120,8 +112,10 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         notificationsGranted: Boolean,
         markDeniedWhenMissing: Boolean,
     ) {
+        // IO started under an earlier permission snapshot must not restore its rows afterward.
+        cachedLibraryReader.invalidate()
         if (!musicGranted && uiState.library.musicAccess == MusicAccess.GRANTED) {
-            libraryRefreshEpoch.incrementAndGet()
+            libraryRefreshEpoch++
             AlbumArtworkLoader.clearMemoryCache()
         }
         updateLibrary {
@@ -135,7 +129,6 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
             it.copy(
                 musicAccess = updatedMusicAccess,
                 notificationsAllowed = notificationsGranted,
-                connectedOutputs = connectedOutputs.read(),
                 // Cached SAF rows remain usable without broad MediaStore permission. A filtered
                 // catalog snapshot replaces device rows on the following IO turn.
                 isLoading = if (updatedMusicAccess == MusicAccess.GRANTED) it.isLoading else false,
@@ -155,31 +148,37 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
             }
             return
         }
-        val requestEpoch = libraryRefreshEpoch.incrementAndGet()
+        val requestEpoch = ++libraryRefreshEpoch
+        cachedLibraryReader.invalidate()
         AlbumArtworkLoader.clearMemoryCache()
         updateLibrary {
             it.copy(
                 isLoading = true,
                 loadingFailed = false,
                 scanProgress = null,
-                connectedOutputs = connectedOutputs.read(),
             )
         }
         activeLibraryScan = viewModelScope.launch {
             val includeDeviceLibrary = uiState.library.musicAccess == MusicAccess.GRANTED
-            val result = runCatching {
-                withContext(Dispatchers.IO) {
-                    catalog.refresh(includeDeviceLibrary) { progress ->
-                        withContext(Dispatchers.Main.immediate) {
-                            if (libraryRefreshEpoch.get() == requestEpoch) {
-                                updateLibrary { it.copy(scanProgress = progress) }
+            val result = try {
+                Result.success(
+                    withContext(Dispatchers.IO) {
+                        catalog.refresh(includeDeviceLibrary) { progress ->
+                            withContext(Dispatchers.Main.immediate) {
+                                if (libraryRefreshEpoch == requestEpoch) {
+                                    updateLibrary { it.copy(scanProgress = progress) }
+                                }
                             }
                         }
-                    }
-                }
+                    },
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                Result.failure(failure)
             }
             if (
-                libraryRefreshEpoch.get() != requestEpoch
+                libraryRefreshEpoch != requestEpoch
             ) {
                 activeLibraryScan = null
                 refreshQueuedLibrary()
@@ -207,8 +206,12 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     fun addLibraryFolder(treeUri: Uri) {
         viewModelScope.launch {
-            val result = runCatching {
-                withContext(Dispatchers.IO) { catalog.addFolder(treeUri) }
+            val result = try {
+                Result.success(withContext(Dispatchers.IO) { catalog.addFolder(treeUri) })
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                Result.failure(failure)
             }
             if (result.isSuccess) {
                 refreshLibrary()
@@ -269,6 +272,14 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         mutateCatalog { catalog.setFavorite(trackId, favorite) }
     }
 
+    suspend fun saveTrackOrder(playlistId: Long?, trackIds: List<Long>): Boolean = try {
+        withContext(Dispatchers.IO) { catalog.saveTrackOrder(playlistId, trackIds) }
+        loadCachedLibrary()
+        true
+    } catch (failure: android.database.sqlite.SQLiteException) {
+        false
+    }
+
     fun createPlaylist(name: String) {
         mutateCatalog { catalog.createPlaylist(name) }
     }
@@ -305,33 +316,16 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     fun refreshPlaybackPosition() = playbackController?.refreshPosition()
 
-    fun refreshConnectedOutputs() {
-        val routeState = connectedOutputs.readState()
-        updateLibrary {
-            it.copy(
-                connectedOutputs = routeState.connectedOutputs,
-                activeRoute = routeState.activeRoute,
-                outputRouteRevision = it.outputRouteRevision + 1,
-                outputRouteChangedAtMs = System.currentTimeMillis(),
-            )
-        }
-    }
-
     override fun onCleared() {
-        connectedOutputs.stop()
+        activeLibraryScan?.cancel()
         playbackController?.release()
+        catalog.close()
         super.onCleared()
     }
 
     private fun playbackController(): PlaybackController = playbackController ?: PlaybackController(
         context = getApplication(),
         onSnapshotChanged = { snapshot -> uiState = uiState.copy(playback = snapshot) },
-        onPlaybackStarted = { trackId ->
-            viewModelScope.launch {
-                withContext(Dispatchers.IO) { catalog.recordPlayback(trackId) }
-                loadCachedLibrary()
-            }
-        },
     ).also { controller ->
         playbackController = controller
     }
@@ -360,19 +354,24 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     private suspend fun loadCachedLibrary() {
         val includeDeviceLibrary = uiState.library.musicAccess == MusicAccess.GRANTED
-        val snapshot = withContext(Dispatchers.IO) { catalog.snapshot(includeDeviceLibrary) }
-        updateLibrary { current ->
-            current.copy(
-                tracks = snapshot.tracks,
-                playlists = snapshot.playlists,
-                sources = snapshot.sources,
-                scanProgress = snapshot.pausedProgress() ?: current.scanProgress?.takeIf(LibraryScanProgress::isPaused),
-            )
-        }
-        playbackController().syncLibrary(snapshot.tracks)
+        cachedLibraryReader.read(
+            load = { withContext(Dispatchers.IO) { catalog.snapshot(includeDeviceLibrary) } },
+            publish = { snapshot ->
+                updateLibrary { current ->
+                    current.copy(
+                        tracks = snapshot.tracks,
+                        playlists = snapshot.playlists,
+                        sources = snapshot.sources,
+                        scanProgress = snapshot.pausedProgress()
+                            ?: current.scanProgress?.takeIf(LibraryScanProgress::isPaused),
+                    )
+                }
+                playbackController().syncLibrary(snapshot.tracks)
+            },
+        )
     }
 
-    private fun mutateCatalog(action: () -> Unit) {
+    private fun mutateCatalog(action: suspend () -> Unit) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { action() }
             loadCachedLibrary()
