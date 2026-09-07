@@ -576,6 +576,38 @@ private fun ChainCurrentSource(playback: PlaybackSnapshot) {
 
 @Composable
 private fun ChainSummaryPanel(playback: PlaybackSnapshot) {
+    val status = playback.usbOutputStatus
+    val title = when (status.phase) {
+        io.github.sumirenokai.vesqen.playback.UsbOutputPhase.SYSTEM ->
+            stringResource(R.string.chain_system_mixed_title)
+        io.github.sumirenokai.vesqen.playback.UsbOutputPhase.AVAILABLE ->
+            stringResource(R.string.chain_strict_available_title)
+        io.github.sumirenokai.vesqen.playback.UsbOutputPhase.APPLYING ->
+            stringResource(R.string.chain_strict_applying_title)
+        io.github.sumirenokai.vesqen.playback.UsbOutputPhase.ACTIVE ->
+            stringResource(R.string.chain_strict_active_title)
+        io.github.sumirenokai.vesqen.playback.UsbOutputPhase.FAILED ->
+            stringResource(R.string.chain_strict_failed_title)
+    }
+    val body = when (status.phase) {
+        io.github.sumirenokai.vesqen.playback.UsbOutputPhase.SYSTEM ->
+            stringResource(R.string.chain_system_mixed_body)
+        io.github.sumirenokai.vesqen.playback.UsbOutputPhase.AVAILABLE ->
+            stringResource(
+                R.string.chain_strict_available_body,
+                status.deviceName ?: stringResource(R.string.settings_usb_device_unknown),
+            )
+        io.github.sumirenokai.vesqen.playback.UsbOutputPhase.APPLYING ->
+            stringResource(R.string.chain_strict_applying_body)
+        io.github.sumirenokai.vesqen.playback.UsbOutputPhase.ACTIVE ->
+            stringResource(
+                R.string.chain_strict_active_body,
+                status.deviceName ?: stringResource(R.string.settings_usb_device_unknown),
+                status.sinkFormat?.displayName ?: stringResource(R.string.settings_format_unknown),
+            )
+        io.github.sumirenokai.vesqen.playback.UsbOutputPhase.FAILED ->
+            stringResource(R.string.chain_strict_failed_body, status.decisionCode)
+    }
     Surface(
         modifier = Modifier.fillMaxWidth().testTag("vesqen.chain.summary"),
         shape = RoundedCornerShape(VesqenRadii.surface),
@@ -587,11 +619,11 @@ private fun ChainSummaryPanel(playback: PlaybackSnapshot) {
         ) {
             OutputStatusChip(declaration = playback.declaration)
             Text(
-                text = stringResource(R.string.chain_system_mixed_title),
+                text = title,
                 style = MaterialTheme.typography.titleLarge,
             )
             Text(
-                text = stringResource(R.string.chain_system_mixed_body),
+                text = body,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

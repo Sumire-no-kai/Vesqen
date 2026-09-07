@@ -20,6 +20,7 @@ import io.github.sumirenokai.vesqen.library.LibrarySourceKind
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
 import io.github.sumirenokai.vesqen.playback.PlaybackController
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -313,6 +314,8 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     fun seekTo(positionMs: Long) = playbackController?.seekTo(positionMs)
 
     fun cyclePlaybackOrderMode() = playbackController?.cyclePlaybackOrderMode()
+
+    fun setUsbOutputMode(mode: UsbOutputMode) = playbackController().setUsbOutputMode(mode)
 
     fun refreshPlaybackPosition() = playbackController?.refreshPosition()
 

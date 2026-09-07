@@ -66,6 +66,7 @@ import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
 import io.github.sumirenokai.vesqen.diagnostics.exportTo
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.telemetry.PlaybackTelemetry
 import io.github.sumirenokai.vesqen.ui.chain.ChainDashboardPreferencesRepository
 import io.github.sumirenokai.vesqen.ui.chain.ChainDashboardPreferencesStore
@@ -260,6 +261,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
         onSeek = viewModel::seekTo,
         onRefreshPlaybackPosition = viewModel::refreshPlaybackPosition,
         onCyclePlaybackOrder = viewModel::cyclePlaybackOrderMode,
+        onSetUsbOutputMode = viewModel::setUsbOutputMode,
         managePhoneOrientation = true,
     )
 }
@@ -301,6 +303,7 @@ fun VesqenAppContent(
     onSeek: (Long) -> Unit,
     onRefreshPlaybackPosition: () -> Unit = {},
     onCyclePlaybackOrder: () -> Unit,
+    onSetUsbOutputMode: (UsbOutputMode) -> Unit = {},
     onAddLibraryFolder: () -> Unit = {},
     onRemoveLibraryFolder: (String) -> Unit = {},
     onPauseLibraryScan: () -> Unit = {},
@@ -458,6 +461,7 @@ fun VesqenAppContent(
                 onNext = onNext,
                 onSeek = onSeek,
                 onCyclePlaybackOrder = onCyclePlaybackOrder,
+                onSetUsbOutputMode = onSetUsbOutputMode,
                 onTogglePlayerOrientation = ::togglePlayerOrientation,
                 showOrientationToggle = isPhone,
                 isLandscape = isLandscape,
@@ -512,6 +516,7 @@ fun VesqenAppContent(
             onNext = onNext,
             onSeek = onSeek,
             onCyclePlaybackOrder = onCyclePlaybackOrder,
+            onSetUsbOutputMode = onSetUsbOutputMode,
             onTogglePlayerOrientation = ::togglePlayerOrientation,
             showOrientationToggle = isPhone,
             isLandscape = isLandscape,
@@ -568,6 +573,7 @@ private fun VesqenDestinationFrame(
     onNext: () -> Unit,
     onSeek: (Long) -> Unit,
     onCyclePlaybackOrder: () -> Unit,
+    onSetUsbOutputMode: (UsbOutputMode) -> Unit,
     onTogglePlayerOrientation: () -> Unit,
     showOrientationToggle: Boolean,
     isLandscape: Boolean,
@@ -840,6 +846,8 @@ private fun VesqenDestinationFrame(
                     )
 
                     VesqenDestination.SETTINGS -> SettingsScreen(
+                        outputStatus = state.playback.usbOutputStatus,
+                        onSetUsbOutputMode = onSetUsbOutputMode,
                         onOpenPlaybackChain = onOpenChain,
                         onOpenAbout = onOpenAbout,
                         versionName = versionName,

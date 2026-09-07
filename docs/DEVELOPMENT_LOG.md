@@ -838,3 +838,14 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 ## 2026-09-08 · M3 范围明确：首页快滑为正式交付项
 
 按用户要求，将 Library 首页快速滑动从“M3 并行遗留项”提升为 M3 正式交付门禁，并同步更新 PRD、路线图和实施清单。M3 需先取得同一 Release/profileable 场景的双机基线，将慢帧和呈现排队对齐到业务调用路径，再逐个变量验证并实施最小修复；最后用 Honor/iQOO 同一 APK 各至少三轮配对测试证明三轮中位 jank 与 p95 的改善，同时重跑曲库功能和无障碍回归。仅有主观改善、一次较好数字、强制 AOT 或热点列表均不算完成。
+
+## 2026-09-08 · M3 第一版软件候选
+
+用户当前无法连接测试机，要求正式进入 M3、先尽可能完成代码、把测试集中到最后。本轮没有把旧 trace 中尚未证明的候选热点直接改成 Library 生产优化；先完成能离线建立的 USB 严格输出链路，并为后续同机性能测量增加 profileable 构建。
+
+- 新增纯 `UsbOutputStrategyResolver`，按 Android 版本、USB Host、权限、设备、源 PCM 和官方 bit-perfect mixer profile 作候选判定；实际 `AudioTrack` 的采样率、encoding、channel mask 不完全一致时拒绝 ACTIVE。
+- 播放服务成为输出模式和结果的唯一写入者。API 34 adapter 隔离 `AudioMixerAttributes`；旧 Android 不加载专属实现。Media3 1.11 的 `AudioOutputProvider` 在创建输出前设置 preference，读回后检查真实 `AudioTrack` 路由和中性处理状态。准备阶段保持输出静音，全部条件成立后才解除静音并发布 ACTIVE。
+- 严格模式失败不会静默退回系统播放。格式、路由、设备、处理、平台调用或服务生命周期失效时，撤销 mixer preference、静音并释放旧输出、停止播放器，保留明确失败原因；普通系统输出需要用户主动选择。
+- `PlaybackSnapshot`、设置页、播放器状态 chip、Chain 和诊断遥测共用 `UsbOutputStatus`。AVAILABLE、REQUESTED、ACTIVE、FAILED 分开呈现；ACTIVE 只说明应用观察到 Media3 请求、Android mixer readback 与 AudioTrack route 一致，仍不写成外部信号 VERIFIED。
+- 新增 `profile` 变体，继承 Release 行为、使用调试签名并声明 shell profileable，供设备恢复后采集 Perfetto/Simpleperf 与三轮 `gfxinfo`。Library 根因、最小修复及 Honor/iQOO 修复前后 A/B 仍开放。
+- 最终本地命令 `./gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleProfile :app:assembleRelease :app:compileDebugAndroidTestKotlin` 通过，共 159 个任务；194 项 JVM 测试为 0 失败、0 错误、0 跳过。instrumentation 只完成编译，没有设备执行。M3 第一版软件候选成立，硬件输出、旧版本运行、资源压力和 Library 性能门禁均未据此关闭。

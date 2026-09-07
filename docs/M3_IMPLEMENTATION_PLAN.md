@@ -1,6 +1,6 @@
 # M3 开发清单：USB bit-perfect 与首页性能收敛
 
-2026-09-08。范围与完成条件以 [PRD 的 M3 章节](PRD.md) 为准；服务侧所有权遵循 [架构审查](ARCHITECTURE_REVIEW.md)。本清单不表示功能已经实现。
+2026-09-08。范围与完成条件以 [PRD 的 M3 章节](PRD.md) 为准；服务侧所有权遵循 [架构审查](ARCHITECTURE_REVIEW.md)。本清单同时记录代码候选与仍待执行的验收，勾选项必须按下文证据边界理解。
 
 ## 开始条件与当前结论
 
@@ -11,6 +11,19 @@ Library 首页快速滑动的具体根因定位与代码修复现列为 **M3 正
 启用真实严格输出前，必须先完成下面第 2 项技术验证。M3 最终验收仍需至少两台 Android 14+ 手机及两款 USB DAC；模拟器和 Fake 测试不能替代。
 
 2026-09-07 双机补充：Honor STF-AL00 / Android 9 已接入，用于 M2 旧系统和 M3 API 26–33 兼容路径回归；iQOO V2171A / Android 15 用于现代系统。Honor **不计作第二台 Android 14+ 设备**。实际执行结果见 M2 验收记录；目前尚未连接可验收的 USB DAC。
+
+## 软件候选进度（2026-09-08）
+
+| 范围 | 当前状态 | 已取得的证据 / 仍缺内容 |
+| --- | --- | --- |
+| 输出决策与状态 | **代码候选完成** | 已有纯 resolver、服务唯一写入状态、Session Bundle 契约、持久模式和组合单测。真机事件顺序尚未执行。 |
+| Android 14 官方 mixer 接入 | **代码候选完成** | API 34 adapter 已隔离；Media3 1.11 `AudioOutputProvider` 在创建 `AudioTrack` 前设置 preference，并在实际输出格式、readback 和路由一致后才声明 ACTIVE。仍缺 Android 14+ 与真实 DAC 证明。 |
+| 严格模式 fail-closed | **代码候选完成** | 准备期间保持输出静音；不支持、格式/路由不一致、处理失效、设备断开或服务结束都会撤销声明、清理 preference 并停止。资源与竞态仍需真机压力验证。 |
+| 设置、播放器、Chain、诊断 | **代码候选完成** | 共用 `UsbOutputStatus`，显示 SYSTEM / AVAILABLE / REQUESTED / ACTIVE / FAILED；ACTIVE 明示不等于外部验证。窄屏、大字体和中英界面仍需设备验收。 |
+| Release/profileable 性能入口 | **代码准备完成** | 新增可安装且允许 shell profiling 的 `profile` 变体；现有测量脚本可保留三轮原始 `gfxinfo`。当前无设备，尚未生成新的基线或修复后数据。 |
+| Library 首页卡顿 | **根因与生产修复仍开放** | 历史 trace 只圈定列表测量、文字布局、预取与 buffer 排队，尚不足以选择唯一业务修复；等待 Honor/iQOO 使用同一 profile APK 复现、取栈、单变量修改和三轮 A/B。 |
+
+本轮本地门禁已通过 `testDebugUnitTest`（194 项，0 失败/错误/跳过）、`lintDebug`、`assembleDebug`、`assembleProfile`、`assembleRelease` 和 `compileDebugAndroidTestKotlin`。这证明源码、单测、静态检查和安装包构建成立，不代表 instrumentation 已执行，也不代表 USB bit-perfect 或 Library 性能已经通过实机验收。因此 M3 已正式进入开发并形成第一版软件候选，**M3 里程碑尚未完成**。
 
 ## 主要需求摘要
 

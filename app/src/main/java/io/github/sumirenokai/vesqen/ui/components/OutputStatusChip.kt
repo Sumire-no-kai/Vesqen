@@ -35,6 +35,14 @@ fun OutputStatusChip(
 ) {
     val label = when (declaration) {
         OutputDeclaration.SYSTEM_MIXED -> androidx.compose.ui.res.stringResource(R.string.system_mixed)
+        OutputDeclaration.BIT_PERFECT_AVAILABLE ->
+            androidx.compose.ui.res.stringResource(R.string.bit_perfect_available)
+        OutputDeclaration.BIT_PERFECT_REQUESTED ->
+            androidx.compose.ui.res.stringResource(R.string.bit_perfect_requested)
+        OutputDeclaration.BIT_PERFECT_ACTIVE ->
+            androidx.compose.ui.res.stringResource(R.string.bit_perfect_active)
+        OutputDeclaration.BIT_PERFECT_FAILED ->
+            androidx.compose.ui.res.stringResource(R.string.bit_perfect_failed)
     }
     val description = androidx.compose.ui.res.stringResource(R.string.output_status_description, label)
     val openChainLabel = if (onClick == null) {

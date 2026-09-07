@@ -122,12 +122,15 @@ data class PlaybackSnapshot(
     val queueSize: Int = 0,
     val queue: List<PlaybackQueueItem> = emptyList(),
     val problem: PlaybackProblem? = null,
-    val declaration: OutputDeclaration = OutputDeclaration.SYSTEM_MIXED,
+    val usbOutputStatus: UsbOutputStatus = UsbOutputStatus(),
     /** Pause remains available during buffering or transient suppression of requested playback. */
     val showsPauseAction: Boolean = isPlaying,
 ) {
     val hasActiveTrack: Boolean
         get() = trackId != null
+
+    val declaration: OutputDeclaration
+        get() = usbOutputStatus.declaration
 
     val progressFraction: Float
         get() = if (durationMs <= 0) 0f else (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)

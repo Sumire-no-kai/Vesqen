@@ -27,6 +27,8 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.source.MediaSource
 import io.github.sumirenokai.vesqen.audio.AudioRouteSource
+import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
+import io.github.sumirenokai.vesqen.playback.UsbOutputStateRepository
 import java.util.ArrayDeque
 import java.util.IdentityHashMap
 import java.util.UUID
@@ -56,6 +58,7 @@ import kotlinx.coroutines.sync.withLock
 @OptIn(UnstableApi::class)
 class AndroidPlaybackTelemetry internal constructor(
     context: Context,
+    private val usbOutputStateRepository: UsbOutputStateRepository = UsbOutputStateRepository(),
     private val clock: TelemetryClock = AndroidTelemetryClock,
     audioRouteSource: AudioRouteSource = AudioRouteSource(context),
 ) : PlaybackTelemetry, AnalyticsListener, TransferListener {
@@ -984,17 +987,31 @@ class AndroidPlaybackTelemetry internal constructor(
             )
         }
 
+        val usbOutputStatus = usbOutputStateRepository.snapshot()
+        val usbOutputInstant = if (usbOutputStatus.generation > 0) {
+            TelemetryInstant(
+                epochMs = usbOutputStatus.observedAtEpochMs,
+                elapsedRealtimeMs = usbOutputStatus.observedAtElapsedRealtimeMs,
+            )
+        } else {
+            raw.instant
+        }
+        val usbOutputSource = if (usbOutputStatus.phase == UsbOutputPhase.SYSTEM) {
+            APP_CONFIGURATION
+        } else {
+            VESQEN_OUTPUT_COORDINATOR
+        }
         metrics.measuredText(
             TelemetryMetricCatalog.ROUTE_OUTPUT_DECLARATION,
-            "SYSTEM MIXED",
-            APP_CONFIGURATION,
-            raw.instant,
+            usbOutputStatus.declaration.name.replace('_', ' '),
+            usbOutputSource,
+            usbOutputInstant,
         )
         metrics.measuredText(
             TelemetryMetricCatalog.ROUTE_LAST_STRATEGY_DECISION,
-            "system_audio_route",
-            APP_CONFIGURATION,
-            raw.instant,
+            usbOutputStatus.decisionCode,
+            usbOutputSource,
+            usbOutputInstant,
         )
         metrics.measuredTextOrUnavailable(
             TelemetryMetricCatalog.ROUTE_AUDIO_TRACK_REQUEST_FORMAT,
@@ -1963,6 +1980,10 @@ class AndroidPlaybackTelemetry internal constructor(
         )
         val ANDROID_USB = TelemetryDataSource(TelemetrySourceId("android.usb_public_api"))
         val APP_CONFIGURATION = TelemetryDataSource(TelemetrySourceId("vesqen.configuration"))
+        val VESQEN_OUTPUT_COORDINATOR = TelemetryDataSource(
+            id = TelemetrySourceId("vesqen.output_coordinator"),
+            detail = "Service decision combining Media3 output format, Android mixer readback, and AudioTrack route; not external signal verification",
+        )
     }
 }
 
