@@ -10,6 +10,8 @@
 .cxx
 gradle/gradle-daemon-jvm.properties
 *.hprof
+# Local acceptance music supplied by the user.
+/Test Flac Audio/
 # Impeccable critique artifacts are local; the checked-in design baseline remains source of truth.
 .impeccable/*
 !.impeccable/design.json

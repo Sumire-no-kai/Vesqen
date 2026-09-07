@@ -5,23 +5,35 @@ import android.content.ContentResolver
 import android.content.Context
 import android.os.Build
 import android.provider.MediaStore
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /** MediaStore adapter for the catalog; its source identity never escapes this boundary. */
 internal class MediaStoreAudioRepository(
     private val context: Context,
     private val contentResolver: ContentResolver,
 ) {
-    /** API 30+ lets an unchanged volume avoid reopening every audio row. */
-    fun currentGeneration(): Long? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        MediaStore.getGeneration(context, MediaStore.VOLUME_EXTERNAL)
+    /** Generations are comparable only within a database version and a concrete mounted volume. */
+    fun currentGeneration(): String? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        libraryScanGeneration(
+            MediaStore.getExternalVolumeNames(context).map { volume ->
+                MediaStoreVolumeVersion(
+                    volumeName = volume,
+                    databaseVersion = MediaStore.getVersion(context, volume),
+                    generation = MediaStore.getGeneration(context, volume),
+                )
+            },
+        )
     } else {
         null
     }
 
-    fun scanTracks(
+    suspend fun scanTracks(
         shouldPause: () -> Boolean,
         onTrack: (LibraryTrackCandidate) -> Unit,
     ): ScanIterationResult {
+        val scanContext = currentCoroutineContext()
+        scanContext.ensureActive()
         val projection = buildList {
             addAll(arrayOf(
             MediaStore.Audio.Media._ID,
@@ -77,6 +89,7 @@ internal class MediaStoreAudioRepository(
 
             var processedTrackCount = 0
             while (cursor.moveToNext()) {
+                scanContext.ensureActive()
                 if (shouldPause()) {
                     return ScanIterationResult(completed = false, processedTrackCount = processedTrackCount)
                 }
@@ -123,6 +136,7 @@ internal class MediaStoreAudioRepository(
                         folderName = folderName,
                         fingerprint = libraryFingerprint(
                             "media",
+                            LIBRARY_METADATA_REVISION,
                             id,
                             contentUri,
                             title,

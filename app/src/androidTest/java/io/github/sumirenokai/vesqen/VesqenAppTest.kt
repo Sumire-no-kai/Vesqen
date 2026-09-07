@@ -1,12 +1,15 @@
 package io.github.sumirenokai.vesqen
 
 import android.content.res.Configuration
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -15,8 +18,11 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.swipeLeft
@@ -26,16 +32,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.lifecycle.Lifecycle
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
+import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecordingState
 import io.github.sumirenokai.vesqen.library.LibraryScanProgress
 import io.github.sumirenokai.vesqen.library.LibraryScanState
 import io.github.sumirenokai.vesqen.library.LibrarySource
@@ -44,22 +55,56 @@ import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
 import io.github.sumirenokai.vesqen.playback.PlaybackQueueItem
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode
+import io.github.sumirenokai.vesqen.telemetry.FakePlaybackTelemetry
+import io.github.sumirenokai.vesqen.telemetry.PlaybackTelemetry
+import io.github.sumirenokai.vesqen.telemetry.TelemetryDataSource
+import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
+import io.github.sumirenokai.vesqen.telemetry.TelemetryEvent
+import io.github.sumirenokai.vesqen.telemetry.TelemetryEventKind
+import io.github.sumirenokai.vesqen.telemetry.TelemetryEventSeverity
+import io.github.sumirenokai.vesqen.telemetry.TelemetryMetric
+import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog
+import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricSelection
+import io.github.sumirenokai.vesqen.telemetry.TelemetryReading
+import io.github.sumirenokai.vesqen.telemetry.TelemetrySection
+import io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot
+import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceId
+import io.github.sumirenokai.vesqen.telemetry.TelemetryUnit
+import io.github.sumirenokai.vesqen.telemetry.TelemetryWindow
+import io.github.sumirenokai.vesqen.telemetry.UsbAudioInterfaceReading
+import io.github.sumirenokai.vesqen.telemetry.UsbHostDeviceReading
+import io.github.sumirenokai.vesqen.telemetry.UsbInventoryReading
 import io.github.sumirenokai.vesqen.ui.LibraryUiState
 import io.github.sumirenokai.vesqen.ui.MusicAccess
 import io.github.sumirenokai.vesqen.ui.VesqenAppContent
 import io.github.sumirenokai.vesqen.ui.VesqenUiState
+import io.github.sumirenokai.vesqen.ui.chain.ChainDashboardPreferences
+import io.github.sumirenokai.vesqen.ui.chain.ChainDashboardPreferencesRepository
+import io.github.sumirenokai.vesqen.ui.chain.ChainMetricViewMode
+import io.github.sumirenokai.vesqen.ui.chain.ChainUnitDisplayMode
+import io.github.sumirenokai.vesqen.ui.chain.InMemoryChainDashboardPreferencesRepository
+import io.github.sumirenokai.vesqen.ui.chain.DiagnosticExportFeedback
+import io.github.sumirenokai.vesqen.ui.chain.formatSeconds
+import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
 import kotlin.math.abs
+import kotlin.math.min
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 
 class VesqenAppTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    private lateinit var fixtureDensity: Density
 
     private val context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
@@ -82,6 +127,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.settings").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
         composeRule.onNodeWithText(context.getString(R.string.chain_empty_title)).assertIsDisplayed()
+        composeRule.onAllNodesWithTag("vesqen.chain.diagnostics").assertCountEquals(0)
         composeRule.onNodeWithText(context.getString(R.string.browse_library)).performClick()
         composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
     }
@@ -97,6 +143,7 @@ class VesqenAppTest {
         )
 
         composeRule.onNodeWithTag("vesqen.permission.request").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.library.menu").performClick()
         composeRule.onNodeWithTag("vesqen.library.add-folder").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.library.add-folder").performClick()
 
@@ -185,7 +232,7 @@ class VesqenAppTest {
         val searchBounds = composeRule.onNodeWithTag("vesqen.library.search")
             .fetchSemanticsNode()
             .boundsInRoot
-        val minimumTouchTargetPx = with(composeRule.density) { 48.dp.toPx() }
+        val minimumTouchTargetPx = with(fixtureDensity) { 48.dp.toPx() }
 
         assertTrue(
             "The device-music action must retain a 48dp target at large font",
@@ -336,7 +383,7 @@ class VesqenAppTest {
             .fetchSemanticsNode().boundsInRoot.bottom
         val finalActionBottom = composeRule.onNodeWithTag("vesqen.track-details.add-to-queue")
             .fetchSemanticsNode().boundsInRoot.bottom
-        val maximumBottomGap = with(composeRule.density) { 16.dp.toPx() }
+        val maximumBottomGap = with(fixtureDensity) { 16.dp.toPx() }
 
         assertEquals("The details title must stay fixed while metadata scrolls", headerBefore, headerAfter)
         assertTrue(
@@ -377,9 +424,622 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.open-chain").performClick()
 
         composeRule.onNodeWithTag("vesqen.chain").assertIsDisplayed()
+        chainNode("vesqen.chain.summary", "vesqen.chain.summary-list").assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.chain_system_mixed_title)).assertIsDisplayed()
         composeRule.onAllNodesWithText("BIT-PERFECT ACTIVE").assertCountEquals(0)
         composeRule.onAllNodesWithText("BIT-PERFECT VERIFIED").assertCountEquals(0)
+    }
+
+    @Test
+    fun buffering_playback_keeps_pause_action_in_mini_player_and_now() {
+        val active = activePlaybackState()
+        render(active.copy(playback = active.playback.copy(isPlaying = false, showsPauseAction = true)))
+
+        composeRule.onNodeWithTag("vesqen.mini-player.play-pause")
+            .assertContentDescriptionEquals(context.getString(R.string.pause))
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.play-pause")
+            .assertContentDescriptionEquals(context.getString(R.string.pause))
+    }
+
+    @Test
+    fun focused_player_position_refresh_stops_in_background_and_resumes_on_return() {
+        val refreshes = AtomicInteger()
+        val active = activePlaybackState()
+        render(
+            active.copy(playback = active.playback.copy(isPlaying = true)),
+            onRefreshPlaybackPosition = { refreshes.incrementAndGet() },
+        )
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.waitUntil(5_000) { refreshes.get() > 0 }
+        composeRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        try {
+            val stoppedCount = refreshes.get()
+            // Observe more than two production ticker intervals while the activity is stopped.
+            SystemClock.sleep(1_200)
+            assertEquals(stoppedCount, refreshes.get())
+        } finally {
+            composeRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        }
+        val resumedCount = refreshes.get()
+        composeRule.waitUntil(5_000) { refreshes.get() > resumedCount }
+    }
+
+    @Test
+    fun chain_observation_runs_only_while_visible_and_advanced_uses_saved_selection() {
+        val telemetry = FakePlaybackTelemetry(chainTelemetrySnapshot())
+        render(
+            state = activePlaybackState(),
+            playbackTelemetry = telemetry,
+        )
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        composeRule.waitUntil(5_000) { telemetry.activeObservationCount == 1 }
+        assertEquals(summaryMetricIds, (telemetry.observationHistory.last().selection as TelemetryMetricSelection.Explicit).metricIds)
+
+        openAdvancedChain()
+        composeRule.waitUntil(5_000) {
+            telemetry.observationHistory.lastOrNull()?.selection is TelemetryMetricSelection.Explicit
+        }
+        val advancedSelection = telemetry.observationHistory.last().selection as TelemetryMetricSelection.Explicit
+        assertEquals(summaryMetricIds, advancedSelection.metricIds)
+
+        composeRule.onNodeWithTag("vesqen.chain.show-summary").performClick()
+        composeRule.onNodeWithTag("vesqen.chain.back").performClick()
+        composeRule.waitUntil(5_000) { telemetry.activeObservationCount == 0 }
+        composeRule.onNodeWithTag("vesqen.settings").assertIsDisplayed()
+    }
+
+    @Test
+    fun chain_advanced_observes_summary_defaults_and_refreshes_wide_path_for_a_repeated_track() {
+        val telemetry = FakePlaybackTelemetry(chainTelemetrySnapshot(codecLabel = "FLAC"))
+        val selectedMetricId = TelemetryMetricCatalog.PROCESS_DATA_SOURCE_READ_THROUGHPUT
+        val preferences = InMemoryChainDashboardPreferencesRepository(
+            ChainDashboardPreferences(selectedMetricIds = listOf(selectedMetricId)),
+        )
+        render(
+            state = activePlaybackState(),
+            playbackTelemetry = telemetry,
+            chainPreferencesRepository = preferences,
+            containerWidth = 840.dp,
+            containerHeight = 720.dp,
+        )
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        openAdvancedChain()
+        composeRule.waitUntil(5_000) {
+            (telemetry.observationHistory.lastOrNull()?.selection as? TelemetryMetricSelection.Explicit)
+                ?.metricIds == summaryMetricIds + selectedMetricId
+        }
+        val advancedSelection = telemetry.observationHistory.last().selection as TelemetryMetricSelection.Explicit
+        assertEquals(summaryMetricIds + selectedMetricId, advancedSelection.metricIds)
+        composeRule.onNodeWithText("FLAC", substring = true).assertIsDisplayed()
+
+        telemetry.publish(
+            chainTelemetrySnapshot(
+                codecLabel = "ALAC",
+                playbackSessionId = "instrumentation-session-repeat",
+            ),
+        )
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText("ALAC", substring = true)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        composeRule.onNodeWithText("ALAC", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun chain_advanced_shows_recent_route_and_error_events_with_session_scope() {
+        val elapsedMs = SystemClock.elapsedRealtime()
+        val telemetry = FakePlaybackTelemetry(
+            chainTelemetrySnapshot(
+                recentEvents = listOf(
+                    TelemetryEvent(
+                        sequence = 7,
+                        kind = TelemetryEventKind.ROUTE_CHANGED,
+                        severity = TelemetryEventSeverity.INFO,
+                        occurredAtEpochMs = System.currentTimeMillis(),
+                        occurredAtElapsedRealtimeMs = elapsedMs,
+                        code = "route.devices_changed",
+                        playbackSessionId = "instrumentation-session",
+                        relatedMetricIds = setOf(TelemetryMetricCatalog.ROUTE_CONNECTED_TYPES),
+                    ),
+                    TelemetryEvent(
+                        sequence = 8,
+                        kind = TelemetryEventKind.ERROR,
+                        severity = TelemetryEventSeverity.ERROR,
+                        occurredAtEpochMs = System.currentTimeMillis(),
+                        occurredAtElapsedRealtimeMs = elapsedMs,
+                        code = "error.player.code_1001",
+                        playbackSessionId = "earlier-session",
+                        relatedMetricIds = setOf(TelemetryMetricCatalog.PLAYBACK_LAST_ERROR_CODE),
+                    ),
+                ),
+            ),
+        )
+        render(
+            state = activePlaybackState(),
+            playbackTelemetry = telemetry,
+        )
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        openAdvancedChain()
+        chainNode("vesqen.chain.recent-events").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.chain.event.7").assertIsDisplayed()
+        composeRule.onNodeWithText("route.devices_changed").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.chain_event_scope_current), substring = true)
+            .performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.chain.event.8").assertIsDisplayed()
+        composeRule.onNodeWithText("error.player.code_1001").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.chain_event_scope_earlier), substring = true)
+            .performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun chain_unit_control_persists_raw_units_for_values_and_chart_descriptions() {
+        val epochMs = System.currentTimeMillis()
+        val elapsedMs = SystemClock.elapsedRealtime()
+        val source = TelemetryDataSource(TelemetrySourceId("test.telemetry"))
+        val throughputReading = TelemetryReading.Decimal(1_536_000.0, TelemetryUnit.BITS_PER_SECOND)
+        val telemetry = FakePlaybackTelemetry(
+            chainTelemetrySnapshot().let { snapshot ->
+                snapshot.copy(
+                    metrics = snapshot.metrics + TelemetryMetric(
+                        id = TelemetryMetricCatalog.PROCESS_DATA_SOURCE_READ_THROUGHPUT,
+                        section = TelemetrySection.PROCESS,
+                        evidence = TelemetryEvidence.Measured(
+                            reading = throughputReading,
+                            source = source,
+                            observedAtEpochMs = epochMs,
+                            observedAtElapsedRealtimeMs = elapsedMs,
+                        ),
+                    ),
+                )
+            },
+        )
+        val preferences = InMemoryChainDashboardPreferencesRepository(
+            ChainDashboardPreferences(
+                selectedMetricIds = listOf(
+                    TelemetryMetricCatalog.SOURCE_SAMPLE_RATE,
+                    TelemetryMetricCatalog.PROCESS_DATA_SOURCE_READ_THROUGHPUT,
+                ),
+                viewMode = ChainMetricViewMode.CHART,
+            ),
+        )
+        render(
+            state = activePlaybackState(),
+            playbackTelemetry = telemetry,
+            chainPreferencesRepository = preferences,
+        )
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        openAdvancedChain()
+        chainNode("vesqen.chain.control.settings").performScrollTo().performClick()
+        composeRule.onNodeWithTag("vesqen.chain.control.units").performScrollTo().performClick()
+        composeRule.onNodeWithText(context.getString(R.string.chain_unit_display_raw)).performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(ChainUnitDisplayMode.RAW, preferences.load().unitDisplayMode)
+        }
+        val expectedSampleRate = formatTelemetryReading(
+            context,
+            TelemetryReading.Integer(96_000, TelemetryUnit.HERTZ),
+            ChainUnitDisplayMode.RAW,
+        )
+        val expectedThroughput = formatTelemetryReading(
+            context,
+            throughputReading,
+            ChainUnitDisplayMode.RAW,
+        )
+        chainNode("vesqen.chain.metric-value.source.sample_rate", useUnmergedTree = true)
+            .performScrollTo()
+            .assertTextEquals(expectedSampleRate)
+        chainNode("vesqen.chain.chart.process.data_source_read_throughput", useUnmergedTree = true)
+            .performScrollTo()
+            .assert(
+                SemanticsMatcher("chart description uses the selected raw units") { node ->
+                    node.config[SemanticsProperties.ContentDescription].any { expectedThroughput in it }
+                },
+            )
+    }
+
+    @Test
+    fun chain_chart_exposes_segment_confidence_source_and_window() {
+        val metricId = TelemetryMetricCatalog.PROCESS_DATA_SOURCE_READ_THROUGHPUT
+        val initial = chainTelemetrySnapshot().let { snapshot ->
+            snapshot.copy(metrics = snapshot.metrics + TelemetryMetric(
+                id = metricId,
+                section = TelemetrySection.PROCESS,
+                evidence = TelemetryEvidence.Measured(
+                    reading = TelemetryReading.Decimal(48_000.0, TelemetryUnit.BITS_PER_SECOND),
+                    source = TelemetryDataSource(TelemetrySourceId("media3.data_source")),
+                    observedAtEpochMs = snapshot.capturedAtEpochMs,
+                    observedAtElapsedRealtimeMs = snapshot.capturedAtElapsedRealtimeMs,
+                ),
+            ))
+        }
+        val telemetry = FakePlaybackTelemetry(initial)
+        val preferences = InMemoryChainDashboardPreferencesRepository(
+            ChainDashboardPreferences(
+                selectedMetricIds = listOf(metricId),
+                viewMode = ChainMetricViewMode.CHART,
+            ),
+        )
+        render(
+            state = activePlaybackState(),
+            playbackTelemetry = telemetry,
+            chainPreferencesRepository = preferences,
+        )
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        openAdvancedChain()
+
+        val nextEpochMs = initial.capturedAtEpochMs + 5_000
+        val nextElapsedMs = initial.capturedAtElapsedRealtimeMs + 5_000
+        val derivedThroughput = TelemetryMetric(
+            id = metricId,
+            section = TelemetrySection.PROCESS,
+            evidence = TelemetryEvidence.Derived(
+                reading = TelemetryReading.Decimal(96_000.0, TelemetryUnit.BITS_PER_SECOND),
+                source = TelemetryDataSource(TelemetrySourceId("media3.data_source")),
+                observedAtEpochMs = nextEpochMs,
+                observedAtElapsedRealtimeMs = nextElapsedMs,
+                window = TelemetryWindow(
+                    startedAtEpochMs = nextEpochMs - 5_000,
+                    endedAtEpochMs = nextEpochMs,
+                    startedAtElapsedRealtimeMs = nextElapsedMs - 5_000,
+                    endedAtElapsedRealtimeMs = nextElapsedMs,
+                ),
+                calculationId = "process.read_throughput.window",
+                inputMetricIds = setOf(metricId),
+                operands = mapOf("io.bytes" to 60_000.0, "window.seconds" to 5.0),
+            ),
+        )
+        telemetry.publish(
+            initial.copy(
+                capturedAtEpochMs = nextEpochMs,
+                capturedAtElapsedRealtimeMs = nextElapsedMs,
+                metrics = initial.metrics.map { metric ->
+                    if (metric.id == metricId) {
+                        derivedThroughput
+                    } else {
+                        metric
+                    }
+                },
+            ),
+        )
+
+        val evidence = chainNode(
+            "vesqen.chain.chart-evidence.process.data_source_read_throughput",
+            useUnmergedTree = true,
+        ).performScrollTo().assertIsDisplayed()
+        fun evidenceText(node: androidx.compose.ui.semantics.SemanticsNode): String =
+            node.config.getOrElse(SemanticsProperties.Text) { emptyList() }.joinToString(" ") { it.text } +
+                node.children.joinToString(" ") { evidenceText(it) }
+        val evidenceText = evidenceText(evidence.fetchSemanticsNode())
+        assertTrue(evidenceText.contains(context.getString(R.string.chain_confidence_measured)))
+        assertTrue(evidenceText.contains(context.getString(R.string.chain_confidence_derived)))
+        assertTrue(evidenceText.contains(context.getString(R.string.chain_source_media3_data_source)))
+        assertTrue(
+            evidenceText.contains(
+                context.getString(
+                    R.string.chain_window_value,
+                    formatSeconds(context, 5.0),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun chain_usb_details_expose_device_and_audio_interface_descriptors() {
+        val epochMs = System.currentTimeMillis()
+        val elapsedMs = SystemClock.elapsedRealtime()
+        val inventory = TelemetryMetric(
+            id = TelemetryMetricCatalog.USB_DEVICE_INVENTORY,
+            section = TelemetrySection.USB,
+            evidence = TelemetryEvidence.Measured(
+                reading = TelemetryReading.UsbInventory(
+                    UsbInventoryReading(
+                        hostDevices = listOf(
+                            UsbHostDeviceReading(
+                                snapshotKey = "usb-1",
+                                manufacturerName = "Acme",
+                                productName = "Reference DAC",
+                                vendorId = 0x1234,
+                                productId = 0xabcd,
+                                permissionGranted = true,
+                                audioInterfaces = listOf(
+                                    UsbAudioInterfaceReading(
+                                        interfaceClass = 0x01,
+                                        interfaceSubclass = 0x02,
+                                        interfaceProtocol = 0x20,
+                                    ),
+                                ),
+                            ),
+                        ),
+                        audioOutputEndpoints = emptyList(),
+                    ),
+                ),
+                source = TelemetryDataSource(TelemetrySourceId("android.usb_public_api")),
+                observedAtEpochMs = epochMs,
+                observedAtElapsedRealtimeMs = elapsedMs,
+            ),
+        )
+        val telemetry = FakePlaybackTelemetry(
+            chainTelemetrySnapshot().let { snapshot ->
+                snapshot.copy(metrics = snapshot.metrics + inventory)
+            },
+        )
+        val preferences = InMemoryChainDashboardPreferencesRepository(
+            ChainDashboardPreferences(
+                selectedMetricIds = listOf(TelemetryMetricCatalog.USB_DEVICE_INVENTORY),
+                viewMode = ChainMetricViewMode.DETAILED,
+            ),
+        )
+        render(
+            state = activePlaybackState(),
+            playbackTelemetry = telemetry,
+            chainPreferencesRepository = preferences,
+        )
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        openAdvancedChain()
+        chainNode(
+            "vesqen.chain.usb.host.0.identity",
+            useUnmergedTree = true,
+        ).performScrollTo().assertTextEquals(
+            context.getString(
+                R.string.chain_usb_host_identity,
+                "0x1234",
+                "0xABCD",
+                context.getString(R.string.chain_usb_permission_granted),
+            ),
+        )
+        composeRule.onNodeWithTag(
+            "vesqen.chain.usb.host.0.interface.0",
+            useUnmergedTree = true,
+        ).assertTextEquals(
+            context.getString(
+                R.string.chain_usb_audio_interface,
+                1,
+                "0x01",
+                "0x02",
+                "0x20",
+            ),
+        )
+    }
+
+    @Test
+    fun diagnostic_recording_survives_leaving_chain_until_explicit_stop_and_clear() {
+        val telemetry = FakePlaybackTelemetry(chainTelemetrySnapshot())
+        val ownerScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val recorder = DiagnosticRecorder(telemetry, ownerScope)
+        var exportRequests = 0
+        try {
+            render(
+                state = activePlaybackState(),
+                playbackTelemetry = telemetry,
+                diagnosticRecorder = recorder,
+                onRequestDiagnosticExport = { exportRequests++ },
+            )
+
+            composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+            composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+            openAdvancedChain()
+            chainNode("vesqen.chain.diagnostics.start").performClick()
+            composeRule.waitUntil(5_000) { recorder.state.value is DiagnosticRecordingState.Active }
+
+            composeRule.onNodeWithTag("vesqen.chain.show-summary").performClick()
+            composeRule.onNodeWithTag("vesqen.chain.back").performClick()
+            composeRule.waitUntil(5_000) { telemetry.activeObservationCount == 1 }
+            assertTrue(recorder.state.value is DiagnosticRecordingState.Active)
+
+            composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+            openAdvancedChain()
+            chainNode("vesqen.chain.diagnostics.stop").performClick()
+            composeRule.waitUntil(5_000) { recorder.state.value is DiagnosticRecordingState.Stopped }
+
+            composeRule.onNodeWithTag("vesqen.chain.diagnostics.export").performClick()
+            composeRule.runOnIdle {
+                assertEquals(1, exportRequests)
+                assertTrue(recorder.state.value is DiagnosticRecordingState.Stopped)
+            }
+            composeRule.onNodeWithTag("vesqen.chain.diagnostics.clear").performClick()
+            composeRule.runOnIdle {
+                assertTrue(recorder.state.value is DiagnosticRecordingState.Stopped)
+            }
+            composeRule.onNodeWithTag("vesqen.chain.diagnostics.clear-confirm")
+                .assertIsDisplayed()
+                .performClick()
+            composeRule.runOnIdle {
+                assertEquals(DiagnosticRecordingState.Idle, recorder.state.value)
+            }
+        } finally {
+            ownerScope.cancel()
+        }
+    }
+
+    @Test
+    fun retained_diagnostic_remains_actionable_from_chain_empty_state_after_playback_stops() {
+        val telemetry = FakePlaybackTelemetry(chainTelemetrySnapshot())
+        val ownerScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val recorder = DiagnosticRecorder(telemetry, ownerScope)
+        val currentState = mutableStateOf(activePlaybackState())
+        var exportRequests = 0
+        try {
+            render(
+                state = currentState.value,
+                stateProvider = { currentState.value },
+                playbackTelemetry = telemetry,
+                diagnosticRecorder = recorder,
+                onRequestDiagnosticExport = { exportRequests++ },
+            )
+
+            composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+            composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+            openAdvancedChain()
+            chainNode("vesqen.chain.diagnostics.start").performClick()
+            composeRule.waitUntil(5_000) { recorder.state.value is DiagnosticRecordingState.Active }
+
+            composeRule.runOnIdle {
+                currentState.value = grantedState(tracks = sampleTracks)
+            }
+            composeRule.onNodeWithText(context.getString(R.string.chain_empty_title)).assertIsDisplayed()
+            composeRule.onNodeWithTag("vesqen.chain.empty-retained-diagnostic").assertIsDisplayed()
+            chainNode("vesqen.chain.diagnostics.stop", "vesqen.chain.empty-retained-diagnostic").assertIsDisplayed()
+
+            val absentSinceElapsedMs = SystemClock.elapsedRealtime() + 10
+            telemetry.publish(
+                TelemetrySnapshot.empty(
+                    capturedAtEpochMs = System.currentTimeMillis() + 10,
+                    capturedAtElapsedRealtimeMs = absentSinceElapsedMs,
+                ),
+            )
+            composeRule.waitUntil(5_000) {
+                (recorder.state.value as? DiagnosticRecordingState.Active)
+                    ?.progress
+                    ?.snapshotCount == 1
+            }
+            telemetry.publish(
+                TelemetrySnapshot.empty(
+                    capturedAtEpochMs = System.currentTimeMillis() + 2_510,
+                    capturedAtElapsedRealtimeMs = absentSinceElapsedMs + 2_500,
+                ),
+            )
+            composeRule.waitUntil(5_000) { recorder.state.value is DiagnosticRecordingState.Stopped }
+
+            chainNode("vesqen.chain.diagnostics.export", "vesqen.chain.empty-retained-diagnostic").performClick()
+            composeRule.runOnIdle { assertEquals(1, exportRequests) }
+            composeRule.onNodeWithTag("vesqen.chain.diagnostics.clear").performClick()
+            composeRule.runOnIdle {
+                assertTrue(recorder.state.value is DiagnosticRecordingState.Stopped)
+            }
+            composeRule.onNodeWithTag("vesqen.chain.diagnostics.clear-confirm")
+                .assertIsDisplayed()
+                .performClick()
+            composeRule.runOnIdle {
+                assertEquals(DiagnosticRecordingState.Idle, recorder.state.value)
+            }
+            composeRule.onAllNodesWithTag("vesqen.chain.diagnostics").assertCountEquals(0)
+        } finally {
+            ownerScope.cancel()
+        }
+    }
+
+    @Test
+    fun chain_source_title_is_available_from_settings_and_player() {
+        val active = activePlaybackState()
+        render(active, playbackTelemetry = FakePlaybackTelemetry(chainTelemetrySnapshot()))
+        val expected = context.getString(R.string.chain_current_source, active.playback.title)
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        composeRule.onNodeWithTag("vesqen.chain.current-source").assertTextEquals(expected)
+        openAdvancedChain()
+        composeRule.onNodeWithTag("vesqen.chain.current-source").assertTextEquals(expected)
+        composeRule.onNodeWithTag("vesqen.chain.back").performClick()
+        composeRule.onNodeWithTag("vesqen.chain.back").performClick()
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.open-chain").performClick()
+        openAdvancedChain()
+        composeRule.onNodeWithTag("vesqen.chain.current-source").assertTextEquals(expected)
+    }
+
+    @Test
+    fun chain_advanced_keeps_header_actions_separate_at_320_by_480_with_large_text() {
+        render(
+            state = activePlaybackState(),
+            playbackTelemetry = FakePlaybackTelemetry(chainTelemetrySnapshot()),
+            containerWidth = 320.dp,
+            containerHeight = 480.dp,
+            fontScale = 2f,
+        )
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        openAdvancedChain()
+        val viewControl = chainNode("vesqen.chain.control.view")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.StateDescription,
+                    context.getString(R.string.chain_view_detailed),
+                ),
+            )
+        composeRule.onNodeWithText(context.getString(R.string.chain_view_mode)).assertIsDisplayed()
+
+        val title = composeRule.onNodeWithTag("vesqen.chain.title").fetchSemanticsNode().boundsInRoot
+        val summary = composeRule.onNodeWithTag("vesqen.chain.show-summary").fetchSemanticsNode().boundsInRoot
+        assertTrue("Chain title must not overlap its summary action", title.right <= summary.left)
+
+        composeRule.onNodeWithTag("vesqen.chain.control.settings").performScrollTo().performClick()
+        val controls = composeRule.onNodeWithTag("vesqen.chain.dashboard-controls")
+            .fetchSemanticsNode().boundsInRoot
+        val viewNode = viewControl.fetchSemanticsNode()
+        val view = viewNode.boundsInRoot
+        val refreshNode = composeRule.onNodeWithTag("vesqen.chain.control.refresh").fetchSemanticsNode()
+        val unitsNode = composeRule.onNodeWithTag("vesqen.chain.control.units").fetchSemanticsNode()
+        assertTrue("320dp controls must stay inside the available width", view.left >= controls.left)
+        assertTrue("320dp controls must stay inside the available width", view.right <= controls.right)
+        assertTrue("Large text selectors must use the available width", abs(viewNode.size.width - controls.width) <= 1f)
+        assertTrue("Large text selectors must stack so their labels remain readable",
+            viewNode.positionInRoot.y + viewNode.size.height <= refreshNode.positionInRoot.y)
+        // English at 2x can put the lower controls below the viewport. Clipped empty
+        // bounds are not layout positions; compare the actual geometry, then scroll to them.
+        assertTrue("320dp controls must stack instead of overlap",
+            viewNode.positionInRoot.y + viewNode.size.height <= unitsNode.positionInRoot.y)
+        chainNode("vesqen.chain.control.units").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun chain_advanced_uses_two_metric_columns_at_600dp() {
+        render(
+            state = activePlaybackState(),
+            playbackTelemetry = FakePlaybackTelemetry(chainTelemetrySnapshot()),
+            containerWidth = 600.dp,
+            containerHeight = 720.dp,
+        )
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        openAdvancedChain()
+
+        chainNode("vesqen.chain.metric.source.container")
+        val container = composeRule.onNodeWithTag("vesqen.chain.metric.source.container")
+            .fetchSemanticsNode().boundsInRoot
+        val codecLabel = composeRule.onNodeWithTag("vesqen.chain.metric.source.codec_label")
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue("600dp metric cards must share a row", abs(container.top - codecLabel.top) <= 1f)
+        assertTrue(
+            "600dp metric cards must not overlap",
+            container.right <= codecLabel.left || codecLabel.right <= container.left,
+        )
+        composeRule.onAllNodesWithTag("vesqen.chain.summary").assertCountEquals(0)
+    }
+
+    @Test
+    fun chain_advanced_keeps_fixed_summary_left_of_metrics_at_840dp() {
+        render(
+            state = activePlaybackState(),
+            playbackTelemetry = FakePlaybackTelemetry(chainTelemetrySnapshot()),
+            containerWidth = 840.dp,
+            containerHeight = 720.dp,
+        )
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        openAdvancedChain()
+
+        val summary = composeRule.onNodeWithTag("vesqen.chain.summary").fetchSemanticsNode().boundsInRoot
+        val metrics = composeRule.onNodeWithTag("vesqen.chain.metrics").fetchSemanticsNode().boundsInRoot
+        assertTrue("840dp summary must remain left of the advanced dashboard", summary.right <= metrics.left)
     }
 
     @Test
@@ -519,7 +1179,6 @@ class VesqenAppTest {
                             PlaybackOrderMode.SHUFFLE_REPEAT_ONE -> PlaybackOrderMode.SEQUENTIAL
                         }
                     },
-                    onRefreshConnectedOutputs = {},
                     motionPolicy = VesqenMotionPolicy(reduceMotion = true),
                 )
             }
@@ -672,7 +1331,6 @@ class VesqenAppTest {
                     onNext = { trackIndex.value = (trackIndex.value + 1).coerceAtMost(sampleTracks.lastIndex) },
                     onSeek = {},
                     onCyclePlaybackOrder = {},
-                    onRefreshConnectedOutputs = {},
                     motionPolicy = VesqenMotionPolicy(reduceMotion = true),
                 )
             }
@@ -863,6 +1521,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.play-pause").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.info").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.open-chain").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.player-page").assert(
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
         )
@@ -881,6 +1540,7 @@ class VesqenAppTest {
         assertFooterActionsDoNotOverlap(
             "vesqen.now.playback-order",
             "vesqen.now.session-toggle",
+            "vesqen.now.open-chain",
             "vesqen.now.info",
         )
     }
@@ -959,10 +1619,6 @@ class VesqenAppTest {
 
     @Test
     fun focused_player_keeps_primary_controls_inside_a_short_landscape_window() {
-        assumeTrue(
-            "A 640dp landscape fixture requires a host viewport at least 640dp wide",
-            composeRule.activity.resources.configuration.screenWidthDp >= 640,
-        )
         render(
             state = grantedState(
                 tracks = sampleTracks,
@@ -1232,7 +1888,7 @@ class VesqenAppTest {
             .onNodeWithTag("vesqen.now.transport-dock")
             .fetchSemanticsNode()
             .boundsInRoot
-        val minimumClearancePx = with(composeRule.density) { 12.dp.toPx() }
+        val minimumClearancePx = with(fixtureDensity) { 12.dp.toPx() }
         val epsilon = 1f
 
         assertTrue(
@@ -1250,7 +1906,7 @@ class VesqenAppTest {
             .onNodeWithTag("vesqen.now.title")
             .fetchSemanticsNode()
             .boundsInRoot
-        val minimumTopBeatPx = with(composeRule.density) { 24.dp.toPx() }
+        val minimumTopBeatPx = with(fixtureDensity) { 24.dp.toPx() }
 
         assertTrue(
             "Landscape track identity must clear the top command band",
@@ -1263,7 +1919,7 @@ class VesqenAppTest {
             .onNodeWithTag("vesqen.now.artwork-stage")
             .fetchSemanticsNode()
         val visibleBounds = artworkNode.boundsInRoot
-        val minimumArtworkPx = with(composeRule.density) { 48.dp.toPx() }
+        val minimumArtworkPx = with(fixtureDensity) { 48.dp.toPx() }
         val epsilon = 1f
 
         assertTrue(
@@ -1283,7 +1939,7 @@ class VesqenAppTest {
         tags: Array<String>,
     ) {
         val containerBounds = composeRule.onNodeWithTag(containerTag).fetchSemanticsNode().boundsInRoot
-        val minimumTouchTargetPx = with(composeRule.density) { 48.dp.toPx() }
+        val minimumTouchTargetPx = with(fixtureDensity) { 48.dp.toPx() }
         val epsilon = 1f
         val touchTargetTags = setOf(
             "vesqen.now.back",
@@ -1376,10 +2032,34 @@ class VesqenAppTest {
         }
     }
 
+    private val summaryMetricIds = TelemetryMetricCatalog.defaultIds + setOf(
+        TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_ENCODING,
+        TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_NAME,
+        TelemetryMetricCatalog.PLAYBACK_CURRENT_MEDIA_READ_BITRATE,
+        TelemetryMetricCatalog.PLAYBACK_ESTIMATED_TOTAL_BUFFERED_DURATION,
+    )
+
+    private fun openAdvancedChain() {
+        composeRule.onNodeWithTag("vesqen.chain.summary-list")
+            .performScrollToNode(hasTestTag("vesqen.chain.open-advanced"))
+        composeRule.onNodeWithTag("vesqen.chain.open-advanced").performClick()
+    }
+
+    private fun chainNode(
+        tag: String,
+        listTag: String = "vesqen.chain.metrics",
+        useUnmergedTree: Boolean = false,
+    ): SemanticsNodeInteraction {
+        composeRule.onNodeWithTag(listTag, useUnmergedTree).performScrollToNode(hasTestTag(tag))
+        return composeRule.onNodeWithTag(tag, useUnmergedTree)
+    }
+
     private fun render(
         state: VesqenUiState,
+        stateProvider: (() -> VesqenUiState)? = null,
         onPrevious: () -> Unit = {},
         onPlayPause: () -> Unit = {},
+        onRefreshPlaybackPosition: () -> Unit = {},
         onNext: () -> Unit = {},
         onCyclePlaybackOrder: () -> Unit = {},
         onRequestMusicAccess: () -> Unit = {},
@@ -1397,12 +2077,19 @@ class VesqenAppTest {
         motionPolicy: VesqenMotionPolicy = VesqenMotionPolicy(reduceMotion = true),
         versionName: String = BuildConfig.VERSION_NAME,
         versionCode: Int = BuildConfig.VERSION_CODE,
+        playbackTelemetry: PlaybackTelemetry? = null,
+        chainPreferencesRepository: ChainDashboardPreferencesRepository =
+            InMemoryChainDashboardPreferencesRepository(),
+        diagnosticRecorder: DiagnosticRecorder? = null,
+        diagnosticExportFeedback: DiagnosticExportFeedback = DiagnosticExportFeedback.NONE,
+        onRequestDiagnosticExport: () -> Unit = {},
     ) {
         composeRule.setContent {
             VesqenTheme(darkTheme = darkTheme) {
                 val app: @Composable () -> Unit = {
+                    fixtureDensity = LocalDensity.current
                     VesqenAppContent(
-                        state = state,
+                        state = stateProvider?.invoke() ?: state,
                         onRequestMusicAccess = onRequestMusicAccess,
                         onOpenAppSettings = onOpenAppSettings,
                         onOpenNotificationSettings = onOpenNotificationSettings,
@@ -1412,16 +2099,21 @@ class VesqenAppTest {
                         onCreatePlaylist = onCreatePlaylist,
                         onPrevious = onPrevious,
                         onPlayPause = onPlayPause,
+                        onRefreshPlaybackPosition = onRefreshPlaybackPosition,
                         onNext = onNext,
                         onSeek = {},
                         onCyclePlaybackOrder = onCyclePlaybackOrder,
-                        onRefreshConnectedOutputs = {},
                         onAddLibraryFolder = onAddLibraryFolder,
                         onRemoveLibraryFolder = onRemoveLibraryFolder,
                         onResumeLibraryScan = onResumeLibraryScan,
                         motionPolicy = motionPolicy,
                         versionName = versionName,
                         versionCode = versionCode,
+                        playbackTelemetry = playbackTelemetry,
+                        chainPreferencesRepository = chainPreferencesRepository,
+                        diagnosticRecorder = diagnosticRecorder,
+                        diagnosticExportFeedback = diagnosticExportFeedback,
+                        onRequestDiagnosticExport = onRequestDiagnosticExport,
                     )
                 }
                 val renderWithinSize: @Composable () -> Unit = {
@@ -1450,12 +2142,30 @@ class VesqenAppTest {
                     ) {
                         Configuration(configuration).apply {
                             this.fontScale = fontScale ?: configuration.fontScale
-                            containerWidth?.let { screenWidthDp = it.value.toInt() }
-                            containerWidth?.let { screenHeightDp = containerHeight.value.toInt() }
+                            containerWidth?.let { width ->
+                                val widthDp = width.value.toInt()
+                                val heightDp = containerHeight.value.toInt()
+                                screenWidthDp = widthDp
+                                screenHeightDp = heightDp
+                                smallestScreenWidthDp = min(widthDp, heightDp)
+                                orientation = if (widthDp > heightDp) {
+                                    Configuration.ORIENTATION_LANDSCAPE
+                                } else {
+                                    Configuration.ORIENTATION_PORTRAIT
+                                }
+                            }
                         }
                     }
-                    val sizedDensity = remember(density, fontScale) {
-                        Density(density.density, fontScale ?: density.fontScale)
+                    val windowSize = LocalWindowInfo.current.containerSize
+                    val sizedDensity = remember(density, fontScale, containerWidth, containerHeight, windowSize) {
+                        // Fit the requested dp viewport on the host; width(840.dp) alone is
+                        // clamped to a 360dp phone and never exercises the wide layout.
+                        val fittedDensity = if (containerWidth == null) density.density else minOf(
+                            density.density,
+                            windowSize.width / containerWidth.value,
+                            windowSize.height / containerHeight.value,
+                        )
+                        Density(fittedDensity, fontScale ?: density.fontScale)
                     }
                     CompositionLocalProvider(
                         LocalConfiguration provides sizedConfiguration,
@@ -1478,6 +2188,59 @@ class VesqenAppTest {
         ),
         playback = playback,
     )
+
+    private fun activePlaybackState(): VesqenUiState = grantedState(
+        tracks = sampleTracks,
+        playback = PlaybackSnapshot(
+            isControllerReady = true,
+            isPlaying = true,
+            trackId = sampleTracks.first().id,
+            title = sampleTracks.first().title,
+            artist = sampleTracks.first().artist,
+            album = sampleTracks.first().album,
+            durationMs = sampleTracks.first().durationMs,
+            positionMs = 30_000,
+            hasNext = true,
+        ),
+    )
+
+    private fun chainTelemetrySnapshot(
+        codecLabel: String = "FLAC",
+        playbackSessionId: String = "instrumentation-session",
+        recentEvents: List<TelemetryEvent> = emptyList(),
+    ): TelemetrySnapshot {
+        val epochMs = System.currentTimeMillis()
+        val elapsedMs = SystemClock.elapsedRealtime()
+        val source = TelemetryDataSource(TelemetrySourceId("test.telemetry"))
+        return TelemetrySnapshot(
+            capturedAtEpochMs = epochMs,
+            capturedAtElapsedRealtimeMs = elapsedMs,
+            playbackSessionId = playbackSessionId,
+            recentEvents = recentEvents,
+            metrics = listOf(
+                TelemetryMetric(
+                    id = TelemetryMetricCatalog.SOURCE_CODEC_LABEL,
+                    section = TelemetrySection.SOURCE,
+                    evidence = TelemetryEvidence.Measured(
+                        reading = TelemetryReading.Text(codecLabel),
+                        source = source,
+                        observedAtEpochMs = epochMs,
+                        observedAtElapsedRealtimeMs = elapsedMs,
+                    ),
+                ),
+                TelemetryMetric(
+                    id = TelemetryMetricCatalog.SOURCE_SAMPLE_RATE,
+                    section = TelemetrySection.SOURCE,
+                    evidence = TelemetryEvidence.Measured(
+                        reading = TelemetryReading.Integer(96_000, TelemetryUnit.HERTZ),
+                        source = source,
+                        observedAtEpochMs = epochMs,
+                        observedAtElapsedRealtimeMs = elapsedMs,
+                    ),
+                ),
+            ),
+        )
+    }
 
     private companion object {
         val sampleTracks = listOf(

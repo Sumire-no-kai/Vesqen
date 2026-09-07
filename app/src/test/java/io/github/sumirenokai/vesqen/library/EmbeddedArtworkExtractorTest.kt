@@ -5,6 +5,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.util.Base64
 
 class EmbeddedArtworkExtractorTest {
@@ -51,6 +52,13 @@ class EmbeddedArtworkExtractorTest {
             this[3] = 0xff.toByte()
         }
         assertNull(extract(atom("moov", atom("covr", oversizedMp4))))
+    }
+
+    @Test
+    fun zeroLengthBulkReadStillMakesBoundedProgress() {
+        val id3 = id3WithPicture(picture)
+
+        assertArrayEquals(picture, extractBoundedId3Picture(ZeroThenDataInputStream(id3)))
     }
 
     private fun extract(bytes: ByteArray): ByteArray? = extractBoundedEmbeddedArtwork(
@@ -238,5 +246,23 @@ class EmbeddedArtworkExtractorTest {
         write((value ushr 8) and 0xff)
         write((value ushr 16) and 0xff)
         write((value ushr 24) and 0xff)
+    }
+
+    private class ZeroThenDataInputStream(
+        private val delegate: ByteArrayInputStream,
+    ) : InputStream() {
+        constructor(bytes: ByteArray) : this(ByteArrayInputStream(bytes))
+
+        private var returnZero = true
+
+        override fun read(): Int = delegate.read()
+
+        override fun read(bytes: ByteArray, offset: Int, length: Int): Int {
+            if (returnZero) {
+                returnZero = false
+                return 0
+            }
+            return delegate.read(bytes, offset, length)
+        }
     }
 }

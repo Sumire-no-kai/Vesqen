@@ -30,6 +30,10 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -50,6 +54,19 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.produceState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import io.github.sumirenokai.vesqen.library.LibraryTitleIndex
+import io.github.sumirenokai.vesqen.library.libraryTitleKeys
+import io.github.sumirenokai.vesqen.library.projectLibraryTitleOrder
+import io.github.sumirenokai.vesqen.ui.components.LibraryAlphabetIndex
+import io.github.sumirenokai.vesqen.ui.components.LibraryTrackList
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -109,78 +126,56 @@ fun LibraryScreen(
     onAddTrackToPlaylist: (Long, Long) -> Unit = { _, _ -> },
     onRemoveTrackFromPlaylist: (Long, Long) -> Unit = { _, _ -> },
     onMovePlaylistTrack: (Long, Int, Int) -> Unit = { _, _, _ -> },
+    onSaveTrackOrder: suspend (Long?, List<Long>) -> Boolean = { _, _ -> false },
     onAddLibraryFolder: () -> Unit = {},
     onRemoveLibraryFolder: (String) -> Unit = {},
     onPauseLibraryScan: () -> Unit = {},
     onResumeLibraryScan: () -> Unit = {},
-) {
-    LibraryContent(
-        state = state,
-        playback = playback,
-        onRequestMusicAccess = onRequestMusicAccess,
-        onOpenAppSettings = onOpenAppSettings,
-        onOpenNotificationSettings = onOpenNotificationSettings,
-        onRescan = onRescan,
-        onAddLibraryFolder = onAddLibraryFolder,
-        onRemoveLibraryFolder = onRemoveLibraryFolder,
-        onPauseLibraryScan = onPauseLibraryScan,
-        onResumeLibraryScan = onResumeLibraryScan,
-        onTrackSelected = onTrackSelected,
-        onPlayQueue = onPlayQueue,
-        onToggleFavorite = onToggleFavorite,
-        onPlayNext = onPlayNext,
-        onAddToQueue = onAddToQueue,
-        onCreatePlaylist = onCreatePlaylist,
-        onRenamePlaylist = onRenamePlaylist,
-        onDeletePlaylist = onDeletePlaylist,
-        onAddTrackToPlaylist = onAddTrackToPlaylist,
-        onRemoveTrackFromPlaylist = onRemoveTrackFromPlaylist,
-        onMovePlaylistTrack = onMovePlaylistTrack,
-        modifier = modifier,
-    )
-}
-
-@Composable
-private fun LibraryContent(
-    state: LibraryUiState,
-    playback: PlaybackSnapshot,
-    onRequestMusicAccess: () -> Unit,
-    onOpenAppSettings: () -> Unit,
-    onRescan: () -> Unit,
-    onOpenNotificationSettings: () -> Unit,
-    onAddLibraryFolder: () -> Unit,
-    onRemoveLibraryFolder: (String) -> Unit,
-    onPauseLibraryScan: () -> Unit,
-    onResumeLibraryScan: () -> Unit,
-    onTrackSelected: (AudioTrack) -> Unit,
-    onPlayQueue: (List<AudioTrack>, Int) -> Unit,
-    onToggleFavorite: (Long, Boolean) -> Unit,
-    onPlayNext: (AudioTrack) -> Unit,
-    onAddToQueue: (AudioTrack) -> Unit,
-    onCreatePlaylist: (String) -> Unit,
-    onRenamePlaylist: (Long, String) -> Unit,
-    onDeletePlaylist: (Long) -> Unit,
-    onAddTrackToPlaylist: (Long, Long) -> Unit,
-    onRemoveTrackFromPlaylist: (Long, Long) -> Unit,
-    onMovePlaylistTrack: (Long, Int, Int) -> Unit,
-    modifier: Modifier = Modifier,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var detailsTrack by remember { mutableStateOf<AudioTrack?>(null) }
     var browseModeName by rememberSaveable { mutableStateOf(LibraryBrowseMode.SONGS.name) }
     var sortOrderName by rememberSaveable { mutableStateOf(LibrarySortOrder.TITLE.name) }
     var favoritesOnly by rememberSaveable { mutableStateOf(false) }
+    var favoriteCustomOrder by rememberSaveable { mutableStateOf(true) }
+    var favoriteSortName by rememberSaveable { mutableStateOf(LibrarySortOrder.TITLE.name) }
+    var orderTarget by remember { mutableStateOf<Pair<Long?, List<AudioTrack>>?>(null) }
+    var orderSaving by remember { mutableStateOf(false) }
+    var orderSaveFailed by remember { mutableStateOf(false) }
+    val orderScope = rememberCoroutineScope()
+    BackHandler(enabled = orderTarget != null || favoritesOnly) {
+        if (!orderSaving) {
+            if (orderTarget != null) orderTarget = null else { favoritesOnly = false; query = "" }
+        }
+    }
+    val context = LocalContext.current.applicationContext
+    val preferences = remember(context) { context.getSharedPreferences("library-browse", 0) }
+    var alphabetEnabled by remember { mutableStateOf(preferences.getBoolean("alphabet-index", true)) }
+    val sourceTracks = state.tracks
+    val titleKeys = remember(sourceTracks) { libraryTitleKeys(sourceTracks) }
+    val titleProjection by produceState<Pair<List<Pair<Long, String>>, LibraryTitleIndex>?>(null, titleKeys) {
+        value = withContext(Dispatchers.Default) { titleKeys to LibraryTitleIndex.build(sourceTracks) }
+    }
+    val titleIndex = titleProjection?.second
+    val titleIndexIsCurrent = titleProjection?.first == titleKeys
     var selectedCollectionKey by rememberSaveable { mutableStateOf<String?>(null) }
     var showCreatePlaylist by rememberSaveable { mutableStateOf(false) }
     var playlistToEdit by remember { mutableStateOf<LibraryPlaylist?>(null) }
     val browseMode = LibraryBrowseMode.valueOf(browseModeName)
-    val sortOrder = LibrarySortOrder.valueOf(sortOrderName)
+    val sortOrder = LibrarySortOrder.valueOf(if (favoritesOnly) favoriteSortName else sortOrderName)
     val searchedTracks = remember(state.tracks, query) { filterTracks(state.tracks, query) }
     val filteredTracks = remember(searchedTracks, favoritesOnly) {
         if (favoritesOnly) searchedTracks.filter(AudioTrack::isFavorite) else searchedTracks
     }
-    val visibleTracks = remember(filteredTracks, sortOrder) {
-        sortLibraryTracks(filteredTracks, sortOrder)
+    val visibleTracks = remember(filteredTracks, sortOrder, favoritesOnly, favoriteCustomOrder, titleIndex) {
+        when {
+            favoritesOnly && favoriteCustomOrder -> filteredTracks.sortedWith(compareBy<AudioTrack> { it.favoritePosition ?: Long.MAX_VALUE }.thenBy { it.id })
+            sortOrder == LibrarySortOrder.TITLE && titleIndex != null -> {
+                projectLibraryTitleOrder(titleIndex.tracks, filteredTracks)
+            }
+            sortOrder == LibrarySortOrder.TITLE -> filteredTracks
+            else -> sortLibraryTracks(filteredTracks, sortOrder)
+        }
     }
     val collections = remember(browseMode, filteredTracks, state.playlists, sortOrder) {
         sortLibraryCollections(
@@ -191,12 +186,25 @@ private fun LibraryContent(
     val selectedCollection = remember(collections, selectedCollectionKey) {
         collections.firstOrNull { it.key == selectedCollectionKey }
     }
+    val isFavoriteList = favoritesOnly && browseMode == LibraryBrowseMode.SONGS && selectedCollection == null
+    val isPlaylist = selectedCollection?.playlistId != null
 
     Column(modifier = modifier.fillMaxSize()) {
         LibraryHeader(
+            favoritesOnly = favoritesOnly,
+            navigationEnabled = !orderSaving,
+            onOpenFavorites = {
+                favoritesOnly = true
+                browseModeName = LibraryBrowseMode.SONGS.name
+                selectedCollectionKey = null
+                query = ""
+            },
+            onBack = {
+                if (orderTarget != null) orderTarget = null else { favoritesOnly = false; query = "" }
+            },
             onAddLibraryFolder = onAddLibraryFolder,
             onRescan = onRescan,
-            sourceActionsEnabled = !state.isLoading,
+            sourceActionsEnabled = !state.isLoading && orderTarget == null,
         )
         if (state.musicAccess != MusicAccess.GRANTED) {
             DeviceMusicAccessNotice(
@@ -221,18 +229,69 @@ private fun LibraryContent(
         if (!state.notificationsAllowed && playback.hasActiveTrack) {
             NotificationNotice(onOpenNotificationSettings = onOpenNotificationSettings)
         }
-        if (state.tracks.isNotEmpty()) {
+        if (state.tracks.isNotEmpty() && orderTarget == null) {
             LibrarySearchField(query = query, onQueryChange = { query = it })
             LibraryBrowseBar(
                 browseMode = browseMode,
                 sortOrder = sortOrder,
                 favoritesOnly = favoritesOnly,
+                trackCount = filteredTracks.size,
                 onBrowseModeChanged = { mode ->
+                    favoritesOnly = false
                     browseModeName = mode.name
                     selectedCollectionKey = null
                 },
-                onSortOrderChanged = { sortOrderName = it.name },
-                onToggleFavorites = { favoritesOnly = !favoritesOnly },
+                onSortOrderChanged = {
+                    if (favoritesOnly) { favoriteSortName = it.name; favoriteCustomOrder = false }
+                    else sortOrderName = it.name
+                },
+                customOrderAvailable = isFavoriteList || isPlaylist,
+                customOrderActive = (isFavoriteList && favoriteCustomOrder) || isPlaylist,
+                manualOnly = isPlaylist,
+                onCustomOrder = { favoriteCustomOrder = true },
+                showAlphabetOption = !favoritesOnly && browseMode == LibraryBrowseMode.SONGS && selectedCollection == null,
+                alphabetEnabled = alphabetEnabled,
+                onToggleAlphabet = {
+                    alphabetEnabled = !alphabetEnabled
+                    preferences.edit().putBoolean("alphabet-index", alphabetEnabled).apply()
+                },
+            )
+        }
+        if (isFavoriteList || isPlaylist) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (orderTarget == null) {
+                    TextButton(
+                        onClick = {
+                            orderSaveFailed = false
+                            orderTarget = selectedCollection?.let { it.playlistId to it.tracks } ?: (null to visibleTracks)
+                        },
+                        enabled = query.isBlank() && (!favoritesOnly || favoriteCustomOrder) &&
+                            (selectedCollection?.tracks ?: visibleTracks).size > 1,
+                        modifier = Modifier.testTag("vesqen.library.edit-order"),
+                    ) { Text(stringResource(R.string.edit_track_order)) }
+                } else {
+                    Text(stringResource(R.string.drag_track_order), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { orderTarget = null }, enabled = !orderSaving) { Text(stringResource(R.string.cancel)) }
+                    TextButton(
+                        onClick = {
+                            val target = orderTarget ?: return@TextButton
+                            orderSaving = true
+                            orderSaveFailed = false
+                            orderScope.launch {
+                                try {
+                                    if (onSaveTrackOrder(target.first, target.second.map(AudioTrack::id))) orderTarget = null
+                                    else orderSaveFailed = true
+                                } finally { orderSaving = false }
+                            }
+                        },
+                        enabled = !orderSaving,
+                        modifier = Modifier.testTag("vesqen.library.save-order"),
+                    ) { Text(stringResource(R.string.save)) }
+                }
+            }
+            if (orderTarget != null && orderSaveFailed) Text(
+                stringResource(R.string.track_order_save_failed), Modifier.padding(horizontal = 16.dp),
+                color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
             )
         }
         Box(modifier = Modifier.weight(1f)) {
@@ -268,6 +327,14 @@ private fun LibraryContent(
                     modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
                 )
 
+                isFavoriteList && query.isBlank() && visibleTracks.isEmpty() -> VesqenEmptyState(
+                    title = stringResource(R.string.library_favorites),
+                    body = stringResource(R.string.library_favorites_empty),
+                    actionLabel = stringResource(R.string.show_all_music),
+                    onAction = { favoritesOnly = false },
+                    modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
+                )
+
                 visibleTracks.isEmpty() && browseMode != LibraryBrowseMode.PLAYLISTS -> VesqenEmptyState(
                     title = stringResource(R.string.no_search_results),
                     body = stringResource(R.string.no_search_results_body),
@@ -277,22 +344,30 @@ private fun LibraryContent(
                 )
 
                 selectedCollection != null -> CollectionTrackList(
-                    collection = selectedCollection,
+                    collection = selectedCollection.copy(tracks = orderTarget?.second ?: selectedCollection.tracks),
                     playback = playback,
-                    onBack = { selectedCollectionKey = null },
+                    onBack = { if (orderTarget != null) { if (!orderSaving) orderTarget = null } else selectedCollectionKey = null },
                     onPlayQueue = onPlayQueue,
                     onTrackSelected = { track ->
                         onPlayQueue(selectedCollection.tracks, selectedCollection.tracks.indexOf(track))
                     },
                     onTrackMore = { detailsTrack = it },
-                    onEditPlaylist = selectedCollection.playlistId?.let { playlistId ->
+                    editing = orderTarget != null,
+                    saving = orderSaving,
+                    onReorder = { tracks -> orderTarget = orderTarget?.copy(second = tracks) },
+                    onEditPlaylist = selectedCollection.playlistId?.takeIf { orderTarget == null }?.let { playlistId ->
                         { playlistToEdit = state.playlists.firstOrNull { it.id == playlistId } }
                     },
                 )
 
-                browseMode == LibraryBrowseMode.SONGS -> TrackList(
-                    tracks = visibleTracks,
-                    playback = playback,
+                browseMode == LibraryBrowseMode.SONGS -> LibraryTrackList(
+                    tracks = orderTarget?.second ?: visibleTracks,
+                    editing = orderTarget != null,
+                    saving = orderSaving,
+                    onReorder = { tracks -> orderTarget = orderTarget?.copy(second = tracks) },
+                    currentTrackId = playback.trackId,
+                    isPlaying = playback.isPlaying,
+                    alphabetSections = if (titleIndexIsCurrent && alphabetEnabled && !favoritesOnly && query.isBlank() && sortOrder == LibrarySortOrder.TITLE) titleIndex?.sections.orEmpty() else emptyMap(),
                     onTrackSelected = { track ->
                         onPlayQueue(visibleTracks, visibleTracks.indexOf(track))
                     },
@@ -316,6 +391,7 @@ private fun LibraryContent(
     detailsTrack?.let { track ->
         val playlistId = selectedCollection?.playlistId
         val playlistTrackIndex = selectedCollection?.tracks?.indexOfFirst { it.id == track.id } ?: -1
+        val storedPlaylistOrder = state.playlists.firstOrNull { it.id == playlistId }?.trackIds.orEmpty()
         TrackDetailsSheet(
             track = track,
             playlists = state.playlists,
@@ -324,7 +400,8 @@ private fun LibraryContent(
                 if (selectedCollection != null) {
                     onPlayQueue(selectedCollection.tracks, selectedCollection.tracks.indexOf(track))
                 } else {
-                    onTrackSelected(track)
+                    val index = visibleTracks.indexOfFirst { it.id == track.id }
+                    if (index >= 0) onPlayQueue(visibleTracks, index)
                 }
                 detailsTrack = null
             },
@@ -350,19 +427,19 @@ private fun LibraryContent(
                     detailsTrack = null
                 }
             },
-            onMoveUp = if (playlistId != null && playlistTrackIndex > 0) {
+            onMoveUp = if (playlistId != null && query.isBlank() && !favoritesOnly && playlistTrackIndex > 0) {
                 {
-                    onMovePlaylistTrack(playlistId, playlistTrackIndex, playlistTrackIndex - 1)
+                    onMovePlaylistTrack(playlistId, storedPlaylistOrder.indexOf(track.id), storedPlaylistOrder.indexOf(selectedCollection.tracks[playlistTrackIndex - 1].id))
                     detailsTrack = null
                 }
             } else null,
             onMoveDown = if (
-                playlistId != null &&
+                playlistId != null && query.isBlank() && !favoritesOnly &&
                 playlistTrackIndex >= 0 &&
                 playlistTrackIndex < selectedCollection.tracks.lastIndex
             ) {
                 {
-                    onMovePlaylistTrack(playlistId, playlistTrackIndex, playlistTrackIndex + 1)
+                    onMovePlaylistTrack(playlistId, storedPlaylistOrder.indexOf(track.id), storedPlaylistOrder.indexOf(selectedCollection.tracks[playlistTrackIndex + 1].id))
                     detailsTrack = null
                 }
             } else null,
@@ -403,9 +480,16 @@ private fun LibraryBrowseBar(
     browseMode: LibraryBrowseMode,
     sortOrder: LibrarySortOrder,
     favoritesOnly: Boolean,
+    trackCount: Int,
     onBrowseModeChanged: (LibraryBrowseMode) -> Unit,
     onSortOrderChanged: (LibrarySortOrder) -> Unit,
-    onToggleFavorites: () -> Unit,
+    customOrderAvailable: Boolean,
+    customOrderActive: Boolean,
+    manualOnly: Boolean,
+    onCustomOrder: () -> Unit,
+    showAlphabetOption: Boolean,
+    alphabetEnabled: Boolean,
+    onToggleAlphabet: () -> Unit,
 ) {
     var showSortMenu by remember { mutableStateOf(false) }
     val modes = LibraryBrowseMode.entries
@@ -415,7 +499,7 @@ private fun LibraryBrowseBar(
             .padding(horizontal = VesqenSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PrimaryScrollableTabRow(
+        if (!favoritesOnly) PrimaryScrollableTabRow(
             selectedTabIndex = modes.indexOf(browseMode),
             modifier = Modifier.weight(1f),
             edgePadding = 0.dp,
@@ -425,10 +509,15 @@ private fun LibraryBrowseBar(
             modes.forEach { mode ->
                 Tab(
                     selected = mode == browseMode,
+                    selectedContentColor = MaterialTheme.colorScheme.onSurface,
+                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     onClick = { onBrowseModeChanged(mode) },
                     text = {
                         Text(
                             text = stringResource(mode.labelResource()),
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = if (mode == browseMode) FontWeight.SemiBold else FontWeight.Normal,
+                            ),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -437,18 +526,10 @@ private fun LibraryBrowseBar(
                 )
             }
         }
-        IconButton(
-            onClick = onToggleFavorites,
-            modifier = Modifier.testTag("vesqen.library.favorites"),
-        ) {
-            Icon(
-                imageVector = if (favoritesOnly) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                contentDescription = stringResource(
-                    if (favoritesOnly) R.string.show_all_music else R.string.show_favorites,
-                ),
-                tint = if (favoritesOnly) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        if (favoritesOnly) Text(
+            pluralStringResource(R.plurals.library_song_total, trackCount, trackCount), Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Box {
             IconButton(
                 onClick = { showSortMenu = true },
@@ -463,52 +544,32 @@ private fun LibraryBrowseBar(
                 expanded = showSortMenu,
                 onDismissRequest = { showSortMenu = false },
             ) {
-                LibrarySortOrder.entries.forEach { order ->
+                if (customOrderAvailable) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.custom_track_order)) },
+                        onClick = { onCustomOrder(); showSortMenu = false },
+                        leadingIcon = if (customOrderActive) { { Icon(Icons.Filled.MusicNote, null) } } else null,
+                    )
+                }
+                if (showAlphabetOption) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(if (alphabetEnabled) R.string.hide_alphabet_index else R.string.show_alphabet_index)) },
+                        onClick = { onToggleAlphabet(); showSortMenu = false },
+                    )
+                }
+                LibrarySortOrder.entries.filter { !manualOnly }.forEach { order ->
                     DropdownMenuItem(
                         text = { Text(stringResource(order.labelResource())) },
                         onClick = {
                             onSortOrderChanged(order)
                             showSortMenu = false
                         },
-                        leadingIcon = if (order == sortOrder) {
+                        leadingIcon = if (order == sortOrder && !customOrderActive) {
                             { Icon(Icons.Filled.MusicNote, contentDescription = null) }
                         } else null,
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun TrackList(
-    tracks: List<AudioTrack>,
-    playback: PlaybackSnapshot,
-    onTrackSelected: (AudioTrack) -> Unit,
-    onTrackMore: (AudioTrack) -> Unit,
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = VesqenSpacing.md,
-            end = VesqenSpacing.md,
-            top = VesqenSpacing.xs,
-            bottom = VesqenSpacing.md,
-        ),
-        verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs),
-    ) {
-        items(
-            items = tracks,
-            key = AudioTrack::id,
-            contentType = { "track" },
-        ) { track ->
-            TrackRow(
-                track = track,
-                isCurrent = track.id == playback.trackId,
-                isPlaying = playback.isPlaying,
-                onPlay = { onTrackSelected(track) },
-                onMore = { onTrackMore(track) },
-            )
         }
     }
 }
@@ -654,6 +715,9 @@ private fun CollectionTrackList(
     onTrackSelected: (AudioTrack) -> Unit,
     onTrackMore: (AudioTrack) -> Unit,
     onEditPlaylist: (() -> Unit)?,
+    editing: Boolean = false,
+    saving: Boolean = false,
+    onReorder: (List<AudioTrack>) -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -680,7 +744,7 @@ private fun CollectionTrackList(
             }
             IconButton(
                 onClick = { onPlayQueue(collection.tracks, 0) },
-                enabled = collection.tracks.isNotEmpty(),
+                enabled = collection.tracks.isNotEmpty() && !editing,
             ) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.play_all))
             }
@@ -701,7 +765,8 @@ private fun CollectionTrackList(
             )
         } else {
             Box(modifier = Modifier.weight(1f)) {
-                TrackList(collection.tracks, playback, onTrackSelected, onTrackMore)
+                LibraryTrackList(collection.tracks, playback.trackId, playback.isPlaying, onTrackSelected, onTrackMore,
+                    editing = editing, saving = saving, onReorder = onReorder)
             }
         }
     }
@@ -795,40 +860,67 @@ private fun LibrarySortOrder.labelResource(): Int = when (this) {
 
 @Composable
 private fun LibraryHeader(
+    favoritesOnly: Boolean,
+    navigationEnabled: Boolean,
+    onOpenFavorites: () -> Unit,
+    onBack: () -> Unit,
     onAddLibraryFolder: () -> Unit,
     onRescan: () -> Unit,
     sourceActionsEnabled: Boolean,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = stringResource(R.string.destination_library),
-            style = MaterialTheme.typography.headlineLarge,
-            modifier = Modifier.weight(1f),
-        )
-        IconButton(
-            modifier = Modifier.size(48.dp).testTag("vesqen.library.add-folder"),
-            onClick = onAddLibraryFolder,
-            enabled = sourceActionsEnabled,
+    var showLibraryMenu by remember { mutableStateOf(false) }
+    val favoritesLink: @Composable () -> Unit = {
+        TextButton(
+            onClick = onOpenFavorites,
+            enabled = navigationEnabled,
+            contentPadding = PaddingValues(horizontal = 12.dp),
+            modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.library.favorites"),
         ) {
-            Icon(
-                imageVector = Icons.Filled.CreateNewFolder,
-                contentDescription = stringResource(R.string.add_music_folder),
-            )
+            Icon(Icons.Filled.FavoriteBorder, null, Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.library_favorites), style = MaterialTheme.typography.labelLarge)
         }
-        IconButton(
-            modifier = Modifier.size(48.dp).testTag("vesqen.library.rescan"),
-            onClick = onRescan,
-            enabled = sourceActionsEnabled,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Refresh,
-                contentDescription = stringResource(R.string.rescan_library),
-            )
+    }
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        val stackNavigation = maxWidth < 280.dp || LocalDensity.current.fontScale > 1.3f
+        Column {
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (favoritesOnly) IconButton(
+                    onClick = onBack, enabled = navigationEnabled,
+                    modifier = Modifier.size(48.dp).testTag("vesqen.library.back"),
+                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.show_all_music)) }
+                Text(
+                    stringResource(if (favoritesOnly) R.string.library_favorites else R.string.destination_library),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.headlineSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (!favoritesOnly) {
+                    if (!stackNavigation) favoritesLink()
+                    Box {
+                        IconButton(onClick = { showLibraryMenu = true }, enabled = sourceActionsEnabled,
+                            modifier = Modifier.size(48.dp).testTag("vesqen.library.menu")) {
+                            Icon(Icons.Filled.MoreVert, stringResource(R.string.library_actions))
+                        }
+                        DropdownMenu(expanded = showLibraryMenu, onDismissRequest = { showLibraryMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.add_music_folder)) },
+                                leadingIcon = { Icon(Icons.Filled.CreateNewFolder, null) },
+                                onClick = { showLibraryMenu = false; onAddLibraryFolder() },
+                                modifier = Modifier.testTag("vesqen.library.add-folder"),
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.rescan_library)) },
+                                leadingIcon = { Icon(Icons.Filled.Refresh, null) },
+                                onClick = { showLibraryMenu = false; onRescan() },
+                                modifier = Modifier.testTag("vesqen.library.rescan"),
+                            )
+                        }
+                    }
+                }
+            }
+            if (!favoritesOnly && stackNavigation) favoritesLink()
         }
     }
 }

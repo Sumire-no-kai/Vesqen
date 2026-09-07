@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen.library
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class LibraryBrowseTest {
@@ -43,6 +44,29 @@ class LibraryBrowseTest {
             listOf("Quiet", "Open"),
             sortLibraryCollections(albums, LibrarySortOrder.MOST_PLAYED).map(LibraryCollection::title),
         )
+    }
+
+    @Test
+    fun `album collection keys cannot collide through metadata separators`() {
+        val ambiguous = listOf(
+            tracks.first().copy(id = 10, albumArtist = "a::b", album = "c"),
+            tracks.first().copy(id = 11, albumArtist = "a", album = "b::c"),
+        )
+
+        val collections = buildLibraryCollections(LibraryBrowseMode.ALBUMS, ambiguous, emptyList())
+
+        assertEquals(2, collections.size)
+        assertEquals(2, collections.map(LibraryCollection::key).distinct().size)
+    }
+
+    @Test
+    fun `collection keys are namespaced by browse mode`() {
+        val track = tracks.first().copy(artist = "Ambient", genre = "Ambient")
+
+        val artistKey = buildLibraryCollections(LibraryBrowseMode.ARTISTS, listOf(track), emptyList()).single().key
+        val genreKey = buildLibraryCollections(LibraryBrowseMode.GENRES, listOf(track), emptyList()).single().key
+
+        assertNotEquals(artistKey, genreKey)
     }
 
     private fun track(

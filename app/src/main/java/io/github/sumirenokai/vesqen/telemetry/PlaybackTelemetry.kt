@@ -34,13 +34,21 @@ data class TelemetryObservation(
     val selection: TelemetryMetricSelection = TelemetryMetricSelection.Default,
 ) {
     init {
+        val effectiveIntervalMs = when (powerMode) {
+            TelemetryPowerMode.STANDARD -> refreshInterval.milliseconds
+            TelemetryPowerMode.LOW_POWER -> maxOf(refreshInterval.milliseconds, LOW_POWER_MIN_INTERVAL_MS)
+        }
         require(derivedWindowMs in MIN_DERIVATION_WINDOW_MS..MAX_DERIVATION_WINDOW_MS) {
             "A telemetry derivation window must be between $MIN_DERIVATION_WINDOW_MS and $MAX_DERIVATION_WINDOW_MS ms"
+        }
+        require(derivedWindowMs >= effectiveIntervalMs) {
+            "A telemetry derivation window cannot be shorter than its effective sampling interval"
         }
     }
 
     private companion object {
         const val MIN_DERIVATION_WINDOW_MS = 250L
+        const val LOW_POWER_MIN_INTERVAL_MS = 2_000L
         const val MAX_DERIVATION_WINDOW_MS = 60_000L
     }
 }

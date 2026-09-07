@@ -8,7 +8,11 @@ The formal Vesqen visual baseline is documented in [DESIGN.md](DESIGN.md) and th
 
 The installable app version is managed from the repository-level [`version.properties`](version.properties). See the [versioning guide](docs/VERSIONING.md) before preparing a release.
 
+The [architecture review](docs/ARCHITECTURE_REVIEW.md) records current ownership boundaries, local fixes, and the service-side output contract needed before M3.
+
 ## Development baseline
+
+The 2026-09-07 additions include in-place drag ordering for Favorites/playlists, an optional All Songs A-Z/# index, play/pause cover motion, and a centered scrubber. Audio Proof includes Bluetooth endpoint/route evidence with explicit unavailable codec/transport parameters and a compact dashboard. Authorized speaker testing now produces valid iQOO and Android 16 emulator instrumentation results, with sampling, persistence, privacy and layout evidence recorded in the M1/M2 acceptance gates. Local validation passes 180 unit tests, Debug lint and Debug/test APK assembly. Full milestone acceptance remains open for the remaining device/OS, peripheral, accessibility and performance checks; the emulator does not replace physical audio hardware.
 
 - Android 8.0+ (`minSdk 26`)
 - `compileSdk 36` and `targetSdk 36`

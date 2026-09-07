@@ -40,6 +40,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccountTree
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
@@ -68,6 +72,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,7 +92,6 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
@@ -107,7 +111,6 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.view.WindowCompat
-import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
@@ -161,16 +164,17 @@ fun NowScreen(
     isLandscape: Boolean,
     motionPolicy: VesqenMotionPolicy,
     modifier: Modifier = Modifier,
+    onToggleFavorite: (Long, Boolean) -> Unit = { _, _ -> },
 ) {
     if (!snapshot.hasActiveTrack) {
         NowEmbeddedEmptyState(modifier = modifier)
         return
     }
 
-    var showDetails by remember { mutableStateOf(false) }
-    var showQueue by remember { mutableStateOf(false) }
+    var showDetails by rememberSaveable { mutableStateOf(false) }
+    var showQueue by rememberSaveable { mutableStateOf(false) }
     var trackTransitionDirection by remember { mutableStateOf(TrackTransitionDirection.FORWARD) }
-    var focusContent by remember { mutableStateOf(NowFocusContent.ARTWORK) }
+    var focusContent by rememberSaveable { mutableStateOf(NowFocusContent.ARTWORK) }
     val trackPresentation = NowTrackPresentation(
         trackId = snapshot.trackId,
         title = snapshot.title,
@@ -284,6 +288,7 @@ fun NowScreen(
                 )
                 if (useLandscapeLayout) {
                     NowLandscapePlayerPage(
+                        favoriteAction = { NowFavoriteButton(currentTrack, onToggleFavorite) },
                         snapshot = snapshot,
                         trackPresentation = trackPresentation,
                         trackTransitionDirection = trackTransitionDirection,
@@ -314,6 +319,7 @@ fun NowScreen(
                 } else {
                     Column(modifier = Modifier.fillMaxSize()) {
                         NowHeader(
+                            favoriteAction = { NowFavoriteButton(currentTrack, onToggleFavorite) },
                             onBack = onBackToLibrary,
                             onToggleOrientation = onToggleOrientation,
                             showOrientationToggle = showOrientationToggle,
@@ -375,6 +381,7 @@ fun NowScreen(
         if (showDetails && currentTrack != null) {
             TrackDetailsSheet(
                 track = currentTrack,
+                onToggleFavorite = { onToggleFavorite(currentTrack.id, !currentTrack.isFavorite) },
                 onDismiss = { showDetails = false },
                 onPlay = {
                     onPlayTrack(currentTrack)
@@ -482,9 +489,6 @@ private fun FullPlayerSystemBars(immersive: Boolean) {
         val previousLightStatusBars = controller?.isAppearanceLightStatusBars
         val previousLightNavigationBars = controller?.isAppearanceLightNavigationBars
         val previousSystemBarsBehavior = controller?.systemBarsBehavior
-        val rootInsets = ViewCompat.getRootWindowInsets(view)
-        val previousStatusBarsVisible = rootInsets?.isVisible(WindowInsetsCompat.Type.statusBars())
-        val previousNavigationBarsVisible = rootInsets?.isVisible(WindowInsetsCompat.Type.navigationBars())
         val previousStatusBarContrast = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window?.isStatusBarContrastEnforced
         } else {
@@ -528,20 +532,9 @@ private fun FullPlayerSystemBars(immersive: Boolean) {
                 previousLightStatusBars?.let { systemBars.isAppearanceLightStatusBars = it }
                 previousLightNavigationBars?.let { systemBars.isAppearanceLightNavigationBars = it }
                 previousSystemBarsBehavior?.let { systemBars.systemBarsBehavior = it }
-                previousStatusBarsVisible?.let { wasVisible ->
-                    if (wasVisible) {
-                        systemBars.show(WindowInsetsCompat.Type.statusBars())
-                    } else {
-                        systemBars.hide(WindowInsetsCompat.Type.statusBars())
-                    }
-                }
-                previousNavigationBarsVisible?.let { wasVisible ->
-                    if (wasVisible) {
-                        systemBars.show(WindowInsetsCompat.Type.navigationBars())
-                    } else {
-                        systemBars.hide(WindowInsetsCompat.Type.navigationBars())
-                    }
-                }
+                // Library and secondary pages use visible system bars. Insets observed during
+                // a rotation animation can still report the preceding immersive player's state.
+                systemBars.show(WindowInsetsCompat.Type.systemBars())
             }
         }
     }
@@ -679,6 +672,7 @@ private fun NowPlayerPage(
 /** Landscape is a dedicated listening surface, not a compressed portrait dock. */
 @Composable
 private fun NowLandscapePlayerPage(
+    favoriteAction: @Composable () -> Unit,
     snapshot: PlaybackSnapshot,
     trackPresentation: NowTrackPresentation,
     trackTransitionDirection: TrackTransitionDirection,
@@ -794,8 +788,10 @@ private fun NowLandscapePlayerPage(
                         NowInfoFooter(
                             snapshot = snapshot,
                             focusContent = focusContent,
+                            showChainAction = isExtremeText,
                             onToggleFocusContent = onToggleFocusContent,
                             onCyclePlaybackOrder = onCyclePlaybackOrder,
+                            onOpenChain = onOpenChain,
                             onOpenDetails = onOpenDetails,
                             canOpenDetails = canOpenDetails,
                             motionPolicy = motionPolicy,
@@ -815,6 +811,7 @@ private fun NowLandscapePlayerPage(
             onClick = onBack,
             modifier = Modifier.align(Alignment.TopStart),
         )
+        Box(Modifier.align(Alignment.TopStart).padding(start = 48.dp)) { favoriteAction() }
     }
 }
 
@@ -907,8 +904,8 @@ private fun PlayerArtworkStage(
     val artworkScale by animateFloatAsState(
         // The cover settles when playback pauses and returns to its full presence on play. This
         // is a one-shot state transition, not a battery-costly decorative loop.
-        targetValue = if (motionPolicy.reduceMotion || isPlaying) 1f else .985f,
-        animationSpec = tween(motionPolicy.stateChangeMillis, easing = TrackTransitionEasing),
+        targetValue = if (motionPolicy.reduceMotion || isPlaying) 1f else .95f,
+        animationSpec = tween(if (motionPolicy.reduceMotion) 0 else 220, easing = TrackTransitionEasing),
         label = "vesqen.now.artwork-play-state",
     )
     Surface(
@@ -1031,8 +1028,10 @@ private fun NowTransportDock(
             NowInfoFooter(
                 snapshot = snapshot,
                 focusContent = focusContent,
+                showChainAction = isExtremeText,
                 onToggleFocusContent = onToggleFocusContent,
                 onCyclePlaybackOrder = onCyclePlaybackOrder,
+                onOpenChain = onOpenChain,
                 onOpenDetails = onOpenDetails,
                 canOpenDetails = canOpenDetails,
                 motionPolicy = motionPolicy,
@@ -1171,8 +1170,10 @@ private fun PlaybackProblemBanner(
 private fun NowInfoFooter(
     snapshot: PlaybackSnapshot,
     focusContent: NowFocusContent,
+    showChainAction: Boolean,
     onToggleFocusContent: () -> Unit,
     onCyclePlaybackOrder: () -> Unit,
+    onOpenChain: () -> Unit,
     onOpenDetails: () -> Unit,
     canOpenDetails: Boolean,
     motionPolicy: VesqenMotionPolicy,
@@ -1218,7 +1219,9 @@ private fun NowInfoFooter(
             .fillMaxWidth()
             .height(48.dp),
     ) {
-        val focusControlWidth = (maxWidth - 96.dp).coerceAtMost(208.dp)
+        val focusControlWidth = (
+            maxWidth - if (showChainAction) 144.dp else 96.dp
+            ).coerceAtMost(208.dp)
         Row(
             modifier = Modifier.fillMaxSize(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1244,6 +1247,19 @@ private fun NowInfoFooter(
                     .width(focusControlWidth)
                     .height(48.dp),
             )
+            if (showChainAction) {
+                IconButton(
+                    onClick = onOpenChain,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .testTag("vesqen.now.open-chain"),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.AccountTree,
+                        contentDescription = stringResource(R.string.open_playback_chain),
+                    )
+                }
+            }
             NowInfoButton(
                 onClick = onOpenDetails,
                 enabled = canOpenDetails,
@@ -1526,6 +1542,7 @@ private fun NowInfoButton(
 
 @Composable
 private fun NowHeader(
+    favoriteAction: @Composable () -> Unit,
     onBack: () -> Unit,
     onToggleOrientation: () -> Unit,
     showOrientationToggle: Boolean,
@@ -1549,11 +1566,28 @@ private fun NowHeader(
             softWrap = false,
             overflow = TextOverflow.Ellipsis,
         )
+        favoriteAction()
         if (showOrientationToggle) {
             NowOrientationButton(onClick = onToggleOrientation, isLandscape = isLandscape)
         } else {
             Spacer(Modifier.size(48.dp))
         }
+    }
+}
+
+@Composable
+private fun NowFavoriteButton(track: AudioTrack?, onToggleFavorite: (Long, Boolean) -> Unit) {
+    IconToggleButton(
+        checked = track?.isFavorite == true,
+        onCheckedChange = { favorite -> track?.let { onToggleFavorite(it.id, favorite) } },
+        enabled = track != null,
+        modifier = Modifier.size(48.dp).testTag("vesqen.now.favorite"),
+    ) {
+        Icon(
+            if (track?.isFavorite == true) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+            stringResource(if (track?.isFavorite == true) R.string.remove_favorite else R.string.favorite),
+            tint = if (track?.isFavorite == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
@@ -1705,23 +1739,27 @@ private fun PlaybackProgress(
                 colors = colors,
                 interactionSource = interactionSource,
                 thumb = {
-                    SliderDefaults.Thumb(
-                        interactionSource = interactionSource,
-                        colors = colors,
-                        enabled = snapshot.isControllerReady,
-                        thumbSize = DpSize(12.dp, 12.dp),
-                    )
+                    // Match the touch container: Material3 otherwise top-aligns a small thumb
+                    // inside its minimum track height, shifting its visible center upward.
+                    Box(Modifier.size(width = 12.dp, height = 48.dp), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(12.dp).background(
+                            if (snapshot.isControllerReady) colors.thumbColor else colors.disabledThumbColor,
+                            androidx.compose.foundation.shape.CircleShape,
+                        ))
+                    }
                 },
                 track = { sliderState ->
-                    SliderDefaults.Track(
-                        sliderState = sliderState,
-                        modifier = Modifier.height(4.dp),
-                        enabled = snapshot.isControllerReady,
-                        colors = colors,
-                        drawStopIndicator = null,
-                        thumbTrackGapSize = 0.dp,
-                        trackInsideCornerSize = 2.dp,
-                    )
+                    val active = if (snapshot.isControllerReady) colors.activeTrackColor else colors.disabledActiveTrackColor
+                    val inactive = if (snapshot.isControllerReady) colors.inactiveTrackColor else colors.disabledInactiveTrackColor
+                    androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(4.dp)) {
+                        val fraction = ((sliderState.value - sliderState.valueRange.start) /
+                            (sliderState.valueRange.endInclusive - sliderState.valueRange.start)).coerceIn(0f, 1f)
+                        val rtl = layoutDirection == androidx.compose.ui.unit.LayoutDirection.Rtl
+                        val start = androidx.compose.ui.geometry.Offset(if (rtl) size.width else 0f, size.height / 2f)
+                        val end = androidx.compose.ui.geometry.Offset(if (rtl) 0f else size.width, size.height / 2f)
+                        drawLine(inactive, start, end, size.height, androidx.compose.ui.graphics.StrokeCap.Round)
+                        if (fraction > 0f) drawLine(active, start, start + (end - start) * fraction, size.height, androidx.compose.ui.graphics.StrokeCap.Round)
+                    }
                 },
             )
         }

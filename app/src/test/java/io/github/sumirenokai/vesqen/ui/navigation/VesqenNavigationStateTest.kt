@@ -12,6 +12,27 @@ class VesqenNavigationStateTest {
     }
 
     @Test
+    fun `full player opened from settings returns to settings`() {
+        val now = VesqenNavigationState()
+            .selectTopLevel(VesqenDestination.SETTINGS)
+            .selectTopLevel(VesqenDestination.NOW)
+
+        assertEquals(VesqenDestination.SETTINGS, now.back().destination)
+    }
+
+    @Test
+    fun `chain opened in player preserves the player origin`() {
+        val chain = VesqenNavigationState()
+            .selectTopLevel(VesqenDestination.SETTINGS)
+            .selectTopLevel(VesqenDestination.NOW)
+            .openChain()
+
+        val now = chain.back()
+        assertEquals(VesqenDestination.NOW, now.destination)
+        assertEquals(VesqenDestination.SETTINGS, now.back().destination)
+    }
+
+    @Test
     fun `back from chain opened in player returns to player then library`() {
         val chain = VesqenNavigationState()
             .selectTopLevel(VesqenDestination.NOW)

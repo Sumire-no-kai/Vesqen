@@ -4,6 +4,7 @@ package io.github.sumirenokai.vesqen.library
  * Metadata read from a locally authorised MediaStore or SAF source. The URI is kept as an opaque
  * content URI so playback never needs to retain a private filesystem path.
  */
+@androidx.compose.runtime.Immutable
 data class AudioTrack(
     val id: Long,
     val contentUri: String,
@@ -40,6 +41,7 @@ data class AudioTrack(
     val isFavorite: Boolean = false,
     val lastPlayedAtMs: Long = 0,
     val playCount: Int = 0,
+    val favoritePosition: Long? = null,
 ) {
     fun displaySubtitle(): String =
         listOf(artist, album)

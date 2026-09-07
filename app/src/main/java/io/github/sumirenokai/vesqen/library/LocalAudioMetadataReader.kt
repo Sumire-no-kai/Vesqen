@@ -7,6 +7,7 @@ import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import androidx.core.net.toUri
+import java.io.IOException
 
 /**
  * Reads bounded textual and technical metadata for a new or changed local item.
@@ -20,6 +21,13 @@ internal class LocalAudioMetadataReader(private val context: Context) {
         val uri = runCatching { candidate.contentUri.toUri() }.getOrNull() ?: return candidate
         val tagMetadata = readTags(uri)
         val streamMetadata = readStream(uri)
+        val sourceHeader = try {
+            context.contentResolver.openInputStream(uri)?.use(::readSourceAudioHeader)
+        } catch (_: IOException) {
+            null
+        } catch (_: SecurityException) {
+            null
+        }
         val resolvedMime = streamMetadata.mimeType.ifBlank {
             tagMetadata.mimeType.ifBlank { candidate.mimeType }
         }
@@ -38,9 +46,9 @@ internal class LocalAudioMetadataReader(private val context: Context) {
                 mimeType = resolvedMime,
                 fileName = candidate.fileName,
             ),
-            channelCount = streamMetadata.channelCount ?: candidate.channelCount,
-            bitDepth = streamMetadata.bitDepth ?: candidate.bitDepth,
-            sampleRateHz = streamMetadata.sampleRateHz ?: candidate.sampleRateHz,
+            channelCount = sourceHeader?.channels ?: streamMetadata.channelCount ?: candidate.channelCount,
+            bitDepth = sourceHeader?.bitDepth ?: streamMetadata.bitDepth,
+            sampleRateHz = sourceHeader?.sampleRate ?: streamMetadata.sampleRateHz ?: candidate.sampleRateHz,
             bitrate = streamMetadata.bitrate ?: tagMetadata.bitrate ?: candidate.bitrate,
         )
     }
@@ -127,7 +135,10 @@ private fun String.leadingNumber(): Int? = substringBefore('/').trim().toIntOrNu
 private fun MediaFormat.toStreamMetadata(): StreamMetadata = StreamMetadata(
     mimeType = stringOrEmpty(MediaFormat.KEY_MIME),
     channelCount = positiveInt(MediaFormat.KEY_CHANNEL_COUNT),
-    bitDepth = positiveInt(BITS_PER_SAMPLE_KEY) ?: pcmEncodingBitDepth(positiveInt(MediaFormat.KEY_PCM_ENCODING)),
+    // For compressed sources pcm-encoding can describe decoder output (16-bit on old ROMs).
+    bitDepth = positiveInt(BITS_PER_SAMPLE_KEY) ?: if (stringOrEmpty(MediaFormat.KEY_MIME) == "audio/raw") {
+        pcmEncodingBitDepth(positiveInt(MediaFormat.KEY_PCM_ENCODING))
+    } else null,
     sampleRateHz = positiveInt(MediaFormat.KEY_SAMPLE_RATE),
     bitrate = positiveInt(MediaFormat.KEY_BIT_RATE),
 )

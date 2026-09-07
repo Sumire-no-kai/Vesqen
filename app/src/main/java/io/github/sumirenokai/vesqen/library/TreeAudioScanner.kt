@@ -3,6 +3,8 @@ package io.github.sumirenokai.vesqen.library
 import android.content.ContentResolver
 import android.net.Uri
 import android.provider.DocumentsContract
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /** Walks a persisted Storage Access Framework tree without resolving it to a filesystem path. */
 internal class TreeAudioScanner(
@@ -32,11 +34,13 @@ internal class TreeAudioScanner(
         DEFAULT_FOLDER_NAME
     }
 
-    fun scan(
+    suspend fun scan(
         treeUri: Uri,
         shouldPause: () -> Boolean,
         onAudioDocument: (TreeAudioDocument) -> Unit,
     ): ScanIterationResult {
+        val scanContext = currentCoroutineContext()
+        scanContext.ensureActive()
         val pendingDirectories = ArrayDeque<DirectoryToScan>().apply {
             add(
                 DirectoryToScan(
@@ -48,6 +52,7 @@ internal class TreeAudioScanner(
         val visitedDirectories = mutableSetOf<String>()
         var processedTrackCount = 0
         while (pendingDirectories.isNotEmpty()) {
+            scanContext.ensureActive()
             if (shouldPause()) {
                 return ScanIterationResult(completed = false, processedTrackCount = processedTrackCount)
             }
@@ -70,6 +75,7 @@ internal class TreeAudioScanner(
                 val sizeIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
                 buildList {
                     while (cursor.moveToNext()) {
+                        scanContext.ensureActive()
                         if (shouldPause()) {
                             return ScanIterationResult(completed = false, processedTrackCount = processedTrackCount)
                         }
@@ -96,6 +102,7 @@ internal class TreeAudioScanner(
                     }
                 }
             }
+            scanContext.ensureActive()
             val artworkDocument = entries.firstOrNull { entry ->
                 isSameDirectoryCover(entry.mimeType, entry.displayName)
             }
@@ -106,6 +113,7 @@ internal class TreeAudioScanner(
                 libraryFingerprint(entry.documentId, entry.lastModifiedMs, entry.sizeBytes)
             }.orEmpty()
             entries.forEach { entry ->
+                scanContext.ensureActive()
                 if (entry.mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
                     val childPath = listOf(directory.displayPath, entry.displayName)
                         .filter(String::isNotBlank)
@@ -162,6 +170,7 @@ internal data class TreeAudioDocument(
 ) {
     val fingerprint: String = libraryFingerprint(
         "tree",
+        LIBRARY_METADATA_REVISION,
         documentId,
         contentUri,
         displayName,

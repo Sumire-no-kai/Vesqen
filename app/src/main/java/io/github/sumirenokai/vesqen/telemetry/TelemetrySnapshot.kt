@@ -53,6 +53,7 @@ enum class TelemetryUnit {
     NANOSECONDS,
     PERCENT,
     COUNT,
+    COUNT_PER_SECOND,
     CELSIUS,
     VOLTS,
     MILLIAMPERES,
@@ -81,6 +82,8 @@ sealed interface TelemetryReading {
             require(value.isFinite()) { "Telemetry decimals must be finite" }
         }
     }
+
+    data class UsbInventory(val value: UsbInventoryReading) : TelemetryReading
 }
 
 enum class TelemetryConfidence {
@@ -223,9 +226,61 @@ data class TelemetryMetric(
     init {
         TelemetryMetricCatalog.requireValid(this)
     }
+
+}
+
+/** Structured USB facts keep each permission/interface tuple together and intentionally have no
+ * serial number or usbfs-path field. Android audio endpoints are separate because public APIs do
+ * not reliably map them back to a particular UsbDevice. */
+data class UsbInventoryReading(
+    val hostDevices: List<UsbHostDeviceReading>,
+    val audioOutputEndpoints: List<UsbAudioOutputEndpointReading>,
+)
+
+data class UsbHostDeviceReading(
+    val snapshotKey: String,
+    val manufacturerName: String?,
+    val productName: String?,
+    val vendorId: Int,
+    val productId: Int,
+    val permissionGranted: Boolean,
+    val audioInterfaces: List<UsbAudioInterfaceReading>,
+) {
+    init {
+        require(snapshotKey.isNotBlank()) { "USB snapshot keys cannot be blank" }
+        require(vendorId in 0..0xffff && productId in 0..0xffff) { "USB ids must be unsigned 16-bit values" }
+    }
+}
+
+data class UsbAudioInterfaceReading(
+    val interfaceClass: Int,
+    val interfaceSubclass: Int,
+    val interfaceProtocol: Int,
+)
+
+data class UsbAudioOutputEndpointReading(
+    val snapshotKey: String,
+    val productName: String?,
+    val type: String,
+    /** Empty platform arrays mean arbitrary values; the explicit flags preserve that meaning. */
+    val sampleRatesHz: List<Int>,
+    val arbitrarySampleRate: Boolean,
+    val channelCounts: List<Int>,
+    val arbitraryChannelCount: Boolean,
+    val encodings: List<String>,
+    val arbitraryEncoding: Boolean,
+) {
+    init {
+        require(snapshotKey.isNotBlank()) { "USB audio endpoint keys cannot be blank" }
+        require(type.isNotBlank()) { "USB audio endpoint types cannot be blank" }
+        require(sampleRatesHz.all { it > 0 }) { "USB sample rates must be positive" }
+        require(channelCounts.all { it > 0 }) { "USB channel counts must be positive" }
+        require(encodings.all(String::isNotBlank)) { "USB encodings cannot be blank" }
+    }
 }
 
 enum class TelemetryEventKind {
+    MEDIA_ITEM_CHANGED,
     PLAYBACK_STATE_CHANGED,
     FORMAT_CHANGED,
     ROUTE_CHANGED,
@@ -247,7 +302,7 @@ enum class TelemetryEventSeverity {
 }
 
 data class TelemetryEvent(
-    /** Monotonically increasing inside one playback session or diagnostic recording. */
+    /** Monotonically increasing inside one telemetry runtime and allowed to span playback sessions. */
     val sequence: Long,
     val kind: TelemetryEventKind,
     val severity: TelemetryEventSeverity,
@@ -293,6 +348,17 @@ data class TelemetrySnapshot(
             event.occurredAtElapsedRealtimeMs <= capturedAtElapsedRealtimeMs
         }) {
             "Telemetry events cannot occur after their containing snapshot"
+        }
+        require(metrics.all { metric ->
+            metric.evidence.observedAtElapsedRealtimeMs <= capturedAtElapsedRealtimeMs
+        }) {
+            "Telemetry evidence cannot be observed after its containing snapshot"
+        }
+        require(metrics.all { metric ->
+            val derived = metric.evidence as? TelemetryEvidence.Derived
+            derived == null || derived.window.endedAtElapsedRealtimeMs <= capturedAtElapsedRealtimeMs
+        }) {
+            "Telemetry derivation windows cannot end after their containing snapshot"
         }
         val availableMetricIds = metrics.mapTo(mutableSetOf(), TelemetryMetric::id)
         metrics.forEach { metric ->

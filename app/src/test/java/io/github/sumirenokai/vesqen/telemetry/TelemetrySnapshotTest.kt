@@ -25,7 +25,7 @@ class TelemetrySnapshotTest {
                 endedAtElapsedRealtimeMs = 16_000,
             ),
             calculationId = "rate.bytes_per_window",
-            inputMetricIds = setOf(TelemetryMetricCatalog.PLAYBACK_SOURCE_BYTES_READ),
+            inputMetricIds = setOf(TelemetryMetricCatalog.PROCESS_DATA_SOURCE_BYTES_TRANSFERRED),
             operands = mapOf(
                 "bytes.delta" to 960_000.0,
                 "window.seconds" to 5.0,
@@ -149,13 +149,13 @@ class TelemetrySnapshotTest {
     @Test
     fun `snapshot retains every input needed by a derived value`() {
         val sourceBytes = TelemetryMetric(
-            id = TelemetryMetricCatalog.PLAYBACK_SOURCE_BYTES_READ,
-            section = TelemetrySection.PLAYBACK,
+            id = TelemetryMetricCatalog.PROCESS_DATA_SOURCE_BYTES_TRANSFERRED,
+            section = TelemetrySection.PROCESS,
             evidence = measured(TelemetryReading.Integer(1_024, TelemetryUnit.BYTES)),
         )
         val bitrate = TelemetryMetric(
-            id = TelemetryMetricCatalog.PLAYBACK_SOURCE_READ_BITRATE,
-            section = TelemetrySection.PLAYBACK,
+            id = TelemetryMetricCatalog.PROCESS_DATA_SOURCE_READ_THROUGHPUT,
+            section = TelemetrySection.PROCESS,
             evidence = TelemetryEvidence.Derived(
                 reading = TelemetryReading.Decimal(8_192.0, TelemetryUnit.BITS_PER_SECOND),
                 source = playerSource,

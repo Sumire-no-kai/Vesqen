@@ -1,5 +1,9 @@
 package io.github.sumirenokai.vesqen.playback
 
+import android.app.PendingIntent
+import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
@@ -10,10 +14,14 @@ import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.MainActivity
 import io.github.sumirenokai.vesqen.VesqenApplication
 
+@androidx.annotation.OptIn(UnstableApi::class)
 class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
+    private var playbackStateKeeper: PlaybackStateKeeper? = null
+    private var sessionArtworkLoader: SessionArtworkLoader? = null
 
     @UnstableApi
     override fun onCreate() {
@@ -40,18 +48,43 @@ class PlaybackService : MediaSessionService() {
             pauseAtEndOfMediaItems = false
         }
         telemetry.attachPlayer(player)
-        mediaSession = MediaSession.Builder(this, player).build()
+        playbackStateKeeper = PlaybackStateKeeper(
+            player = player,
+            stateStore = PlaybackStateStore(this),
+            handler = Handler(Looper.getMainLooper()),
+            onPlaybackStarted = (application as VesqenApplication)
+                .playbackHistoryRecorder::recordPlayback,
+        ).also(PlaybackStateKeeper::start)
+        val artworkLoader = SessionArtworkLoader(this).also { sessionArtworkLoader = it }
+        val sessionActivity = PendingIntent.getActivity(this, 0,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        mediaSession = MediaSession.Builder(this, player)
+            .setBitmapLoader(artworkLoader)
+            .setSessionActivity(sessionActivity)
+            .build()
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
+    @UnstableApi
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
+        mediaSession.takeIf {
+            // The service remains exported so Android system controls, media buttons, trusted
+            // assistants and this app can reach it. An arbitrary local app does not need read
+            // access to the user's current title or queue.
+            controllerInfo.isTrusted
+        }
 
     override fun onDestroy() {
+        playbackStateKeeper?.stop()
+        playbackStateKeeper = null
         mediaSession?.run {
             (application as VesqenApplication).telemetryRuntime.detachPlayer(player as ExoPlayer)
             player.release()
             release()
         }
         mediaSession = null
+        sessionArtworkLoader?.close()
+        sessionArtworkLoader = null
         super.onDestroy()
     }
 }

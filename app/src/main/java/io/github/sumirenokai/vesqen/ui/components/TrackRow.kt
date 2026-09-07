@@ -36,9 +36,12 @@ fun TrackRow(
     onPlay: () -> Unit,
     onMore: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    trailingContent: (@Composable () -> Unit)? = null,
 ) {
     val title = track.title.ifBlank { stringResource(R.string.unknown_title) }
-    val subtitle = track.displaySubtitle().ifBlank { stringResource(R.string.unknown_artist) }
+    val subtitle = androidx.compose.runtime.remember(track.artist, track.album) { track.displaySubtitle() }
+        .ifBlank { stringResource(R.string.unknown_artist) }
     val accessibilityLabel = stringResource(R.string.track_row_description, title, subtitle)
     Row(
         modifier = modifier
@@ -46,7 +49,7 @@ fun TrackRow(
             .heightIn(min = 72.dp)
             .testTag("vesqen.library.track.${track.id}")
             .semantics { contentDescription = accessibilityLabel }
-            .clickable(onClick = onPlay),
+            .clickable(enabled = enabled, onClick = onPlay),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AlbumArtwork(track = track, targetSize = 48.dp, modifier = Modifier.size(48.dp))
@@ -78,7 +81,7 @@ fun TrackRow(
                 modifier = Modifier.size(24.dp),
             )
         }
-        IconButton(
+        if (trailingContent != null) trailingContent() else IconButton(
             modifier = Modifier.size(48.dp).testTag("vesqen.library.track.${track.id}.more"),
             onClick = onMore,
         ) {
