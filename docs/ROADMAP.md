@@ -5,7 +5,7 @@ The normative scope, acceptance criteria, and product boundaries live in [PRD.md
 - **M0 — Foundation:** Android scaffold, durable package identity, build/lint/unit-test workflow, CI, contributor documentation, and evidence-level rules.
 - **M1 — Local player MVP:** MediaStore/SAF library, Media3-based playback, metadata, queue, background controls, focus handling, ordinary Android routes, the formal `Library / Now / Settings` shell, and the secondary Chain evidence surface.
 - **M2 — Audio Proof:** auditable source/decoder/processing/route telemetry with explicit confidence levels.
-- **M3 — Android 14+ USB bit-perfect:** capability-gated official mixer attributes, centralized strategy decisions, and fail-closed behavior.
+- **M3 — Android 14+ USB bit-perfect and Library performance convergence:** capability-gated official mixer attributes, centralized strategy decisions, fail-closed behavior, plus root-cause analysis and a two-device verified fix for Library home fast-scroll jank.
   - [Implementation checklist and entry conditions](M3_IMPLEMENTATION_PLAN.md): software development may begin while M2 acceptance remains open; hardware delivery still requires the PRD device matrix.
 - **M4 — Verification and public beta:** device matrix, external bit-perfect evidence, endurance testing, accessibility, localization, and performance budgets.
 - **M5+ — Conditional extensions:** advanced formats, DAC lab, incremental playback-kernel work, legacy USB experiments, and optional on-device audio intelligence.
