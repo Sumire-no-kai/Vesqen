@@ -46,7 +46,7 @@
 | 组合/门禁 | 状态 | 当前证据与关闭条件 |
 | --- | --- | --- |
 | Honor STF-AL00 / Android 9 / API 28 / 普通系统输出 | `PARTIAL_PASS` | 候选 APK 身份、签名 registry 存储/拒绝、55 项 UI、普通扬声器短流程、100 次 Chain 生命周期和数据保留已通过；Debug 启动/体积基线已采集。不具备 API 34 mixer，不能进入严格 USB 或 VERIFIED。详见下方执行记录。 |
-| iQOO V2171A / Android 15 / API 35 / 无 DAC | `NOT_TESTED` | 最终候选需要重跑 API 34 无 DAC fail-closed、M4 UI/Settings/Chain 和现代系统兼容；开始前由用户连接。 |
+| iQOO V2171A / Android 15 / API 35 / 无 DAC | `PARTIAL_PASS` | 最终候选的 registry/cache 3 项、无 DAC 严格模式 8 轮 fail-closed、55 个不同 UI 用例、100 次 Chain 生命周期、Profile 启动基线和覆盖安装数据保留已有证据；因没有 DAC，不能证明严格 USB `ACTIVE` 或 `VERIFIED`。详见下方执行记录。 |
 | Android 14+ 手机 A × DAC A/B | `MISSING_DEVICE` | 需要真实 UAC 设备、支持/不支持格式、设置/读回/route、拔插与失败清理。 |
 | Android 14+ 手机 B × DAC A/B | `MISSING_DEVICE` | 第二台现代手机不得由 Honor API 28 或模拟器替代。 |
 | 至少一条外部数字逐样本组合 | `MISSING_DEVICE` | 需要有效签名记录并在精确组合上实际显示 VERIFIED。 |
@@ -80,7 +80,7 @@
 - registry 首轮 2 项在 API 28 因 `InputStream.readNBytes` 不存在而失败；原始失败保留在私有 `verification-repository.txt`。改为有界兼容读取后，独立 2/2 通过；随后包含有效签名、错误签名不替换、Settings 导入 fail-closed 和 150% 英文 Playback progress 的最终定向批次 4/4 通过。
 - 最终 UI runner 55/55 通过；其中 About 首轮因新增设置行后入口位于视口外、VERIFIED 展示首轮因 Chain 摘要位于视口外而失败。测试改为执行真实滚动后分别定向复测通过，完整 55 项再跑通过，没有删减产品断言。最终 app 上的 registry/运行身份缓存 3/3、普通扬声器切歌/seek/暂停/观察者释放 1/1 通过；较早同功能候选上的 Chain 100 次进出、诊断、前后台、旋转、隐私和释放 1/1 通过。
 - 一次把整个扬声器测试类误加入组合 runner，UI 55 项完成后进入首个 sampling soak 时被立即中断；该批次没有 `result.json`，不计整套通过，也没有继续执行用户暂缓的长时测试。随后独立 UI 55/55 和明确方法级扬声器短测 1/1 通过，原始中断目录保留。
-- Debug 基线明确不是 Release 验收：采集时 app APK 哈希为 `7d5c3a8a...`，并非上面的最终 `f5229e5c...`；两者体积均为 24,721,095 bytes，小于 PRD 的 30 MB 预算。5 次 `ThisTime` 为 4299/4304/4291/4310/4380 ms，中位数 4304 ms。`TotalTime` 首次受系统恢复影响为 51489 ms，其余为 4304/4291/4310/4380 ms，中位数 4310 ms；不能丢弃首轮原始值后宣称全为约 4.3 秒。CPU、内存、gfx、battery 与 thermal 原始输出均保留，thermal 在该 ROM 上为空。最终 APK 的 Release/Profile 性能基线仍须另采。
+- Debug 基线明确不是 Release 验收：采集时 app APK 哈希为 `7d5c3a8a...`，并非上面的最终 `f5229e5c...`；两者体积均为 24,721,095 bytes，小于 PRD 的 30 MB 预算。5 次 `ThisTime` 为 4299/4304/4291/4310/4380 ms，中位数 4304 ms。`TotalTime` 首次受系统恢复影响为 51489 ms，其余为 4304/4291/4310/4380 ms，中位数 4310 ms；不能丢弃首轮原始值后宣称全为约 4.3 秒。CPU、内存、gfx、battery 与 thermal 原始输出均保留，thermal 在该 ROM 上为空。Honor 上最终 APK 的 Release/Profile 性能基线仍须另采。
 - 覆盖安装前后逻辑用户数据一致：40 首曲目、1 个来源、0 个歌单/条目；排除扫描瞬态 `seen_epoch` 后曲目字段摘要一致，来源身份/授权摘要一致。测试清空的播放队列偏好已从测试前备份精确恢复，最终 XML SHA-256 为 `92b21d976f0c1944fbd83307b2204d5eba84cd53877e3d818f7b6a7212f9b302`。设备端仅清理本轮明确创建的 `speaker-acceptance` 和两个 WAV；可从主机归档 `speaker-acceptance-device.tar` 恢复，用户音乐未改动。
 - 以上 runner、备份和原始指标位于未提交的 `build/qa/m4-honor-20260908`。它们证明当前候选的 Honor/API 28 普通输出与软件路径，不证明 API 34 严格 USB、真实 DAC、外部数字逐样本、Release 性能、长时稳定性或完整 M4 验收。
 
@@ -89,3 +89,12 @@
 - JDK 21 下 `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleProfile :app:assembleRelease :app:assembleDebugAndroidTest` 通过：199 项 JVM 测试，0 failure/error/skip；Lint 0 error / 21 warning；182 个 Gradle 任务成功。
 - 最终产物：Debug `f5229e5c1fdf1123bd92d59e97f9192fabe1ca78d806b893de751f6aa8805715`（24,721,095 bytes），Profile `140ecec5ade2b0b92036d052222f41c196fdc09ccacc423d438410ea207ebe0f`（15,963,112 bytes），unsigned Release `82e185ab1bf59ad92a59cc68fced8015b9691f8ad71b2b539f54a56aaffc237b`（15,954,892 bytes），test APK `bd21f6541a15a2e152f5ca5cd46890685545fd93bcf4485cfc26277ff319581c`（1,329,991 bytes）。unsigned Release 只证明构建，不是发布签名候选。
 - Python 工具回归 13/13 通过；使用临时 RSA/PKCS12 key 完成 payload prepare、Java signer 自检与 registry inspect 冒烟。`inspect` 按设计只报告结构与 `signatureCryptographicallyVerified=false`，不冒充应用端验签。
+
+### 2026-09-08 · iQOO 现代系统候选
+
+- 设备是 vivo/iQOO `V2171A`、Android 15 / API 35，ROM fingerprint 仅以 SHA-256 `686b0eea4b6d4eb3edc2f73e383c04b3178894e375ae97f8160e0c82fbe5d19e` 记录。最终 Debug app/test APK 的 SHA-256 分别为 `f5229e5c1fdf1123bd92d59e97f9192fabe1ca78d806b893de751f6aa8805715` 与 `bd21f6541a15a2e152f5ca5cd46890685545fd93bcf4485cfc26277ff319581c`，均与本地候选一致。
+- registry 与运行身份缓存 3/3 通过。无 DAC 严格模式定向用例 1/1 通过：连续 8 轮均未错误进入 `AVAILABLE`/`ACTIVE`，并且只有用户选择普通系统输出后才恢复播放；这证明 API 35 无外设时 fail closed，不证明真实 USB 路由。
+- Chain 生命周期用例 1/1 通过，耗时 79.018 秒，覆盖 100 次进出、前后台、旋转、诊断、隐私和观察者释放。UI 首轮完成 54/55；首例因同 Activity 前台宿主竞争而未取得 Compose hierarchy。该缺失用例随后以独立 `MainActivity` 宿主在相同最终 APK 上 1/1 通过。再次把宿主应用到整套时第二例在断言前触发 vivo `startActivitySync` 后台启动超时，因此保留原失败，不把两批拼成一份全绿 runner；当前证据覆盖 55 个不同 UI 用例，但不存在单次 55/55 报告。
+- 最终 Debug 的 5 次冷启动 `TotalTime` 为 1503/1605/1758/1748/1834 ms，中位数 1748 ms，只作可调试包比较。不可调试 Profile APK 哈希为 `140ecec5ade2b0b92036d052222f41c196fdc09ccacc423d438410ea207ebe0f`，5 次冷启动为 370/414/427/457/462 ms，中位数 427 ms、范围 370–462 ms；启动、APK 体积和资源快照不替代 Library/Chain 滑动、长时功耗或 Release 签名验收。
+- 覆盖安装与测试前有 112 首曲目、1 个来源、0 个歌单/条目。测试前后排除扫描瞬态的曲目用户字段、来源身份/授权、歌单和条目摘要分别保持一致；最终又从有效 Debug 备份精确恢复。重新导出的 31 个私有文件逐文件 SHA-256 与测试前 31/31 一致，播放状态 XML 恢复为 `f9bf8cacb5ad2c76af909249a1ca8d3ee364026945df161fe3c099409ee8d13e`。两次因旧 Profile 不可调试而只包含 `run-as` 错误文本的 61-byte 文件明确判为无效备份，未用于恢复。
+- 原始 runner、基线、有效备份与逐文件核对位于未提交的 `build/qa/m4-iqoo-20260908`。设备最终保留 `0.4.0-beta.1` / `9` Debug 包、应用进程停止且用户数据精确恢复；未修改用户音乐。没有连接 DAC，故真实 mixer attributes、AudioTrack USB route、拔插、外部数字逐样本和 `VERIFIED` 继续为硬件门禁。

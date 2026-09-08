@@ -26,6 +26,7 @@
 
 - 当前没有完成两台 Android 14+ 手机 × 两款 DAC 的严格 USB 矩阵，也没有外部数字逐样本 VERIFIED 组合时，不得宣传完整 bit-perfect 支持。
 - Honor Android 9 只能验证普通输出与旧系统兼容，不能验证 Android 14 mixer。
+- iQOO Android 15 已验证无 DAC 时严格模式 fail closed、适用 UI/生命周期、Profile 启动基线和数据保留；没有真实 DAC 时仍不能验证严格 USB `ACTIVE` 或任何 `VERIFIED` 组合。
 - Library 首页卡顿的 M3-R1 根因、实际业务修复与双机 A/B 仍开放。
 - 长时播放、完整外设/中断、折叠屏、高刷新率和完整 TalkBack 语音矩阵按设备与用户安排继续开放。
 
