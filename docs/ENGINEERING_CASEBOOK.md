@@ -295,3 +295,34 @@ Debug 的 18.10 秒 Simpleperf 有 7705 样本、0 丢样、16 条调用链错�
 随后冷进程 Profile、索引开启、暂停场景的独立 Simpleperf 取得 4096 样本。`TrackRow` inclusive 3.83%、文字 measure 3.61%；图片解码在 DefaultDispatcher，纹理上传 `GrGLGpu::uploadTexData` 在 RenderThread（1.68%），`prepareToDraw` 同在渲染线程。纹理上传/渲染任务是下一步解释那一帧等待的候选，**不同采集轮的栈不能证明它就是那一帧的唯一原因**。保留 `fixed-profile-playing-timeline` 与 `fixed-profile-cold-cpu` 供继续对齐分析。
 
 目前 iQOO 的实际 60 Hz 场景已取得稳定的非 debuggable 结果；业务列表修复、Honor 对照及高刷新率门禁继续 OPEN。交给用户检查顺滑度的安装包采用本轮 Profile，调试版用于 instrumentation。这个选择针对已经证实的构建差异，没有删除列表功能。
+
+## P03 · Chain 高频页面的重组与文字布局（2026-09-08）
+
+**场景与边界。** 本轮只做短时测量；用户明确暂缓长时间稳定性测试。设备为 iQOO V2171A / Android 15，实际 60 Hz，扬声器播放同一曲目并临时设为单曲循环，Chain 使用详细视图、默认指标与标准功耗模式。基线 Profile SHA-256 为 `915aa81311d60db35ad9bf9de4f301eda4430a54d4096455a45b4e8523ed9d32`，非 debuggable，沿用当前工程未启用 R8 optimization 的 Profile 配置。
+
+先从 UI XML 取得高级页的纵向视口，4 次预热、每轮 48 次 100 ms 快滑、每 8 次反向，分别执行三轮。复用 `tools/measure_library_scroll.py` 的 HWUI 统计算法；脚本现可用 `--surface chain` 明确标记场景。这是屏幕帧证据，不是音频欠载计数。
+
+| 构建 / 刷新率 | 三轮 HWUI jank | 三轮 p95 | 每轮有效帧数 |
+| --- | --- | --- | --- |
+| 基线 / 250 ms | 0.90 / 0.87 / 0.52% | 13 / 13 / 12 ms | 558 / 572 / 575 |
+| 基线 / 1 s | 0.31 / 0.65 / 0.47% | 10 / 10 / 11 ms | 655 / 612 / 638 |
+| 修复后 / 250 ms | 0.89 / 0.35 / 0.70% | 13 / 13 / 12 ms | 562 / 573 / 568 |
+| 修复后 / 1 s | 0.88 / 0.36 / 0.53% | 11 / 10 / 10 ms | 571 / 560 / 567 |
+
+修复后 Profile SHA-256 为 `87974fcd8362ab7852198a27d178084e8a6156400fa297d5091f3fc4257b87de`。两次 250 ms 测量起始电池温度分别为 28.6°C / 30.7°C，文本卡片布局也有改变，因此不是严格单变量实验。非采集结果没有证明显著的帧耗时改善，应如实保留这个结论。
+
+**从帧追到调用栈。** 另采集 18 秒 Perfetto（FrameTimeline、sched、gfx/view/dalvik 和应用 atrace），以应用 Surface 的 frame token 对齐主线程 `Choreographer#doFrame`，再与 `sched` 求运行时间交集。814 帧中 23 帧含 App Deadline Missed，438 帧仅 Buffer Stuffing，353 帧 None；不能把 438 帧全算成应用超时。最慢的一帧呈现 41.87 ms、doFrame 27.91 ms、主线程实际运行 27.01 ms，最大 measure 6.77 ms；另一帧 doFrame 30.43 ms、Running 29.96 ms、measure 14.65 ms。这批慢帧存在主线程重组/布局成本，不能沿用 Library 那一帧“主要等待 RenderThread”的结论。trace 丢弃 7 条负时间戳事件，因此保留健康度说明；带采集的比例不能替代上面的非采集三轮结果。
+
+独立的 500 Hz / 18 秒 Simpleperf 取得 3931 个样本，`ChainCoreFact` inclusive 2.06%、`ChainMetricCard` 1.88%、`formatTelemetryReading` 1.50%，其下可见数字格式化与 `NumberFormat.getInstance`。这些百分比存在父子包含关系，不能相加，也不能把独立采样栈指定为上面某一帧的唯一原因。
+
+**局部修复。** 阅读源码后确认：证据时间更新会重新格式化未变的读数；详细/紧凑视图也会复制图表历史；指标分组在普通快照更新时重复计算。本轮分别按读数、单位与资源配置缓存格式化结果，仅在图表视图读取历史副本，并按用户布局配置记住分组。采样周期、时间戳、置信度、图表历史的实际积累与退出后的取消流程均保持原有证据契约。候选性能效果须以同场景修复后数据判断，不能根据减少分配的源码直接宣布门禁关闭。
+
+修复后独立 trace 的 798 帧中仍有 21 帧含 App Deadline Missed（其中 3 帧同时标记 Display HAL），主线程最大 measure 17.09 ms、最大 Recomposer 重组 16.11 ms；该 trace 丢弃 5 条负时间戳事件。说明最慢帧仍值得继续追查，不能把减少几处重复工作描述为已根治高频卡顿。iQOO 短时对照和退出资源回归已补齐，旧机及长时门禁继续开放。
+
+## R07 · 页面转场方向与 Chain 标识符排版（2026-09-08）
+
+普通页面原来只有 2% 微缩放；Now 与 Chain 之间的导航又被“任一端是 Now”误分为播放器展开/收起。修复后，播放器与其来源沿纵向移动 25%，Chain/About 沿横向进入并反向返回；页面按 Library、Settings、Now、详情的层级绘制，让退出页面保持在来源之上，避免来源的实色背景过早盖住退出动画。保留 240 ms 展开、180 ms 收起和 80 ms 减少动效回退。
+
+`c2.android.flac.decoder` 长 23 字符，原来没有超过 24 字符阈值，被放入不到半张卡片宽的数据列而换行。现在按读数类别布局：文本/USB 描述使用整行，普通字号数字保留对齐列，大字体则也使用整行。320 dp 普通字体和双倍字体的真机 Compose 用例检查完整字符串、实际 TextLayoutResult 的行数与溢出，并确认可用宽度超过卡片的 80%；不能只凭语义树有这段文字就声称没有裁切。
+
+本轮私有截图、基线帧统计、trace、CPU 采样和测试原始输出位于 `build/qa/m2-software-closeout-20260908/`，不提交歌曲名称、原文件和设备原始日志到远端。最终验收数量与修复后性能结果见 M2_DEVICE_ACCEPTANCE 文末。

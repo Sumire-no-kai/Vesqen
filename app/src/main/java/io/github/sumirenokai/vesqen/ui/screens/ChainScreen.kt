@@ -85,6 +85,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -682,6 +683,16 @@ private fun ChainCorePanel(
 }
 
 @Composable
+private fun rememberedTelemetryReading(reading: TelemetryReading?, unitDisplayMode: ChainUnitDisplayMode): String {
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    // Evidence timestamps still update each sample; an unchanged reading needs no new formatter.
+    return remember(context, configuration, reading, unitDisplayMode) {
+        formatTelemetryReading(context, reading, unitDisplayMode)
+    }
+}
+
+@Composable
 private fun ChainCoreFact(
     id: TelemetryMetricId,
     metrics: Map<TelemetryMetricId, TelemetryMetric>,
@@ -693,7 +704,7 @@ private fun ChainCoreFact(
     val context = LocalContext.current
     val evidence = metrics[id]?.evidence
     val label = telemetryMetricLabel(context, id)
-    val value = formatTelemetryReading(context, evidence?.reading, unitDisplayMode)
+    val value = rememberedTelemetryReading(evidence?.reading, unitDisplayMode)
     var expanded by remember(id) { mutableStateOf(false) }
     val action = stringResource(R.string.chain_evidence_details)
     Column(
@@ -1058,20 +1069,24 @@ private fun ChainMetricsGrid(
     modifier: Modifier = Modifier,
 ) {
     val snapshot = observationState.lastSnapshot()
-    val metricMap = snapshot?.metrics.orEmpty().associateBy { it.id }
-    val selectedSet = preferences.selectedMetricIds.toSet()
-    val orderedIds = preferences.metricOrder.filter(selectedSet::contains)
-    val pinnedSet = preferences.pinnedMetricIds.toSet()
+    val metricMap = remember(snapshot?.metrics) { snapshot?.metrics.orEmpty().associateBy { it.id } }
     val expectedCadenceMs = effectiveTelemetryIntervalMs(
         preferences.refreshInterval,
         preferences.powerMode,
     )
-    val pinned = orderedIds.filter(pinnedSet::contains)
-    val grouped = preferences.groupOrder.mapNotNull { section ->
-        val ids = orderedIds.filter { id ->
-            id !in pinnedSet && runCatching { TelemetryMetricCatalog.descriptor(id).section == section }.getOrDefault(false)
+    val (pinned, grouped) = remember(
+        preferences.selectedMetricIds, preferences.metricOrder, preferences.pinnedMetricIds, preferences.groupOrder,
+    ) {
+        val selectedSet = preferences.selectedMetricIds.toSet()
+        val orderedIds = preferences.metricOrder.filter(selectedSet::contains)
+        val pinnedSet = preferences.pinnedMetricIds.toSet()
+        val grouped = preferences.groupOrder.mapNotNull { section ->
+            val ids = orderedIds.filter { id ->
+                id !in pinnedSet && runCatching { TelemetryMetricCatalog.descriptor(id).section == section }.getOrDefault(false)
+            }
+            if (ids.isEmpty()) null else section to ids
         }
-        if (ids.isEmpty()) null else section to ids
+        orderedIds.filter(pinnedSet::contains) to grouped
     }
     LazyVerticalGrid(
         columns = columns,
@@ -1121,7 +1136,7 @@ private fun ChainMetricsGrid(
                     viewMode = preferences.viewMode,
                     unitDisplayMode = preferences.unitDisplayMode,
                     nowElapsedRealtimeMs = nowElapsedRealtimeMs,
-                    history = history.points(id),
+                    history = if (preferences.viewMode == ChainMetricViewMode.CHART) history.points(id) else emptyList(),
                     expectedCadenceMs = expectedCadenceMs,
                 )
             }
@@ -1138,7 +1153,7 @@ private fun ChainMetricsGrid(
                     viewMode = preferences.viewMode,
                     unitDisplayMode = preferences.unitDisplayMode,
                     nowElapsedRealtimeMs = nowElapsedRealtimeMs,
-                    history = history.points(id),
+                    history = if (preferences.viewMode == ChainMetricViewMode.CHART) history.points(id) else emptyList(),
                     expectedCadenceMs = expectedCadenceMs,
                 )
             }
@@ -1828,7 +1843,7 @@ private fun ChainMetricCard(
     var evidenceExpanded by remember(metricId) { mutableStateOf(false) }
     val evidenceAction = stringResource(R.string.chain_evidence_details)
     val evidence = metric?.evidence
-    val value = formatTelemetryReading(context, evidence?.reading, unitDisplayMode)
+    val value = rememberedTelemetryReading(evidence?.reading, unitDisplayMode)
     val confidence = evidence?.let { telemetryConfidenceLabel(context, it.confidence) }
         ?: stringResource(R.string.chain_sampling_starting_short)
     val source = evidence?.let { telemetryEvidenceSource(context, it) }
@@ -1860,19 +1875,22 @@ private fun ChainMetricCard(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            val longText = evidence?.reading is TelemetryReading.Text && value.length > 24
+            // Identifiers and route descriptions need the full card width even when they contain
+            // few characters. Numeric values retain the aligned readout column at normal text size.
+            val stackedValue = evidence?.reading is TelemetryReading.Text ||
+                evidence?.reading is TelemetryReading.UsbInventory || LocalDensity.current.fontScale > 1.3f
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                 if (pinned) Icon(Icons.Filled.PushPin, stringResource(R.string.chain_pinned), Modifier.size(14.dp))
-                if (!longText) Text(
+                if (!stackedValue) Text(
                     value, style = MaterialTheme.typography.titleSmall.copy(fontFamily = FontFamily.Monospace),
                     textAlign = TextAlign.End, modifier = Modifier.weight(.85f).testTag("vesqen.chain.metric-value.${metricId.value}"),
                 )
                 Icon(if (evidenceExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                     null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (longText) Text(value, style = VesqenDataStyle,
-                modifier = Modifier.testTag("vesqen.chain.metric-value.${metricId.value}"))
+            if (stackedValue) Text(value, style = VesqenDataStyle,
+                modifier = Modifier.fillMaxWidth().testTag("vesqen.chain.metric-value.${metricId.value}"))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
                 Box(Modifier.weight(1f)) { ChainConfidenceChip(evidence?.confidence, confidence) }
                 if (viewMode != ChainMetricViewMode.COMPACT) updated?.let {

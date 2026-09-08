@@ -23,6 +23,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.swipeLeft
@@ -646,6 +649,96 @@ class VesqenAppTest {
                     node.config[SemanticsProperties.ContentDescription].any { expectedThroughput in it }
                 },
             )
+    }
+
+    @Test
+    fun navigation_animates_player_vertically_and_contextual_chain_horizontally_in_both_directions() {
+        render(state = activePlaybackState(), motionPolicy = VesqenMotionPolicy(reduceMotion = false))
+        composeRule.mainClock.autoAdvance = false
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.mainClock.advanceTimeBy(96)
+        val enteringPlayer = composeRule.onNodeWithTag("vesqen.now.player-page").fetchSemanticsNode().positionInRoot
+        composeRule.mainClock.advanceTimeBy(300)
+        val playerRest = composeRule.onNodeWithTag("vesqen.now.player-page").fetchSemanticsNode().positionInRoot
+        assertTrue("Player must visibly rise into place", enteringPlayer.y > playerRest.y + 12f)
+
+        composeRule.onNodeWithTag("vesqen.now.open-chain").performClick()
+        composeRule.mainClock.advanceTimeBy(96)
+        val enteringChain = composeRule.onNodeWithTag("vesqen.chain").fetchSemanticsNode().positionInRoot
+        composeRule.mainClock.advanceTimeBy(300)
+        val chainRest = composeRule.onNodeWithTag("vesqen.chain").fetchSemanticsNode().positionInRoot
+        assertTrue("Contextual Chain must enter from the side", enteringChain.x > chainRest.x + 12f)
+
+        composeRule.onNodeWithTag("vesqen.chain.back").performClick()
+        composeRule.mainClock.advanceTimeBy(96)
+        val leavingChain = composeRule.onNodeWithTag("vesqen.chain").fetchSemanticsNode().positionInRoot
+        assertTrue("Chain return must reverse the detail path: resting=$chainRest, leaving=$leavingChain",
+            leavingChain.x > chainRest.x + 12f)
+        composeRule.mainClock.advanceTimeBy(300)
+        composeRule.onAllNodesWithTag("vesqen.chain").assertCountEquals(0)
+
+        composeRule.onNodeWithTag("vesqen.now.back").performClick()
+        composeRule.mainClock.advanceTimeBy(96)
+        val leavingPlayer = composeRule.onNodeWithTag("vesqen.now.player-page").fetchSemanticsNode().positionInRoot
+        assertTrue("Player must visibly retreat downward", leavingPlayer.y > playerRest.y + 12f)
+        composeRule.mainClock.advanceTimeBy(300)
+        composeRule.onAllNodesWithTag("vesqen.now.player-page").assertCountEquals(0)
+        composeRule.mainClock.autoAdvance = true
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").assertIsDisplayed()
+    }
+
+    @Test
+    fun reduced_motion_changes_destinations_without_spatial_movement() {
+        render(state = activePlaybackState(), motionPolicy = VesqenMotionPolicy(reduceMotion = true))
+        composeRule.mainClock.autoAdvance = false
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.mainClock.advanceTimeBy(32)
+        val during = composeRule.onNodeWithTag("vesqen.now.player-page").fetchSemanticsNode().positionInRoot
+        composeRule.mainClock.advanceTimeBy(120)
+        val after = composeRule.onNodeWithTag("vesqen.now.player-page").fetchSemanticsNode().positionInRoot
+        assertEquals(after.x, during.x, 1f)
+        assertEquals(after.y, during.y, 1f)
+        composeRule.mainClock.autoAdvance = true
+    }
+
+    @Test
+    fun chain_decoder_identifier_uses_full_width_at_320dp() = assertDecoderIdentifierLayout(1f, 1)
+
+    @Test
+    fun chain_decoder_identifier_remains_complete_at_320dp_with_double_text() = assertDecoderIdentifierLayout(2f, 2)
+
+    private fun assertDecoderIdentifierLayout(fontScale: Float, maximumLines: Int) {
+        val name = "c2.android.flac.decoder"
+        val snapshot = chainTelemetrySnapshot().let { snapshot ->
+            snapshot.copy(metrics = snapshot.metrics + TelemetryMetric(
+                id = TelemetryMetricCatalog.DECODER_NAME,
+                section = TelemetrySection.DECODER,
+                evidence = TelemetryEvidence.Measured(
+                    reading = TelemetryReading.Text(name),
+                    source = TelemetryDataSource(TelemetrySourceId("media3.decoder")),
+                    observedAtEpochMs = snapshot.capturedAtEpochMs,
+                    observedAtElapsedRealtimeMs = snapshot.capturedAtElapsedRealtimeMs,
+                ),
+            ))
+        }
+        render(
+            state = activePlaybackState(), playbackTelemetry = FakePlaybackTelemetry(snapshot),
+            containerWidth = 320.dp, containerHeight = 640.dp, fontScale = fontScale,
+        )
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        openAdvancedChain()
+        val value = chainNode("vesqen.chain.metric-value.decoder.name", useUnmergedTree = true)
+            .performScrollTo().assertIsDisplayed().assertTextEquals(name)
+        val results = mutableListOf<TextLayoutResult>()
+        value.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+        assertTrue("Decoder identifier must wrap using the full card width", results.single().lineCount <= maximumLines)
+        assertTrue("Decoder identifier must not be clipped", !results.single().hasVisualOverflow)
+        val card = composeRule.onNodeWithTag("vesqen.chain.metric.decoder.name").fetchSemanticsNode()
+        assertTrue("Identifier must not occupy the narrow numeric column",
+            value.fetchSemanticsNode().size.width > card.size.width * .8f)
     }
 
     @Test

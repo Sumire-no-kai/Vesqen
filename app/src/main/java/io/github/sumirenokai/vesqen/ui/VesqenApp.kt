@@ -22,6 +22,8 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -677,9 +679,9 @@ private fun VesqenDestinationFrame(
                 modifier = Modifier.fillMaxSize(),
                 transitionSpec = {
                     val opensFocusedPlayer = targetState == VesqenDestination.NOW &&
-                        initialState != VesqenDestination.NOW
+                        !initialState.isSecondaryDetail
                     val closesFocusedPlayer = initialState == VesqenDestination.NOW &&
-                        targetState != VesqenDestination.NOW
+                        !targetState.isSecondaryDetail
                     when {
                         motionPolicy.reduceMotion -> {
                             fadeIn(animationSpec = tween(motionPolicy.stateChangeMillis)) togetherWith
@@ -699,7 +701,7 @@ private fun VesqenDestinationFrame(
                                     delayMillis = motionPolicy.playerHandoffDelayMillis,
                                     easing = FocusedPlayerEasing,
                                 ),
-                                initialOffsetY = { height -> height / 6 },
+                                initialOffsetY = { height -> height / 4 },
                             ) + scaleIn(
                                 initialScale = .94f,
                                 animationSpec = tween(
@@ -761,7 +763,7 @@ private fun VesqenDestinationFrame(
                                         durationMillis = motionPolicy.playerCollapseMillis,
                                         easing = FocusedPlayerEasing,
                                     ),
-                                    targetOffsetY = { height -> height / 6 },
+                                    targetOffsetY = { height -> height / 4 },
                                 ) + scaleOut(
                                     targetScale = .94f,
                                     animationSpec = tween(
@@ -772,11 +774,27 @@ private fun VesqenDestinationFrame(
                         }
 
                         else -> {
-                            val duration = motionPolicy.stateChangeMillis
+                            val returning = initialState.isSecondaryDetail ||
+                                targetState == VesqenDestination.LIBRARY
+                            val direction = if (returning) -1 else 1
+                            val duration = motionPolicy.playerExpandMillis
                             (fadeIn(animationSpec = tween(duration)) +
-                                scaleIn(initialScale = .98f, animationSpec = tween(duration))) togetherWith
-                                (fadeOut(animationSpec = tween(duration / 2)) +
-                                    scaleOut(targetScale = .98f, animationSpec = tween(duration / 2)))
+                                slideInHorizontally(animationSpec = tween(duration)) {
+                                    it * direction / if (returning) 12 else 4
+                                }) togetherWith
+                                (fadeOut(animationSpec = tween(duration)) +
+                                    slideOutHorizontally(animationSpec = tween(duration)) {
+                                        -it * direction / if (returning) 4 else 12
+                                    })
+                        }
+                    }.apply {
+                        // Keep the retreating surface above its destination so the incoming opaque
+                        // page cannot cover the player's collapse or a detail's return animation.
+                        targetContentZIndex = when {
+                            targetState.isSecondaryDetail -> 3f
+                            targetState == VesqenDestination.NOW -> 2f
+                            targetState == VesqenDestination.SETTINGS -> 1f
+                            else -> 0f
                         }
                     }
                 },

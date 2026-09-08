@@ -1,6 +1,6 @@
 """ADB frame statistics from a UI-XML-derived viewport. Artifacts may contain private data.
 
-Run with the library open and settled; use the same APK, data, power and play state for A/B.
+Run with the selected surface open and settled; use the same APK, data, power and play state for A/B.
 Debug builds require explicit opt-in and are not a release performance acceptance result.
 This measures HWUI jank, not audio underruns or a call-stack root cause.
 """
@@ -20,6 +20,7 @@ parser.add_argument('--swipe-ms', type=int, choices=[100, 350], default=100)
 parser.add_argument('--swipes', type=int, default=48)
 parser.add_argument('--repeats', type=int, default=3)
 parser.add_argument('--xml', type=Path, required=True)
+parser.add_argument('--surface', choices=['library', 'chain'], default='library')
 parser.add_argument('--allow-debuggable', action='store_true', help='Allow an explicitly labelled Debug comparison')
 args = parser.parse_args()
 if args.output.exists(): parser.error('Output already exists; preserve previous evidence')
@@ -54,20 +55,22 @@ if debuggable and not args.allow_debuggable:
     raise RuntimeError('Debug APK installed: use profile for acceptance, or --allow-debuggable for a Debug comparison')
 
 tree = ET.parse(args.xml)
+if args.surface == 'chain' and not any(n.get('text') in {'高级链路', 'Advanced chain'} for n in tree.iter('node')):
+    raise RuntimeError('Expected the advanced Chain page in the supplied UI XML')
 if any('正在扫描' in n.get('text', '') or n.get('text', '').startswith('Scanning ') for n in tree.iter('node')):
     raise RuntimeError('Wait for the library scan to finish and capture a fresh XML viewport')
 nodes = [n for n in tree.iter('node') if n.get('scrollable') == 'true' and n.get('package') == args.package]
 def bounds(n): return list(map(int, re.findall(r'-?\d+', n.get('bounds', ''))))
 if not nodes: raise RuntimeError('No app scroll viewport in XML')
 x1, y1, x2, y2 = bounds(max(nodes, key=lambda n: bounds(n)[3] - bounds(n)[1]))
-if y2 - y1 <= 400: raise RuntimeError('Expected vertical library viewport')
+if y2 - y1 <= 400: raise RuntimeError('Expected a vertical content viewport')
 margin = (y2 - y1) // 6
 
 def swipe(up):
     start, end = (y2-margin, y1+margin) if up else (y1+margin, y2-margin)
     call('shell', 'input', 'swipe', str((x1+x2)//2), str(start), str((x1+x2)//2), str(end), str(args.swipe_ms))
 
-metadata = {'swipeMs': args.swipe_ms, 'viewport': [x1,y1,x2,y2], 'swipes': args.swipes,
+metadata = {'surface': args.surface, 'swipeMs': args.swipe_ms, 'viewport': [x1,y1,x2,y2], 'swipes': args.swipes,
             'apks': apk_identity, 'debuggable': debuggable,
             'model': call('shell','getprop','ro.product.model').strip(),
             'sdk': call('shell','getprop','ro.build.version.sdk').strip()}

@@ -871,3 +871,12 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - 对同源码 Debug/Profile 做三轮帧统计、Perfetto FrameTimeline/sched 与 Simpleperf。确认 Debug 解释执行/JIT 显著放大新行组成和测量成本；恢复原队列后的 Debug p95 26/25/23 ms，Profile 11/11/10 ms。Profile 播放/索引场景也已执行，偶发渲染等待仍单独保留，未把 iQOO 的 60 Hz 结果写成所有设备无卡顿。
 - 性能脚本新增实际安装 APK 哈希与 debuggable 校验，默认拒绝 Debug 作为性能验收；安装被拒绝后的错误标签实验和失败 recorder 明确作废。手段、SQL 对齐、具体调用栈和边界另写入中文 [工程案例 R06/P02](ENGINEERING_CASEBOOK.md)，详细数量见 [设备验收](M2_DEVICE_ACCEPTANCE.md)。
 - 用户曲库备份、112 首/稳定 ID/收藏一致性审计、原队列与浏览偏好恢复完成。本地 195 项 JVM、Lint、Debug/Profile/Release 与 instrumentation APK 构建通过；本轮没有 Honor、实际高刷新率、真实 DAC 或 M3 长时测试，M3 继续开放。
+
+## 2026-09-08 · 转场、Chain 标识符与短时性能收尾
+
+- 按用户要求暂缓所有长时间稳定性测试，继续可以直接完成的软件与 iQOO 短时验证。
+- 修复 Now/Chain 转场误分类：播放器沿纵向展开和收起，二级详情沿横向进入和返回；加强到 25% 位移，并按页面层级保证退出动画不被来源页面提前覆盖。保留减少动效回退。
+- 去掉长文本的 24 字符布局阈值，文本与 USB 描述占整行，大字体数值也使用整行；修复 decoder 名称挤入窄列的问题。
+- 独立完成高级页 250 ms / 1 s 的 Profile 基线和修复后三轮对照，结合 FrameTimeline、sched 与 CPU 调用栈定位重组、文字测量和重复格式化成本；缓存未变读数与布局分组，非图表视图不复制历史点。修复后 p95 未显著下降，高频性能门禁保持开放。
+- 195 项 JVM、Lint、Debug/Profile 和测试 APK 构建通过；49 项 UI 与 100 次进出/录制生命周期共 50 个不同设备用例分别取得通过。安装拒绝与早期帧采样失败均保留，最终动画复测核验测试 APK 后完成。
+- 112 首曲目、来源、稳定 ID/收藏、歌单和系统设置审计通过；原队列与偏好恢复，最终安装 Profile。方法与失败边界另记中文 [工程案例 P03/R07](ENGINEERING_CASEBOOK.md)，完整数量见 [M2 设备验收](M2_DEVICE_ACCEPTANCE.md)。旧机、外设、完整适配及长时任务继续跟踪，不提前关闭 M2/M3。
