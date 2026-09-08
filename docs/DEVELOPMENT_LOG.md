@@ -834,3 +834,62 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - M3 六项主需求、API 技术验证顺序、严格模式状态/失败处理和两台现代手机 × 两款 DAC 验收已列清单；快滑、高频、转场、排版与外设/系统矩阵按优先级跟进。M2 仍部分验收，允许 M3 软件开发，不宣称 USB bit-perfect 可用。
 - 清理前归档诊断、数据库和偏好。原 ID/来源/收藏/歌单保留、播放计数未减少；Honor 37→40，iQOO 112→112。恢复原播放/浏览偏好、字体、方向、超时配置；两机 app files 中仅余原 profileInstalled，用户音源保留。Honor 后续覆盖安装恢复 run-from-apk，iQOO 为 verify；未留下强制 speed 的最终状态。
 - 私有音源、设备序列号、备份、trace 与原始通知不提交。当前源码与证据摘要通过 feature 分支交付；实际远端 CI/合并结果以 PR 状态为准，与本地及真机结果分别报告。
+
+## 2026-09-08 · M3 范围明确：首页快滑为正式交付项
+
+按用户要求，将 Library 首页快速滑动从“M3 并行遗留项”提升为 M3 正式交付门禁，并同步更新 PRD、路线图和实施清单。M3 需先取得同一 Release/profileable 场景的双机基线，将慢帧和呈现排队对齐到业务调用路径，再逐个变量验证并实施最小修复；最后用 Honor/iQOO 同一 APK 各至少三轮配对测试证明三轮中位 jank 与 p95 的改善，同时重跑曲库功能和无障碍回归。仅有主观改善、一次较好数字、强制 AOT 或热点列表均不算完成。
+
+## 2026-09-08 · M3 第一版软件候选
+
+用户当前无法连接测试机，要求正式进入 M3、先尽可能完成代码、把测试集中到最后。本轮没有把旧 trace 中尚未证明的候选热点直接改成 Library 生产优化；先完成能离线建立的 USB 严格输出链路，并为后续同机性能测量增加 profileable 构建。
+
+- 新增纯 `UsbOutputStrategyResolver`，按 Android 版本、USB Host、权限、设备、源 PCM 和官方 bit-perfect mixer profile 作候选判定；实际 `AudioTrack` 的采样率、encoding、channel mask 不完全一致时拒绝 ACTIVE。
+- 播放服务成为输出模式和结果的唯一写入者。API 34 adapter 隔离 `AudioMixerAttributes`；旧 Android 不加载专属实现。Media3 1.11 的 `AudioOutputProvider` 在创建输出前设置 preference，读回后检查真实 `AudioTrack` 路由和中性处理状态。准备阶段保持输出静音，全部条件成立后才解除静音并发布 ACTIVE。
+- 严格模式失败不会静默退回系统播放。格式、路由、设备、处理、平台调用或服务生命周期失效时，撤销 mixer preference、静音并释放旧输出、停止播放器，保留明确失败原因；普通系统输出需要用户主动选择。
+- `PlaybackSnapshot`、设置页、播放器状态 chip、Chain 和诊断遥测共用 `UsbOutputStatus`。AVAILABLE、REQUESTED、ACTIVE、FAILED 分开呈现；ACTIVE 只说明应用观察到 Media3 请求、Android mixer readback 与 AudioTrack route 一致，仍不写成外部信号 VERIFIED。
+- 新增 `profile` 变体，继承 Release 行为、使用调试签名并声明 shell profileable，供设备恢复后采集 Perfetto/Simpleperf 与三轮 `gfxinfo`。Library 根因、最小修复及 Honor/iQOO 修复前后 A/B 仍开放。
+- 最终本地命令 `./gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleProfile :app:assembleRelease :app:compileDebugAndroidTestKotlin` 通过，共 159 个任务；194 项 JVM 测试为 0 失败、0 错误、0 跳过。instrumentation 只完成编译，没有设备执行。M3 第一版软件候选成立，硬件输出、旧版本运行、资源压力和 Library 性能门禁均未据此关闭。
+
+## 2026-09-08 · M3 软件候选自审与加固
+
+完成第一版候选后，对服务线程、Media3 playback thread、Session 状态传播和退出清理做了一轮独立代码审查，并核对本地 Media3 1.11 `AudioOutputProvider.OutputConfig`、`AudioOutput` 与 `AudioTrackAudioOutput` 的实际 API 签名。审查发现并修复以下问题：
+
+- 重配、切歌或切回系统模式时，playback thread 仍可能完成旧严格输出并写回过期状态。配置、选定计划和 AudioTrack 现均绑定 generation；旧操作只能返回静音输出，不能设置新状态、恢复播放或撤销新计划。
+- 原 mixer preference 使用固定媒体属性，而 Media3 的实际 `OutputConfig` 可能带不同 flags、capture policy 或 spatialization behavior。设置、读回与清理现统一使用该 AudioTrack 请求对应的真实 platform `AudioAttributes`。
+- 原清理顺序先撤销 mixer preference、后静音输出，存在旧 AudioTrack 短暂落回普通混音路径的窗口。重配、失败、系统模式恢复和服务关闭现均先静音/解除监听，再清 preference。
+- 路由始终为 `null` 且没有回调时会无限停留 APPLYING。播放意图成立后增加 3 秒有界核验；仍无可观察路由时以 `ROUTE_UNAVAILABLE` fail closed。USB 新设备加入也会重新判定，不沿用旧候选。
+- 内部重建触发的暂停改为等待真实 `onPlayWhenReadyChanged(false)` 后再消费抑制标记，避免异步 listener 清掉应恢复的播放意图；输出静音门创建和路由监听注册异常也进入明确的平台失败路径。
+- 状态仓库与 Controller 以 generation 拒绝重复/倒退状态；模式命令回到服务主线程后再返回同一状态。Chain 补齐 `vesqen.output_coordinator` 来源标签。
+
+自审后完整本地门禁再次通过：195 项 JVM 测试，0 失败、0 错误、0 跳过；Debug lint 0 错误、21 个既有告警；Debug、profile、Release APK 构建和 Debug instrumentation Kotlin 编译均成功，共 159 个 Gradle 任务。没有连接测试机或 USB DAC，因此上述只构成软件候选证据；真实 AudioAttributes/mixer 对应、路由时序、内部暂停恢复、反复插拔、长时资源释放及 Library 首页性能修复仍须真机关闭。
+
+## 2026-09-08 · iQOO 接入，M3 播放回归修复与 Library 深入取证
+
+- 真机发现两个播放测试超时：M3 在 Media3 1.11 的旧 `onConnect` 空命令占位对象上追加 USB 命令，丢失内部标记，导致普通播放与队列命令均被拒绝。改用 `onConnectAsync` 和按控制器可信程度初始化的 builder，保留外部控制器默认权限；原扬声器回归和新增严格无 USB 回归均通过。
+- 新增 `StrictUsbSpeakerDeviceTest`，覆盖 8 轮无 USB 失败、Controller 重连和主动恢复系统播放，以及密集交错命令、generation 单调性和无错误 AVAILABLE/ACTIVE。真实 USB/DAC 仍未验证。
+- 65 个不同的设备用例分批取得通过，包括真实无损文件、高频快照/隐私/通知、47 项 UI、存储与设置、100 次 Chain 进出和前后台/旋转。窄屏大字用例新增滚动到屏外设置入口，未改变原断言；保留原失败和一次人为中断批次，最终独立完整复测。
+- 对同源码 Debug/Profile 做三轮帧统计、Perfetto FrameTimeline/sched 与 Simpleperf。确认 Debug 解释执行/JIT 显著放大新行组成和测量成本；恢复原队列后的 Debug p95 26/25/23 ms，Profile 11/11/10 ms。Profile 播放/索引场景也已执行，偶发渲染等待仍单独保留，未把 iQOO 的 60 Hz 结果写成所有设备无卡顿。
+- 性能脚本新增实际安装 APK 哈希与 debuggable 校验，默认拒绝 Debug 作为性能验收；安装被拒绝后的错误标签实验和失败 recorder 明确作废。手段、SQL 对齐、具体调用栈和边界另写入中文 [工程案例 R06/P02](ENGINEERING_CASEBOOK.md)，详细数量见 [设备验收](M2_DEVICE_ACCEPTANCE.md)。
+- 用户曲库备份、112 首/稳定 ID/收藏一致性审计、原队列与浏览偏好恢复完成。本地 195 项 JVM、Lint、Debug/Profile/Release 与 instrumentation APK 构建通过；本轮没有 Honor、实际高刷新率、真实 DAC 或 M3 长时测试，M3 继续开放。
+
+## 2026-09-08 · 转场、Chain 标识符与短时性能收尾
+
+- 按用户要求暂缓所有长时间稳定性测试，继续可以直接完成的软件与 iQOO 短时验证。
+- 修复 Now/Chain 转场误分类：播放器沿纵向展开和收起，二级详情沿横向进入和返回；加强到 25% 位移，并按页面层级保证退出动画不被来源页面提前覆盖。保留减少动效回退。
+- 去掉长文本的 24 字符布局阈值，文本与 USB 描述占整行，大字体数值也使用整行；修复 decoder 名称挤入窄列的问题。
+- 独立完成高级页 250 ms / 1 s 的 Profile 基线和修复后三轮对照，结合 FrameTimeline、sched 与 CPU 调用栈定位重组、文字测量和重复格式化成本；缓存未变读数与布局分组，非图表视图不复制历史点。修复后 p95 未显著下降，高频性能门禁保持开放。
+- 195 项 JVM、Lint、Debug/Profile 和测试 APK 构建通过；49 项 UI 与 100 次进出/录制生命周期共 50 个不同设备用例分别取得通过。安装拒绝与早期帧采样失败均保留，最终动画复测核验测试 APK 后完成。
+- 112 首曲目、来源、稳定 ID/收藏、歌单和系统设置审计通过；原队列与偏好恢复，最终安装 Profile。方法与失败边界另记中文 [工程案例 P03/R07](ENGINEERING_CASEBOOK.md)，完整数量见 [M2 设备验收](M2_DEVICE_ACCEPTANCE.md)。旧机、外设、完整适配及长时任务继续跟踪，不提前关闭 M2/M3。
+
+## 2026-09-08 · iQOO 重连补验与英文按钮文字修复
+
+- 在已核对哈希的 Profile 上补采 Library 三轮快滑和独立冷进程 Perfetto。三轮 HWUI jank 均 0%、p95 11/10/10 ms；独立 trace 仍有 1/794 个应用超时帧。对齐 doFrame、sched 和 RenderThread 后，本次慢帧不支持“大封面上传”解释，继续保留业务根因和双机性能门禁。
+- 英文 UI 51 项、真实音源及存储/遥测契约 15 项、扬声器和无 DAC 严格模式 2 项通过；补测设置跨进程持久化，以及 1.3×/1.5× 中文字体。所有宿主辅助、启动冲突与独立复测保留，原始证据存于私有 build/qa/m3-followup-20260908。
+- 实际中英文大字体截图发现英文视图切换按钮省略，局部改为 Session / Artwork。新增文字布局回归；核对 Compose 语义布局适配器源码后，修正把较宽段落盒误当文字溢出的代理指标，改查字形宽度、垂直溢出和省略号。最终候选英文定向 4 项、中文 1 项通过，详见中文案例 R08。
+- Debug/Profile/测试 APK 构建与 Lint 通过，未重复无关 JVM 全套。曲库和偏好审计、原队列/系统设置恢复、最终 Profile 安装完成；详细版本与批次边界见 M2_DEVICE_ACCEPTANCE 文末。没有执行用户暂缓的长时测试，也没有推送或合并。
+
+## 2026-09-08 · 记录 M3 未完成项与 M4 任务
+
+- 按当前验收证据整理 M3-R1 至 M3-R5：Library 业务根因/实际修复/双机对照、真实 DAC 矩阵、最终候选旧系统兼容、严格模式中断与长时资源验证，以及最终交付证据/Git 收尾。说明历史实现清单的未勾选项不等于代码全部未写。
+- 新增 [M4 开发清单](M4_IMPLEMENTATION_PLAN.md)，拆分验证矩阵、测试向量、声明与证据关联、稳定性/中断、性能/界面以及 Beta 准备六组任务，写明交付物、依赖和完成条件；更新 Roadmap 入口。
+- 保留缺少 DAC、Bluetooth 暂缓和长时间测试暂缓的状态。准备 M4 不关闭 M3，不自动执行暂缓测试，也不自动发布。此轮仅修改文档，未运行新的构建或设备测试。

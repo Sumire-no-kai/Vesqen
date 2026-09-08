@@ -12,7 +12,7 @@ class PlaybackSnapshotTest {
     }
 
     @Test
-    fun `m1 declaration never overclaims bit perfect playback`() {
+    fun `default declaration never overclaims bit perfect playback`() {
         assertEquals(OutputDeclaration.SYSTEM_MIXED, PlaybackSnapshot().declaration)
     }
 

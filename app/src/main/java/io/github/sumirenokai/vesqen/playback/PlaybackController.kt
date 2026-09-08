@@ -13,6 +13,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import io.github.sumirenokai.vesqen.library.AudioTrack
@@ -43,6 +44,8 @@ class PlaybackController(
     private var reconnectAttempt = 0
     private var connectionGeneration = 0L
     private var released = false
+    private val usbOutputCommand = SessionCommand(UsbOutputSessionContract.SET_MODE_ACTION, Bundle.EMPTY)
+    private var usbOutputStatus = UsbOutputStatus()
 
     private var latestSnapshot = PlaybackSnapshot()
 
@@ -74,6 +77,13 @@ class PlaybackController(
     }
 
     private val controllerListener = object : MediaController.Listener {
+        override fun onExtrasChanged(controller: MediaController, extras: Bundle) {
+            if (this@PlaybackController.controller !== controller) return
+            UsbOutputSessionContract.fromBundle(extras)?.let { status ->
+                if (acceptUsbOutputStatus(status)) publish(controller)
+            }
+        }
+
         override fun onDisconnected(disconnectedController: MediaController) {
             if (controller !== disconnectedController || released) return
             disconnectedController.removeListener(playerListener)
@@ -111,6 +121,9 @@ class PlaybackController(
                         mainHandler.removeCallbacks(reconnectRunnable)
                         reconnectAttempt = 0
                         controller = resolvedController
+                        UsbOutputSessionContract.fromBundle(resolvedController.sessionExtras)?.let { status ->
+                            acceptUsbOutputStatus(status)
+                        }
                         resolvedController.addListener(playerListener)
                         val queueToApply = pendingQueue.also { pendingQueue = null }
                         // A replacement service owns a fresh, empty player. Always reconcile the
@@ -240,7 +253,12 @@ class PlaybackController(
             tracksById.clear()
             currentProblem = null
             queueCache = PlaybackQueueCache()
-            updateSnapshot(PlaybackSnapshot(isControllerReady = true))
+            updateSnapshot(
+                PlaybackSnapshot(
+                    isControllerReady = true,
+                    usbOutputStatus = usbOutputStatus,
+                ),
+            )
         }
     }
 
@@ -309,6 +327,27 @@ class PlaybackController(
             }
             publish(activeController)
         }
+    }
+
+    fun setUsbOutputMode(mode: UsbOutputMode) {
+        val activeController = controller ?: return
+        if (!activeController.isSessionCommandAvailable(usbOutputCommand)) return
+        val future = activeController.sendCustomCommand(
+            usbOutputCommand,
+            UsbOutputSessionContract.modeArguments(mode),
+        )
+        future.addListener(
+            {
+                runCatching { future.get() }
+                    .getOrNull()
+                    ?.extras
+                    ?.let(UsbOutputSessionContract::fromBundle)
+                    ?.let { status ->
+                        if (acceptUsbOutputStatus(status)) controller?.let(::publish)
+                    }
+            },
+            executor,
+        )
     }
 
     fun refreshPosition() {
@@ -381,6 +420,7 @@ class PlaybackController(
                 queueSize = player.mediaItemCount,
                 queue = queueCache.projection,
                 problem = currentProblem,
+                usbOutputStatus = usbOutputStatus,
             ),
         )
     }
@@ -389,6 +429,12 @@ class PlaybackController(
         if (updated == latestSnapshot) return
         latestSnapshot = updated
         onSnapshotChanged(updated)
+    }
+
+    private fun acceptUsbOutputStatus(candidate: UsbOutputStatus): Boolean {
+        if (candidate.generation < usbOutputStatus.generation) return false
+        usbOutputStatus = candidate
+        return true
     }
 
     private fun buildQueueCache(player: Player): PlaybackQueueCache {

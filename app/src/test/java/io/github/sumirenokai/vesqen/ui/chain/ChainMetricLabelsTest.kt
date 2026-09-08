@@ -69,6 +69,7 @@ class ChainMetricLabelsTest {
             "android.mixer_attributes",
             "android.usb_public_api",
             "vesqen.configuration",
+            "vesqen.output_coordinator",
         )
 
         val missing = productionSourceIds.filter { telemetrySourceLabelResource(it) == null }

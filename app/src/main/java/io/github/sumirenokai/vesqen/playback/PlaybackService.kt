@@ -13,6 +13,12 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionError
+import androidx.media3.session.SessionResult
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.SettableFuture
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.MainActivity
 import io.github.sumirenokai.vesqen.VesqenApplication
@@ -22,6 +28,65 @@ class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private var playbackStateKeeper: PlaybackStateKeeper? = null
     private var sessionArtworkLoader: SessionArtworkLoader? = null
+    private var usbOutputCoordinator: UsbOutputCoordinator? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val usbOutputCommand = SessionCommand(UsbOutputSessionContract.SET_MODE_ACTION, android.os.Bundle.EMPTY)
+    private val outputStateListener: (UsbOutputStatus) -> Unit = { status ->
+        mainHandler.post {
+            mediaSession?.setSessionExtras(UsbOutputSessionContract.toBundle(status))
+        }
+    }
+
+    private val sessionCallback = object : MediaSession.Callback {
+        override fun onConnectAsync(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+        ): ListenableFuture<MediaSession.ConnectionResult> {
+            // Media3 1.11's deprecated onConnect default is a sentinel with empty commands.
+            // Resolve the controller's trust-aware defaults before adding our private command.
+            val base = MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller).build()
+            if (controller.packageName != packageName) return Futures.immediateFuture(base)
+            return Futures.immediateFuture(MediaSession.ConnectionResult.accept(
+                base.availableSessionCommands.buildUpon().add(usbOutputCommand).build(),
+                base.availablePlayerCommands,
+            ))
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: android.os.Bundle,
+        ): ListenableFuture<SessionResult> {
+            if (
+                controller.packageName != packageName ||
+                customCommand.customAction != UsbOutputSessionContract.SET_MODE_ACTION
+            ) {
+                return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
+            }
+            val mode = UsbOutputSessionContract.readMode(args)
+                ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
+            return applyUsbOutputMode(mode)
+        }
+    }
+
+    private fun applyUsbOutputMode(mode: UsbOutputMode): ListenableFuture<SessionResult> {
+        fun apply(): SessionResult {
+            usbOutputCoordinator?.requestMode(mode)
+            val extras = UsbOutputSessionContract.toBundle(
+                usbOutputCoordinator?.currentStatus() ?: UsbOutputStatus(),
+            )
+            return SessionResult(SessionResult.RESULT_SUCCESS, extras)
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return Futures.immediateFuture(apply())
+        }
+        val result = SettableFuture.create<SessionResult>()
+        if (!mainHandler.post { result.set(apply()) }) {
+            result.set(SessionResult(SessionError.ERROR_SESSION_DISCONNECTED))
+        }
+        return result
+    }
 
     @UnstableApi
     override fun onCreate() {
@@ -38,16 +103,21 @@ class PlaybackService : MediaSessionService() {
         val dataSourceFactory = DefaultDataSource.Factory(this)
             .setTransferListener(telemetry.transferListener)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
-        val player = ExoPlayer.Builder(this)
+        val outputStateRepository = (application as VesqenApplication).usbOutputStateRepository
+        val outputCoordinator = UsbOutputCoordinator(this, outputStateRepository).also {
+            usbOutputCoordinator = it
+        }
+        val player = ExoPlayer.Builder(this, VesqenAudioRenderersFactory(this, outputCoordinator))
             .setMediaSourceFactory(mediaSourceFactory)
             .build()
             .apply {
-            setAudioAttributes(audioAttributes, true)
-            setHandleAudioBecomingNoisy(true)
-            setWakeMode(C.WAKE_MODE_LOCAL)
-            pauseAtEndOfMediaItems = false
-        }
+                setAudioAttributes(audioAttributes, true)
+                setHandleAudioBecomingNoisy(true)
+                setWakeMode(C.WAKE_MODE_LOCAL)
+                pauseAtEndOfMediaItems = false
+            }
         telemetry.attachPlayer(player)
+        outputCoordinator.attachPlayer(player)
         playbackStateKeeper = PlaybackStateKeeper(
             player = player,
             stateStore = PlaybackStateStore(this),
@@ -62,7 +132,10 @@ class PlaybackService : MediaSessionService() {
         mediaSession = MediaSession.Builder(this, player)
             .setBitmapLoader(artworkLoader)
             .setSessionActivity(sessionActivity)
+            .setCallback(sessionCallback)
+            .setSessionExtras(UsbOutputSessionContract.toBundle(outputStateRepository.snapshot()))
             .build()
+        outputStateRepository.addListener(outputStateListener)
     }
 
     @UnstableApi
@@ -75,6 +148,9 @@ class PlaybackService : MediaSessionService() {
         }
 
     override fun onDestroy() {
+        (application as VesqenApplication).usbOutputStateRepository.removeListener(outputStateListener)
+        usbOutputCoordinator?.close()
+        usbOutputCoordinator = null
         playbackStateKeeper?.stop()
         playbackStateKeeper = null
         mediaSession?.run {

@@ -4,7 +4,7 @@
 
 - 文档状态：Draft v0.7
 - 更新日期：2026-09-08
-- 实现进度：M1 交互与 M2 Audio Proof 已进入实现候选；Android 9 Honor 与 Android 15 iQOO 已取得真实无损音源、界面和扬声器自动化证据，详见 M1/M2_DEVICE_ACCEPTANCE。M2 尚未完整关闭：真实外设、其余系统/格式/适配矩阵、快滑与高频性能及转场体验仍开放。M3 可开始软件开发，需求和遗留项见 M3_IMPLEMENTATION_PLAN。
+- 实现进度：M1 交互与 M2 Audio Proof 已进入实现候选；Android 9 Honor 与 Android 15 iQOO 已取得真实无损音源、界面和扬声器自动化证据，详见 M1/M2_DEVICE_ACCEPTANCE。M2 尚未完整关闭：真实外设、其余系统/格式/适配矩阵、高频性能及转场体验仍开放。Library 首页快滑的具体定位与修复已纳入 M3 正式交付门禁；M3 可开始软件开发，需求和验收步骤见 M3_IMPLEMENTATION_PLAN。
 - 产品形态：Android 本地音乐播放器
 - 开源许可证：Apache License 2.0
 - 最低安装版本：Android 8.0（API 26，产品支持基线）
@@ -536,12 +536,13 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 - 状态变化与插拔、路由切换和播放会话一致。
 - 蓝牙连接／已选路由区分、权限拒绝与撤销、codec／码率缺失、切换清理与隐私导出通过 `docs/M2_DEVICE_ACCEPTANCE.md`；系统未提供指标时，正确说明不可用属于合格行为。
 
-### M3：Android 14+ USB bit-perfect
+### M3：Android 14+ USB bit-perfect 与 Library 首页性能收敛
 
-目标：使用公开 Android API 实现受控 USB 直出。
+目标：使用公开 Android API 实现受控 USB 直出，并完成 Library 首页快速滑动的根因定位与性能收敛。
 
 范围：
 
+- Library 首页快速滑动的可复现 Release/profileable 双机基线、慢帧/呈现排队/调用栈归因、最小代码修复和修复前后配对验证。
 - `UsbOutputStrategyResolver` Module 和可测试的 `UsbOutputDecision` 状态模型。
 - 启动时 API level/USB Host feature 检测，以及设备、格式和路由变化时的重新判定。
 - API 34+ `OfficialMixerBitPerfectAdapter` Implementation。
@@ -554,6 +555,7 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 
 完成条件：
 
+- 首页卡顿已经定位到有 trace 与调用路径支持的具体业务根因，并提交实际修复；Honor 与 iQOO 使用同一最终 APK、相同业务场景各完成至少三轮修复前后测试，三轮中位 jank 和 p95 均有超过自然波动的改善，且曲库点播、刷新保持、索引、封面、拖动和无障碍无回归。
 - 至少两台 Android 14+ 手机和两款 USB DAC 完成能力测试。
 - API 26–33 不会加载或调用 API 34 专属 Implementation，并明确落入普通系统路由。
 - 策略解析器的版本、设备、格式、权限和插拔组合测试通过。
