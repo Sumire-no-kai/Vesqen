@@ -707,6 +707,14 @@ class VesqenAppTest {
     @Test
     fun chain_decoder_identifier_remains_complete_at_320dp_with_double_text() = assertDecoderIdentifierLayout(2f, 2)
 
+    @Test
+    fun chain_decoder_identifier_remains_complete_at_320dp_with_130_percent_text() =
+        assertDecoderIdentifierLayout(1.3f, 2)
+
+    @Test
+    fun chain_decoder_identifier_remains_complete_at_320dp_with_150_percent_text() =
+        assertDecoderIdentifierLayout(1.5f, 2)
+
     private fun assertDecoderIdentifierLayout(fontScale: Float, maximumLines: Int) {
         val name = "c2.android.flac.decoder"
         val snapshot = chainTelemetrySnapshot().let { snapshot ->
@@ -1135,6 +1143,33 @@ class VesqenAppTest {
         val summary = composeRule.onNodeWithTag("vesqen.chain.summary").fetchSemanticsNode().boundsInRoot
         val metrics = composeRule.onNodeWithTag("vesqen.chain.metrics").fetchSemanticsNode().boundsInRoot
         assertTrue("840dp summary must remain left of the advanced dashboard", summary.right <= metrics.left)
+    }
+
+    @Test
+    fun player_view_switch_labels_are_not_ellipsized_with_150_percent_text() {
+        render(
+            state = activePlaybackState(), containerWidth = 360.dp,
+            containerHeight = 720.dp, fontScale = 1.5f,
+        )
+        composeRule.onNodeWithTag("vesqen.nav.now").performClick()
+        for (label in listOf(R.string.show_playback_session, R.string.show_album_artwork)) {
+            val layouts = mutableListOf<TextLayoutResult>()
+            composeRule.onNodeWithText(context.getString(label), useUnmergedTree = true)
+                .assertIsDisplayed()
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val layout = layouts.single()
+            assertTrue("View switch action must fit on one line", layout.lineCount == 1)
+            // The String Text semantics adapter rebuilds a paragraph at maxWidth while keeping
+            // the original, narrower layoutSize. Compare glyph advance, not paragraph width.
+            val textWidth = layout.getLineRight(0) - layout.getLineLeft(0)
+            assertTrue("Visible action must be complete: text=${layout.layoutInput.text.text}, " +
+                "size=${layout.size}, constraints=${layout.layoutInput.constraints}, " +
+                "textWidth=$textWidth, heightOverflow=${layout.didOverflowHeight}, " +
+                "ellipsized=${layout.isLineEllipsized(0)}",
+                textWidth <= layout.size.width + 1f &&
+                    !layout.didOverflowHeight && !layout.isLineEllipsized(0))
+            composeRule.onNodeWithTag("vesqen.now.session-toggle").performClick()
+        }
     }
 
     @Test

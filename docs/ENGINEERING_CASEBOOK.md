@@ -326,3 +326,25 @@ Debug 的 18.10 秒 Simpleperf 有 7705 样本、0 丢样、16 条调用链错�
 `c2.android.flac.decoder` 长 23 字符，原来没有超过 24 字符阈值，被放入不到半张卡片宽的数据列而换行。现在按读数类别布局：文本/USB 描述使用整行，普通字号数字保留对齐列，大字体则也使用整行。320 dp 普通字体和双倍字体的真机 Compose 用例检查完整字符串、实际 TextLayoutResult 的行数与溢出，并确认可用宽度超过卡片的 80%；不能只凭语义树有这段文字就声称没有裁切。
 
 本轮私有截图、基线帧统计、trace、CPU 采样和测试原始输出位于 `build/qa/m2-software-closeout-20260908/`，不提交歌曲名称、原文件和设备原始日志到远端。最终验收数量与修复后性能结果见 M2_DEVICE_ACCEPTANCE 文末。
+
+### P02 补测：当前 Profile 的冷进程慢帧（2026-09-08）
+
+iQOO 再次接入后，确认已安装的 Profile SHA-256 为 `87974fcd8362ab7852198a27d178084e8a6156400fa297d5091f3fc4257b87de`。保留真实曲库和已暂停的迷你播放器，三轮各 48 次 100 ms 滑动分别得到 570/565/574 帧、HWUI jank 均 0%、p95 11/10/10 ms。这是当前场景复验，不是修复前后的收益。
+
+另在重启进程后独立采集 Perfetto：794 个应用表面帧中，376 None、417 仅 Buffer Stuffing、1 App Deadline Missed；错误/数据丢失统计没有非零项。唯一超时帧的预期预算 16.667 ms，实际 FrameTimeline 时长 21.681 ms。用 surface frame token 对齐 doFrame 后，其耗时 12.446 ms，其中主线程实际 Running 12.042 ms，最大 measureAndLayout 5.504 ms、重组 1.895 ms、postAndWait 0.443 ms；这些嵌套切片不能相加。对应 RenderThread DrawFrames 为 4.463 ms，72×72 纹理上传仅 0.109 ms。
+
+本次样本不支持把该帧归因为大型封面上传或主线程长期等待渲染。它与前一轮的长 postAndWait 帧不同，需要分别解释，不能用不同轮次的 CPU 热点强行给所有慢帧同一个原因。继续保留 Library 的业务根因、代码修复、双机配对和高刷新率验收项，不为获得“已修复”结论而改动尚无证据的列表逻辑。
+
+原始帧统计、trace、SQL 报告和 APK 身份位于私有 `build/qa/m3-followup-20260908/`。
+
+## R08 · 语义文字完整，不等于按钮没有省略（2026-09-08）
+
+实际切换应用语言和系统字体后，英文 Now 页底部的 `Show playback session` 在 1.3×/1.5× 字体下省略，中文按钮仍完整。既有回归检查节点存在、语义标签和几何边界，都不能发现这个问题：Compose 的 Text 即使画面用了省略号，语义树仍可保留完整字符串。
+
+根因是固定一行的底部切换按钮使用了过长英文动作句；字号放大后超过图标旁的可用文字宽度。修复保持按钮布局和字体缩放，用目标名称 `Session` / `Artwork` 表达切换方向；当前视图状态仍由原 stateDescription 提供。没有压缩字号或改变点击区域。
+
+新增 360 dp、1.5× 字体回归，实际切换两个视图，分别读取 TextLayoutResult。第一次检查直接使用 hasVisualOverflow，导致较短文案也失败；补充数值后发现 `Session` 的 layoutSize 宽 203 px，可用宽 480 px，isLineEllipsized 为 false，但 didOverflowWidth 为 true。
+
+核对本地 Compose 源码：String Text 的 ParagraphLayoutCache.slowCreateTextLayoutResultOrNull 为语义查询按最大约束重建 MultiParagraph，却保留原始较窄的 layoutSize；TextLayoutResult.didOverflowWidth 比较的是 size.width 和 multiParagraph.width。因此这里的 true 不能直接证明字形被裁切。修正测试代理指标为实际行文字宽度不超过绘制宽度（允许 1 px 取整差）、无垂直溢出、单行且无省略号。实际显示契约没有放宽，原始失败和诊断输出保留；不把这两次误报描述成修复后仍有真实省略。
+
+最终英文 4 项定向回归和中文 1 项分别通过；测试参数、APK 身份和实际 Profile 复查结果见 M2_DEVICE_ACCEPTANCE 文末。本例说明测试要对齐用户可见的契约：完整语义不能证明画面完整，而一个宽度代理标志也不能代替字形和省略状态。
