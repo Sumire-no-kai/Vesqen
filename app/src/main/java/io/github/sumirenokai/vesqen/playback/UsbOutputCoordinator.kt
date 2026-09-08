@@ -3,6 +3,9 @@ package io.github.sumirenokai.vesqen.playback
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.hardware.usb.UsbConstants
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbManager
 import android.media.AudioAttributes
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
@@ -46,6 +49,7 @@ internal class UsbOutputCoordinator(
 ), Player.Listener {
     private val appContext = context.applicationContext
     private val audioManager = appContext.getSystemService(AudioManager::class.java)
+    private val usbManager = appContext.getSystemService(UsbManager::class.java)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val lock = Any()
@@ -818,6 +822,7 @@ internal class UsbOutputCoordinator(
                 phase = phase,
                 failure = failure,
                 deviceName = device?.displayName(),
+                hardwareIdentity = device?.let { uniqueUsbHardwareIdentity() },
                 sourceFormat = source?.toSummary(),
                 sinkFormat = sink?.toSummary(),
                 decisionCode = decisionCode,
@@ -933,6 +938,25 @@ internal class UsbOutputCoordinator(
     private fun AudioDeviceInfo.displayName(): String = productName?.toString()?.takeIf(String::isNotBlank)
         ?: "USB audio ${id}"
 
+    /**
+     * Android does not expose a reliable AudioDeviceInfo-to-UsbDevice mapping. An exact identity
+     * is therefore published only when one physical USB Audio Class device is present; multiple
+     * candidates remain intentionally unverifiable instead of being matched by display name.
+     */
+    private fun uniqueUsbHardwareIdentity(): UsbHardwareIdentity? = runCatching {
+        usbManager.deviceList.values
+            .filter(UsbDevice::isUsbAudioDevice)
+            .singleOrNull()
+            ?.let { device ->
+                val descriptorVersion = device.version.takeIf(String::isNotBlank) ?: return@runCatching null
+                UsbHardwareIdentity(
+                    vendorId = device.vendorId,
+                    productId = device.productId,
+                    descriptorVersion = descriptorVersion,
+                )
+            }
+    }.getOrNull()
+
     private companion object {
         const val PREFERENCES_NAME = "usb_output_preferences"
         const val MODE_KEY = "mode"
@@ -1020,6 +1044,12 @@ private class StrictGatedAudioOutput(
 }
 
 private fun AudioDeviceInfo.isUsbAudioOutput(): Boolean = isSink && type in USB_AUDIO_TYPES
+
+private fun UsbDevice.isUsbAudioDevice(): Boolean =
+    deviceClass == UsbConstants.USB_CLASS_AUDIO ||
+        (0 until interfaceCount).any { index ->
+            getInterface(index).interfaceClass == UsbConstants.USB_CLASS_AUDIO
+        }
 
 private val USB_AUDIO_TYPES = setOf(
     AudioDeviceInfo.TYPE_USB_DEVICE,

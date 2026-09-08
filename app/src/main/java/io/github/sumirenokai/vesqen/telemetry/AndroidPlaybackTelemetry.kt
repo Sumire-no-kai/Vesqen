@@ -28,7 +28,10 @@ import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.source.MediaSource
 import io.github.sumirenokai.vesqen.audio.AudioRouteSource
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
+import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.playback.UsbOutputStateRepository
+import io.github.sumirenokai.vesqen.verification.OutputVerificationMatch
+import io.github.sumirenokai.vesqen.verification.resolveOutputDeclaration
 import java.util.ArrayDeque
 import java.util.IdentityHashMap
 import java.util.UUID
@@ -59,6 +62,7 @@ import kotlinx.coroutines.sync.withLock
 class AndroidPlaybackTelemetry internal constructor(
     context: Context,
     private val usbOutputStateRepository: UsbOutputStateRepository = UsbOutputStateRepository(),
+    private val outputVerificationLookup: (UsbOutputStatus) -> OutputVerificationMatch? = { null },
     private val clock: TelemetryClock = AndroidTelemetryClock,
     audioRouteSource: AudioRouteSource = AudioRouteSource(context),
 ) : PlaybackTelemetry, AnalyticsListener, TransferListener {
@@ -1001,11 +1005,41 @@ class AndroidPlaybackTelemetry internal constructor(
         } else {
             VESQEN_OUTPUT_COORDINATOR
         }
+        val outputVerification = outputVerificationLookup(usbOutputStatus)
+        val outputDeclaration = resolveOutputDeclaration(usbOutputStatus, outputVerification)
         metrics.measuredText(
             TelemetryMetricCatalog.ROUTE_OUTPUT_DECLARATION,
-            usbOutputStatus.declaration.name.replace('_', ' '),
-            usbOutputSource,
+            outputDeclaration.name.replace('_', ' '),
+            if (outputVerification == null) usbOutputSource else EXTERNAL_OUTPUT_VERIFICATION,
             usbOutputInstant,
+        )
+        metrics.measuredTextOrUnavailable(
+            TelemetryMetricCatalog.ROUTE_EXTERNAL_VERIFICATION_RECORD,
+            outputVerification?.record?.recordId,
+            EXTERNAL_OUTPUT_VERIFICATION,
+            usbOutputInstant,
+            TelemetryUnavailableReason.NOT_APPLICABLE,
+        )
+        metrics.measuredTextOrUnavailable(
+            TelemetryMetricCatalog.ROUTE_EXTERNAL_VERIFICATION_METHOD,
+            outputVerification?.record?.methodId,
+            EXTERNAL_OUTPUT_VERIFICATION,
+            usbOutputInstant,
+            TelemetryUnavailableReason.NOT_APPLICABLE,
+        )
+        metrics.measuredTextOrUnavailable(
+            TelemetryMetricCatalog.ROUTE_EXTERNAL_VERIFICATION_EVIDENCE,
+            outputVerification?.record?.evidenceReference,
+            EXTERNAL_OUTPUT_VERIFICATION,
+            usbOutputInstant,
+            TelemetryUnavailableReason.NOT_APPLICABLE,
+        )
+        metrics.measuredTextOrUnavailable(
+            TelemetryMetricCatalog.ROUTE_EXTERNAL_VERIFICATION_TEST_VECTOR,
+            outputVerification?.record?.testVectorSha256,
+            EXTERNAL_OUTPUT_VERIFICATION,
+            usbOutputInstant,
+            TelemetryUnavailableReason.NOT_APPLICABLE,
         )
         metrics.measuredText(
             TelemetryMetricCatalog.ROUTE_LAST_STRATEGY_DECISION,
@@ -1983,6 +2017,10 @@ class AndroidPlaybackTelemetry internal constructor(
         val VESQEN_OUTPUT_COORDINATOR = TelemetryDataSource(
             id = TelemetrySourceId("vesqen.output_coordinator"),
             detail = "Service decision combining Media3 output format, Android mixer readback, and AudioTrack route; not external signal verification",
+        )
+        val EXTERNAL_OUTPUT_VERIFICATION = TelemetryDataSource(
+            id = TelemetrySourceId("vesqen.external_output_verification"),
+            detail = "Maintainer-signed exact device, DAC, build, and PCM-format verification record",
         )
     }
 }

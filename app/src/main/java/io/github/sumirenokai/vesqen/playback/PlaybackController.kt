@@ -18,10 +18,12 @@ import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMediaItemExtras
+import io.github.sumirenokai.vesqen.verification.OutputVerificationMatch
 
 /** Main-thread facade around the Media3 controller used by the Compose UI. */
 class PlaybackController(
     context: Context,
+    private val outputVerificationLookup: (UsbOutputStatus) -> OutputVerificationMatch? = { null },
     private val onSnapshotChanged: (PlaybackSnapshot) -> Unit = {},
 ) {
     private val appContext = context.applicationContext
@@ -90,7 +92,12 @@ class PlaybackController(
             controller = null
             queueCache = PlaybackQueueCache()
             updateSnapshot(
-                latestSnapshot.copy(isControllerReady = false, isPlaying = false, showsPauseAction = false),
+                latestSnapshot.copy(
+                    isControllerReady = false,
+                    isPlaying = false,
+                    showsPauseAction = false,
+                    outputVerification = null,
+                ),
             )
             scheduleReconnect()
         }
@@ -143,7 +150,12 @@ class PlaybackController(
                     }
                     .onFailure {
                         updateSnapshot(
-                            latestSnapshot.copy(isControllerReady = false, isPlaying = false, showsPauseAction = false),
+                            latestSnapshot.copy(
+                                isControllerReady = false,
+                                isPlaying = false,
+                                showsPauseAction = false,
+                                outputVerification = null,
+                            ),
                         )
                         scheduleReconnect()
                     }
@@ -257,6 +269,7 @@ class PlaybackController(
                 PlaybackSnapshot(
                     isControllerReady = true,
                     usbOutputStatus = usbOutputStatus,
+                    outputVerification = outputVerificationLookup(usbOutputStatus),
                 ),
             )
         }
@@ -366,6 +379,14 @@ class PlaybackController(
         }
     }
 
+    fun refreshOutputVerification() {
+        updateSnapshot(
+            latestSnapshot.copy(
+                outputVerification = outputVerificationLookup(usbOutputStatus),
+            ),
+        )
+    }
+
     fun release() {
         if (released) return
         released = true
@@ -421,6 +442,7 @@ class PlaybackController(
                 queue = queueCache.projection,
                 problem = currentProblem,
                 usbOutputStatus = usbOutputStatus,
+                outputVerification = outputVerificationLookup(usbOutputStatus),
             ),
         )
     }

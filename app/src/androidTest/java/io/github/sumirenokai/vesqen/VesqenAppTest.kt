@@ -58,6 +58,11 @@ import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
 import io.github.sumirenokai.vesqen.playback.PlaybackQueueItem
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode
+import io.github.sumirenokai.vesqen.playback.AudioFormatSummary
+import io.github.sumirenokai.vesqen.playback.UsbHardwareIdentity
+import io.github.sumirenokai.vesqen.playback.UsbOutputMode
+import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
+import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.telemetry.FakePlaybackTelemetry
 import io.github.sumirenokai.vesqen.telemetry.PlaybackTelemetry
 import io.github.sumirenokai.vesqen.telemetry.TelemetryDataSource
@@ -91,6 +96,11 @@ import io.github.sumirenokai.vesqen.ui.chain.formatSeconds
 import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
+import io.github.sumirenokai.vesqen.verification.OutputVerificationRegistryState
+import io.github.sumirenokai.vesqen.verification.OutputVerificationMatch
+import io.github.sumirenokai.vesqen.verification.OutputVerificationRecord
+import io.github.sumirenokai.vesqen.verification.OutputVerificationResult
+import io.github.sumirenokai.vesqen.verification.VerificationPcmFormat
 import kotlin.math.abs
 import kotlin.math.min
 import java.util.concurrent.atomic.AtomicInteger
@@ -315,6 +325,8 @@ class VesqenAppTest {
         render(grantedState(), versionName = "0.1.0", versionCode = 1)
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.about"))
         composeRule.onNodeWithText(context.getString(R.string.settings_version, "0.1.0"))
             .assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.settings.about").performClick()
@@ -1170,6 +1182,89 @@ class VesqenAppTest {
                     !layout.didOverflowHeight && !layout.isLineEllipsized(0))
             composeRule.onNodeWithTag("vesqen.now.session-toggle").performClick()
         }
+    }
+
+    @Test
+    fun settings_exposes_signed_verification_registry_import_without_claiming_verified() {
+        var importCalls = 0
+        render(
+            state = grantedState(),
+            verificationRegistryState = OutputVerificationRegistryState.Ready(
+                records = emptyList(),
+                applicableInstallRecordCount = 0,
+            ),
+            onImportVerificationRegistry = { importCalls++ },
+        )
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.verification-registry"))
+        composeRule.onNodeWithTag("vesqen.settings.verification-registry").assertIsDisplayed().performClick()
+        composeRule.onAllNodesWithText(context.getString(R.string.bit_perfect_verified)).assertCountEquals(0)
+        composeRule.runOnIdle { assertEquals(1, importCalls) }
+    }
+
+    @Test
+    fun exact_verification_match_is_visually_distinct_and_traceable_in_chain() {
+        val verification = fakeOutputVerification()
+        val outputStatus = UsbOutputStatus(
+            mode = UsbOutputMode.STRICT_BIT_PERFECT,
+            phase = UsbOutputPhase.ACTIVE,
+            deviceName = "Reference DAC",
+            hardwareIdentity = UsbHardwareIdentity(0x1234, 0x5678, "2.10"),
+            sourceFormat = AudioFormatSummary(96_000, 2, "pcm 24-bit"),
+            sinkFormat = AudioFormatSummary(96_000, 2, "pcm 24-bit"),
+            decisionCode = "strict_usb.active",
+            generation = 1,
+        )
+        render(
+            state = grantedState(
+                tracks = sampleTracks,
+                playback = PlaybackSnapshot(
+                    trackId = sampleTracks.first().id,
+                    title = sampleTracks.first().title,
+                    usbOutputStatus = outputStatus,
+                    outputVerification = verification,
+                ),
+            ),
+        )
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.verification-registry"))
+        composeRule.onNodeWithText(
+            context.getString(R.string.settings_verification_active, verification.record.recordId),
+        ).assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        composeRule.onNodeWithTag("vesqen.chain.summary-list")
+            .performScrollToNode(hasTestTag("vesqen.chain.summary"))
+        composeRule.onNodeWithText(context.getString(R.string.bit_perfect_verified)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.chain_verified_title)).assertIsDisplayed()
+        composeRule.onNodeWithText(verification.record.recordId, substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun playback_progress_label_is_not_ellipsized_with_150_percent_text() {
+        render(
+            state = activePlaybackState(),
+            containerWidth = 360.dp,
+            containerHeight = 720.dp,
+            fontScale = 1.5f,
+        )
+        composeRule.onNodeWithTag("vesqen.nav.now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.session-toggle").performClick()
+
+        val layouts = mutableListOf<TextLayoutResult>()
+        composeRule.onNodeWithText(context.getString(R.string.playback_progress), useUnmergedTree = true)
+            .assertIsDisplayed()
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+
+        val layout = layouts.single()
+        assertTrue("Playback progress must remain complete at 150% text", layout.lineCount == 1)
+        assertTrue("Playback progress must not be ellipsized", !layout.isLineEllipsized(0))
+        assertTrue("Playback progress must not overflow vertically", !layout.didOverflowHeight)
     }
 
     @Test
@@ -2213,6 +2308,8 @@ class VesqenAppTest {
         diagnosticRecorder: DiagnosticRecorder? = null,
         diagnosticExportFeedback: DiagnosticExportFeedback = DiagnosticExportFeedback.NONE,
         onRequestDiagnosticExport: () -> Unit = {},
+        verificationRegistryState: OutputVerificationRegistryState = OutputVerificationRegistryState.Empty,
+        onImportVerificationRegistry: () -> Unit = {},
     ) {
         composeRule.setContent {
             VesqenTheme(darkTheme = darkTheme) {
@@ -2244,6 +2341,8 @@ class VesqenAppTest {
                         diagnosticRecorder = diagnosticRecorder,
                         diagnosticExportFeedback = diagnosticExportFeedback,
                         onRequestDiagnosticExport = onRequestDiagnosticExport,
+                        verificationRegistryState = verificationRegistryState,
+                        onImportVerificationRegistry = onImportVerificationRegistry,
                     )
                 }
                 val renderWithinSize: @Composable () -> Unit = {
@@ -2317,6 +2416,31 @@ class VesqenAppTest {
             tracks = tracks,
         ),
         playback = playback,
+    )
+
+    private fun fakeOutputVerification() = OutputVerificationMatch(
+        OutputVerificationRecord(
+            recordId = "m4.reference_96k24",
+            result = OutputVerificationResult.VERIFIED,
+            verifiedAtEpochMs = 1_788_800_000_000,
+            appVersionName = "0.4.0-beta.1",
+            appVersionCode = 9,
+            baseApkSha256 = "a".repeat(64),
+            deviceManufacturer = "Example",
+            deviceModel = "Reference Phone",
+            androidApiLevel = 35,
+            buildFingerprintSha256 = "b".repeat(64),
+            dacVendorId = 0x1234,
+            dacProductId = 0x5678,
+            dacName = "Reference DAC",
+            dacDescriptorVersion = "2.10",
+            sourceFormat = VerificationPcmFormat(96_000, 2, "pcm 24-bit"),
+            sinkFormat = VerificationPcmFormat(96_000, 2, "pcm 24-bit"),
+            testVectorSha256 = "c".repeat(64),
+            methodId = "digital_capture.sample_compare",
+            signalPoint = "usb_digital_pcm",
+            evidenceReference = "private-evidence/m4-reference-96k24",
+        ),
     )
 
     private fun activePlaybackState(): VesqenUiState = grantedState(

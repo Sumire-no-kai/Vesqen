@@ -1,5 +1,8 @@
 package io.github.sumirenokai.vesqen.playback
 
+import io.github.sumirenokai.vesqen.verification.OutputVerificationMatch
+import io.github.sumirenokai.vesqen.verification.resolveOutputDeclaration
+
 enum class PlaybackRepeatMode {
     OFF,
     ALL,
@@ -123,6 +126,7 @@ data class PlaybackSnapshot(
     val queue: List<PlaybackQueueItem> = emptyList(),
     val problem: PlaybackProblem? = null,
     val usbOutputStatus: UsbOutputStatus = UsbOutputStatus(),
+    val outputVerification: OutputVerificationMatch? = null,
     /** Pause remains available during buffering or transient suppression of requested playback. */
     val showsPauseAction: Boolean = isPlaying,
 ) {
@@ -130,7 +134,7 @@ data class PlaybackSnapshot(
         get() = trackId != null
 
     val declaration: OutputDeclaration
-        get() = usbOutputStatus.declaration
+        get() = resolveOutputDeclaration(usbOutputStatus, outputVerification)
 
     val progressFraction: Float
         get() = if (durationMs <= 0) 0f else (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)

@@ -6,6 +6,7 @@
     <string name="bit_perfect_available">BIT-PERFECT AVAILABLE</string>
     <string name="bit_perfect_requested">BIT-PERFECT REQUESTED</string>
     <string name="bit_perfect_active">BIT-PERFECT ACTIVE</string>
+    <string name="bit_perfect_verified">BIT-PERFECT VERIFIED</string>
     <string name="bit_perfect_failed">STRICT OUTPUT STOPPED</string>
     <string name="output_phone_speaker">Phone speaker</string>
     <string name="output_wired_or_usb">Wired or USB audio</string>
@@ -91,6 +92,21 @@
     <string name="usb_failure_platform">The Android audio path could not be prepared safely.</string>
     <string name="settings_playback_chain">Playback chain</string>
     <string name="settings_playback_chain_body">Inspect the current Android route declaration, detected output types, and evidence limits.</string>
+    <string name="settings_verification_registry">Output verification records</string>
+    <string name="settings_verification_loading">Loading the private signed registry…</string>
+    <string name="settings_verification_empty">Import a maintainer-signed JSON registry. A record is used only for its exact app, phone/ROM, DAC, source, and sink combination.</string>
+    <string name="settings_verification_loaded">Registry loaded. Total records: %1$d; applicable to this app build and phone: %2$d. Tap to replace it.</string>
+    <string name="settings_verification_active">Exact external verification record %1$s is active. Tap to replace the registry.</string>
+    <string name="settings_verification_imported">Import complete. Total records: %1$d; applicable to this app build and phone: %2$d.</string>
+    <string name="settings_verification_import_failed">Registry not imported: %1$s.</string>
+    <string name="settings_verification_invalid">Stored registry is invalid: %1$s. Tap to replace it.</string>
+    <string name="verification_failure_too_large">file exceeds the 256 KiB limit</string>
+    <string name="verification_failure_malformed">document is malformed or contains duplicate fields</string>
+    <string name="verification_failure_schema">schema version is unsupported</string>
+    <string name="verification_failure_algorithm">signature algorithm is unsupported</string>
+    <string name="verification_failure_signature">signature does not match the installed app certificate</string>
+    <string name="verification_failure_certificate">installed app signing certificate is unavailable</string>
+    <string name="verification_failure_io">file could not be read or stored</string>
     <string name="settings_about">About</string>
     <string name="settings_about_vesqen">About Vesqen</string>
     <string name="settings_version">Version %1$s</string>
@@ -151,6 +167,8 @@
     <string name="chain_strict_applying_body">Vesqen is rebuilding the Media3 AudioTrack and checking the mixer readback and actual route.</string>
     <string name="chain_strict_active_title">Strict USB output active</string>
     <string name="chain_strict_active_body">%1$s is using %2$s with a matching AudioTrack, mixer preference, and route. External signal verification remains separate.</string>
+    <string name="chain_verified_title">Externally verified output</string>
+    <string name="chain_verified_body">Record %1$s verifies this exact app build, phone/ROM, DAC, source format, and sink format. Method: %2$s.</string>
     <string name="chain_strict_failed_title">Strict output stopped</string>
     <string name="chain_strict_failed_body">Fail-closed decision: %1$s. Select System output in Settings to use Android’s normal route.</string>
     <string name="unavailable">UNAVAILABLE</string>
@@ -465,6 +483,7 @@
     <string name="chain_source_android_direct_capability">Android direct-playback capability API</string>
     <string name="chain_source_android_mixer_attributes">Android mixer-attributes capability API</string>
     <string name="chain_source_output_coordinator">Vesqen output coordinator</string>
+    <string name="chain_source_external_output_verification">Signed external verification record</string>
     <string name="chain_source_android_usb">Android public USB APIs</string>
     <string name="chain_source_app_configuration">App configuration</string>
     <string name="chain_source_platform">Android platform</string>
@@ -593,6 +612,10 @@
     <string name="chain_metric_route_mixer_profile_count">Anticipated mixer profiles</string>
     <string name="chain_metric_route_preferred_mixer_profile">Anticipated preferred mixer profile</string>
     <string name="chain_metric_route_output_declaration">Output declaration</string>
+    <string name="chain_metric_route_external_verification_record">Verification record</string>
+    <string name="chain_metric_route_external_verification_method">Verification method</string>
+    <string name="chain_metric_route_external_verification_evidence">Evidence reference</string>
+    <string name="chain_metric_route_external_verification_test_vector">Test vector SHA-256</string>
     <string name="chain_metric_route_audio_track_request_format">AudioTrack requested format</string>
     <string name="chain_metric_route_observed_output_format">Observed output format</string>
     <string name="chain_metric_route_bluetooth_codec">Bluetooth codec</string>

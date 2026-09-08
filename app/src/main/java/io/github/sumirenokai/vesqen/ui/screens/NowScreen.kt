@@ -82,6 +82,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -1115,6 +1116,26 @@ private fun NowSessionStage(
 
 @Composable
 private fun NowInfoLine(label: String, value: String, compact: Boolean) {
+    val largeText = LocalDensity.current.fontScale > 1.3f
+    if (largeText) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs),
+        ) {
+            Text(
+                text = label,
+                style = if (compact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = value,
+                style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.align(Alignment.End),
+            )
+        }
+        return
+    }
     Row(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = label,

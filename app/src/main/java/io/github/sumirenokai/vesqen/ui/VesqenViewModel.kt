@@ -72,6 +72,11 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                     loadCachedLibrary()
                 }
             }
+            viewModelScope.launch {
+                vesqenApplication.outputVerificationRepository.state.collect {
+                    playbackController?.refreshOutputVerification()
+                }
+            }
         }
     }
 
@@ -329,6 +334,8 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     private fun playbackController(): PlaybackController = playbackController ?: PlaybackController(
         context = getApplication(),
         onSnapshotChanged = { snapshot -> uiState = uiState.copy(playback = snapshot) },
+        outputVerificationLookup = (getApplication() as VesqenApplication)
+            .outputVerificationRepository::match,
     ).also { controller ->
         playbackController = controller
     }

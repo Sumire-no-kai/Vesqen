@@ -6,6 +6,7 @@
     <string name="bit_perfect_available">BIT-PERFECT AVAILABLE</string>
     <string name="bit_perfect_requested">BIT-PERFECT REQUESTED</string>
     <string name="bit_perfect_active">BIT-PERFECT ACTIVE</string>
+    <string name="bit_perfect_verified">BIT-PERFECT VERIFIED</string>
     <string name="bit_perfect_failed">严格输出已停止</string>
     <string name="output_phone_speaker">手机扬声器</string>
     <string name="output_wired_or_usb">有线或 USB 音频</string>
@@ -88,6 +89,21 @@
     <string name="usb_failure_platform">Android 音频链路无法被安全建立。</string>
     <string name="settings_playback_chain">播放链路</string>
     <string name="settings_playback_chain_body">查看当前 Android 路由声明、已检测的输出类型与证据边界。</string>
+    <string name="settings_verification_registry">输出验证记录</string>
+    <string name="settings_verification_loading">正在载入私有签名记录库…</string>
+    <string name="settings_verification_empty">导入维护者签名的 JSON 记录库。记录仅用于完全一致的应用、手机/ROM、DAC、源格式与输出格式组合。</string>
+    <string name="settings_verification_loaded">已载入 %1$d 条签名记录；%2$d 条适用于当前应用构建和手机。轻触可替换记录库。</string>
+    <string name="settings_verification_active">精确外部验证记录 %1$s 当前生效。轻触可替换记录库。</string>
+    <string name="settings_verification_imported">已导入 %1$d 条签名记录；%2$d 条适用于当前应用构建和手机。</string>
+    <string name="settings_verification_import_failed">未导入记录库：%1$s。</string>
+    <string name="settings_verification_invalid">已存储的记录库无效：%1$s。轻触可替换。</string>
+    <string name="verification_failure_too_large">文件超过 256 KiB 上限</string>
+    <string name="verification_failure_malformed">文档格式错误或包含重复字段</string>
+    <string name="verification_failure_schema">不支持该结构版本</string>
+    <string name="verification_failure_algorithm">不支持该签名算法</string>
+    <string name="verification_failure_signature">签名与已安装应用的证书不匹配</string>
+    <string name="verification_failure_certificate">无法取得已安装应用的签名证书</string>
+    <string name="verification_failure_io">无法读取或保存文件</string>
     <string name="settings_about">关于</string>
     <string name="settings_about_vesqen">关于 Vesqen</string>
     <string name="settings_version">版本 %1$s</string>
@@ -148,6 +164,8 @@
     <string name="chain_strict_applying_body">Vesqen 正在重建 Media3 AudioTrack，并核对 mixer 读回与实际路由。</string>
     <string name="chain_strict_active_title">严格 USB 输出已生效</string>
     <string name="chain_strict_active_body">%1$s 正使用 %2$s，AudioTrack、mixer preference 与路由一致；外部信号验证仍是独立证据。</string>
+    <string name="chain_verified_title">输出已通过外部验证</string>
+    <string name="chain_verified_body">记录 %1$s 精确验证了当前应用构建、手机/ROM、DAC、源格式与输出格式。方法：%2$s。</string>
     <string name="chain_strict_failed_title">严格输出已停止</string>
     <string name="chain_strict_failed_body">Fail-closed 决策：%1$s。如需 Android 普通路由，请在设置中选择“系统输出”。</string>
     <string name="unavailable">不可用</string>
@@ -446,6 +464,7 @@
     <string name="chain_source_android_direct_capability">Android 直出能力 API</string>
     <string name="chain_source_android_mixer_attributes">Android 混音器属性能力 API</string>
     <string name="chain_source_output_coordinator">Vesqen 输出协调器</string>
+    <string name="chain_source_external_output_verification">签名的外部验证记录</string>
     <string name="chain_source_android_usb">Android 公共 USB API</string>
     <string name="chain_source_app_configuration">应用配置</string>
     <string name="chain_source_platform">Android 平台</string>
@@ -574,6 +593,10 @@
     <string name="chain_metric_route_mixer_profile_count">预计混音器配置数</string>
     <string name="chain_metric_route_preferred_mixer_profile">预计首选混音器配置</string>
     <string name="chain_metric_route_output_declaration">输出声明</string>
+    <string name="chain_metric_route_external_verification_record">验证记录</string>
+    <string name="chain_metric_route_external_verification_method">验证方法</string>
+    <string name="chain_metric_route_external_verification_evidence">证据引用</string>
+    <string name="chain_metric_route_external_verification_test_vector">测试向量 SHA-256</string>
     <string name="chain_metric_route_audio_track_request_format">AudioTrack 请求格式</string>
     <string name="chain_metric_route_observed_output_format">观测到的输出格式</string>
     <string name="chain_metric_route_bluetooth_codec">蓝牙编解码器</string>

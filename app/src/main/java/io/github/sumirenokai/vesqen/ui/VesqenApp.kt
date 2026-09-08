@@ -58,6 +58,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.sumirenokai.vesqen.BuildConfig
@@ -89,9 +90,14 @@ import io.github.sumirenokai.vesqen.ui.screens.SettingsScreen
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
+import io.github.sumirenokai.vesqen.verification.OutputVerificationImportFailure
+import io.github.sumirenokai.vesqen.verification.OutputVerificationImportResult
+import io.github.sumirenokai.vesqen.verification.OutputVerificationRegistryState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val FocusedPlayerEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
@@ -161,6 +167,28 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
     }
     val diagnosticRecorder = application.diagnosticRecorder
     val diagnosticExportScope = rememberCoroutineScope()
+    val verificationRegistryState by application.outputVerificationRepository.state
+        .collectAsStateWithLifecycle()
+    val verificationImportScope = rememberCoroutineScope()
+    var verificationImportResult by remember {
+        mutableStateOf<OutputVerificationImportResult?>(null)
+    }
+    val verificationImportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { source ->
+        if (source != null) {
+            verificationImportScope.launch {
+                verificationImportResult = withContext(Dispatchers.IO) {
+                    val input = runCatching { context.contentResolver.openInputStream(source) }.getOrNull()
+                    if (input == null) {
+                        OutputVerificationImportResult.Failure(OutputVerificationImportFailure.IO_ERROR)
+                    } else {
+                        application.outputVerificationRepository.import(input)
+                    }
+                }
+            }
+        }
+    }
     var diagnosticExportFeedback by remember {
         mutableStateOf(DiagnosticExportFeedback.NONE)
     }
@@ -264,6 +292,12 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
         onRefreshPlaybackPosition = viewModel::refreshPlaybackPosition,
         onCyclePlaybackOrder = viewModel::cyclePlaybackOrderMode,
         onSetUsbOutputMode = viewModel::setUsbOutputMode,
+        verificationRegistryState = verificationRegistryState,
+        verificationImportResult = verificationImportResult,
+        onImportVerificationRegistry = {
+            verificationImportResult = null
+            verificationImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
+        },
         managePhoneOrientation = true,
     )
 }
@@ -320,6 +354,9 @@ fun VesqenAppContent(
     diagnosticExportFeedback: DiagnosticExportFeedback = DiagnosticExportFeedback.NONE,
     onRequestDiagnosticExport: () -> Unit = {},
     onClearDiagnosticExportFeedback: () -> Unit = {},
+    verificationRegistryState: OutputVerificationRegistryState = OutputVerificationRegistryState.Empty,
+    verificationImportResult: OutputVerificationImportResult? = null,
+    onImportVerificationRegistry: () -> Unit = {},
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     val appliedChainPreferencesRepository = chainPreferencesRepository ?: remember {
@@ -464,6 +501,9 @@ fun VesqenAppContent(
                 onSeek = onSeek,
                 onCyclePlaybackOrder = onCyclePlaybackOrder,
                 onSetUsbOutputMode = onSetUsbOutputMode,
+                verificationRegistryState = verificationRegistryState,
+                verificationImportResult = verificationImportResult,
+                onImportVerificationRegistry = onImportVerificationRegistry,
                 onTogglePlayerOrientation = ::togglePlayerOrientation,
                 showOrientationToggle = isPhone,
                 isLandscape = isLandscape,
@@ -519,6 +559,9 @@ fun VesqenAppContent(
             onSeek = onSeek,
             onCyclePlaybackOrder = onCyclePlaybackOrder,
             onSetUsbOutputMode = onSetUsbOutputMode,
+            verificationRegistryState = verificationRegistryState,
+            verificationImportResult = verificationImportResult,
+            onImportVerificationRegistry = onImportVerificationRegistry,
             onTogglePlayerOrientation = ::togglePlayerOrientation,
             showOrientationToggle = isPhone,
             isLandscape = isLandscape,
@@ -576,6 +619,9 @@ private fun VesqenDestinationFrame(
     onSeek: (Long) -> Unit,
     onCyclePlaybackOrder: () -> Unit,
     onSetUsbOutputMode: (UsbOutputMode) -> Unit,
+    verificationRegistryState: OutputVerificationRegistryState,
+    verificationImportResult: OutputVerificationImportResult?,
+    onImportVerificationRegistry: () -> Unit,
     onTogglePlayerOrientation: () -> Unit,
     showOrientationToggle: Boolean,
     isLandscape: Boolean,
@@ -865,8 +911,12 @@ private fun VesqenDestinationFrame(
 
                     VesqenDestination.SETTINGS -> SettingsScreen(
                         outputStatus = state.playback.usbOutputStatus,
+                        outputVerification = state.playback.outputVerification,
+                        verificationRegistryState = verificationRegistryState,
+                        verificationImportResult = verificationImportResult,
                         onSetUsbOutputMode = onSetUsbOutputMode,
                         onOpenPlaybackChain = onOpenChain,
+                        onImportVerificationRegistry = onImportVerificationRegistry,
                         onOpenAbout = onOpenAbout,
                         versionName = versionName,
                         modifier = destinationModifier,

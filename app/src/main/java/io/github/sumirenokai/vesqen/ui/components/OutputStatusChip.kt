@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -41,6 +43,8 @@ fun OutputStatusChip(
             androidx.compose.ui.res.stringResource(R.string.bit_perfect_requested)
         OutputDeclaration.BIT_PERFECT_ACTIVE ->
             androidx.compose.ui.res.stringResource(R.string.bit_perfect_active)
+        OutputDeclaration.BIT_PERFECT_VERIFIED ->
+            androidx.compose.ui.res.stringResource(R.string.bit_perfect_verified)
         OutputDeclaration.BIT_PERFECT_FAILED ->
             androidx.compose.ui.res.stringResource(R.string.bit_perfect_failed)
     }
@@ -61,8 +65,19 @@ fun OutputStatusChip(
                 onClick = onClick,
             )
     }
-    val resolvedContainerColor = containerColor ?: MaterialTheme.colorScheme.surfaceContainerHigh
-    val resolvedContentColor = contentColor ?: MaterialTheme.colorScheme.onSurfaceVariant
+    val verified = declaration == OutputDeclaration.BIT_PERFECT_VERIFIED
+    val resolvedContainerColor = containerColor ?: when {
+        verified -> MaterialTheme.colorScheme.tertiaryContainer
+        declaration == OutputDeclaration.BIT_PERFECT_FAILED -> MaterialTheme.colorScheme.errorContainer
+        declaration == OutputDeclaration.BIT_PERFECT_ACTIVE -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val resolvedContentColor = contentColor ?: when {
+        verified -> MaterialTheme.colorScheme.onTertiaryContainer
+        declaration == OutputDeclaration.BIT_PERFECT_FAILED -> MaterialTheme.colorScheme.onErrorContainer
+        declaration == OutputDeclaration.BIT_PERFECT_ACTIVE -> MaterialTheme.colorScheme.onPrimaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
     Box(
         modifier = modifier
@@ -77,6 +92,7 @@ fun OutputStatusChip(
             shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
             color = resolvedContainerColor,
             contentColor = resolvedContentColor,
+            border = if (verified) BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary) else null,
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -84,7 +100,7 @@ fun OutputStatusChip(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Route,
+                    imageVector = if (verified) Icons.Filled.VerifiedUser else Icons.Filled.Route,
                     contentDescription = null,
                     modifier = Modifier.defaultMinSize(minWidth = 14.dp, minHeight = 14.dp),
                 )
