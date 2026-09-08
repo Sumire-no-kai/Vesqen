@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen.playback
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
@@ -11,11 +12,19 @@ import androidx.annotation.RequiresApi
 internal interface MixerBitPerfectAdapter {
     fun profiles(device: AudioDeviceInfo): Result<List<MixerProfile>>
 
-    fun setPreferred(device: AudioDeviceInfo, format: PlatformPcmFormat): Result<Boolean>
+    fun setPreferred(
+        device: AudioDeviceInfo,
+        format: PlatformPcmFormat,
+        audioAttributes: AudioAttributes,
+    ): Result<Boolean>
 
-    fun isPreferred(device: AudioDeviceInfo, format: PlatformPcmFormat): Result<Boolean>
+    fun isPreferred(
+        device: AudioDeviceInfo,
+        format: PlatformPcmFormat,
+        audioAttributes: AudioAttributes,
+    ): Result<Boolean>
 
-    fun clearPreferred(device: AudioDeviceInfo): Result<Boolean>
+    fun clearPreferred(device: AudioDeviceInfo, audioAttributes: AudioAttributes): Result<Boolean>
 }
 
 internal object MixerBitPerfectAdapterFactory {
@@ -34,11 +43,22 @@ private object UnsupportedMixerBitPerfectAdapter : MixerBitPerfectAdapter {
 
     override fun profiles(device: AudioDeviceInfo): Result<List<MixerProfile>> = unsupported()
 
-    override fun setPreferred(device: AudioDeviceInfo, format: PlatformPcmFormat): Result<Boolean> = unsupported()
+    override fun setPreferred(
+        device: AudioDeviceInfo,
+        format: PlatformPcmFormat,
+        audioAttributes: AudioAttributes,
+    ): Result<Boolean> = unsupported()
 
-    override fun isPreferred(device: AudioDeviceInfo, format: PlatformPcmFormat): Result<Boolean> = unsupported()
+    override fun isPreferred(
+        device: AudioDeviceInfo,
+        format: PlatformPcmFormat,
+        audioAttributes: AudioAttributes,
+    ): Result<Boolean> = unsupported()
 
-    override fun clearPreferred(device: AudioDeviceInfo): Result<Boolean> = unsupported()
+    override fun clearPreferred(
+        device: AudioDeviceInfo,
+        audioAttributes: AudioAttributes,
+    ): Result<Boolean> = unsupported()
 }
 
 /** The only class that links against API 34 AudioMixerAttributes. */
@@ -55,20 +75,31 @@ internal class OfficialMixerBitPerfectAdapter(context: Context) : MixerBitPerfec
         }
     }
 
-    override fun setPreferred(device: AudioDeviceInfo, format: PlatformPcmFormat): Result<Boolean> = runCatching {
+    override fun setPreferred(
+        device: AudioDeviceInfo,
+        format: PlatformPcmFormat,
+        audioAttributes: AudioAttributes,
+    ): Result<Boolean> = runCatching {
         val attributes = findBitPerfectAttributes(device, format) ?: return@runCatching false
-        audioManager.setPreferredMixerAttributes(MEDIA_ATTRIBUTES, device, attributes)
+        audioManager.setPreferredMixerAttributes(audioAttributes, device, attributes)
     }
 
-    override fun isPreferred(device: AudioDeviceInfo, format: PlatformPcmFormat): Result<Boolean> = runCatching {
-        val preferred = audioManager.getPreferredMixerAttributes(MEDIA_ATTRIBUTES, device)
+    override fun isPreferred(
+        device: AudioDeviceInfo,
+        format: PlatformPcmFormat,
+        audioAttributes: AudioAttributes,
+    ): Result<Boolean> = runCatching {
+        val preferred = audioManager.getPreferredMixerAttributes(audioAttributes, device)
         preferred?.mixerBehavior == AudioMixerAttributes.MIXER_BEHAVIOR_BIT_PERFECT &&
             preferred.format.toPlatformFormat() == format
     }
 
-    override fun clearPreferred(device: AudioDeviceInfo): Result<Boolean> = runCatching {
-        val preferred = audioManager.getPreferredMixerAttributes(MEDIA_ATTRIBUTES, device)
-        preferred == null || audioManager.clearPreferredMixerAttributes(MEDIA_ATTRIBUTES, device)
+    override fun clearPreferred(
+        device: AudioDeviceInfo,
+        audioAttributes: AudioAttributes,
+    ): Result<Boolean> = runCatching {
+        val preferred = audioManager.getPreferredMixerAttributes(audioAttributes, device)
+        preferred == null || audioManager.clearPreferredMixerAttributes(audioAttributes, device)
     }
 
     private fun findBitPerfectAttributes(
@@ -85,11 +116,4 @@ internal class OfficialMixerBitPerfectAdapter(context: Context) : MixerBitPerfec
         channelMask = channelMask,
         channelCount = channelCount,
     )
-
-    private companion object {
-        val MEDIA_ATTRIBUTES = android.media.AudioAttributes.Builder()
-            .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
-            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
-            .build()
-    }
 }

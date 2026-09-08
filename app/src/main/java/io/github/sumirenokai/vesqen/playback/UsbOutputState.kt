@@ -29,6 +29,7 @@ enum class UsbOutputFailure {
     MIXER_READBACK_MISMATCH,
     AUDIO_TRACK_FORMAT_MISMATCH,
     PREFERRED_DEVICE_REJECTED,
+    ROUTE_UNAVAILABLE,
     ROUTE_MISMATCH,
     DEVICE_DISCONNECTED,
     PROCESSING_NOT_NEUTRAL,
@@ -99,17 +100,22 @@ class UsbOutputStateRepository {
     fun snapshot(): UsbOutputStatus = current
 
     fun publish(status: UsbOutputStatus) {
-        current = status
-        listeners.forEach { listener -> listener(status) }
+        synchronized(this) {
+            if (status.generation <= current.generation) return
+            current = status
+            listeners.forEach { listener -> listener(status) }
+        }
     }
 
     fun addListener(listener: (UsbOutputStatus) -> Unit) {
-        listeners += listener
-        listener(current)
+        synchronized(this) {
+            listeners += listener
+            listener(current)
+        }
     }
 
     fun removeListener(listener: (UsbOutputStatus) -> Unit) {
-        listeners -= listener
+        synchronized(this) { listeners -= listener }
     }
 }
 

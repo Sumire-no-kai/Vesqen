@@ -849,3 +849,16 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - `PlaybackSnapshot`、设置页、播放器状态 chip、Chain 和诊断遥测共用 `UsbOutputStatus`。AVAILABLE、REQUESTED、ACTIVE、FAILED 分开呈现；ACTIVE 只说明应用观察到 Media3 请求、Android mixer readback 与 AudioTrack route 一致，仍不写成外部信号 VERIFIED。
 - 新增 `profile` 变体，继承 Release 行为、使用调试签名并声明 shell profileable，供设备恢复后采集 Perfetto/Simpleperf 与三轮 `gfxinfo`。Library 根因、最小修复及 Honor/iQOO 修复前后 A/B 仍开放。
 - 最终本地命令 `./gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleProfile :app:assembleRelease :app:compileDebugAndroidTestKotlin` 通过，共 159 个任务；194 项 JVM 测试为 0 失败、0 错误、0 跳过。instrumentation 只完成编译，没有设备执行。M3 第一版软件候选成立，硬件输出、旧版本运行、资源压力和 Library 性能门禁均未据此关闭。
+
+## 2026-09-08 · M3 软件候选自审与加固
+
+完成第一版候选后，对服务线程、Media3 playback thread、Session 状态传播和退出清理做了一轮独立代码审查，并核对本地 Media3 1.11 `AudioOutputProvider.OutputConfig`、`AudioOutput` 与 `AudioTrackAudioOutput` 的实际 API 签名。审查发现并修复以下问题：
+
+- 重配、切歌或切回系统模式时，playback thread 仍可能完成旧严格输出并写回过期状态。配置、选定计划和 AudioTrack 现均绑定 generation；旧操作只能返回静音输出，不能设置新状态、恢复播放或撤销新计划。
+- 原 mixer preference 使用固定媒体属性，而 Media3 的实际 `OutputConfig` 可能带不同 flags、capture policy 或 spatialization behavior。设置、读回与清理现统一使用该 AudioTrack 请求对应的真实 platform `AudioAttributes`。
+- 原清理顺序先撤销 mixer preference、后静音输出，存在旧 AudioTrack 短暂落回普通混音路径的窗口。重配、失败、系统模式恢复和服务关闭现均先静音/解除监听，再清 preference。
+- 路由始终为 `null` 且没有回调时会无限停留 APPLYING。播放意图成立后增加 3 秒有界核验；仍无可观察路由时以 `ROUTE_UNAVAILABLE` fail closed。USB 新设备加入也会重新判定，不沿用旧候选。
+- 内部重建触发的暂停改为等待真实 `onPlayWhenReadyChanged(false)` 后再消费抑制标记，避免异步 listener 清掉应恢复的播放意图；输出静音门创建和路由监听注册异常也进入明确的平台失败路径。
+- 状态仓库与 Controller 以 generation 拒绝重复/倒退状态；模式命令回到服务主线程后再返回同一状态。Chain 补齐 `vesqen.output_coordinator` 来源标签。
+
+自审后完整本地门禁再次通过：195 项 JVM 测试，0 失败、0 错误、0 跳过；Debug lint 0 错误、21 个既有告警；Debug、profile、Release APK 构建和 Debug instrumentation Kotlin 编译均成功，共 159 个 Gradle 任务。没有连接测试机或 USB DAC，因此上述只构成软件候选证据；真实 AudioAttributes/mixer 对应、路由时序、内部暂停恢复、反复插拔、长时资源释放及 Library 首页性能修复仍须真机关闭。

@@ -80,8 +80,7 @@ class PlaybackController(
         override fun onExtrasChanged(controller: MediaController, extras: Bundle) {
             if (this@PlaybackController.controller !== controller) return
             UsbOutputSessionContract.fromBundle(extras)?.let { status ->
-                usbOutputStatus = status
-                publish(controller)
+                if (acceptUsbOutputStatus(status)) publish(controller)
             }
         }
 
@@ -123,7 +122,7 @@ class PlaybackController(
                         reconnectAttempt = 0
                         controller = resolvedController
                         UsbOutputSessionContract.fromBundle(resolvedController.sessionExtras)?.let { status ->
-                            usbOutputStatus = status
+                            acceptUsbOutputStatus(status)
                         }
                         resolvedController.addListener(playerListener)
                         val queueToApply = pendingQueue.also { pendingQueue = null }
@@ -344,8 +343,7 @@ class PlaybackController(
                     ?.extras
                     ?.let(UsbOutputSessionContract::fromBundle)
                     ?.let { status ->
-                        usbOutputStatus = status
-                        controller?.let(::publish)
+                        if (acceptUsbOutputStatus(status)) controller?.let(::publish)
                     }
             },
             executor,
@@ -431,6 +429,12 @@ class PlaybackController(
         if (updated == latestSnapshot) return
         latestSnapshot = updated
         onSnapshotChanged(updated)
+    }
+
+    private fun acceptUsbOutputStatus(candidate: UsbOutputStatus): Boolean {
+        if (candidate.generation < usbOutputStatus.generation) return false
+        usbOutputStatus = candidate
+        return true
     }
 
     private fun buildQueueCache(player: Player): PlaybackQueueCache {

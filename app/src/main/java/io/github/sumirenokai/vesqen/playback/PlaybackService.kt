@@ -18,6 +18,7 @@ import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.SettableFuture
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.MainActivity
 import io.github.sumirenokai.vesqen.VesqenApplication
@@ -63,12 +64,26 @@ class PlaybackService : MediaSessionService() {
             }
             val mode = UsbOutputSessionContract.readMode(args)
                 ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
+            return applyUsbOutputMode(mode)
+        }
+    }
+
+    private fun applyUsbOutputMode(mode: UsbOutputMode): ListenableFuture<SessionResult> {
+        fun apply(): SessionResult {
             usbOutputCoordinator?.requestMode(mode)
             val extras = UsbOutputSessionContract.toBundle(
                 usbOutputCoordinator?.currentStatus() ?: UsbOutputStatus(),
             )
-            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS, extras))
+            return SessionResult(SessionResult.RESULT_SUCCESS, extras)
         }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return Futures.immediateFuture(apply())
+        }
+        val result = SettableFuture.create<SessionResult>()
+        if (!mainHandler.post { result.set(apply()) }) {
+            result.set(SessionResult(SessionError.ERROR_SESSION_DISCONNECTED))
+        }
+        return result
     }
 
     @UnstableApi
@@ -94,11 +109,11 @@ class PlaybackService : MediaSessionService() {
             .setMediaSourceFactory(mediaSourceFactory)
             .build()
             .apply {
-            setAudioAttributes(audioAttributes, true)
-            setHandleAudioBecomingNoisy(true)
-            setWakeMode(C.WAKE_MODE_LOCAL)
-            pauseAtEndOfMediaItems = false
-        }
+                setAudioAttributes(audioAttributes, true)
+                setHandleAudioBecomingNoisy(true)
+                setWakeMode(C.WAKE_MODE_LOCAL)
+                pauseAtEndOfMediaItems = false
+            }
         telemetry.attachPlayer(player)
         outputCoordinator.attachPlayer(player)
         playbackStateKeeper = PlaybackStateKeeper(

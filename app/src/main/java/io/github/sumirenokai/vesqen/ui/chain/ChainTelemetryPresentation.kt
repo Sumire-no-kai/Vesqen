@@ -579,6 +579,7 @@ private val SOURCE_LABEL_RESOURCES = mapOf(
     "android.mixer_attributes" to R.string.chain_source_android_mixer_attributes,
     "android.usb_public_api" to R.string.chain_source_android_usb,
     "vesqen.configuration" to R.string.chain_source_app_configuration,
+    "vesqen.output_coordinator" to R.string.chain_source_output_coordinator,
 )
 
 private val METRIC_LABEL_RESOURCES: Map<String, Int> = mapOf(

@@ -83,6 +83,7 @@
     <string name="usb_failure_readback">Android did not retain the requested mixer preference.</string>
     <string name="usb_failure_track_format">Media3’s actual PCM request does not match a bit-perfect mixer profile.</string>
     <string name="usb_failure_preferred_device">The AudioTrack did not accept the selected USB device.</string>
+    <string name="usb_failure_route_unavailable">Android did not expose the AudioTrack’s active route in time.</string>
     <string name="usb_failure_route">The AudioTrack was routed to a different device.</string>
     <string name="usb_failure_disconnected">The selected USB audio device was disconnected.</string>
     <string name="usb_failure_processing">A software volume, speed, silence-skip, or other PCM-changing setting became active.</string>
@@ -463,6 +464,7 @@
     <string name="chain_source_android_system_media_route">Android system media route</string>
     <string name="chain_source_android_direct_capability">Android direct-playback capability API</string>
     <string name="chain_source_android_mixer_attributes">Android mixer-attributes capability API</string>
+    <string name="chain_source_output_coordinator">Vesqen output coordinator</string>
     <string name="chain_source_android_usb">Android public USB APIs</string>
     <string name="chain_source_app_configuration">App configuration</string>
     <string name="chain_source_platform">Android platform</string>

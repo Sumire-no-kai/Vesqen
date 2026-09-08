@@ -203,6 +203,7 @@ private fun strictUsbFailureLabel(failure: UsbOutputFailure): String = stringRes
         UsbOutputFailure.MIXER_READBACK_MISMATCH -> R.string.usb_failure_readback
         UsbOutputFailure.AUDIO_TRACK_FORMAT_MISMATCH -> R.string.usb_failure_track_format
         UsbOutputFailure.PREFERRED_DEVICE_REJECTED -> R.string.usb_failure_preferred_device
+        UsbOutputFailure.ROUTE_UNAVAILABLE -> R.string.usb_failure_route_unavailable
         UsbOutputFailure.ROUTE_MISMATCH -> R.string.usb_failure_route
         UsbOutputFailure.DEVICE_DISCONNECTED -> R.string.usb_failure_disconnected
         UsbOutputFailure.PROCESSING_NOT_NEUTRAL -> R.string.usb_failure_processing

@@ -128,6 +128,21 @@ class UsbOutputStrategyResolverTest {
         assertNull(active.failure)
     }
 
+    @Test
+    fun `state repository ignores duplicate and older generations`() {
+        val repository = UsbOutputStateRepository()
+        val observed = mutableListOf<Long>()
+        repository.addListener { observed += it.generation }
+
+        repository.publish(UsbOutputStatus(generation = 2, decisionCode = "system.new"))
+        repository.publish(UsbOutputStatus(generation = 1, decisionCode = "system.old"))
+        repository.publish(UsbOutputStatus(generation = 2, decisionCode = "system.duplicate"))
+
+        assertEquals(2, repository.snapshot().generation)
+        assertEquals("system.new", repository.snapshot().decisionCode)
+        assertEquals(listOf(0L, 2L), observed)
+    }
+
     private fun resolve(
         usbHostSupported: Boolean = true,
         modifyAudioSettingsGranted: Boolean = true,

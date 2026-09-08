@@ -18,12 +18,22 @@ Library 首页快速滑动的具体根因定位与代码修复现列为 **M3 正
 | --- | --- | --- |
 | 输出决策与状态 | **代码候选完成** | 已有纯 resolver、服务唯一写入状态、Session Bundle 契约、持久模式和组合单测。真机事件顺序尚未执行。 |
 | Android 14 官方 mixer 接入 | **代码候选完成** | API 34 adapter 已隔离；Media3 1.11 `AudioOutputProvider` 在创建 `AudioTrack` 前设置 preference，并在实际输出格式、readback 和路由一致后才声明 ACTIVE。仍缺 Android 14+ 与真实 DAC 证明。 |
-| 严格模式 fail-closed | **代码候选完成** | 准备期间保持输出静音；不支持、格式/路由不一致、处理失效、设备断开或服务结束都会撤销声明、清理 preference 并停止。资源与竞态仍需真机压力验证。 |
+| 严格模式 fail-closed | **代码候选完成并已自审加固** | 准备期间保持输出静音；不支持、格式/路由不一致、处理失效、设备断开或服务结束都会撤销声明、清理 preference 并停止。配置 generation 会拒绝过期输出与回调；撤销时先静音、再清 preference。资源与竞态仍需真机压力验证。 |
 | 设置、播放器、Chain、诊断 | **代码候选完成** | 共用 `UsbOutputStatus`，显示 SYSTEM / AVAILABLE / REQUESTED / ACTIVE / FAILED；ACTIVE 明示不等于外部验证。窄屏、大字体和中英界面仍需设备验收。 |
 | Release/profileable 性能入口 | **代码准备完成** | 新增可安装且允许 shell profiling 的 `profile` 变体；现有测量脚本可保留三轮原始 `gfxinfo`。当前无设备，尚未生成新的基线或修复后数据。 |
 | Library 首页卡顿 | **根因与生产修复仍开放** | 历史 trace 只圈定列表测量、文字布局、预取与 buffer 排队，尚不足以选择唯一业务修复；等待 Honor/iQOO 使用同一 profile APK 复现、取栈、单变量修改和三轮 A/B。 |
 
-本轮本地门禁已通过 `testDebugUnitTest`（194 项，0 失败/错误/跳过）、`lintDebug`、`assembleDebug`、`assembleProfile`、`assembleRelease` 和 `compileDebugAndroidTestKotlin`。这证明源码、单测、静态检查和安装包构建成立，不代表 instrumentation 已执行，也不代表 USB bit-perfect 或 Library 性能已经通过实机验收。因此 M3 已正式进入开发并形成第一版软件候选，**M3 里程碑尚未完成**。
+本轮自审后的本地门禁已通过 `testDebugUnitTest`（195 项，0 失败/错误/跳过）、`lintDebug`（0 错误、21 个既有告警）、`assembleDebug`、`assembleProfile`、`assembleRelease` 和 `compileDebugAndroidTestKotlin`。这证明源码、单测、静态检查和安装包构建成立，不代表 instrumentation 已执行，也不代表 USB bit-perfect 或 Library 性能已经通过实机验收。因此 M3 已正式进入开发并形成自审加固的软件候选，**M3 里程碑尚未完成**。
+
+### 软件候选自审结论（2026-09-08）
+
+- 修复重配、切歌和模式切换并发时的过期计划竞态：每次配置拥有 generation，旧 `getAudioOutput`、路由回调和超时任务只能保持静音，不能覆盖新状态或恢复失效的 ACTIVE。
+- mixer preference 的设置、读回和清理改为使用 Media3 当前 `OutputConfig` 的实际 `AudioAttributes`，避免固定属性与真实 AudioTrack 属性不一致；失败与关闭路径保留同一属性用于精确清理。
+- fail-closed 清理统一先静音并解除路由监听，再撤销 mixer preference；路由长期不可观测时在播放意图成立后等待 3 秒并明确失败，避免无限停留在 APPLYING。
+- 服务命令统一回到主线程执行；进程内状态仓库和 Controller 拒绝重复或倒退 generation，避免 Session extras 与命令响应乱序覆盖新状态。
+- 补齐 USB 新增设备重新判定、内部暂停恢复、输出静音门与路由监听注册异常处理，以及 Chain 对输出协调器证据来源的中英文标签。
+
+上述结论来自源码审查、Media3 1.11 本地 API 签名核对和本地构建门禁。当前没有测试机或 USB DAC，尚未执行真机事件顺序、真实路由、听音、插拔、长时播放或资源压力验证。
 
 ## 主要需求摘要
 
