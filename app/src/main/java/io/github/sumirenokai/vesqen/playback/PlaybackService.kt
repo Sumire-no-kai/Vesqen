@@ -38,16 +38,18 @@ class PlaybackService : MediaSessionService() {
     }
 
     private val sessionCallback = object : MediaSession.Callback {
-        override fun onConnect(
+        override fun onConnectAsync(
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
-        ): MediaSession.ConnectionResult {
-            val base = super.onConnect(session, controller)
-            if (!base.isAccepted || controller.packageName != packageName) return base
-            return MediaSession.ConnectionResult.accept(
+        ): ListenableFuture<MediaSession.ConnectionResult> {
+            // Media3 1.11's deprecated onConnect default is a sentinel with empty commands.
+            // Resolve the controller's trust-aware defaults before adding our private command.
+            val base = MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller).build()
+            if (controller.packageName != packageName) return Futures.immediateFuture(base)
+            return Futures.immediateFuture(MediaSession.ConnectionResult.accept(
                 base.availableSessionCommands.buildUpon().add(usbOutputCommand).build(),
                 base.availablePlayerCommands,
-            )
+            ))
         }
 
         override fun onCustomCommand(

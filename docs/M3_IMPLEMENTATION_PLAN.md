@@ -16,14 +16,14 @@ Library 首页快速滑动的具体根因定位与代码修复现列为 **M3 正
 
 | 范围 | 当前状态 | 已取得的证据 / 仍缺内容 |
 | --- | --- | --- |
-| 输出决策与状态 | **代码候选完成** | 已有纯 resolver、服务唯一写入状态、Session Bundle 契约、持久模式和组合单测。真机事件顺序尚未执行。 |
+| 输出决策与状态 | **代码候选完成，已执行无 USB 真机路径** | 纯 resolver、服务状态、Session 契约和组合单测已有；iQOO 通过无 USB 的 8 轮模式切换、Controller 重连及密集命令。真实 DAC 事件顺序未验证。 |
 | Android 14 官方 mixer 接入 | **代码候选完成** | API 34 adapter 已隔离；Media3 1.11 `AudioOutputProvider` 在创建 `AudioTrack` 前设置 preference，并在实际输出格式、readback 和路由一致后才声明 ACTIVE。仍缺 Android 14+ 与真实 DAC 证明。 |
-| 严格模式 fail-closed | **代码候选完成并已自审加固** | 准备期间保持输出静音；不支持、格式/路由不一致、处理失效、设备断开或服务结束都会撤销声明、清理 preference 并停止。配置 generation 会拒绝过期输出与回调；撤销时先静音、再清 preference。资源与竞态仍需真机压力验证。 |
-| 设置、播放器、Chain、诊断 | **代码候选完成** | 共用 `UsbOutputStatus`，显示 SYSTEM / AVAILABLE / REQUESTED / ACTIVE / FAILED；ACTIVE 明示不等于外部验证。窄屏、大字体和中英界面仍需设备验收。 |
-| Release/profileable 性能入口 | **代码准备完成** | 新增可安装且允许 shell profiling 的 `profile` 变体；现有测量脚本可保留三轮原始 `gfxinfo`。当前无设备，尚未生成新的基线或修复后数据。 |
-| Library 首页卡顿 | **根因与生产修复仍开放** | 历史 trace 只圈定列表测量、文字布局、预取与 buffer 排队，尚不足以选择唯一业务修复；等待 Honor/iQOO 使用同一 profile APK 复现、取栈、单变量修改和三轮 A/B。 |
+| 严格模式 fail-closed | **无设备失败路径已通过 iQOO 回归** | 无 USB 时停止并报告 NO_USB_AUDIO_DEVICE，Controller 重连保持失败，只有主动选择 SYSTEM 后恢复；从未错误声明 AVAILABLE/ACTIVE。真实路由、拔插及长时资源压力仍缺硬件。 |
+| 设置、播放器、Chain、诊断 | **已取得部分真机回归** | 47 项 UI 用例分别取得通过结果，覆盖 Chain 入口/窄屏/大字；100 次 Chain 进出、前后台录制和旋转返回通过。新增 USB 全状态的实物展示、中英完整矩阵仍开放。 |
+| Release/profileable 性能入口 | **已在 iQOO 执行** | 取得 Debug/Profile 三轮帧统计、Perfetto 及 Simpleperf。脚本核验实际 APK 哈希/调试标志，默认拒绝 Debug 作为验收构建；当前 Release/Profile 的 R8 仍关闭。 |
+| Library 首页卡顿 | **已确认 Debug 冷路径是重要因素，完成门禁仍开放** | Debug 慢帧主要为主线程 CPU 执行，集中在新行组成/测量；同源码非 debuggable 构建显著改善。完整现场数据与边界见工程案例 P02；Honor、实际高刷新率和唯一业务修复尚未闭环。 |
 
-本轮自审后的本地门禁已通过 `testDebugUnitTest`（195 项，0 失败/错误/跳过）、`lintDebug`（0 错误、21 个既有告警）、`assembleDebug`、`assembleProfile`、`assembleRelease` 和 `compileDebugAndroidTestKotlin`。这证明源码、单测、静态检查和安装包构建成立，不代表 instrumentation 已执行，也不代表 USB bit-perfect 或 Library 性能已经通过实机验收。因此 M3 已正式进入开发并形成自审加固的软件候选，**M3 里程碑尚未完成**。
+修复真机发现的 Media3 1.11 会话授权回归后，本地门禁通过 `testDebugUnitTest`（195 项，0 失败/错误/跳过）、`lintDebug`（0 错误、21 个既有告警）、Debug/Profile/Release 构建和 instrumentation APK 构建。iQOO 共有 **65 个不同用例取得通过结果**，包含修复后的分批和独立复测，不能描述成一次 65/65 全套成功。原失败与中断批次均保留。证据见 [设备验收记录](M2_DEVICE_ACCEPTANCE.md) 和 [中文工程案例 R06/P02](ENGINEERING_CASEBOOK.md)。**M3 里程碑尚未完成**：无 USB 故障回归不能代替 DAC 输出验证，单台 60 Hz 的性能结果也不能关闭双机门禁。
 
 ### 软件候选自审结论（2026-09-08）
 
@@ -33,7 +33,7 @@ Library 首页快速滑动的具体根因定位与代码修复现列为 **M3 正
 - 服务命令统一回到主线程执行；进程内状态仓库和 Controller 拒绝重复或倒退 generation，避免 Session extras 与命令响应乱序覆盖新状态。
 - 补齐 USB 新增设备重新判定、内部暂停恢复、输出静音门与路由监听注册异常处理，以及 Chain 对输出协调器证据来源的中英文标签。
 
-上述结论来自源码审查、Media3 1.11 本地 API 签名核对和本地构建门禁。当前没有测试机或 USB DAC，尚未执行真机事件顺序、真实路由、听音、插拔、长时播放或资源压力验证。
+上述自审完成时没有设备，结论仅来自源码与本地门禁。随后 iQOO 接入，执行了上表所列回归并修复 R06；本轮仍无 Honor 或 USB DAC，严格输出、真实插拔和 M3 长时资源检查未通过实物验收。
 
 ## 主要需求摘要
 

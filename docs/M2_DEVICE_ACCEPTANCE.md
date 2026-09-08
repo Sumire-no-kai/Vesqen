@@ -235,3 +235,22 @@ M3 软件开发的入口与依赖清单见 [M3_IMPLEMENTATION_PLAN.md](M3_IMPLEM
 两机均完成独立 Library 快滑测量。iQOO Perfetto 和 Simpleperf、Honor 最后的小 buffer atrace 有有效证据；扫描污染的初轮及 Honor 内存不足的早期 trace 不计有效。列表测量、文字布局与预取已有热点证据，iQOO 还观察到 buffer 排队；**没有取得稳定修复收益，快滑继续 OPEN**。原始数据、公式、调用栈解释、不同 APK/采集开销及下一步见中文 [工程案例 P01](ENGINEERING_CASEBOOK.md)。
 
 本轮没有重跑每机 30 分钟录制和三个 15 分钟模式；之前 iQOO 的长时证据仍仅对应当时版本。完整 Android 10–14/其余格式/无障碍/适配、真实 Bluetooth/USB/3.5 mm 与高频性能继续开放。Honor 可验证 M3 旧 API 路径，不能充当第二台 Android 14+ USB 设备。M3 主需求和维护优先级已列入 [开发清单](M3_IMPLEMENTATION_PLAN.md)。
+
+## 2026-09-08 · M3 候选的 iQOO 真机回归
+
+本轮只有 iQOO V2171A / Android 15（API 35）连接，未连接 Honor、Bluetooth 或 USB DAC。修复 M3 新增命令导致普通播放权限丢失的问题后，取得以下结果。最终 Debug SHA-256：`7bd6cfe3d22ea39939a8cec0c322f1c773c19879ba194c84ca4f63f3d51efe66`；Profile：`915aa81311d60db35ad9bf9de4f301eda4430a54d4096455a45b4e8523ed9d32`。
+
+| 执行范围 | 有效结果 |
+| --- | --- |
+| 47 项 UI、Library 顺序/刷新、Chain 入口及适配 | 首批 45 通过；宿主冲突的返回用例独立 1/1；320×480、2 倍字体用例补上滚动到屏外 Chain 入口后独立 1/1，原布局断言保留。 |
+| 无 USB 严格模式与扬声器短回归 | 修复前同批 2 失败；修复后 2/2，13.827 s。8 轮模式切换/重连、密集命令、无错误 ACTIVE、主动恢复 SYSTEM；切歌/seek/暂停、采样档位、100 次观察者释放与短诊断隐私通过。 |
+| 三份真实无损音源与 14 项存储/设置/遥测契约 | 同批 15/15，116.239 s。48 kHz/24-bit FLAC、48 kHz/24-bit WAV、96 kHz/24-bit FLAC；三个高频窗口分别 129/126/129 个快照，均无记录到 ERROR/UNDERRUN，通知曲名/封面及诊断隐私断言通过。 |
+| 100 次 Chain 进出、录制前后台、横竖屏和资源释放 | 独立 1/1，67.097 s。退出观察者归零，显式录制在后台保留唯一观察者，停止后释放。 |
+
+共 **65 个不同用例分别取得通过结果**，不是一次完整 65/65 runner。一次两项 UI 独立批次被后续 instrumentation 提前打断，第二项未完成，该批不计成功；最终两项分别完整执行通过。原失败、中断、安装拒绝与作废性能采集都留在私有 `build/qa/m3-iqoo-20260908/`，没有用跳过或删除断言替代通过。
+
+数据审计：测试前后 112 首曲目、1 个来源，曲目 ID、收藏及收藏顺序一致，SQLite integrity 为 `ok`；原播放队列和浏览偏好已恢复。真实歌曲的测试播放会形成相应历史记录。完整文件名、原始诊断、截图、trace 和用户数据备份不进入 Git。
+
+Library 使用同一修复代码做实际 60 Hz 对照：带迷你播放器的 Debug 三轮 jank 为 1.30/1.16/0.51%、p95 26/25/23 ms；Profile 暂停为 0/0/0%、p95 11/11/10 ms，播放及索引开启场景各三轮均 0%、p95 10 ms。独立 Profile 播放 trace 仍有 1 个应用超时帧，主要等待 RenderThread。根因证据、调用栈方法、不同口径和未关闭项见 [工程案例 R06/P02](ENGINEERING_CASEBOOK.md)。
+
+这些结果不关闭 M2 全部矩阵或 M3 里程碑。本轮没有重跑 30 分钟录制/75 分钟采样对照，没有验证 M3 真实 DAC、旧 Android 或实际 120 Hz；Honor 和两台现代手机×两款 DAC 仍待接入。新源码门禁为 195 项 JVM 通过、Lint 0 错误/21 个既有告警、Debug/Profile/Release 及 instrumentation APK 构建通过，远端 CI 与实机结果分开记录。

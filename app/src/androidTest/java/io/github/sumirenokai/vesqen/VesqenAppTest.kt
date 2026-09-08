@@ -962,6 +962,8 @@ class VesqenAppTest {
         )
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
         openAdvancedChain()
         val viewControl = chainNode("vesqen.chain.control.view")

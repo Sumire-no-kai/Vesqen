@@ -232,3 +232,66 @@ Honor 的两个失败没有通过改产品数据或跳过测试解决。第一�
 第二，实际横屏/回竖屏已成功，超时发生在返回后检查导航栏。该 Honor 普通页面进入前的 `navigationVisible` 就是 false，来自设备导航模式。回归改为先保存真实初始状态，再验证返回恢复相同状态、状态栏可见且应用 FULLSCREEN/HIDE_NAVIGATION 标志已清除；不强行要求系统显示不存在的导航栏。Activity 重建时使用当前 RESUMED 生命周期实例，避免读取已销毁的 ActivityScenario 实例。随后完整 100 次 Chain 进出、录制前后台和横竖屏回归通过。
 
 iQOO 无前台宿主的 runner 启动/服务连接曾超时；用例开始时显式启动同一应用宿主后通过。界面首例也曾因启动辅助争用 ActivityScenario 失败，预先建立宿主后独立执行通过。保留原失败记录，分别报告各轮结果，不能将启动失败批次重写成全通过。
+
+## R06：M3 能连上控制器，却无法播放
+
+2026-09-08，iQOO Android 15 上两个扬声器用例都在等待播放时超时。服务已创建、Controller 已 ready，USB 自定义命令也有响应，但日志连续报告普通播放、队列、prepare 等命令不被允许。这不是解码或 USB 路由失败。
+
+根因是新增 USB 自定义命令时调用了 `super.onConnect()`，再用 `ConnectionResult.accept()` 复制并追加命令。项目所用 Media3 **1.11.0** 的旧回调返回一个带内部标记的空命令占位对象；复制时丢掉了标记，空的 player commands 因而被当作真实授权结果。编译、单测和静态自审没有发现这个运行契约问题。
+
+改为实现 `onConnectAsync()`，使用 `AcceptedResultBuilder(session, controller)` 得到按控制器可信程度决定的默认命令，再只向本应用追加 USB 命令。没有向外部控制器开放额外操作。依据是 [对应版本的官方源码](https://github.com/androidx/media/blob/1.11.0/libraries/session/src/main/java/androidx/media3/session/MediaSession.java)，尤其 `getDeprecatedDefaultConnectionResult()` 与 `onConnectAsync()`。
+
+同一 iQOO 修复前两个用例失败，修复后原扬声器回归及新增 `StrictUsbSpeakerDeviceTest` 同批 2/2 通过。新增用例验证 8 轮“系统播放→无 USB 严格失败→Controller 重连→主动选择系统→恢复播放”，以及密集交错命令。无 USB 时始终不产生 AVAILABLE/ACTIVE，失败原因为 `NO_USB_AUDIO_DEVICE`，状态 generation 单调增加。它验证无设备故障路径，不证明真实 DAC 输出或拔插竞态。
+
+## P02：先区分 Debug 开销，再给 Library 选修复
+
+2026-09-08，保留真实 112 首曲库、封面和功能，在 iQOO Android 15 上做同源码的构建对照。系统设置上限为 120 Hz，但该应用实测显示模式为 **60 Hz**，不能按 8.33 ms 预算或 120 FPS 宣传结果。起始条件为无播放、无索引栏、无扫描和诊断录制；M3 当时还存在 R06，队列没有成功恢复，因此这批数据不覆盖带迷你播放器的正常播放场景。
+
+| 同一候选源码的构建 | 三轮 HWUI jank | 三轮 p95 | 每轮帧数 |
+| --- | --- | --- | --- |
+| Profile，非 debuggable、shell profileable | 0 / 0 / 0% | 12 / 11 / 10 ms | 579 / 573 / 585 |
+| 已确认安装的 Debug | 3.72 / 0.17 / 0% | 32 / 19 / 18 ms | 537 / 604 / 609 |
+
+每轮 48 次 100 ms 手势，每 8 次反向，三轮均报告；4 次预热手势不能消除整个列表冷路径的成本。Profile 继承当前 Release 配置，**R8 仍关闭**，这里只证明排除 debuggable 与调试依赖后的表现，不把它叫作已开启全部优化的 Release。
+
+### 从帧时间走到调用栈
+
+1. 先用不带 profiler 的 `gfxinfo framestats` 定量。脚本从当前 UI hierarchy 找列表视口，保留完整帧统计。`Janky frames (legacy)` 与现代 HWUI jank 分开；例如 Profile 第一轮 legacy 35.58%，现代 jank 为 0，不能选高者当用户掉帧率。
+2. 单独采集 18 秒 Perfetto，包含 FrameTimeline、应用 atrace、sched 与 CPU frequency；1 秒启动后执行 64 次同形手势。先检查 recorder 成功、应用帧存在及 trace health，再分析。Profiler 采集轮不与上表直接算优化百分比。
+3. 用 `actual_frame_timeline_slice.surface_frame_token` 对齐 `Choreographer#doFrame <token>`，再看该帧主线程里的组成、测量/布局、文字布局、绘制和预取。查询 `sched` 与帧区间的交集得到实际运行时间，区分 CPU 执行和等待。
+4. 另跑 `simpleperf record --app PACKAGE -e cpu-clock -f 500 -g --duration 18`，用 `report --children` 看调用链。`Self` 是函数自身，`Children` 包含下游；解释器、TrackRow、Text 的比例不能相加。采样热点必须与慢帧时间线互相印证。
+
+冷进程 Debug 时间线共 837 个应用表面帧：16 个仅 App Deadline Missed、25 个同时 App Deadline Missed/Buffer Stuffing、787 个仅 Buffer Stuffing、9 个正常。**应用 deadline miss 共 41 个，不能把所有排队帧写成掉帧。** 最慢呈现帧 65.39 ms，对应 doFrame 59.84 ms，其中实际 Running 59.50 ms、最大测量/布局切片 39.98 ms。第二慢 doFrame 47.37 ms，Running 47.07 ms、测量/布局 37.23 ms。这些慢帧主要花在主线程计算，不是长时间被抢占或等磁盘。
+
+Debug 的 18.10 秒 Simpleperf 有 7705 样本、0 丢样、16 条调用链错误（0.21%）。主线程解释器路径 inclusive 70.53%，`TrackRow` 6.62%，文字 measure 4.59%；封面 loader 样本在后台 DefaultDispatcher。不能据此断言所有封面场景都没有问题，但当前不支持“主线程同步解码封面”为主因。没有修改内核符号权限或系统安全策略。
+
+同类 Profile 时间线的 799 帧全部为 On-time/None；测量/布局最大 4.84 ms、urgent prefetch 最大 4.77 ms、文字 measure 最大 1.42 ms。主线程累计运行约 5.38 秒，Debug 为 11.24 秒；JIT 线程分别约 0.07 秒、1.49 秒。工作量、缓存及采集轮不同，累计值只用于解释，不作为精确收益比。两份 trace 分别丢弃 1/2 条负时间戳事件，未报告 buffer data loss，结论限于成功解析的窗口。
+
+### 已确认什么，下一步改哪里
+
+已确认 **Debug 构建的冷路径、解释执行与 JIT 成本显著放大了 Lazy 列表新行组成及测量成本**，是这台 iQOO 上历史卡顿的重要因素。保留同一封面与列表逻辑时，非 debuggable 构建已有明显不同的表现。业务层已经有稳定 key/contentType，标题索引在后台且不随滚动重算，封面有界异步加载；没有证据时，不关闭预取、移除封面、删文字或重写列表来追求数字。
+
+本轮先修正验收工具：记录实际安装 APK 的 SHA-256 与 debuggable 标志，默认拒绝 Debug，显式 `--allow-debuggable` 才做 Debug 对照；结束时再次检查 APK 身份。一次 Debug 安装被手机拒绝后产生的错误标签目录 `baseline-debug` 已标无效；一次 Perfetto 配置路径不可读的采集也作废。文件存在、目录叫 Debug、脚本退出，都不能替代有效结果。
+
+原始文件在忽略的私有目录 `build/qa/m3-iqoo-20260908/`，包含 `baseline-profile`、`debug-confirmed`、`baseline-timeline-valid`、`debug-cold-timeline`、`debug-cpu` 及慢帧 SQL。Debug/Profile 原候选哈希分别为 `d4f1a9e2298effa8da1868d9f69f9a918022120c97210db34144b031ab3a0c76` / `e73eab6641eb3b0ba39e55d9ff33908be0bc53930df467265df940702aa4ffd8`。它们早于 R06 修复。
+
+**Library 的 M3 完成条件仍开放**：继续验证恢复队列后的暂停/播放场景、首次封面与索引、实际高刷新率，并在 Honor 接入后重复同一非 debuggable APK。R8、基线配置、预取及行结构是后续可测候选；本轮没有把未证实的业务改动提交成“首页已修复”。
+
+### R06 修复后，带原队列与迷你播放器的补测
+
+恢复原播放 checkpoint，仍使用完整 112 首曲库及原标题排序，列表视口变为 `[0,594][1080,1926]`。相同手势、三轮、不带 profiler；Debug/Profile 暂停对照的起始电池温度分别为 31.1/31.2°C。APK 哈希记录在各轮 `build-identity.json`。
+
+| 场景 | 三轮 HWUI jank | 三轮 p95 | 每轮帧数 |
+| --- | --- | --- | --- |
+| 修复后 Debug，暂停、迷你播放器存在 | 1.30 / 1.16 / 0.51% | 26 / 25 / 23 ms | 614 / 606 / 592 |
+| 修复后 Profile，同一暂停场景 | 0 / 0 / 0% | 11 / 11 / 10 ms | 560 / 580 / 578 |
+| 同一 Profile，真实歌曲播放中 | 0 / 0 / 0% | 10 / 10 / 10 ms | 576 / 581 / 577 |
+| 同一 Profile，播放并开启字母索引 | 0 / 0 / 0% | 10 / 10 / 10 ms | 578 / 582 / 576 |
+
+后两行是附加场景覆盖；播放过程中曲目会自然推进，不能将索引开启行与暂停行视为只改变一个变量的优化实验。临时把系统最小刷新率也设成 120 后，`dumpsys display` 仍为 60 Hz，随后恢复原设置；本轮 **没有完成实际 120 Hz 验收**。
+
+修复后另一次“Profile + 播放” Perfetto 有 792 帧：582 None、208 仅 Buffer Stuffing、1 Prediction Error、**1 App Deadline Missed**。该慢帧呈现 23.53 ms、doFrame 20.43 ms、主线程 Running 3.01 ms，`postAndWait` 17.35 ms；对应渲染线程在该区间实际运行 18.37 ms。与 Debug 的长时间列表计算不同，这是主线程等待渲染工作的偶发慢帧。不要把非采集三轮的 0% 写成所有环境完全没有卡顿。该 trace 丢弃 2 条负时间戳事件，没有报告 buffer data loss。
+
+随后冷进程 Profile、索引开启、暂停场景的独立 Simpleperf 取得 4096 样本。`TrackRow` inclusive 3.83%、文字 measure 3.61%；图片解码在 DefaultDispatcher，纹理上传 `GrGLGpu::uploadTexData` 在 RenderThread（1.68%），`prepareToDraw` 同在渲染线程。纹理上传/渲染任务是下一步解释那一帧等待的候选，**不同采集轮的栈不能证明它就是那一帧的唯一原因**。保留 `fixed-profile-playing-timeline` 与 `fixed-profile-cold-cpu` 供继续对齐分析。
+
+目前 iQOO 的实际 60 Hz 场景已取得稳定的非 debuggable 结果；业务列表修复、Honor 对照及高刷新率门禁继续 OPEN。交给用户检查顺滑度的安装包采用本轮 Profile，调试版用于 instrumentation。这个选择针对已经证实的构建差异，没有删除列表功能。

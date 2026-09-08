@@ -862,3 +862,12 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - 状态仓库与 Controller 以 generation 拒绝重复/倒退状态；模式命令回到服务主线程后再返回同一状态。Chain 补齐 `vesqen.output_coordinator` 来源标签。
 
 自审后完整本地门禁再次通过：195 项 JVM 测试，0 失败、0 错误、0 跳过；Debug lint 0 错误、21 个既有告警；Debug、profile、Release APK 构建和 Debug instrumentation Kotlin 编译均成功，共 159 个 Gradle 任务。没有连接测试机或 USB DAC，因此上述只构成软件候选证据；真实 AudioAttributes/mixer 对应、路由时序、内部暂停恢复、反复插拔、长时资源释放及 Library 首页性能修复仍须真机关闭。
+
+## 2026-09-08 · iQOO 接入，M3 播放回归修复与 Library 深入取证
+
+- 真机发现两个播放测试超时：M3 在 Media3 1.11 的旧 `onConnect` 空命令占位对象上追加 USB 命令，丢失内部标记，导致普通播放与队列命令均被拒绝。改用 `onConnectAsync` 和按控制器可信程度初始化的 builder，保留外部控制器默认权限；原扬声器回归和新增严格无 USB 回归均通过。
+- 新增 `StrictUsbSpeakerDeviceTest`，覆盖 8 轮无 USB 失败、Controller 重连和主动恢复系统播放，以及密集交错命令、generation 单调性和无错误 AVAILABLE/ACTIVE。真实 USB/DAC 仍未验证。
+- 65 个不同的设备用例分批取得通过，包括真实无损文件、高频快照/隐私/通知、47 项 UI、存储与设置、100 次 Chain 进出和前后台/旋转。窄屏大字用例新增滚动到屏外设置入口，未改变原断言；保留原失败和一次人为中断批次，最终独立完整复测。
+- 对同源码 Debug/Profile 做三轮帧统计、Perfetto FrameTimeline/sched 与 Simpleperf。确认 Debug 解释执行/JIT 显著放大新行组成和测量成本；恢复原队列后的 Debug p95 26/25/23 ms，Profile 11/11/10 ms。Profile 播放/索引场景也已执行，偶发渲染等待仍单独保留，未把 iQOO 的 60 Hz 结果写成所有设备无卡顿。
+- 性能脚本新增实际安装 APK 哈希与 debuggable 校验，默认拒绝 Debug 作为性能验收；安装被拒绝后的错误标签实验和失败 recorder 明确作废。手段、SQL 对齐、具体调用栈和边界另写入中文 [工程案例 R06/P02](ENGINEERING_CASEBOOK.md)，详细数量见 [设备验收](M2_DEVICE_ACCEPTANCE.md)。
+- 用户曲库备份、112 首/稳定 ID/收藏一致性审计、原队列与浏览偏好恢复完成。本地 195 项 JVM、Lint、Debug/Profile/Release 与 instrumentation APK 构建通过；本轮没有 Honor、实际高刷新率、真实 DAC 或 M3 长时测试，M3 继续开放。
