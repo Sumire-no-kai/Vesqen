@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "records": [
+    {
+      "recordId": "m4.replace_with_stable_record_id",
+      "result": "NOT_TESTED",
+      "verifiedAtEpochMs": 0,
+      "appVersionName": "0.4.0-beta.1",
+      "appVersionCode": 9,
+      "baseApkSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "deviceManufacturer": "Replace with Build.MANUFACTURER",
+      "deviceModel": "Replace with Build.MODEL",
+      "androidApiLevel": 35,
+      "buildFingerprintSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "dacVendorId": 0,
+      "dacProductId": 0,
+      "dacName": "Replace with observed DAC name",
+      "dacDescriptorVersion": "Replace with UsbDevice.version",
+      "sourceFormat": {
+        "sampleRateHz": 96000,
+        "channelCount": 2,
+        "encoding": "pcm 24-bit"
+      },
+      "sinkFormat": {
+        "sampleRateHz": 96000,
+        "channelCount": 2,
+        "encoding": "pcm 24-bit"
+      },
+      "testVectorSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "methodId": "digital_capture.sample_compare",
+      "signalPoint": "usb_digital_pcm",
+      "evidenceReference": "private-evidence/m4/pending"
+    }
+  ]
+}

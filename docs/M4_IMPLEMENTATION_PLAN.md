@@ -36,3 +36,14 @@
 - [ ] 最终发布候选完成适用的构建、回归、升级/数据保留及交付检查，各类证据分开报告。
 
 没有 DAC 时可以推进软件并准备受限 Beta，但**不满足原定 M4 全部完成条件**。是否实际发布受限 Beta、其功能与声明范围，需要在可审阅的候选和证据明确后决定；本清单不构成发布动作。
+
+## 2026-09-08 软件候选进度
+
+- M4-01：已实现严格 schema、不可变组合身份、私有持久化、结果枚举、精确匹配与签名 registry 导入；失败记录的外部归档和真实设备矩阵仍按验收文件累积。
+- M4-02：已实现确定性 44.1/16、48/24、96/24 双声道 PCM 向量生成、manifest/hash、显式 frame 对齐的逐字节比较和 Android 签名私钥工具；真实数字采集信号点与 DAC 证据仍缺失。
+- M4-03：已将 registry match 接入 Playback snapshot、播放器、Chain、遥测和诊断。只有严格输出 `ACTIVE` 且 app/ROM/手机/DAC/source/sink 全部精确匹配的有效签名记录才能显示 `BIT-PERFECT VERIFIED`；不存在用户勾选入口。
+- M4-04：Honor 普通扬声器短流程、100 次 Chain 生命周期、前后台/旋转/诊断释放已通过；长时、来电、API 34 route 与真实拔插仍开放或按用户要求暂缓。
+- M4-05：已修复 150% 英文 Playback progress 省略并补真机回归；新增可重复基线采集。Honor Debug 体积/启动/资源快照已记录，Release/Profile、双机 Library/Chain 和完整人工适配矩阵仍需收尾。
+- M4-06：版本已推进到 `0.4.0-beta.1` / `9`，CI 门禁扩展到 Python 工具测试、unit/lint/Debug/Profile/Release/androidTest APK，并准备受限 Beta 声明与发布清单；CI、签名候选、合并和是否实际发布仍分别判定。
+
+当前是“软件候选 + Honor 部分验收”，不是 M4 完成。详见 [M4 设备验收](M4_DEVICE_ACCEPTANCE.md)和 [Beta 发布清单](M4_BETA_RELEASE.md)。
