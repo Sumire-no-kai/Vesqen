@@ -727,6 +727,74 @@ class VesqenAppTest {
     fun chain_decoder_identifier_remains_complete_at_320dp_with_150_percent_text() =
         assertDecoderIdentifierLayout(1.5f, 2)
 
+    @Test
+    fun chain_core_stacks_and_keeps_aged_evidence_on_one_line_at_130_percent_text() {
+        val epochMs = System.currentTimeMillis()
+        val elapsedMs = SystemClock.elapsedRealtime() - 120_000
+        val source = TelemetryDataSource(TelemetrySourceId("test.telemetry"))
+        val snapshot = chainTelemetrySnapshot().copy(
+            metrics = listOf(
+                TelemetryMetric(
+                    id = TelemetryMetricCatalog.SOURCE_SAMPLE_RATE,
+                    section = TelemetrySection.SOURCE,
+                    evidence = TelemetryEvidence.Estimated(
+                        reading = TelemetryReading.Integer(96_000, TelemetryUnit.HERTZ),
+                        source = source,
+                        observedAtEpochMs = epochMs,
+                        observedAtElapsedRealtimeMs = elapsedMs,
+                        methodId = "test.estimate",
+                    ),
+                ),
+                TelemetryMetric(
+                    id = TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE,
+                    section = TelemetrySection.PLAYBACK,
+                    evidence = TelemetryEvidence.Measured(
+                        reading = TelemetryReading.Integer(96_000, TelemetryUnit.HERTZ),
+                        source = source,
+                        observedAtEpochMs = epochMs,
+                        observedAtElapsedRealtimeMs = elapsedMs,
+                    ),
+                ),
+            ),
+        )
+        render(
+            state = activePlaybackState(),
+            playbackTelemetry = FakePlaybackTelemetry(snapshot),
+            containerWidth = 360.dp,
+            containerHeight = 720.dp,
+            fontScale = 1.3f,
+        )
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+
+        val sourceBounds = composeRule.onNodeWithTag("vesqen.chain.core.source.sample_rate")
+            .fetchSemanticsNode().boundsInRoot
+        val playbackBounds = composeRule.onNodeWithTag("vesqen.chain.core.playback.audio_track_sample_rate")
+            .fetchSemanticsNode().boundsInRoot
+        assertEquals(
+            "Large text must give paired core facts the same full-width column",
+            sourceBounds.left,
+            playbackBounds.left,
+            1f,
+        )
+        assertTrue("Playback facts must follow source facts vertically", playbackBounds.top > sourceBounds.top)
+
+        val layouts = mutableListOf<TextLayoutResult>()
+        composeRule.onNodeWithTag(
+            "vesqen.chain.core-evidence.playback.audio_track_sample_rate",
+            useUnmergedTree = true,
+        ).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val layout = layouts.single()
+        assertEquals(1, layout.lineCount)
+        assertTrue(
+            "Core evidence annotation must not be clipped: " +
+                "size=${layout.size}, overflowWidth=${layout.didOverflowWidth}, " +
+                "overflowHeight=${layout.didOverflowHeight}, source=$sourceBounds, playback=$playbackBounds",
+            !layout.hasVisualOverflow,
+        )
+    }
+
     private fun assertDecoderIdentifierLayout(fontScale: Float, maximumLines: Int) {
         val name = "c2.android.flac.decoder"
         val snapshot = chainTelemetrySnapshot().let { snapshot ->
