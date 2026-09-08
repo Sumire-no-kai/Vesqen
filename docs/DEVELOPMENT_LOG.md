@@ -899,3 +899,20 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - 将英文大字体按钮修复、真机证据、M3 未完成项和 M4 清单提交为 `28312de`；本地 195 项 JVM 通过、Lint 0 错误/21 个既有告警，Debug/Release/instrumentation 构建通过。
 - PR #21 的远端 `verify` 通过后合并到 `master`，合并提交为 `d5af010`。远端功能分支保留，没有执行额外删除。
 - Git 提交、CI 和合并状态已经关闭；Library 根因/实际修复与双机对照、真实 DAC、最终旧系统兼容和严格模式中断/长时验证继续作为 M3 未完成项，不能因软件候选合并而视作验收完成。
+
+## 2026-09-08 · M4 签名验证软件候选与 Honor 旧系统验收
+
+- 在 `feature/m4-verification-beta` 实现精确组合验证 registry：记录 app/APK、ROM、手机、DAC descriptor、source/sink PCM、方法、测试向量和证据引用；仅接受当前安装包签名证书对应私钥的 RSA/ECDSA envelope。解析拒绝重复/未知字段、超限数据和错误签名，导入失败不替换原 registry。
+- 严格 USB 的唯一物理 UAC 身份进入状态快照。Playback、Chain、状态 chip、遥测和诊断只在 `ACTIVE` 加精确匹配时显示 VERIFIED；证据路径继续走文本隐私过滤，没有任意勾选或普通输出升级路径。
+- 新增确定性 PCM 向量、显式对齐逐样本比较、canonical payload、Java keystore signer 和可重复设备基线工具；版本推进到 `0.4.0-beta.1` / `9`，CI 准备覆盖 Python、unit/lint、Debug/Profile/Release 和 instrumentation APK。
+- 修复 150% 英文字体下 Playback progress 省略。Honor/API 28 首轮真实暴露 `readNBytes` 不兼容后改为有界读取；最终 registry/运行身份缓存 3/3、UI 55/55、扬声器短流程 1/1 通过，较早同功能候选的 Chain 100 次生命周期 1/1 通过，最终 app/test APK 与设备安装哈希一致。一次误入 sampling soak 的组合 runner 被立即中断且不计通过，随后使用方法级短测独立复测。
+- Honor Debug APK 为 24,721,095 bytes，5 次 `ThisTime` 中位 4304 ms；保留首次 `TotalTime` 51489 ms 异常原值。覆盖安装前后 40 首曲目、来源、用户元数据及歌单摘要一致，测试清空的队列偏好已精确恢复。
+- 当前 Honor 证据不关闭真实 DAC/外部数字逐样本、API 34 严格路由、Release/Profile 性能、长时稳定性、M3-R1 或完整 M4。详细哈希、失败与复测边界见 [M4 设备验收](M4_DEVICE_ACCEPTANCE.md)。
+
+## 2026-09-08 · M4 iQOO 现代系统短测与 Profile 基线
+
+- 在 iQOO V2171A / Android 15 上核对最终 app/test APK 哈希，registry/cache 3 项与无 DAC 严格模式 8 轮 fail-closed 通过；普通输出恢复仍需用户主动选择，没有错误 `AVAILABLE`/`ACTIVE`。未连接 DAC，因此不形成真实 USB 或 VERIFIED 证据。
+- 55 个不同 UI 用例在 54/55 主批次加缺失首例独立复测中均有通过证据；vivo 前台宿主竞争造成的断言前 launcher 失败完整保留，不表述为单次全绿 runner。100 次 Chain 进出、前后台、旋转、诊断、隐私及释放 1/1 通过。
+- 最终 Debug 冷启动中位数 1748 ms，只作比较；不可调试 Profile APK 的 5 次冷启动中位数 427 ms、范围 370–462 ms。该结果不替代 Library/Chain 滑动、功耗、长时或发布签名验收。
+- 覆盖安装前后曲库为 112 首、1 个来源、0 个歌单/条目，用户字段逻辑摘要一致。最终装回 Debug、停止进程并恢复测试前有效备份；31 个私有文件逐文件 SHA-256 31/31 一致，原播放状态精确恢复。旧 Profile 下 `run-as` 失败产生的两个 61-byte 文件判为无效备份，没有用于恢复。
+- M4 当前是双机适用范围的部分验收，不是里程碑完成。真实 DAC 矩阵、外部数字逐样本、长时/中断、完整适配与 TalkBack、M3-R1 和实际公开 Beta 决策继续独立开放。

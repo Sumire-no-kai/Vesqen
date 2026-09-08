@@ -128,6 +128,10 @@ object TelemetryMetricCatalog {
     val ROUTE_ANTICIPATED_MIXER_PROFILE_COUNT = id("route.anticipated_mixer_profile_count")
     val ROUTE_ANTICIPATED_PREFERRED_MIXER_PROFILE = id("route.anticipated_preferred_mixer_profile")
     val ROUTE_OUTPUT_DECLARATION = id("route.output_declaration")
+    val ROUTE_EXTERNAL_VERIFICATION_RECORD = id("route.external_verification_record")
+    val ROUTE_EXTERNAL_VERIFICATION_METHOD = id("route.external_verification_method")
+    val ROUTE_EXTERNAL_VERIFICATION_EVIDENCE = id("route.external_verification_evidence")
+    val ROUTE_EXTERNAL_VERIFICATION_TEST_VECTOR = id("route.external_verification_test_vector")
     val ROUTE_AUDIO_TRACK_REQUEST_FORMAT = id("route.audio_track_request_format")
     val ROUTE_OBSERVED_OUTPUT_FORMAT = id("route.observed_output_format")
     val ROUTE_BLUETOOTH_CODEC = id("route.bluetooth_codec")
@@ -237,6 +241,10 @@ object TelemetryMetricCatalog {
         integer(ROUTE_ANTICIPATED_MIXER_PROFILE_COUNT, TelemetrySection.ROUTE, TelemetryUnit.COUNT, 0.0),
         safeText(ROUTE_ANTICIPATED_PREFERRED_MIXER_PROFILE, TelemetrySection.ROUTE),
         safeText(ROUTE_OUTPUT_DECLARATION, TelemetrySection.ROUTE, defaultVisible = true),
+        safeText(ROUTE_EXTERNAL_VERIFICATION_RECORD, TelemetrySection.ROUTE, defaultVisible = true),
+        safeText(ROUTE_EXTERNAL_VERIFICATION_METHOD, TelemetrySection.ROUTE),
+        text(ROUTE_EXTERNAL_VERIFICATION_EVIDENCE, TelemetrySection.ROUTE),
+        safeText(ROUTE_EXTERNAL_VERIFICATION_TEST_VECTOR, TelemetrySection.ROUTE),
         safeText(ROUTE_AUDIO_TRACK_REQUEST_FORMAT, TelemetrySection.ROUTE),
         safeText(ROUTE_OBSERVED_OUTPUT_FORMAT, TelemetrySection.ROUTE),
         safeText(ROUTE_BLUETOOTH_CODEC, TelemetrySection.ROUTE, defaultVisible = true),

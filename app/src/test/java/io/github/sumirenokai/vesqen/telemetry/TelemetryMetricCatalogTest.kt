@@ -56,5 +56,17 @@ class TelemetryMetricCatalogTest {
             TelemetryExportPolicy.INCLUDE,
             TelemetryMetricCatalog.descriptor(TelemetryMetricCatalog.SOURCE_CODEC_MIME).exportPolicy,
         )
+        assertEquals(
+            TelemetryExportPolicy.INCLUDE,
+            TelemetryMetricCatalog.descriptor(
+                TelemetryMetricCatalog.ROUTE_EXTERNAL_VERIFICATION_RECORD,
+            ).exportPolicy,
+        )
+        assertEquals(
+            TelemetryExportPolicy.REDACT_TEXT,
+            TelemetryMetricCatalog.descriptor(
+                TelemetryMetricCatalog.ROUTE_EXTERNAL_VERIFICATION_EVIDENCE,
+            ).exportPolicy,
+        )
     }
 }

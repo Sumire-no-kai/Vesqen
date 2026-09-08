@@ -8,7 +8,9 @@ The normative scope, acceptance criteria, and product boundaries live in [PRD.md
 - **M3 — Android 14+ USB bit-perfect and Library performance convergence:** capability-gated official mixer attributes, centralized strategy decisions, fail-closed behavior, plus root-cause analysis and a two-device verified fix for Library home fast-scroll jank.
   - [Implementation checklist and open gates](M3_IMPLEMENTATION_PLAN.md): a software candidate and partial device evidence exist; Library fixes and hardware acceptance remain open while M4 preparation can proceed.
 - **M4 — Verification and public beta:** device matrix, external bit-perfect evidence, endurance testing, accessibility, localization, and performance budgets.
-  - [Development tasks and dependencies](M4_IMPLEMENTATION_PLAN.md): evidence records, test vectors, declaration matching, stability, performance/UI acceptance, and beta preparation. Missing hardware and deferred endurance tests remain explicit gates.
+  - [Development tasks and dependencies](M4_IMPLEMENTATION_PLAN.md): the signed-registry software candidate, test vectors, declaration matching, and beta preparation exist; missing hardware and deferred endurance tests remain explicit gates.
+  - [Device acceptance record](M4_DEVICE_ACCEPTANCE.md): separates local software, Honor legacy coverage, iQOO/API 35, real DAC, external digital evidence, performance, and long-run status.
+  - [Limited-Beta release checklist](M4_BETA_RELEASE.md): public claim boundaries, blockers, signing, upgrade/data-retention, privacy, and release evidence.
 - **M5+ — Conditional extensions:** advanced formats, DAC lab, incremental playback-kernel work, legacy USB experiments, and optional on-device audio intelligence.
 
 A build, passing test, implemented API call, or matching DAC display does not by itself complete an audio-verification milestone. Completion requires the corresponding PRD acceptance evidence.

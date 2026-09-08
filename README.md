@@ -2,7 +2,7 @@
 
 Vesqen is a lightweight, offline-first Android player for local lossless audio. Its defining goal is to expose an auditable playback chain and use Android's official USB bit-perfect path only when the device, ROM, DAC, and source format genuinely support it.
 
-The repository now contains the M1 local-player implementation candidate: MediaStore and persistently authorised multi-folder SAF discovery, a private incremental catalog, songs/albums/artists/folders/genres browsing, search and listening history, playlists, an editable persistent queue, rich local metadata, Media3 background playback, selected-system-route observation, and the adaptive `Library / Now / Settings` shell with a secondary Chain evidence surface. M1 is not accepted until the connected runner, real format fixtures, endurance, route-disconnect and accessibility/device matrix in the [M1 device acceptance gate](docs/M1_DEVICE_ACCEPTANCE.md) pass. The M2 Audio Proof foundation is in progress; USB direct/bit-perfect output remains a later milestone. See the [product requirements](docs/PRD.md), [roadmap](docs/ROADMAP.md), and [development log](docs/DEVELOPMENT_LOG.md) for the evidence boundary.
+The repository contains implementation candidates for the local player, Audio Proof, Android 14+ official strict USB output, and the M4 signed verification registry. MediaStore and persistently authorised multi-folder SAF discovery, a private incremental catalog, local browsing and metadata, playlists, an editable persistent queue, Media3 background playback, selected-system-route observation, and the adaptive `Library / Now / Settings` shell feed one Chain evidence surface. Strict USB fails closed, and `BIT-PERFECT VERIFIED` is available only when a maintainer-signed record exactly matches the installed APK, phone/ROM, DAC, source, and sink while strict output is active. These implementation candidates do not complete M1–M4: real format fixtures, endurance, accessibility, performance, Android 14+ phone/DAC matrices, and at least one external digital verification remain acceptance gates. See the [product requirements](docs/PRD.md), [roadmap](docs/ROADMAP.md), [M4 device acceptance gate](docs/M4_DEVICE_ACCEPTANCE.md), and [development log](docs/DEVELOPMENT_LOG.md) for the evidence boundary.
 
 The formal Vesqen visual baseline is documented in [DESIGN.md](DESIGN.md) and the [visual identity guide](docs/brand/VISUAL_IDENTITY.md). Its Twin Paths mark, adaptive launcher icon, light/dark palette, and component tokens are versioned with the application instead of being maintained as detached mockups.
 
@@ -12,7 +12,7 @@ The [architecture review](docs/ARCHITECTURE_REVIEW.md) records current ownership
 
 ## Development baseline
 
-The 2026-09-07 additions include in-place drag ordering for Favorites/playlists, an optional All Songs A-Z/# index, play/pause cover motion, and a centered scrubber. Audio Proof includes Bluetooth endpoint/route evidence with explicit unavailable codec/transport parameters and a compact dashboard. Authorized speaker testing now produces valid iQOO and Android 16 emulator instrumentation results, with sampling, persistence, privacy and layout evidence recorded in the M1/M2 acceptance gates. Local validation passes 180 unit tests, Debug lint and Debug/test APK assembly. Full milestone acceptance remains open for the remaining device/OS, peripheral, accessibility and performance checks; the emulator does not replace physical audio hardware.
+The M4 software candidate adds offline signed verification records, deterministic PCM vectors and comparison tooling, explicit evidence linkage, a repeatable device baseline collector, and a `0.4.0-beta.1` limited-Beta version candidate. Local validation covers 199 JVM tests, 13 Python tool tests, Debug lint, and Debug/Profile/Release/test APK assembly. Honor Android 9 has current ordinary-output and legacy-system evidence; iQOO Android 15 has no-DAC fail-closed, UI/lifecycle, Profile-baseline, and data-retention evidence. Real DAC strict USB, external digital sample comparison, deferred endurance runs, final accessibility coverage, and the M3 Library root-cause gate remain open. Passing software checks or an Android-side `ACTIVE` state does not imply `VERIFIED` or milestone acceptance. See the [M4 acceptance record](docs/M4_DEVICE_ACCEPTANCE.md) and [limited-Beta release checklist](docs/M4_BETA_RELEASE.md).
 
 - Android 8.0+ (`minSdk 26`)
 - `compileSdk 36` and `targetSdk 36`
@@ -25,13 +25,13 @@ Install JDK 21 and Android SDK Platform 36, then create `local.properties` throu
 On Windows:
 
 ```powershell
-.\gradlew.bat testDebugUnitTest lintDebug assembleDebug
+.\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleProfile :app:assembleRelease :app:assembleDebugAndroidTest
 ```
 
 On macOS or Linux:
 
 ```bash
-./gradlew testDebugUnitTest lintDebug assembleDebug
+./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleProfile :app:assembleRelease :app:assembleDebugAndroidTest
 ```
 
 Generated debug APKs are written under `app/build/outputs/apk/debug/`.

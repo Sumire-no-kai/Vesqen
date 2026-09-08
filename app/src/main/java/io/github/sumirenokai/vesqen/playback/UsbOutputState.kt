@@ -52,11 +52,26 @@ data class AudioFormatSummary(
         get() = "${sampleRateHz / 1_000f} kHz · $encoding · $channelCount ch"
 }
 
+/** Stable public USB identity. Serial numbers and usbfs paths are deliberately excluded. */
+data class UsbHardwareIdentity(
+    val vendorId: Int,
+    val productId: Int,
+    val descriptorVersion: String,
+) {
+    init {
+        require(vendorId in 0..0xffff && productId in 0..0xffff) {
+            "USB ids must be unsigned 16-bit values"
+        }
+        require(descriptorVersion.isNotBlank()) { "USB descriptor version cannot be blank" }
+    }
+}
+
 data class UsbOutputStatus(
     val mode: UsbOutputMode = UsbOutputMode.SYSTEM,
     val phase: UsbOutputPhase = UsbOutputPhase.SYSTEM,
     val failure: UsbOutputFailure? = null,
     val deviceName: String? = null,
+    val hardwareIdentity: UsbHardwareIdentity? = null,
     val sourceFormat: AudioFormatSummary? = null,
     val sinkFormat: AudioFormatSummary? = null,
     val decisionCode: String = "system_audio_route",
@@ -126,6 +141,9 @@ internal object UsbOutputSessionContract {
     private const val PHASE = "usb_output_phase"
     private const val FAILURE = "usb_output_failure"
     private const val DEVICE_NAME = "usb_output_device_name"
+    private const val DEVICE_VENDOR_ID = "usb_output_device_vendor_id"
+    private const val DEVICE_PRODUCT_ID = "usb_output_device_product_id"
+    private const val DEVICE_DESCRIPTOR_VERSION = "usb_output_device_descriptor_version"
     private const val DECISION_CODE = "usb_output_decision_code"
     private const val OBSERVED_AT = "usb_output_observed_at"
     private const val OBSERVED_AT_ELAPSED = "usb_output_observed_at_elapsed"
@@ -149,6 +167,11 @@ internal object UsbOutputSessionContract {
         putString(PHASE, status.phase.name)
         status.failure?.let { putString(FAILURE, it.name) }
         status.deviceName?.let { putString(DEVICE_NAME, it) }
+        status.hardwareIdentity?.let { identity ->
+            putInt(DEVICE_VENDOR_ID, identity.vendorId)
+            putInt(DEVICE_PRODUCT_ID, identity.productId)
+            putString(DEVICE_DESCRIPTOR_VERSION, identity.descriptorVersion)
+        }
         putString(DECISION_CODE, status.decisionCode)
         putLong(OBSERVED_AT, status.observedAtEpochMs)
         putLong(OBSERVED_AT_ELAPSED, status.observedAtElapsedRealtimeMs)
@@ -174,6 +197,7 @@ internal object UsbOutputSessionContract {
                 phase = phase,
                 failure = failure,
                 deviceName = bundle.getString(DEVICE_NAME),
+                hardwareIdentity = bundle.readHardwareIdentity(),
                 sourceFormat = bundle.readFormat(SOURCE_RATE, SOURCE_CHANNELS, SOURCE_ENCODING),
                 sinkFormat = bundle.readFormat(SINK_RATE, SINK_CHANNELS, SINK_ENCODING),
                 decisionCode = bundle.getString(DECISION_CODE) ?: "session_state_missing_decision",
@@ -200,5 +224,15 @@ internal object UsbOutputSessionContract {
         val channels = getInt(channelKey).takeIf { it > 0 } ?: return null
         val encoding = getString(encodingKey)?.takeIf(String::isNotBlank) ?: return null
         return AudioFormatSummary(rate, channels, encoding)
+    }
+
+    private fun Bundle.readHardwareIdentity(): UsbHardwareIdentity? {
+        val version = getString(DEVICE_DESCRIPTOR_VERSION)?.takeIf(String::isNotBlank) ?: return null
+        if (!containsKey(DEVICE_VENDOR_ID) || !containsKey(DEVICE_PRODUCT_ID)) return null
+        return UsbHardwareIdentity(
+            vendorId = getInt(DEVICE_VENDOR_ID),
+            productId = getInt(DEVICE_PRODUCT_ID),
+            descriptorVersion = version,
+        )
     }
 }

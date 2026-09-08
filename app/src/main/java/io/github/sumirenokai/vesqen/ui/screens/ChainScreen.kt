@@ -578,7 +578,10 @@ private fun ChainCurrentSource(playback: PlaybackSnapshot) {
 @Composable
 private fun ChainSummaryPanel(playback: PlaybackSnapshot) {
     val status = playback.usbOutputStatus
-    val title = when (status.phase) {
+    val verification = playback.outputVerification
+    val title = if (verification != null) {
+        stringResource(R.string.chain_verified_title)
+    } else when (status.phase) {
         io.github.sumirenokai.vesqen.playback.UsbOutputPhase.SYSTEM ->
             stringResource(R.string.chain_system_mixed_title)
         io.github.sumirenokai.vesqen.playback.UsbOutputPhase.AVAILABLE ->
@@ -590,7 +593,13 @@ private fun ChainSummaryPanel(playback: PlaybackSnapshot) {
         io.github.sumirenokai.vesqen.playback.UsbOutputPhase.FAILED ->
             stringResource(R.string.chain_strict_failed_title)
     }
-    val body = when (status.phase) {
+    val body = if (verification != null) {
+        stringResource(
+            R.string.chain_verified_body,
+            verification.record.recordId,
+            verification.record.methodId,
+        )
+    } else when (status.phase) {
         io.github.sumirenokai.vesqen.playback.UsbOutputPhase.SYSTEM ->
             stringResource(R.string.chain_system_mixed_body)
         io.github.sumirenokai.vesqen.playback.UsbOutputPhase.AVAILABLE ->

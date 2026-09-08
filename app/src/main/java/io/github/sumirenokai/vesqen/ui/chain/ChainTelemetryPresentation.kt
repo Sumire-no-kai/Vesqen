@@ -580,6 +580,7 @@ private val SOURCE_LABEL_RESOURCES = mapOf(
     "android.usb_public_api" to R.string.chain_source_android_usb,
     "vesqen.configuration" to R.string.chain_source_app_configuration,
     "vesqen.output_coordinator" to R.string.chain_source_output_coordinator,
+    "vesqen.external_output_verification" to R.string.chain_source_external_output_verification,
 )
 
 private val METRIC_LABEL_RESOURCES: Map<String, Int> = mapOf(
@@ -673,6 +674,10 @@ private val METRIC_LABEL_RESOURCES: Map<String, Int> = mapOf(
     "route.anticipated_mixer_profile_count" to R.string.chain_metric_route_mixer_profile_count,
     "route.anticipated_preferred_mixer_profile" to R.string.chain_metric_route_preferred_mixer_profile,
     "route.output_declaration" to R.string.chain_metric_route_output_declaration,
+    "route.external_verification_record" to R.string.chain_metric_route_external_verification_record,
+    "route.external_verification_method" to R.string.chain_metric_route_external_verification_method,
+    "route.external_verification_evidence" to R.string.chain_metric_route_external_verification_evidence,
+    "route.external_verification_test_vector" to R.string.chain_metric_route_external_verification_test_vector,
     "route.audio_track_request_format" to R.string.chain_metric_route_audio_track_request_format,
     "route.observed_output_format" to R.string.chain_metric_route_observed_output_format,
     "route.bluetooth_codec" to R.string.chain_metric_route_bluetooth_codec,

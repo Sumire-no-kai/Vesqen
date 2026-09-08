@@ -18,8 +18,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AccountTree
+import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Usb
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,15 +42,23 @@ import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
+import io.github.sumirenokai.vesqen.verification.OutputVerificationImportFailure
+import io.github.sumirenokai.vesqen.verification.OutputVerificationImportResult
+import io.github.sumirenokai.vesqen.verification.OutputVerificationMatch
+import io.github.sumirenokai.vesqen.verification.OutputVerificationRegistryState
 
 @Composable
 fun SettingsScreen(
     outputStatus: UsbOutputStatus,
     onSetUsbOutputMode: (UsbOutputMode) -> Unit,
     onOpenPlaybackChain: () -> Unit,
+    onImportVerificationRegistry: () -> Unit,
     onOpenAbout: () -> Unit,
     versionName: String,
     modifier: Modifier = Modifier,
+    outputVerification: OutputVerificationMatch? = null,
+    verificationRegistryState: OutputVerificationRegistryState = OutputVerificationRegistryState.Empty,
+    verificationImportResult: OutputVerificationImportResult? = null,
 ) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
@@ -101,6 +111,24 @@ fun SettingsScreen(
                 )
             }
             item {
+                SettingsActionRow(
+                    icon = {
+                        Icon(
+                            if (outputVerification == null) Icons.Filled.FileOpen else Icons.Filled.VerifiedUser,
+                            contentDescription = null,
+                        )
+                    },
+                    title = stringResource(R.string.settings_verification_registry),
+                    body = verificationRegistryBody(
+                        outputVerification = outputVerification,
+                        registryState = verificationRegistryState,
+                        importResult = verificationImportResult,
+                    ),
+                    onClick = onImportVerificationRegistry,
+                    modifier = Modifier.testTag("vesqen.settings.verification-registry"),
+                )
+            }
+            item {
                 SettingsSectionLabel(stringResource(R.string.settings_about))
             }
             item {
@@ -115,6 +143,58 @@ fun SettingsScreen(
         }
     }
 }
+
+@Composable
+private fun verificationRegistryBody(
+    outputVerification: OutputVerificationMatch?,
+    registryState: OutputVerificationRegistryState,
+    importResult: OutputVerificationImportResult?,
+): String {
+    if (outputVerification != null) {
+        return stringResource(
+            R.string.settings_verification_active,
+            outputVerification.record.recordId,
+        )
+    }
+    return when (importResult) {
+        is OutputVerificationImportResult.Success -> stringResource(
+            R.string.settings_verification_imported,
+            importResult.recordCount,
+            importResult.applicableInstallRecordCount,
+        )
+        is OutputVerificationImportResult.Failure -> stringResource(
+            R.string.settings_verification_import_failed,
+            verificationFailureLabel(importResult.reason),
+        )
+        null -> when (registryState) {
+            OutputVerificationRegistryState.Loading -> stringResource(R.string.settings_verification_loading)
+            OutputVerificationRegistryState.Empty -> stringResource(R.string.settings_verification_empty)
+            is OutputVerificationRegistryState.Ready -> stringResource(
+                R.string.settings_verification_loaded,
+                registryState.records.size,
+                registryState.applicableInstallRecordCount,
+            )
+            is OutputVerificationRegistryState.Invalid -> stringResource(
+                R.string.settings_verification_invalid,
+                verificationFailureLabel(registryState.reason),
+            )
+        }
+    }
+}
+
+@Composable
+private fun verificationFailureLabel(failure: OutputVerificationImportFailure): String = stringResource(
+    when (failure) {
+        OutputVerificationImportFailure.INPUT_TOO_LARGE -> R.string.verification_failure_too_large
+        OutputVerificationImportFailure.MALFORMED_DOCUMENT -> R.string.verification_failure_malformed
+        OutputVerificationImportFailure.UNSUPPORTED_SCHEMA -> R.string.verification_failure_schema
+        OutputVerificationImportFailure.UNSUPPORTED_SIGNATURE_ALGORITHM ->
+            R.string.verification_failure_algorithm
+        OutputVerificationImportFailure.SIGNATURE_MISMATCH -> R.string.verification_failure_signature
+        OutputVerificationImportFailure.NO_SIGNING_CERTIFICATE -> R.string.verification_failure_certificate
+        OutputVerificationImportFailure.IO_ERROR -> R.string.verification_failure_io
+    },
+)
 
 @Composable
 private fun SettingsChoiceRow(
