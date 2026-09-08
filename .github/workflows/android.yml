@@ -34,5 +34,11 @@ jobs:
       - name: Verify M4 evidence tools
         run: python3 -m unittest discover -s tools/tests -v
 
-      - name: Verify Android project
-        run: ./gradlew testDebugUnitTest lintDebug assembleDebug assembleProfile assembleRelease assembleDebugAndroidTest
+      - name: Verify debug and tests
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest --no-daemon
+
+      - name: Assemble Profile
+        run: ./gradlew assembleProfile --no-daemon
+
+      - name: Assemble Release
+        run: ./gradlew assembleRelease --no-daemon
