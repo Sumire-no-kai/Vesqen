@@ -187,6 +187,9 @@ private val ChainCoreMetricIds = setOf(
     TelemetryMetricCatalog.PLAYBACK_UNDERRUN_COUNT,
 )
 
+// Leave margin below Android's 1.3 preset because OEM/non-linear scaling can report it just under 1.3.
+private const val ChainLargeTextFontScale = 1.25f
+
 @Composable
 fun ChainScreen(
     snapshot: PlaybackSnapshot,
@@ -669,13 +672,19 @@ private fun ChainCorePanel(
                     ChainCoreFact(TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE, metrics, nowElapsedRealtimeMs, unitDisplayMode, prominent = true)
                     ChainCoreFact(TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_ENCODING, metrics, nowElapsedRealtimeMs, unitDisplayMode)
                 }
-                if (maxWidth >= 280.dp && LocalDensity.current.fontScale <= 1.3f) {
+                if (maxWidth >= 280.dp && LocalDensity.current.fontScale < ChainLargeTextFontScale) {
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { source() }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { pcm() }
                     }
                 } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { source(); pcm() }
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        source()
+                        pcm()
+                    }
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -723,7 +732,7 @@ private fun ChainCoreFact(
             .semantics(mergeDescendants = true) {},
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        if (inline && LocalDensity.current.fontScale <= 1.3f) {
+        if (inline && LocalDensity.current.fontScale < ChainLargeTextFontScale) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
                 Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -738,6 +747,7 @@ private fun ChainCoreFact(
         Text(
             evidence?.let { telemetryConfidenceLabel(context, it.confidence) + " · " + telemetryEvidenceAge(context, it, nowElapsedRealtimeMs) }
                 ?: stringResource(R.string.chain_sampling_starting_short),
+            modifier = Modifier.fillMaxWidth().testTag("vesqen.chain.core-evidence.${id.value}"),
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (evidence != null && (expanded || evidence is TelemetryEvidence.Unavailable)) {
@@ -1644,7 +1654,7 @@ private fun ChainDashboardControls(
     var showSettings by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().testTag("vesqen.chain.dashboard-controls"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val stackSelectors = maxWidth < 300.dp || LocalDensity.current.fontScale > 1.3f
+            val stackSelectors = maxWidth < 300.dp || LocalDensity.current.fontScale >= ChainLargeTextFontScale
             val selectorWidth = if (maxWidth < 480.dp) (maxWidth - 8.dp) / 2 else null
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
@@ -1678,8 +1688,13 @@ private fun ChainDashboardControls(
         }
         if (showSettings) {
             BoxWithConstraints(Modifier.fillMaxWidth()) {
-                val controlModifier = if (maxWidth < 300.dp || LocalDensity.current.fontScale > 1.3f) Modifier.fillMaxWidth()
-                    else Modifier.width((maxWidth - 8.dp) / 2)
+                val controlModifier = if (
+                    maxWidth < 300.dp || LocalDensity.current.fontScale >= ChainLargeTextFontScale
+                ) {
+                    Modifier.fillMaxWidth()
+                } else {
+                    Modifier.width((maxWidth - 8.dp) / 2)
+                }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     ChainOptionMenuButton(
                         stringResource(R.string.chain_unit_display), unitDisplayModeLabel(preferences.unitDisplayMode),
@@ -1887,7 +1902,8 @@ private fun ChainMetricCard(
             // Identifiers and route descriptions need the full card width even when they contain
             // few characters. Numeric values retain the aligned readout column at normal text size.
             val stackedValue = evidence?.reading is TelemetryReading.Text ||
-                evidence?.reading is TelemetryReading.UsbInventory || LocalDensity.current.fontScale > 1.3f
+                evidence?.reading is TelemetryReading.UsbInventory ||
+                    LocalDensity.current.fontScale >= ChainLargeTextFontScale
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                 if (pinned) Icon(Icons.Filled.PushPin, stringResource(R.string.chain_pinned), Modifier.size(14.dp))
