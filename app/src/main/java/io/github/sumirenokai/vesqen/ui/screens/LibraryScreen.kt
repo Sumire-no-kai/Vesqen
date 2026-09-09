@@ -1,5 +1,14 @@
 package io.github.sumirenokai.vesqen.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -100,9 +109,51 @@ import io.github.sumirenokai.vesqen.ui.components.TrackDetailsSheet
 import io.github.sumirenokai.vesqen.ui.components.TrackRow
 import io.github.sumirenokai.vesqen.ui.components.VesqenEmptyState
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
+import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.WarningAmberBright
 import io.github.sumirenokai.vesqen.ui.theme.WarningAmberDeep
+import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
+
+private val LibraryHierarchyEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
+
+private sealed interface LibraryContentView {
+    val depth: Int
+
+    data object Root : LibraryContentView {
+        override val depth = 0
+    }
+
+    data object Favorites : LibraryContentView {
+        override val depth = 1
+    }
+
+    data class Collection(val key: String) : LibraryContentView {
+        override val depth = 1
+    }
+}
+
+private fun libraryHierarchyTransition(
+    forward: Boolean,
+    motionPolicy: VesqenMotionPolicy,
+): ContentTransform {
+    val durationMillis = if (motionPolicy.reduceMotion) motionPolicy.stateChangeMillis else 180
+    if (motionPolicy.reduceMotion) {
+        return fadeIn(tween(durationMillis)) togetherWith fadeOut(tween(durationMillis))
+    }
+    val direction = if (forward) 1 else -1
+    return (
+        fadeIn(tween(durationMillis, easing = LibraryHierarchyEasing)) +
+            slideInHorizontally(tween(durationMillis, easing = LibraryHierarchyEasing)) {
+                it * direction / 8
+            }
+        ) togetherWith (
+        fadeOut(tween(durationMillis, easing = LibraryHierarchyEasing)) +
+            slideOutHorizontally(tween(durationMillis, easing = LibraryHierarchyEasing)) {
+                -it * direction / 12
+            }
+        )
+}
 
 @Composable
 fun LibraryScreen(
@@ -131,7 +182,9 @@ fun LibraryScreen(
     onRemoveLibraryFolder: (String) -> Unit = {},
     onPauseLibraryScan: () -> Unit = {},
     onResumeLibraryScan: () -> Unit = {},
+    motionPolicy: VesqenMotionPolicy? = null,
 ) {
+    val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     var query by rememberSaveable { mutableStateOf("") }
     var detailsTrack by remember { mutableStateOf<AudioTrack?>(null) }
     var browseModeName by rememberSaveable { mutableStateOf(LibraryBrowseMode.SONGS.name) }
@@ -139,13 +192,21 @@ fun LibraryScreen(
     var favoritesOnly by rememberSaveable { mutableStateOf(false) }
     var favoriteCustomOrder by rememberSaveable { mutableStateOf(true) }
     var favoriteSortName by rememberSaveable { mutableStateOf(LibrarySortOrder.TITLE.name) }
+    var selectedCollectionKey by rememberSaveable { mutableStateOf<String?>(null) }
     var orderTarget by remember { mutableStateOf<Pair<Long?, List<AudioTrack>>?>(null) }
     var orderSaving by remember { mutableStateOf(false) }
     var orderSaveFailed by remember { mutableStateOf(false) }
     val orderScope = rememberCoroutineScope()
-    BackHandler(enabled = orderTarget != null || favoritesOnly) {
+    BackHandler(enabled = orderTarget != null || selectedCollectionKey != null || favoritesOnly) {
         if (!orderSaving) {
-            if (orderTarget != null) orderTarget = null else { favoritesOnly = false; query = "" }
+            when {
+                orderTarget != null -> orderTarget = null
+                selectedCollectionKey != null -> selectedCollectionKey = null
+                else -> {
+                    favoritesOnly = false
+                    query = ""
+                }
+            }
         }
     }
     val context = LocalContext.current.applicationContext
@@ -158,29 +219,43 @@ fun LibraryScreen(
     }
     val titleIndex = titleProjection?.second
     val titleIndexIsCurrent = titleProjection?.first == titleKeys
-    var selectedCollectionKey by rememberSaveable { mutableStateOf<String?>(null) }
     var showCreatePlaylist by rememberSaveable { mutableStateOf(false) }
     var playlistToEdit by remember { mutableStateOf<LibraryPlaylist?>(null) }
     val browseMode = LibraryBrowseMode.valueOf(browseModeName)
-    val sortOrder = LibrarySortOrder.valueOf(if (favoritesOnly) favoriteSortName else sortOrderName)
+    val rootSortOrder = LibrarySortOrder.valueOf(sortOrderName)
+    val favoriteSortOrder = LibrarySortOrder.valueOf(favoriteSortName)
+    val sortOrder = if (favoritesOnly) favoriteSortOrder else rootSortOrder
     val searchedTracks = remember(state.tracks, query) { filterTracks(state.tracks, query) }
-    val filteredTracks = remember(searchedTracks, favoritesOnly) {
-        if (favoritesOnly) searchedTracks.filter(AudioTrack::isFavorite) else searchedTracks
+    val favoriteTracks = remember(searchedTracks) {
+        searchedTracks.filter(AudioTrack::isFavorite)
     }
-    val visibleTracks = remember(filteredTracks, sortOrder, favoritesOnly, favoriteCustomOrder, titleIndex) {
+    val rootVisibleTracks = remember(searchedTracks, rootSortOrder, titleIndex) {
         when {
-            favoritesOnly && favoriteCustomOrder -> filteredTracks.sortedWith(compareBy<AudioTrack> { it.favoritePosition ?: Long.MAX_VALUE }.thenBy { it.id })
-            sortOrder == LibrarySortOrder.TITLE && titleIndex != null -> {
-                projectLibraryTitleOrder(titleIndex.tracks, filteredTracks)
+            rootSortOrder == LibrarySortOrder.TITLE && titleIndex != null -> {
+                projectLibraryTitleOrder(titleIndex.tracks, searchedTracks)
             }
-            sortOrder == LibrarySortOrder.TITLE -> filteredTracks
-            else -> sortLibraryTracks(filteredTracks, sortOrder)
+            rootSortOrder == LibrarySortOrder.TITLE -> searchedTracks
+            else -> sortLibraryTracks(searchedTracks, rootSortOrder)
         }
     }
-    val collections = remember(browseMode, filteredTracks, state.playlists, sortOrder) {
+    val favoriteVisibleTracks = remember(favoriteTracks, favoriteSortOrder, favoriteCustomOrder, titleIndex) {
+        when {
+            favoriteCustomOrder -> favoriteTracks.sortedWith(
+                compareBy<AudioTrack> { it.favoritePosition ?: Long.MAX_VALUE }.thenBy { it.id },
+            )
+            favoriteSortOrder == LibrarySortOrder.TITLE && titleIndex != null -> {
+                projectLibraryTitleOrder(titleIndex.tracks, favoriteTracks)
+            }
+            favoriteSortOrder == LibrarySortOrder.TITLE -> favoriteTracks
+            else -> sortLibraryTracks(favoriteTracks, favoriteSortOrder)
+        }
+    }
+    val visibleTracks = if (favoritesOnly) favoriteVisibleTracks else rootVisibleTracks
+    val filteredTracks = if (favoritesOnly) favoriteTracks else searchedTracks
+    val collections = remember(browseMode, searchedTracks, state.playlists, rootSortOrder) {
         sortLibraryCollections(
-            buildLibraryCollections(browseMode, filteredTracks, state.playlists),
-            sortOrder,
+            buildLibraryCollections(browseMode, searchedTracks, state.playlists),
+            rootSortOrder,
         )
     }
     val selectedCollection = remember(collections, selectedCollectionKey) {
@@ -188,24 +263,32 @@ fun LibraryScreen(
     }
     val isFavoriteList = favoritesOnly && browseMode == LibraryBrowseMode.SONGS && selectedCollection == null
     val isPlaylist = selectedCollection?.playlistId != null
+    val contentView = selectedCollection?.let { LibraryContentView.Collection(it.key) }
+        ?: if (isFavoriteList) LibraryContentView.Favorites else LibraryContentView.Root
 
     Column(modifier = modifier.fillMaxSize()) {
-        LibraryHeader(
-            favoritesOnly = favoritesOnly,
-            navigationEnabled = !orderSaving,
-            onOpenFavorites = {
-                favoritesOnly = true
-                browseModeName = LibraryBrowseMode.SONGS.name
-                selectedCollectionKey = null
-                query = ""
-            },
-            onBack = {
-                if (orderTarget != null) orderTarget = null else { favoritesOnly = false; query = "" }
-            },
-            onAddLibraryFolder = onAddLibraryFolder,
-            onRescan = onRescan,
-            sourceActionsEnabled = !state.isLoading && orderTarget == null,
-        )
+        AnimatedContent(
+            targetState = favoritesOnly,
+            transitionSpec = { libraryHierarchyTransition(targetState, appliedMotionPolicy) },
+            label = "vesqen.library-header-hierarchy",
+        ) { showingFavorites ->
+            LibraryHeader(
+                favoritesOnly = showingFavorites,
+                navigationEnabled = !orderSaving,
+                onOpenFavorites = {
+                    favoritesOnly = true
+                    browseModeName = LibraryBrowseMode.SONGS.name
+                    selectedCollectionKey = null
+                    query = ""
+                },
+                onBack = {
+                    if (orderTarget != null) orderTarget = null else { favoritesOnly = false; query = "" }
+                },
+                onAddLibraryFolder = onAddLibraryFolder,
+                onRescan = onRescan,
+                sourceActionsEnabled = !state.isLoading && orderTarget == null,
+            )
+        }
         if (state.musicAccess != MusicAccess.GRANTED) {
             DeviceMusicAccessNotice(
                 denied = state.musicAccess == MusicAccess.DENIED,
@@ -228,6 +311,9 @@ fun LibraryScreen(
         }
         if (!state.notificationsAllowed && playback.hasActiveTrack) {
             NotificationNotice(onOpenNotificationSettings = onOpenNotificationSettings)
+        }
+        if (state.catalogMutationFailed) {
+            LibraryMutationFailureNotice()
         }
         if (state.tracks.isNotEmpty() && orderTarget == null) {
             LibrarySearchField(query = query, onQueryChange = { query = it })
@@ -295,95 +381,125 @@ fun LibraryScreen(
             )
         }
         Box(modifier = Modifier.weight(1f)) {
-            when {
-                state.isLoading && state.tracks.isEmpty() -> LibraryLoading()
-                state.loadingFailed && state.tracks.isEmpty() -> VesqenEmptyState(
-                    title = stringResource(R.string.library_load_failed),
-                    body = stringResource(
-                        if (playback.hasActiveTrack) {
-                            R.string.library_load_failed_playback_continues
-                        } else {
-                            R.string.library_load_failed_body
+            AnimatedContent(
+                targetState = contentView,
+                modifier = Modifier.fillMaxSize(),
+                transitionSpec = {
+                    libraryHierarchyTransition(
+                        forward = targetState.depth > initialState.depth,
+                        motionPolicy = appliedMotionPolicy,
+                    )
+                },
+                label = "vesqen.library-content-hierarchy",
+            ) { activeView ->
+                val activeFavorites = activeView == LibraryContentView.Favorites
+                val activeVisibleTracks = if (activeFavorites) favoriteVisibleTracks else rootVisibleTracks
+                val activeCollection = (activeView as? LibraryContentView.Collection)?.let { view ->
+                    collections.firstOrNull { it.key == view.key }
+                }
+                when {
+                    state.isLoading && state.tracks.isEmpty() -> LibraryLoading()
+                    state.loadingFailed && state.tracks.isEmpty() -> VesqenEmptyState(
+                        title = stringResource(R.string.library_load_failed),
+                        body = stringResource(
+                            if (playback.hasActiveTrack) {
+                                R.string.library_load_failed_playback_continues
+                            } else {
+                                R.string.library_load_failed_body
+                            },
+                        ),
+                        actionLabel = stringResource(R.string.try_again),
+                        onAction = onRescan,
+                        modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
+                    )
+
+                    state.tracks.isEmpty() -> VesqenEmptyState(
+                        title = stringResource(R.string.no_local_music),
+                        body = stringResource(R.string.no_local_music_body),
+                        actionLabel = stringResource(R.string.add_music_folder),
+                        onAction = onAddLibraryFolder,
+                        modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
+                    )
+
+                    browseMode == LibraryBrowseMode.PLAYLISTS && state.playlists.isEmpty() -> VesqenEmptyState(
+                        title = stringResource(R.string.library_playlists),
+                        body = stringResource(R.string.no_playlists_body),
+                        actionLabel = stringResource(R.string.create_playlist),
+                        onAction = { showCreatePlaylist = true },
+                        modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
+                    )
+
+                    activeFavorites && query.isBlank() && activeVisibleTracks.isEmpty() -> VesqenEmptyState(
+                        title = stringResource(R.string.library_favorites),
+                        body = stringResource(R.string.library_favorites_empty),
+                        actionLabel = stringResource(R.string.show_all_music),
+                        onAction = { favoritesOnly = false },
+                        modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
+                    )
+
+                    activeVisibleTracks.isEmpty() && browseMode != LibraryBrowseMode.PLAYLISTS -> VesqenEmptyState(
+                        title = stringResource(R.string.no_search_results),
+                        body = stringResource(R.string.no_search_results_body),
+                        actionLabel = stringResource(R.string.clear_search),
+                        onAction = { query = "" },
+                        modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
+                    )
+
+                    activeCollection != null -> CollectionTrackList(
+                        collection = activeCollection.copy(
+                            tracks = orderTarget?.second ?: activeCollection.tracks,
+                        ),
+                        playback = playback,
+                        onBack = {
+                            if (orderTarget != null) {
+                                if (!orderSaving) orderTarget = null
+                            } else {
+                                selectedCollectionKey = null
+                            }
                         },
-                    ),
-                    actionLabel = stringResource(R.string.try_again),
-                    onAction = onRescan,
-                    modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
-                )
+                        onPlayQueue = onPlayQueue,
+                        onTrackSelected = { track ->
+                            onPlayQueue(activeCollection.tracks, activeCollection.tracks.indexOf(track))
+                        },
+                        onTrackMore = { detailsTrack = it },
+                        editing = orderTarget != null,
+                        saving = orderSaving,
+                        onReorder = { tracks -> orderTarget = orderTarget?.copy(second = tracks) },
+                        onEditPlaylist = activeCollection.playlistId
+                            ?.takeIf { orderTarget == null }
+                            ?.let { playlistId ->
+                                { playlistToEdit = state.playlists.firstOrNull { it.id == playlistId } }
+                            },
+                    )
 
-                state.tracks.isEmpty() -> VesqenEmptyState(
-                    title = stringResource(R.string.no_local_music),
-                    body = stringResource(R.string.no_local_music_body),
-                    actionLabel = stringResource(R.string.add_music_folder),
-                    onAction = onAddLibraryFolder,
-                    modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
-                )
+                    browseMode == LibraryBrowseMode.SONGS -> LibraryTrackList(
+                        tracks = orderTarget?.second ?: activeVisibleTracks,
+                        editing = orderTarget != null,
+                        saving = orderSaving,
+                        onReorder = { tracks -> orderTarget = orderTarget?.copy(second = tracks) },
+                        currentTrackId = playback.trackId,
+                        isPlaying = playback.isPlaying,
+                        alphabetSections = if (
+                            titleIndexIsCurrent && alphabetEnabled && !activeFavorites &&
+                            query.isBlank() && rootSortOrder == LibrarySortOrder.TITLE
+                        ) titleIndex?.sections.orEmpty() else emptyMap(),
+                        onTrackSelected = { track ->
+                            onPlayQueue(activeVisibleTracks, activeVisibleTracks.indexOf(track))
+                        },
+                        onTrackMore = { detailsTrack = it },
+                    )
 
-                browseMode == LibraryBrowseMode.PLAYLISTS && state.playlists.isEmpty() -> VesqenEmptyState(
-                    title = stringResource(R.string.library_playlists),
-                    body = stringResource(R.string.no_playlists_body),
-                    actionLabel = stringResource(R.string.create_playlist),
-                    onAction = { showCreatePlaylist = true },
-                    modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
-                )
-
-                isFavoriteList && query.isBlank() && visibleTracks.isEmpty() -> VesqenEmptyState(
-                    title = stringResource(R.string.library_favorites),
-                    body = stringResource(R.string.library_favorites_empty),
-                    actionLabel = stringResource(R.string.show_all_music),
-                    onAction = { favoritesOnly = false },
-                    modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
-                )
-
-                visibleTracks.isEmpty() && browseMode != LibraryBrowseMode.PLAYLISTS -> VesqenEmptyState(
-                    title = stringResource(R.string.no_search_results),
-                    body = stringResource(R.string.no_search_results_body),
-                    actionLabel = stringResource(R.string.clear_search),
-                    onAction = { query = "" },
-                    modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
-                )
-
-                selectedCollection != null -> CollectionTrackList(
-                    collection = selectedCollection.copy(tracks = orderTarget?.second ?: selectedCollection.tracks),
-                    playback = playback,
-                    onBack = { if (orderTarget != null) { if (!orderSaving) orderTarget = null } else selectedCollectionKey = null },
-                    onPlayQueue = onPlayQueue,
-                    onTrackSelected = { track ->
-                        onPlayQueue(selectedCollection.tracks, selectedCollection.tracks.indexOf(track))
-                    },
-                    onTrackMore = { detailsTrack = it },
-                    editing = orderTarget != null,
-                    saving = orderSaving,
-                    onReorder = { tracks -> orderTarget = orderTarget?.copy(second = tracks) },
-                    onEditPlaylist = selectedCollection.playlistId?.takeIf { orderTarget == null }?.let { playlistId ->
-                        { playlistToEdit = state.playlists.firstOrNull { it.id == playlistId } }
-                    },
-                )
-
-                browseMode == LibraryBrowseMode.SONGS -> LibraryTrackList(
-                    tracks = orderTarget?.second ?: visibleTracks,
-                    editing = orderTarget != null,
-                    saving = orderSaving,
-                    onReorder = { tracks -> orderTarget = orderTarget?.copy(second = tracks) },
-                    currentTrackId = playback.trackId,
-                    isPlaying = playback.isPlaying,
-                    alphabetSections = if (titleIndexIsCurrent && alphabetEnabled && !favoritesOnly && query.isBlank() && sortOrder == LibrarySortOrder.TITLE) titleIndex?.sections.orEmpty() else emptyMap(),
-                    onTrackSelected = { track ->
-                        onPlayQueue(visibleTracks, visibleTracks.indexOf(track))
-                    },
-                    onTrackMore = { detailsTrack = it },
-                )
-
-                else -> CollectionList(
-                    mode = browseMode,
-                    collections = collections,
-                    onCollectionSelected = { selectedCollectionKey = it.key },
-                    onCreatePlaylist = if (browseMode == LibraryBrowseMode.PLAYLISTS) {
-                        { showCreatePlaylist = true }
-                    } else {
-                        null
-                    },
-                )
+                    else -> CollectionList(
+                        mode = browseMode,
+                        collections = collections,
+                        onCollectionSelected = { selectedCollectionKey = it.key },
+                        onCreatePlaylist = if (browseMode == LibraryBrowseMode.PLAYLISTS) {
+                            { showCreatePlaylist = true }
+                        } else {
+                            null
+                        },
+                    )
+                }
             }
         }
     }
@@ -891,7 +1007,15 @@ private fun LibraryHeader(
                 ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.show_all_music)) }
                 Text(
                     stringResource(if (favoritesOnly) R.string.library_favorites else R.string.destination_library),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(
+                            if (favoritesOnly) {
+                                "vesqen.library.title.favorites"
+                            } else {
+                                "vesqen.library.title.root"
+                            },
+                        ),
                     style = MaterialTheme.typography.headlineSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -984,6 +1108,35 @@ private fun DeviceMusicAccessNotice(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun LibraryMutationFailureNotice() {
+    val message = stringResource(R.string.library_change_save_failed)
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.xxs)
+            .heightIn(min = 48.dp)
+            .testTag("vesqen.library.mutation-failed")
+            .semantics { contentDescription = message },
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = VesqenSpacing.sm, vertical = VesqenSpacing.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.WarningAmber,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(VesqenSpacing.xs))
+            Text(message, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

@@ -333,9 +333,16 @@ Implementation candidate, 2026-09-07 (device review pending):
 
 - **Destinations:** Library, Now, and Settings, each with a familiar icon and persistent text label. Chain remains one deliberate action away from Now and Settings.
 - **Localization:** `Library`, `Now`, and `Settings` are stable semantic IDs, not forced English display strings. English uses those labels; Simplified Chinese uses `曲库`, `正在播放`, and `设置`.
-- **Compact shell:** Compact windows use a 64dp text-labelled navigation bar before the system navigation inset. The bar continues the page canvas instead of introducing a second near-white surface; labels remain one line and may ellipsize rather than wrap or clip.
+- **Compact shell:** Compact windows use a 60dp text-labelled navigation bar before the system navigation inset. The label baseline receives a 4dp upward optical correction so compactness does not pin type to the bottom edge, while every destination retains a 48dp minimum touch target. The bar continues the page canvas instead of introducing a second near-white surface; labels remain one line and may ellipsize rather than wrap or clip. Selection uses a restrained 180ms icon emphasis plus the existing tonal/color state; reduced motion keeps only the 80ms crossfade.
 - **Default:** First launch and ordinary cold launch begin in Library. Now without a track explains the single next action: choose a track from Library.
 - **Adaptive:** Compact windows use bottom navigation; medium and expanded windows use a navigation rail while preserving the same order and labels.
+- **Library hierarchy:** Favorites and collection interiors use a short horizontal shared-axis transition to communicate one level of navigation; Back reverses it. Ordinary search, sorting, scans, and list updates remain spatially stable. Reduced motion uses the 80ms crossfade.
+
+### Settings
+
+- **Information architecture:** Playback output contains the mutually exclusive System and Strict USB modes. Audio proof contains Playback Chain and signed verification records. Application contains version/About. A control appears in only one group, and unfinished preferences are not shown as decorative placeholders.
+- **Composition:** Each group is one quiet tonal surface with flat rows and inset separators. Icons establish scanning rhythm, titles name the action, supporting copy explains consequence or evidence boundary, and a radio or chevron supplies the standard affordance. Avoid one-card-per-setting grids and nested surfaces.
+- **State:** The selected output row receives the scarce Moss emphasis plus a radio state; failures retain explicit Error wording and never silently fall back. Dynamic output details may crossfade without moving unrelated groups.
 
 ### Empty, Loading, and Error States
 

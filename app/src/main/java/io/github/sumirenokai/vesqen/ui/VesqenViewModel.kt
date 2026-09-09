@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen.ui
 
 import android.app.Application
+import android.database.sqlite.SQLiteException
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +44,7 @@ data class LibraryUiState(
     val sources: List<LibrarySource> = emptyList(),
     val scanProgress: LibraryScanProgress? = null,
     val loadingFailed: Boolean = false,
+    val catalogMutationFailed: Boolean = false,
 ) {
     val isScanPaused: Boolean
         get() = scanProgress?.isPaused == true || sources.any { it.scanState == LibraryScanState.PAUSED }
@@ -161,6 +163,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
             it.copy(
                 isLoading = true,
                 loadingFailed = false,
+                catalogMutationFailed = false,
                 scanProgress = null,
             )
         }
@@ -228,10 +231,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun removeLibraryFolder(sourceId: String) {
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) { catalog.removeFolder(sourceId) }
-            refreshCachedLibrary()
-        }
+        mutateCatalog { catalog.removeFolder(sourceId) }
     }
 
     fun pauseLibraryScan() {
@@ -282,7 +282,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         withContext(Dispatchers.IO) { catalog.saveTrackOrder(playlistId, trackIds) }
         loadCachedLibrary()
         true
-    } catch (failure: android.database.sqlite.SQLiteException) {
+    } catch (failure: SQLiteException) {
         false
     }
 
@@ -383,8 +383,15 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun mutateCatalog(action: suspend () -> Unit) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { action() }
-            loadCachedLibrary()
+            updateLibrary { it.copy(catalogMutationFailed = false) }
+            try {
+                withContext(Dispatchers.IO) { action() }
+                loadCachedLibrary()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: SQLiteException) {
+                updateLibrary { it.copy(catalogMutationFailed = true) }
+            }
         }
     }
 }

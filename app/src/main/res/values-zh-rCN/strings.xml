@@ -58,7 +58,13 @@
     <string name="destination_now">正在播放</string>
     <string name="destination_chain">链路</string>
     <string name="destination_settings">设置</string>
-    <string name="settings_audio_output">音频与输出</string>
+    <string name="settings_intro">先决定音乐如何播放，需要时再查看对应证据。</string>
+    <string name="settings_playback_output">播放输出</string>
+    <string name="settings_playback_output_body">选择 Vesqen 播放时使用的唯一输出策略。</string>
+    <string name="settings_audio_proof">音频证据</string>
+    <string name="settings_audio_proof_body">将 Android 观测到的链路与外部验证结果分开查看。</string>
+    <string name="settings_application">应用信息</string>
+    <string name="settings_application_body">查看版本、许可与产品说明。</string>
     <string name="settings_system_output">系统输出</string>
     <string name="settings_system_output_body">使用 Android 普通路由，保留系统混音、重采样和手机音量。</string>
     <string name="settings_strict_usb_output">严格 USB bit-perfect</string>
@@ -123,6 +129,7 @@
     <string name="no_search_results_body">请尝试其他标题、艺术家或专辑。</string>
     <string name="library_load_failed_body">请重新扫描。你的本地曲库没有被修改。</string>
     <string name="library_load_failed_playback_continues">请重新扫描。当前播放可以继续。</string>
+    <string name="library_change_save_failed">无法保存这项曲库修改；已有音乐和元数据均已保留。</string>
     <string name="output_status_description">输出声明：%1$s</string>
     <string name="open_playback_chain">查看播放链路</string>
     <string name="playing">正在播放</string>

@@ -1,10 +1,17 @@
 package io.github.sumirenokai.vesqen.ui.screens
 
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,13 +31,17 @@ import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -42,10 +53,13 @@ import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
+import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 import io.github.sumirenokai.vesqen.verification.OutputVerificationImportFailure
 import io.github.sumirenokai.vesqen.verification.OutputVerificationImportResult
 import io.github.sumirenokai.vesqen.verification.OutputVerificationMatch
 import io.github.sumirenokai.vesqen.verification.OutputVerificationRegistryState
+
+private val SettingsStateEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
 @Composable
 fun SettingsScreen(
@@ -68,77 +82,94 @@ fun SettingsScreen(
                 .testTag("vesqen.settings"),
             contentPadding = PaddingValues(
                 horizontal = VesqenSpacing.lg,
-                vertical = VesqenSpacing.md,
+                vertical = VesqenSpacing.lg,
             ),
-            verticalArrangement = Arrangement.spacedBy(VesqenSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(VesqenSpacing.lg),
         ) {
             item {
-                Text(
-                    text = stringResource(R.string.destination_settings),
-                    style = MaterialTheme.typography.headlineLarge,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xs)) {
+                    Text(
+                        text = stringResource(R.string.destination_settings),
+                        style = MaterialTheme.typography.headlineLarge,
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_intro),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             item {
-                SettingsSectionLabel(stringResource(R.string.settings_audio_output))
+                SettingsSection(
+                    title = stringResource(R.string.settings_playback_output),
+                    body = stringResource(R.string.settings_playback_output_body),
+                    modifier = Modifier.testTag("vesqen.settings.section.playback-output"),
+                ) {
+                    SettingsChoiceRow(
+                        icon = { Icon(Icons.Filled.Speaker, contentDescription = null) },
+                        title = stringResource(R.string.settings_system_output),
+                        body = stringResource(R.string.settings_system_output_body),
+                        selected = outputStatus.mode == UsbOutputMode.SYSTEM,
+                        onClick = { onSetUsbOutputMode(UsbOutputMode.SYSTEM) },
+                        modifier = Modifier.testTag("vesqen.settings.output.system"),
+                    )
+                    SettingsDivider()
+                    SettingsChoiceRow(
+                        icon = { Icon(Icons.Filled.Usb, contentDescription = null) },
+                        title = stringResource(R.string.settings_strict_usb_output),
+                        body = strictUsbOutputBody(outputStatus),
+                        selected = outputStatus.mode == UsbOutputMode.STRICT_BIT_PERFECT,
+                        onClick = { onSetUsbOutputMode(UsbOutputMode.STRICT_BIT_PERFECT) },
+                        modifier = Modifier.testTag("vesqen.settings.output.strict-usb"),
+                    )
+                }
             }
             item {
-                SettingsChoiceRow(
-                    icon = { Icon(Icons.Filled.Speaker, contentDescription = null) },
-                    title = stringResource(R.string.settings_system_output),
-                    body = stringResource(R.string.settings_system_output_body),
-                    selected = outputStatus.mode == UsbOutputMode.SYSTEM,
-                    onClick = { onSetUsbOutputMode(UsbOutputMode.SYSTEM) },
-                    modifier = Modifier.testTag("vesqen.settings.output.system"),
-                )
+                SettingsSection(
+                    title = stringResource(R.string.settings_audio_proof),
+                    body = stringResource(R.string.settings_audio_proof_body),
+                    modifier = Modifier.testTag("vesqen.settings.section.audio-proof"),
+                ) {
+                    SettingsActionRow(
+                        icon = { Icon(Icons.Filled.AccountTree, contentDescription = null) },
+                        title = stringResource(R.string.settings_playback_chain),
+                        body = stringResource(R.string.settings_playback_chain_body),
+                        onClick = onOpenPlaybackChain,
+                        modifier = Modifier.testTag("vesqen.settings.playback-chain"),
+                    )
+                    SettingsDivider()
+                    SettingsActionRow(
+                        icon = {
+                            Icon(
+                                if (outputVerification == null) Icons.Filled.FileOpen else Icons.Filled.VerifiedUser,
+                                contentDescription = null,
+                            )
+                        },
+                        title = stringResource(R.string.settings_verification_registry),
+                        body = verificationRegistryBody(
+                            outputVerification = outputVerification,
+                            registryState = verificationRegistryState,
+                            importResult = verificationImportResult,
+                        ),
+                        onClick = onImportVerificationRegistry,
+                        modifier = Modifier.testTag("vesqen.settings.verification-registry"),
+                    )
+                }
             }
             item {
-                SettingsChoiceRow(
-                    icon = { Icon(Icons.Filled.Usb, contentDescription = null) },
-                    title = stringResource(R.string.settings_strict_usb_output),
-                    body = strictUsbOutputBody(outputStatus),
-                    selected = outputStatus.mode == UsbOutputMode.STRICT_BIT_PERFECT,
-                    onClick = { onSetUsbOutputMode(UsbOutputMode.STRICT_BIT_PERFECT) },
-                    modifier = Modifier.testTag("vesqen.settings.output.strict-usb"),
-                )
-            }
-            item {
-                SettingsActionRow(
-                    icon = { Icon(Icons.Filled.AccountTree, contentDescription = null) },
-                    title = stringResource(R.string.settings_playback_chain),
-                    body = stringResource(R.string.settings_playback_chain_body),
-                    onClick = onOpenPlaybackChain,
-                    modifier = Modifier.testTag("vesqen.settings.playback-chain"),
-                )
-            }
-            item {
-                SettingsActionRow(
-                    icon = {
-                        Icon(
-                            if (outputVerification == null) Icons.Filled.FileOpen else Icons.Filled.VerifiedUser,
-                            contentDescription = null,
-                        )
-                    },
-                    title = stringResource(R.string.settings_verification_registry),
-                    body = verificationRegistryBody(
-                        outputVerification = outputVerification,
-                        registryState = verificationRegistryState,
-                        importResult = verificationImportResult,
-                    ),
-                    onClick = onImportVerificationRegistry,
-                    modifier = Modifier.testTag("vesqen.settings.verification-registry"),
-                )
-            }
-            item {
-                SettingsSectionLabel(stringResource(R.string.settings_about))
-            }
-            item {
-                SettingsActionRow(
-                    icon = { Icon(Icons.Outlined.Info, contentDescription = null) },
-                    title = stringResource(R.string.settings_about_vesqen),
-                    body = stringResource(R.string.settings_version, versionName),
-                    onClick = onOpenAbout,
-                    modifier = Modifier.testTag("vesqen.settings.about"),
-                )
+                SettingsSection(
+                    title = stringResource(R.string.settings_application),
+                    body = stringResource(R.string.settings_application_body),
+                    modifier = Modifier.testTag("vesqen.settings.section.application"),
+                ) {
+                    SettingsActionRow(
+                        icon = { Icon(Icons.Outlined.Info, contentDescription = null) },
+                        title = stringResource(R.string.settings_about_vesqen),
+                        body = stringResource(R.string.settings_version, versionName),
+                        onClick = onOpenAbout,
+                        modifier = Modifier.testTag("vesqen.settings.about"),
+                    )
+                }
             }
         }
     }
@@ -205,44 +236,63 @@ private fun SettingsChoiceRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
+    val motionPolicy = rememberVesqenMotionPolicy()
+    val durationMillis = motionPolicy.stateChangeMillis
+    val backgroundColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+        animationSpec = tween(durationMillis, easing = SettingsStateEasing),
+        label = "vesqen.settings-choice-background",
+    )
+    val iconContainerColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        },
+        animationSpec = tween(durationMillis, easing = SettingsStateEasing),
+        label = "vesqen.settings-choice-icon-container",
+    )
+    val iconScale by animateFloatAsState(
+        targetValue = if (selected && !motionPolicy.reduceMotion) 1.08f else 1f,
+        animationSpec = tween(
+            durationMillis = if (motionPolicy.reduceMotion) 0 else durationMillis,
+            easing = SettingsStateEasing,
+        ),
+        label = "vesqen.settings-choice-icon-scale",
+    )
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .selectable(selected = selected, onClick = onClick, role = Role.RadioButton),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.surface),
-        color = if (selected) {
-            MaterialTheme.colorScheme.secondaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceContainerLow
-        },
+            .background(backgroundColor)
+            .selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
+            .defaultMinSize(minHeight = 88.dp)
+            .padding(VesqenSpacing.md),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.padding(VesqenSpacing.md),
-            verticalAlignment = Alignment.CenterVertically,
+        SettingsIcon(
+            containerColor = iconContainerColor,
+            contentColor = if (selected) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            scale = iconScale,
+            icon = icon,
+        )
+        Spacer(Modifier.width(VesqenSpacing.sm))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs),
         ) {
-            Surface(
-                modifier = Modifier.size(44.dp),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                contentColor = MaterialTheme.colorScheme.primary,
-            ) {
-                Box(contentAlignment = Alignment.Center) { icon() }
-            }
-            Spacer(Modifier.width(VesqenSpacing.sm))
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs),
-            ) {
-                Text(text = title, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    text = body,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.width(VesqenSpacing.xs))
-            RadioButton(selected = selected, onClick = null)
+            Text(text = title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
+        Spacer(Modifier.width(VesqenSpacing.xs))
+        RadioButton(selected = selected, onClick = null)
     }
 }
 
@@ -293,12 +343,42 @@ private fun strictUsbFailureLabel(failure: UsbOutputFailure): String = stringRes
 )
 
 @Composable
-private fun SettingsSectionLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = VesqenSpacing.xs),
+private fun SettingsSection(
+    title: String,
+    body: String,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = VesqenSpacing.xxs),
+            verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs),
+        ) {
+            Text(text = title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.surface),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+        ) {
+            Column(content = content)
+        }
+    }
+}
+
+@Composable
+private fun SettingsDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 68.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
     )
 }
 
@@ -310,14 +390,17 @@ private fun SettingsActionRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.surface),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    SettingsRowContent(
+        modifier = modifier.clickable(onClick = onClick),
+        icon = icon,
+        title = title,
+        body = body,
     ) {
-        SettingsRowContent(icon = icon, title = title, body = body, showChevron = true)
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -326,20 +409,21 @@ private fun SettingsRowContent(
     icon: @Composable () -> Unit,
     title: String,
     body: String,
-    showChevron: Boolean,
+    modifier: Modifier = Modifier,
+    trailing: @Composable () -> Unit,
 ) {
     Row(
-        modifier = Modifier.padding(VesqenSpacing.md),
+        modifier = modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 80.dp)
+            .padding(VesqenSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Surface(
-            modifier = Modifier.size(44.dp),
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            contentColor = MaterialTheme.colorScheme.primary,
-        ) {
-            Box(contentAlignment = Alignment.Center) { icon() }
-        }
+        SettingsIcon(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            icon = icon,
+        )
         Spacer(Modifier.width(VesqenSpacing.sm))
         Column(
             modifier = Modifier.weight(1f),
@@ -352,13 +436,29 @@ private fun SettingsRowContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (showChevron) {
-            Spacer(Modifier.width(VesqenSpacing.xs))
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        Spacer(Modifier.width(VesqenSpacing.xs))
+        trailing()
+    }
+}
+
+@Composable
+private fun SettingsIcon(
+    containerColor: Color,
+    contentColor: Color,
+    icon: @Composable () -> Unit,
+    scale: Float = 1f,
+) {
+    Surface(
+        modifier = Modifier
+            .size(40.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            },
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
+        color = containerColor,
+        contentColor = contentColor,
+    ) {
+        Box(contentAlignment = Alignment.Center) { icon() }
     }
 }
