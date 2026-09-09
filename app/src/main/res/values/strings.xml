@@ -321,11 +321,12 @@
     <string name="chain_reset_body">Refresh, power, calculation window, chart history, display units, selection, pins, order, and view will return to their defaults.</string>
     <string name="chain_diagnostic_title">Diagnostic recording</string>
     <string name="chain_diagnostic_idle">Ready to record</string>
-    <string name="chain_diagnostic_unavailable">Recorder unavailable in this preview</string>
+    <string name="chain_diagnostic_restoring">Restoring private recording</string>
     <string name="chain_diagnostic_active">Recording</string>
     <string name="chain_diagnostic_stopping">Finishing recording</string>
     <string name="chain_diagnostic_stopped">Recording stopped and retained</string>
-    <string name="chain_diagnostic_body">Captures bounded playback telemetry and events for troubleshooting. Exported JSON omits media titles, paths, URIs, route names, and USB product names.</string>
+    <string name="chain_diagnostic_recovered">Interrupted recording recovered</string>
+    <string name="chain_diagnostic_body">Debug-only recording persists bounded playback telemetry and events in private storage. Exported JSON omits media titles, paths, URIs, route names, and USB product names.</string>
     <string name="chain_diagnostic_counts">%1$s · %2$s</string>
     <plurals name="chain_diagnostic_snapshot_count">
         <item quantity="one">%1$d snapshot</item>
@@ -349,6 +350,7 @@
         <item quantity="other">%1$d event sequence discontinuities were observed. This is not proof that events were lost.</item>
     </plurals>
     <string name="chain_diagnostic_start">Start recording</string>
+    <string name="chain_diagnostic_restoring_action">Restoring…</string>
     <string name="chain_diagnostic_stop">Stop recording</string>
     <string name="chain_diagnostic_stopping_action">Stopping…</string>
     <string name="chain_diagnostic_export">Export JSON</string>
@@ -360,7 +362,9 @@
     <string name="chain_diagnostic_termination_playback_stopped">Playback stopped; the recording was sealed and retained.</string>
     <string name="chain_diagnostic_termination_completed">Telemetry source completed; the stopped recording was retained.</string>
     <string name="chain_diagnostic_termination_failed">Telemetry source failed; the stopped recording was retained.</string>
+    <string name="chain_diagnostic_termination_storage_failed">Private storage failed. This recording remains available only until the app process ends.</string>
     <string name="chain_diagnostic_termination_cancelled">Recording owner was cancelled; the stopped recording was retained.</string>
+    <string name="chain_diagnostic_termination_process_terminated">The app process ended before Stop; the last complete private samples were recovered.</string>
     <string name="chain_diagnostic_exporting">Writing JSON…</string>
     <string name="chain_diagnostic_export_success">JSON exported. The stopped recording remains available until you clear it.</string>
     <string name="chain_diagnostic_export_cancelled">No destination selected. The stopped recording was retained.</string>

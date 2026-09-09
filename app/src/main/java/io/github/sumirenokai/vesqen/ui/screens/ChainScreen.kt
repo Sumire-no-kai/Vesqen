@@ -325,7 +325,6 @@ fun ChainScreen(
             !snapshot.hasActiveTrack -> ChainEmptyScreen(
                 onBrowseLibrary = onBrowseLibrary,
                 diagnosticState = diagnosticState,
-                diagnosticAvailable = diagnosticRecorder != null,
                 diagnosticExportFeedback = diagnosticExportFeedback,
                 onStartDiagnosticRecording = startDiagnosticRecording,
                 onStopDiagnosticRecording = stopDiagnosticRecording,
@@ -423,7 +422,6 @@ private fun ChainHeader(
 private fun ChainEmptyScreen(
     onBrowseLibrary: () -> Unit,
     diagnosticState: DiagnosticRecordingState,
-    diagnosticAvailable: Boolean,
     diagnosticExportFeedback: DiagnosticExportFeedback,
     onStartDiagnosticRecording: () -> Unit,
     onStopDiagnosticRecording: () -> Unit,
@@ -484,7 +482,6 @@ private fun ChainEmptyScreen(
         item(key = "retained-diagnostic") {
             ChainDiagnosticPanel(
                 state = diagnosticState,
-                available = diagnosticAvailable,
                 exportFeedback = diagnosticExportFeedback,
                 onStart = onStartDiagnosticRecording,
                 onStop = onStopDiagnosticRecording,
@@ -1177,16 +1174,17 @@ private fun ChainMetricsGrid(
                 )
             }
         }
-        item(key = "diagnostic-recorder", span = { GridItemSpan(maxLineSpan) }) {
-            ChainDiagnosticPanel(
-                state = diagnosticState,
-                available = diagnosticAvailable,
-                exportFeedback = diagnosticExportFeedback,
-                onStart = onStartDiagnosticRecording,
-                onStop = onStopDiagnosticRecording,
-                onClear = onClearDiagnosticRecording,
-                onExport = onRequestDiagnosticExport,
-            )
+        if (diagnosticAvailable) {
+            item(key = "diagnostic-recorder", span = { GridItemSpan(maxLineSpan) }) {
+                ChainDiagnosticPanel(
+                    state = diagnosticState,
+                    exportFeedback = diagnosticExportFeedback,
+                    onStart = onStartDiagnosticRecording,
+                    onStop = onStopDiagnosticRecording,
+                    onClear = onClearDiagnosticRecording,
+                    onExport = onRequestDiagnosticExport,
+                )
+            }
         }
         item(key = "recent-events", span = { GridItemSpan(maxLineSpan) }) {
             ChainRecentEventsPanel(
@@ -1353,7 +1351,6 @@ private fun telemetryEventAge(
 @Composable
 private fun ChainDiagnosticPanel(
     state: DiagnosticRecordingState,
-    available: Boolean,
     exportFeedback: DiagnosticExportFeedback,
     onStart: () -> Unit,
     onStop: () -> Unit,
@@ -1362,22 +1359,34 @@ private fun ChainDiagnosticPanel(
 ) {
     val progress = when (state) {
         DiagnosticRecordingState.Idle -> null
+        DiagnosticRecordingState.Restoring -> null
         is DiagnosticRecordingState.Active -> state.progress
         is DiagnosticRecordingState.Stopping -> state.progress
         is DiagnosticRecordingState.Stopped -> null
+        is DiagnosticRecordingState.Recovered -> null
     }
     val recording = (state as? DiagnosticRecordingState.Stopped)?.recording
-    val snapshotCount = progress?.snapshotCount ?: recording?.snapshots?.size
-    val eventCount = progress?.eventCount ?: recording?.events?.size
-    val droppedSnapshotCount = progress?.droppedSnapshotCount ?: recording?.droppedSnapshotCount ?: 0
-    val droppedEventCount = progress?.droppedEventCount ?: recording?.droppedEventCount ?: 0
+    val recovered = (state as? DiagnosticRecordingState.Recovered)?.summary
+    val snapshotCount = progress?.snapshotCount ?: recording?.snapshots?.size ?: recovered?.snapshotCount
+    val eventCount = progress?.eventCount ?: recording?.events?.size ?: recovered?.eventCount
+    val droppedSnapshotCount = progress?.droppedSnapshotCount
+        ?: recording?.droppedSnapshotCount
+        ?: recovered?.droppedSnapshotCount
+        ?: 0
+    val droppedEventCount = progress?.droppedEventCount
+        ?: recording?.droppedEventCount
+        ?: recovered?.droppedEventCount
+        ?: 0
     val sequenceGapCount = progress?.observedEventSequenceGapCount
         ?: recording?.observedEventSequenceGapCount
+        ?: recovered?.observedEventSequenceGapCount
         ?: 0
     val isExporting = exportFeedback == DiagnosticExportFeedback.EXPORTING
     var showClearConfirmation by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(state is DiagnosticRecordingState.Stopped) {
-        if (state !is DiagnosticRecordingState.Stopped) showClearConfirmation = false
+    val hasRetainedRecording = state is DiagnosticRecordingState.Stopped ||
+        state is DiagnosticRecordingState.Recovered
+    LaunchedEffect(hasRetainedRecording) {
+        if (!hasRetainedRecording) showClearConfirmation = false
     }
 
     Surface(
@@ -1412,14 +1421,12 @@ private fun ChainDiagnosticPanel(
                     Text(
                         text = stringResource(
                             when (state) {
-                                DiagnosticRecordingState.Idle -> if (available) {
-                                    R.string.chain_diagnostic_idle
-                                } else {
-                                    R.string.chain_diagnostic_unavailable
-                                }
+                                DiagnosticRecordingState.Idle -> R.string.chain_diagnostic_idle
+                                DiagnosticRecordingState.Restoring -> R.string.chain_diagnostic_restoring
                                 is DiagnosticRecordingState.Active -> R.string.chain_diagnostic_active
                                 is DiagnosticRecordingState.Stopping -> R.string.chain_diagnostic_stopping
                                 is DiagnosticRecordingState.Stopped -> R.string.chain_diagnostic_stopped
+                                is DiagnosticRecordingState.Recovered -> R.string.chain_diagnostic_recovered
                             },
                         ),
                         style = MaterialTheme.typography.titleSmall,
@@ -1498,7 +1505,7 @@ private fun ChainDiagnosticPanel(
                     }
                 }
             }
-            recording?.termination?.let { termination ->
+            (recording?.termination ?: recovered?.termination)?.let { termination ->
                 if (termination != DiagnosticRecordingTermination.USER_STOPPED) {
                     Text(
                         text = diagnosticTerminationLabel(termination),
@@ -1539,12 +1546,18 @@ private fun ChainDiagnosticPanel(
                 when (state) {
                     DiagnosticRecordingState.Idle -> Button(
                         onClick = onStart,
-                        enabled = available,
                         modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.chain.diagnostics.start"),
                     ) {
                         Icon(Icons.Filled.FiberManualRecord, contentDescription = null)
                         Spacer(Modifier.width(VesqenSpacing.xs))
                         Text(stringResource(R.string.chain_diagnostic_start))
+                    }
+                    DiagnosticRecordingState.Restoring -> Button(
+                        onClick = {},
+                        enabled = false,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
+                        Text(stringResource(R.string.chain_diagnostic_restoring_action))
                     }
                     is DiagnosticRecordingState.Active -> Button(
                         onClick = onStop,
@@ -1563,7 +1576,8 @@ private fun ChainDiagnosticPanel(
                         Spacer(Modifier.width(VesqenSpacing.xs))
                         Text(stringResource(R.string.chain_diagnostic_stopping_action))
                     }
-                    is DiagnosticRecordingState.Stopped -> {
+                    is DiagnosticRecordingState.Stopped,
+                    is DiagnosticRecordingState.Recovered -> {
                         Button(
                             onClick = onExport,
                             enabled = !isExporting,
@@ -1587,7 +1601,7 @@ private fun ChainDiagnosticPanel(
             }
         }
     }
-    if (showClearConfirmation && state is DiagnosticRecordingState.Stopped) {
+    if (showClearConfirmation && hasRetainedRecording) {
         AlertDialog(
             onDismissRequest = { showClearConfirmation = false },
             title = { Text(stringResource(R.string.chain_diagnostic_clear_confirm_title)) },
@@ -1627,7 +1641,9 @@ private fun diagnosticTerminationLabel(termination: DiagnosticRecordingTerminati
         DiagnosticRecordingTermination.PLAYBACK_STOPPED -> R.string.chain_diagnostic_termination_playback_stopped
         DiagnosticRecordingTermination.SOURCE_COMPLETED -> R.string.chain_diagnostic_termination_completed
         DiagnosticRecordingTermination.SOURCE_FAILED -> R.string.chain_diagnostic_termination_failed
+        DiagnosticRecordingTermination.STORAGE_FAILED -> R.string.chain_diagnostic_termination_storage_failed
         DiagnosticRecordingTermination.OWNER_CANCELLED -> R.string.chain_diagnostic_termination_cancelled
+        DiagnosticRecordingTermination.PROCESS_TERMINATED -> R.string.chain_diagnostic_termination_process_terminated
     },
 )
 

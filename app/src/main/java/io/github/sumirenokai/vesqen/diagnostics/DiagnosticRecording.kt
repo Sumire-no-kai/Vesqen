@@ -78,7 +78,9 @@ enum class DiagnosticRecordingTermination {
     PLAYBACK_STOPPED,
     SOURCE_COMPLETED,
     SOURCE_FAILED,
+    STORAGE_FAILED,
     OWNER_CANCELLED,
+    PROCESS_TERMINATED,
 }
 
 class DiagnosticRecording internal constructor(
@@ -111,6 +113,44 @@ class DiagnosticRecording internal constructor(
     }
 }
 
+data class DiagnosticRecordingSummary(
+    val id: String,
+    val startedAt: DiagnosticTimestamp,
+    val stoppedAt: DiagnosticTimestamp,
+    val termination: DiagnosticRecordingTermination,
+    val limits: DiagnosticRecordingLimits,
+    val snapshotCount: Int,
+    val eventCount: Int,
+    val droppedSnapshotCount: Long,
+    val droppedEventCount: Long,
+    val observedEventSequenceGapCount: Long,
+) {
+    init {
+        require(id.matches(RECORDING_ID_PATTERN)) { "Diagnostic recording ids must be export-safe" }
+        require(stoppedAt.elapsedRealtimeMs >= startedAt.elapsedRealtimeMs) {
+            "A diagnostic recording summary cannot stop before it starts"
+        }
+        require(snapshotCount in 0..limits.maxSnapshots) { "Snapshot count exceeds its fixed limit" }
+        require(eventCount in 0..limits.maxEvents) { "Event count exceeds its fixed limit" }
+        require(droppedSnapshotCount >= 0) { "Dropped snapshot count cannot be negative" }
+        require(droppedEventCount >= 0) { "Dropped event count cannot be negative" }
+        require(observedEventSequenceGapCount >= 0) { "Observed event gaps cannot be negative" }
+    }
+}
+
+internal fun DiagnosticRecording.summary() = DiagnosticRecordingSummary(
+    id = id,
+    startedAt = startedAt,
+    stoppedAt = stoppedAt,
+    termination = termination,
+    limits = limits,
+    snapshotCount = snapshots.size,
+    eventCount = events.size,
+    droppedSnapshotCount = droppedSnapshotCount,
+    droppedEventCount = droppedEventCount,
+    observedEventSequenceGapCount = observedEventSequenceGapCount,
+)
+
 data class DiagnosticRecordingProgress(
     val id: String,
     val startedAt: DiagnosticTimestamp,
@@ -124,11 +164,15 @@ data class DiagnosticRecordingProgress(
 sealed interface DiagnosticRecordingState {
     data object Idle : DiagnosticRecordingState
 
+    data object Restoring : DiagnosticRecordingState
+
     data class Active(val progress: DiagnosticRecordingProgress) : DiagnosticRecordingState
 
     data class Stopping(val progress: DiagnosticRecordingProgress) : DiagnosticRecordingState
 
     data class Stopped(val recording: DiagnosticRecording) : DiagnosticRecordingState
+
+    data class Recovered(val summary: DiagnosticRecordingSummary) : DiagnosticRecordingState
 }
 
 enum class DiagnosticExportFailure {
@@ -156,9 +200,10 @@ sealed interface DiagnosticExportResult {
  * recording must survive screen and ViewModel replacement; an idle or stopped instance launches no
  * sampling work.
  */
-class DiagnosticRecorder(
+class DiagnosticRecorder internal constructor(
     private val playbackTelemetry: PlaybackTelemetry,
     private val scope: CoroutineScope,
+    private val store: DiagnosticRecordingStore = VolatileDiagnosticRecordingStore,
     private val limits: DiagnosticRecordingLimits = DiagnosticRecordingLimits(),
     private val clock: DiagnosticClock = DiagnosticClock.System,
     private val idFactory: (DiagnosticTimestamp) -> String = { startedAt ->
@@ -169,13 +214,51 @@ class DiagnosticRecorder(
     private val mutableState = MutableStateFlow<DiagnosticRecordingState>(DiagnosticRecordingState.Idle)
     private var activeSession: ActiveSession? = null
     private var stoppedRecording: DiagnosticRecording? = null
+    private var recoveredRecording: DiagnosticRecordingSummary? = null
+    private var stoppedPersistenceFinished: CompletableDeferred<Unit>? = null
     private var activeExportCount = 0
+    private var restorationStarted = false
 
     val state: StateFlow<DiagnosticRecordingState> = mutableState.asStateFlow()
 
+    /** Restores a stopped or interrupted private recording without doing disk work on the caller. */
+    fun restore() {
+        val shouldRestore = synchronized(lock) {
+            if (restorationStarted || activeSession != null || stoppedRecording != null) {
+                false
+            } else {
+                restorationStarted = true
+                mutableState.value = DiagnosticRecordingState.Restoring
+                true
+            }
+        }
+        if (!shouldRestore) return
+        scope.launch {
+            val restored = try {
+                store.restore()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            synchronized(lock) {
+                if (activeSession == null && stoppedRecording == null) {
+                    recoveredRecording = restored
+                    mutableState.value = restored?.let(DiagnosticRecordingState::Recovered)
+                        ?: DiagnosticRecordingState.Idle
+                }
+            }
+        }
+    }
+
     /** Returns false rather than replacing an active or not-yet-cleared stopped recording. */
     fun start(): Boolean = synchronized(lock) {
-        if (activeSession != null || stoppedRecording != null) return@synchronized false
+        if (
+            activeSession != null ||
+            stoppedRecording != null ||
+            recoveredRecording != null ||
+            mutableState.value == DiagnosticRecordingState.Restoring
+        ) return@synchronized false
 
         val startedAt = clock.now()
         val recordingId = idFactory(startedAt)
@@ -188,12 +271,17 @@ class DiagnosticRecorder(
         session.job = scope.launch {
             var termination: DiagnosticRecordingTermination? = null
             try {
+                if (!store.begin(session.start())) throw DiagnosticStorageFailure
                 playbackTelemetry.observe(RECORDING_OBSERVATION).collect { snapshot ->
-                    if (capture(session, snapshot)) throw NoActivePlaybackSignal
+                    val captured = capture(session, snapshot) ?: return@collect
+                    if (!store.append(captured.batch)) throw DiagnosticStorageFailure
+                    if (captured.shouldAutoSeal) throw NoActivePlaybackSignal
                 }
                 termination = DiagnosticRecordingTermination.SOURCE_COMPLETED
             } catch (_: NoActivePlaybackSignal) {
                 termination = DiagnosticRecordingTermination.PLAYBACK_STOPPED
+            } catch (_: DiagnosticStorageFailure) {
+                termination = DiagnosticRecordingTermination.STORAGE_FAILED
             } catch (cancelled: CancellationException) {
                 termination = synchronized(lock) {
                     session.requestedTermination
@@ -215,6 +303,7 @@ class DiagnosticRecorder(
                 when {
                     session.requestedTermination != null -> session.requestedTermination!!
                     failure is CancellationException -> DiagnosticRecordingTermination.OWNER_CANCELLED
+                    failure === DiagnosticStorageFailure -> DiagnosticRecordingTermination.STORAGE_FAILED
                     failure != null -> DiagnosticRecordingTermination.SOURCE_FAILED
                     else -> DiagnosticRecordingTermination.SOURCE_COMPLETED
                 }
@@ -230,41 +319,81 @@ class DiagnosticRecorder(
      */
     suspend fun stop(): DiagnosticRecording? {
         val session = synchronized(lock) {
-            stoppedRecording?.let { return it }
-            val current = activeSession ?: return null
-            if (current.requestedTermination == null) {
-                current.requestedTermination = DiagnosticRecordingTermination.USER_STOPPED
-                mutableState.value = DiagnosticRecordingState.Stopping(current.progress())
-                current.job.cancel()
+            if (stoppedRecording != null) {
+                null
+            } else {
+                val current = activeSession ?: return null
+                if (current.requestedTermination == null) {
+                    current.requestedTermination = DiagnosticRecordingTermination.USER_STOPPED
+                    mutableState.value = DiagnosticRecordingState.Stopping(current.progress())
+                    current.job.cancel()
+                }
+                current
             }
-            current
         }
-        return session.finished.await()
+        val recording = session?.finished?.await()
+        val persistenceFinished = synchronized(lock) {
+            stoppedPersistenceFinished ?: session?.persistenceFinished
+        }
+        persistenceFinished?.await()
+        return synchronized(lock) { stoppedRecording } ?: recording
     }
 
     /** Active, stopping, or currently exporting recordings cannot be cleared. */
     fun clear(): Boolean = synchronized(lock) {
+        val retained = stoppedRecording?.summary() ?: recoveredRecording
         if (
             activeSession != null ||
-            stoppedRecording == null ||
+            retained == null ||
             activeExportCount > 0
         ) return@synchronized false
         stoppedRecording = null
+        recoveredRecording = null
+        stoppedPersistenceFinished = null
         mutableState.value = DiagnosticRecordingState.Idle
+        scope.launch {
+            val cleared = try {
+                store.clear(retained.id)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                false
+            }
+            if (!cleared) {
+                synchronized(lock) {
+                    if (
+                        activeSession == null &&
+                        stoppedRecording == null &&
+                        recoveredRecording == null &&
+                        mutableState.value == DiagnosticRecordingState.Idle
+                    ) {
+                        recoveredRecording = retained
+                        mutableState.value = DiagnosticRecordingState.Recovered(retained)
+                    }
+                }
+            }
+        }
         true
     }
 
     /** Writes off the UI thread without closing [output]. Export failure never clears the recording. */
     suspend fun exportTo(output: OutputStream): DiagnosticExportResult = withContext(Dispatchers.IO) {
-        val recording = acquireRecordingForExport()
+        val retained = acquireRecordingForExport()
             ?: return@withContext DiagnosticExportResult.Failure(
                 DiagnosticExportFailure.NO_STOPPED_RECORDING,
             )
         try {
-            writeDiagnosticRecording(
-                recording,
-                output.cancellationChecked(currentCoroutineContext()[Job]),
-            )
+            val destination = output.cancellationChecked(currentCoroutineContext()[Job])
+            when (retained) {
+                is RetainedRecording.Memory -> writeDiagnosticRecording(retained.recording, destination)
+                is RetainedRecording.Stored -> try {
+                    store.export(retained.summary.id, destination)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    DiagnosticExportResult.Failure(DiagnosticExportFailure.WRITE_FAILED)
+                }
+            }
         } finally {
             releaseRecordingAfterExport()
         }
@@ -272,8 +401,10 @@ class DiagnosticRecorder(
 
     internal fun retainedRecording(): DiagnosticRecording? = synchronized(lock) { stoppedRecording }
 
-    internal fun acquireRecordingForExport(): DiagnosticRecording? = synchronized(lock) {
-        stoppedRecording?.also { activeExportCount++ }
+    private fun acquireRecordingForExport(): RetainedRecording? = synchronized(lock) {
+        val retained = stoppedRecording?.let(RetainedRecording::Memory)
+            ?: recoveredRecording?.let(RetainedRecording::Stored)
+        retained?.also { activeExportCount++ }
     }
 
     internal fun releaseRecordingAfterExport() {
@@ -288,11 +419,11 @@ class DiagnosticRecorder(
      * should automatically seal the recording. A short grace window tolerates MediaController or
      * service reconnection without leaving a hidden recorder running after the queue is cleared.
      */
-    private fun capture(session: ActiveSession, source: TelemetrySnapshot): Boolean {
+    private fun capture(session: ActiveSession, source: TelemetrySnapshot): CaptureResult? {
         // StateFlow may replay a cached sample captured before the explicit Start action. A
         // diagnostic recording is a temporal boundary, so neither that snapshot nor its events
         // belong to the recording.
-        if (source.capturedAtElapsedRealtimeMs <= session.startedAt.elapsedRealtimeMs) return false
+        if (source.capturedAtElapsedRealtimeMs <= session.startedAt.elapsedRealtimeMs) return null
         val snapshot = source.immutableCopyWithoutEvents()
         val sourceEvents = source.recentEvents.asSequence()
             .filter { event ->
@@ -302,7 +433,7 @@ class DiagnosticRecorder(
             .toList()
         return synchronized(lock) {
             if (activeSession !== session || session.requestedTermination != null) {
-                return@synchronized false
+                return@synchronized null
             }
 
             if (session.snapshots.size == limits.maxSnapshots) {
@@ -311,7 +442,7 @@ class DiagnosticRecorder(
             }
             session.snapshots.addLast(snapshot)
 
-            sourceEvents.forEach(session::captureEvent)
+            val acceptedEvents = sourceEvents.filter(session::captureEvent)
             val shouldAutoSeal = session.updatePlaybackPresence(
                 hasActivePlayback = source.playbackSessionId != null,
                 capturedAtElapsedRealtimeMs = source.capturedAtElapsedRealtimeMs,
@@ -322,7 +453,15 @@ class DiagnosticRecorder(
             } else {
                 mutableState.value = DiagnosticRecordingState.Active(session.progress())
             }
-            shouldAutoSeal
+            CaptureResult(
+                batch = DiagnosticRecordingBatch(
+                    recordingId = session.id,
+                    snapshot = snapshot,
+                    events = acceptedEvents,
+                    progress = session.progress(),
+                ),
+                shouldAutoSeal = shouldAutoSeal,
+            )
         }
     }
 
@@ -353,10 +492,31 @@ class DiagnosticRecorder(
             )
             activeSession = null
             stoppedRecording = sealed
+            stoppedPersistenceFinished = session.persistenceFinished
             mutableState.value = DiagnosticRecordingState.Stopped(sealed)
             sealed
         }
         session.finished.complete(recording)
+        scope.launch {
+            val persisted = try {
+                store.finish(recording.summary())
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                false
+            }
+            if (!persisted) markPersistenceFailure(recording)
+        }
+            .invokeOnCompletion { session.persistenceFinished.complete(Unit) }
+    }
+
+    private fun markPersistenceFailure(recording: DiagnosticRecording) {
+        synchronized(lock) {
+            if (stoppedRecording !== recording) return
+            val failed = recording.withTermination(DiagnosticRecordingTermination.STORAGE_FAILED)
+            stoppedRecording = failed
+            mutableState.value = DiagnosticRecordingState.Stopped(failed)
+        }
     }
 
     private inner class ActiveSession(
@@ -366,6 +526,7 @@ class DiagnosticRecorder(
         val snapshots = ArrayDeque<TelemetrySnapshot>(limits.maxSnapshots.coerceAtMost(64))
         val events = ArrayDeque<TelemetryEvent>(limits.maxEvents.coerceAtMost(64))
         val finished = CompletableDeferred<DiagnosticRecording>()
+        val persistenceFinished = CompletableDeferred<Unit>()
         lateinit var job: Job
         var latestEventSequence: Long? = null
         var requestedTermination: DiagnosticRecordingTermination? = null
@@ -374,9 +535,9 @@ class DiagnosticRecorder(
         var droppedEventCount = 0L
         var observedEventSequenceGapCount = 0L
 
-        fun captureEvent(event: TelemetryEvent) {
+        fun captureEvent(event: TelemetryEvent): Boolean {
             val latestSequence = latestEventSequence
-            if (latestSequence != null && event.sequence <= latestSequence) return
+            if (latestSequence != null && event.sequence <= latestSequence) return false
             if (latestSequence != null && event.sequence - latestSequence > 1) {
                 observedEventSequenceGapCount = observedEventSequenceGapCount.saturatedAdd(
                     event.sequence - latestSequence - 1,
@@ -389,7 +550,14 @@ class DiagnosticRecorder(
                 droppedEventCount++
             }
             events.addLast(event)
+            return true
         }
+
+        fun start() = DiagnosticRecordingStart(
+            id = id,
+            startedAt = startedAt,
+            limits = limits,
+        )
 
         fun updatePlaybackPresence(
             hasActivePlayback: Boolean,
@@ -434,6 +602,34 @@ class DiagnosticRecorder(
 }
 
 private object NoActivePlaybackSignal : Exception(null, null, false, false)
+private object DiagnosticStorageFailure : Exception(null, null, false, false)
+
+private data class CaptureResult(
+    val batch: DiagnosticRecordingBatch,
+    val shouldAutoSeal: Boolean,
+)
+
+private sealed interface RetainedRecording {
+    data class Memory(val recording: DiagnosticRecording) : RetainedRecording
+    data class Stored(val summary: DiagnosticRecordingSummary) : RetainedRecording
+}
+
+private fun DiagnosticRecording.withTermination(
+    termination: DiagnosticRecordingTermination,
+) = DiagnosticRecording(
+    id = id,
+    startedAt = startedAt,
+    stoppedAt = stoppedAt,
+    termination = termination,
+    limits = limits,
+    snapshots = snapshots,
+    events = events,
+    droppedSnapshotCount = droppedSnapshotCount,
+    droppedEventCount = droppedEventCount,
+    observedEventSequenceGapCount = observedEventSequenceGapCount,
+)
+
+private val RECORDING_ID_PATTERN = Regex("^[A-Za-z0-9._-]{1,128}$")
 
 private fun TelemetrySnapshot.immutableCopyWithoutEvents(): TelemetrySnapshot = TelemetrySnapshot(
     capturedAtEpochMs = capturedAtEpochMs,

@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen
 
 import android.app.Application
+import io.github.sumirenokai.vesqen.diagnostics.AndroidDiagnosticRecordingStore
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryRecorder
 import io.github.sumirenokai.vesqen.playback.UsbOutputStateRepository
@@ -39,12 +40,29 @@ class VesqenApplication : Application() {
         PlaybackHistoryRecorder(this, applicationScope)
     }
 
-    val diagnosticRecorder: DiagnosticRecorder by lazy {
-        DiagnosticRecorder(playbackTelemetry, applicationScope)
+    private val developerDiagnosticRecorder: DiagnosticRecorder? by lazy {
+        if (BuildConfig.DEVELOPER_DIAGNOSTICS_ENABLED) {
+            DiagnosticRecorder(
+                playbackTelemetry = playbackTelemetry,
+                scope = applicationScope,
+                store = AndroidDiagnosticRecordingStore(this),
+            ).also(DiagnosticRecorder::restore)
+        } else {
+            null
+        }
     }
+
+    internal val diagnosticRecorder: DiagnosticRecorder
+        get() = checkNotNull(developerDiagnosticRecorder) {
+            "Developer diagnostics are unavailable in this build"
+        }
+
+    internal val diagnosticRecorderOrNull: DiagnosticRecorder?
+        get() = developerDiagnosticRecorder
 
     override fun onCreate() {
         super.onCreate()
+        developerDiagnosticRecorder
         applicationScope.launch { outputVerificationRepository.load() }
     }
 

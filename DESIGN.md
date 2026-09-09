@@ -375,7 +375,7 @@ Implementation candidate, 2026-09-07 (device review pending):
 ## 2026-09-07 interaction revision: inline ordering and Audio Proof density
 
 - Favorites and custom playlists enter reorder mode in their existing lazy list. Keep artwork and metadata visible; replace overflow with a 24 dp visual handle inside a 48 dp touch target. No separate ordering page, modal sheet, or per-row arrow-button clutter. Edge dragging scrolls continuously; Save persists the draft and Cancel discards it. TalkBack retains explicit move actions.
-- Advanced Chain is an instrument readout, not a stack of promotional cards. Prioritize observed readings before configuration, recording explanations, and event history. A compact toolbar holds view/cadence controls; secondary sampling settings expand inline.
+- Advanced Chain is an instrument readout, not a stack of promotional cards. Prioritize observed readings before configuration, Debug/Internal-only recording explanations, and event history. A compact toolbar holds view/cadence controls; secondary sampling settings expand inline. Public Release builds omit the diagnostic recorder surface entirely; they do not render a disabled switch or unavailable placeholder.
 - Use flat metric rows with restrained dividers, aligned labels/readings, monospace for data only, and small confidence/source/time annotations. Keep unavailability reasons and provenance readable; visual simplification must not erase evidence boundaries.
 - Events are a chronological log, not cards nested in a card. Preserve the existing light/dark moss palette and scalable text; do not introduce decorative gradients, oversized figures, or blanket entrance animations.
 

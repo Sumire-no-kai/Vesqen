@@ -165,7 +165,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
     ) { treeUri ->
         treeUri?.let(viewModel::addLibraryFolder)
     }
-    val diagnosticRecorder = application.diagnosticRecorder
+    val diagnosticRecorder = application.diagnosticRecorderOrNull
     val diagnosticExportScope = rememberCoroutineScope()
     val verificationRegistryState by application.outputVerificationRepository.state
         .collectAsStateWithLifecycle()
@@ -201,7 +201,10 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
             diagnosticExportScope.launch {
                 diagnosticExportFeedback = DiagnosticExportFeedback.EXPORTING
                 diagnosticExportFeedback = when (
-                    val result = diagnosticRecorder.exportTo(context.contentResolver, destination)
+                    val result = diagnosticRecorder?.exportTo(context.contentResolver, destination)
+                        ?: DiagnosticExportResult.Failure(
+                            DiagnosticExportFailure.NO_STOPPED_RECORDING,
+                        )
                 ) {
                     is DiagnosticExportResult.Success -> DiagnosticExportFeedback.SUCCESS
                     is DiagnosticExportResult.Failure -> when (result.reason) {

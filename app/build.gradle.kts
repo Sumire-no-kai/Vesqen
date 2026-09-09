@@ -1,3 +1,4 @@
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -37,13 +38,18 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("boolean", "DEVELOPER_DIAGNOSTICS_ENABLED", "true")
+        }
         release {
+            buildConfigField("boolean", "DEVELOPER_DIAGNOSTICS_ENABLED", "false")
             optimization {
                 enable = false
             }
         }
         create("profile") {
             initWith(getByName("release"))
+            buildConfigField("boolean", "DEVELOPER_DIAGNOSTICS_ENABLED", "false")
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
             isDebuggable = false
@@ -57,6 +63,40 @@ android {
         buildConfig = true
         compose = true
     }
+}
+
+val checkNoUncontrolledProductionLogs by tasks.registering {
+    group = "verification"
+    description = "Reject uncontrolled logcat and console writes from production sources."
+    val productionSources = fileTree("src/main") {
+        include("**/*.kt", "**/*.java")
+    }
+    inputs.files(productionSources)
+    val sourceRootPath = layout.projectDirectory.dir("src/main").asFile.absolutePath
+    doLast {
+        val forbiddenPatterns = listOf(
+            Regex("\\bandroid\\.util\\.Log\\b"),
+            Regex("\\bLog\\.(?:v|d|i|w|e|wtf|println)\\s*\\("),
+            Regex("\\b(?:print|println)\\s*\\("),
+            Regex("\\b(?:java\\.lang\\.)?System\\.(?:out|err)\\b"),
+            Regex("\\.printStackTrace\\s*\\("),
+            Regex("\\bjava\\.util\\.logging\\b"),
+            Regex("\\bTimber\\."),
+        )
+        val sourceRoot = File(sourceRootPath)
+        val violations = inputs.files.files.filter { source ->
+            val text = source.readText()
+            forbiddenPatterns.any { pattern -> pattern.containsMatchIn(text) }
+        }
+        check(violations.isEmpty()) {
+            "Uncontrolled production logging is forbidden; route structured diagnostics through the diagnostics module: " +
+                violations.joinToString { it.relativeTo(sourceRoot).invariantSeparatorsPath }
+        }
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn(checkNoUncontrolledProductionLogs)
 }
 
 dependencies {
