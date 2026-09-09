@@ -95,6 +95,7 @@ import io.github.sumirenokai.vesqen.ui.chain.InMemoryChainDashboardPreferencesRe
 import io.github.sumirenokai.vesqen.ui.chain.DiagnosticExportFeedback
 import io.github.sumirenokai.vesqen.ui.chain.formatSeconds
 import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
+import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
 import io.github.sumirenokai.vesqen.verification.OutputVerificationRegistryState
@@ -1091,6 +1092,8 @@ class VesqenAppTest {
             )
 
             composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+            composeRule.onNodeWithTag("vesqen.settings")
+                .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
             composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
             openAdvancedChain()
             chainNode("vesqen.chain.diagnostics.start").performClick()
@@ -1101,6 +1104,8 @@ class VesqenAppTest {
             composeRule.waitUntil(5_000) { telemetry.activeObservationCount == 1 }
             assertTrue(recorder.state.value is DiagnosticRecordingState.Active)
 
+            composeRule.onNodeWithTag("vesqen.settings")
+                .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
             composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
             openAdvancedChain()
             chainNode("vesqen.chain.diagnostics.stop").performClick()
@@ -1143,6 +1148,8 @@ class VesqenAppTest {
             )
 
             composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+            composeRule.onNodeWithTag("vesqen.settings")
+                .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
             composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
             openAdvancedChain()
             chainNode("vesqen.chain.diagnostics.start").performClick()
@@ -1191,6 +1198,29 @@ class VesqenAppTest {
         } finally {
             ownerScope.cancel()
         }
+    }
+
+    @Test
+    fun chain_omits_diagnostic_controls_when_build_does_not_supply_a_recorder() {
+        composeRule.setContent {
+            VesqenTheme(darkTheme = true) {
+                ChainScreen(
+                    snapshot = activePlaybackState().playback,
+                    playbackTelemetry = FakePlaybackTelemetry(chainTelemetrySnapshot()),
+                    preferencesRepository = InMemoryChainDashboardPreferencesRepository(),
+                    diagnosticRecorder = null,
+                    diagnosticExportFeedback = DiagnosticExportFeedback.NONE,
+                    onRequestDiagnosticExport = {},
+                    onClearDiagnosticExportFeedback = {},
+                    onBack = {},
+                    onBrowseLibrary = {},
+                )
+            }
+        }
+        openAdvancedChain()
+
+        composeRule.onAllNodesWithTag("vesqen.chain.diagnostics").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("vesqen.chain.diagnostics.start").assertCountEquals(0)
     }
 
     @Test

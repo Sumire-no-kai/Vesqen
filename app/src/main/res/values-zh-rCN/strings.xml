@@ -313,11 +313,12 @@
     <string name="chain_reset_body">刷新频率、功耗模式、计算窗口、图表历史、显示单位、选择、置顶、顺序与视图都会恢复默认设置。</string>
     <string name="chain_diagnostic_title">诊断录制</string>
     <string name="chain_diagnostic_idle">可以开始录制</string>
-    <string name="chain_diagnostic_unavailable">此预览中没有诊断录制器</string>
+    <string name="chain_diagnostic_restoring">正在恢复私有录制</string>
     <string name="chain_diagnostic_active">正在录制</string>
     <string name="chain_diagnostic_stopping">正在完成录制</string>
     <string name="chain_diagnostic_stopped">录制已停止并保留</string>
-    <string name="chain_diagnostic_body">采集有上限的播放遥测与事件，用于排查问题。导出的 JSON 不含媒体标题、路径、URI、路由名称和 USB 产品名称。</string>
+    <string name="chain_diagnostic_recovered">已恢复意外中断的录制</string>
+    <string name="chain_diagnostic_body">仅 Debug 构建会把有上限的播放遥测与事件持久化到应用私有存储。导出的 JSON 不含媒体标题、路径、URI、路由名称和 USB 产品名称。</string>
     <string name="chain_diagnostic_counts">%1$s · %2$s</string>
     <plurals name="chain_diagnostic_snapshot_count">
         <item quantity="other">%1$d 个快照</item>
@@ -336,6 +337,7 @@
         <item quantity="other">观测到 %1$d 处事件序列不连续；这并不能证明事件确实丢失。</item>
     </plurals>
     <string name="chain_diagnostic_start">开始录制</string>
+    <string name="chain_diagnostic_restoring_action">正在恢复…</string>
     <string name="chain_diagnostic_stop">停止录制</string>
     <string name="chain_diagnostic_stopping_action">正在停止…</string>
     <string name="chain_diagnostic_export">导出 JSON</string>
@@ -347,7 +349,9 @@
     <string name="chain_diagnostic_termination_playback_stopped">播放已停止；录制已自动封存并保留。</string>
     <string name="chain_diagnostic_termination_completed">遥测来源已结束；已保留停止后的录制。</string>
     <string name="chain_diagnostic_termination_failed">遥测来源失败；已保留停止后的录制。</string>
+    <string name="chain_diagnostic_termination_storage_failed">私有存储写入失败；本次录制只会保留到应用进程结束。</string>
     <string name="chain_diagnostic_termination_cancelled">录制所有者已取消；已保留停止后的录制。</string>
+    <string name="chain_diagnostic_termination_process_terminated">应用进程在停止录制前结束；已恢复最后一批完整的私有记录。</string>
     <string name="chain_diagnostic_exporting">正在写入 JSON…</string>
     <string name="chain_diagnostic_export_success">JSON 已导出。停止后的录制会一直保留，直到你主动清除。</string>
     <string name="chain_diagnostic_export_cancelled">未选择保存位置。停止后的录制仍然保留。</string>

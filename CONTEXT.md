@@ -33,7 +33,7 @@ A time-aligned view of the facts and recent events known for one playback sessio
 _Avoid_: Player state, device specification
 
 **Diagnostic Recording**:
-A user-initiated, bounded history of Audio Proof snapshots and events prepared for local inspection or privacy-cleaned export.
+A developer-initiated, bounded and private history of Audio Proof snapshots and events prepared for local inspection or privacy-cleaned export. It exists only in Debug/Internal builds; public Release builds provide no recording control or persistent diagnostic writer.
 _Avoid_: Analytics, background telemetry
 
 **Chain**:

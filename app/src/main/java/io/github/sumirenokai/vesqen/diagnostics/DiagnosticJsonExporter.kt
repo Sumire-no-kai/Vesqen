@@ -11,6 +11,7 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot
 import java.io.BufferedWriter
 import java.io.OutputStream
 import java.io.OutputStreamWriter
+import java.io.StringWriter
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
@@ -248,6 +249,46 @@ object DiagnosticJsonExporter {
             }
         }
     }
+
+    internal fun snapshotFragment(
+        snapshot: TelemetrySnapshot,
+        sessionAliases: SessionAliases,
+        usbAliases: UsbIdentityAliases,
+    ): String = jsonFragment { sink ->
+        sink.snapshotValue(snapshot, sessionAliases, usbAliases)
+    }
+
+    internal fun eventFragment(
+        event: TelemetryEvent,
+        sessionAliases: SessionAliases,
+    ): String = jsonFragment { sink ->
+        sink.eventValue(event, sessionAliases)
+    }
+
+    private fun jsonFragment(write: (JsonSink) -> Unit): String {
+        val destination = StringWriter()
+        val sink = JsonSink(BufferedWriter(destination))
+        write(sink)
+        sink.flush()
+        return destination.toString()
+    }
+}
+
+/** Stateful privacy aliases keep identities stable within one persisted recording only. */
+internal class DiagnosticJsonFragmentEncoder {
+    private val sessionAliases = SessionAliases()
+    private val usbAliases = UsbIdentityAliases()
+
+    fun snapshot(snapshot: TelemetrySnapshot): String = DiagnosticJsonExporter.snapshotFragment(
+        snapshot,
+        sessionAliases,
+        usbAliases,
+    )
+
+    fun event(event: TelemetryEvent): String = DiagnosticJsonExporter.eventFragment(
+        event,
+        sessionAliases,
+    )
 }
 
 internal fun writeDiagnosticRecording(
@@ -286,7 +327,7 @@ internal fun OutputStream.cancellationChecked(job: Job?): OutputStream {
     }
 }
 
-private class SessionAliases {
+internal class SessionAliases {
     private val aliases = linkedMapOf<String, String>()
 
     fun alias(rawSessionId: String?): String? {
@@ -295,7 +336,7 @@ private class SessionAliases {
     }
 }
 
-private class UsbIdentityAliases {
+internal class UsbIdentityAliases {
     private val hostDevices = linkedMapOf<String, Long>()
     private val audioEndpoints = linkedMapOf<String, Long>()
 
