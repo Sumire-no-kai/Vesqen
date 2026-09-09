@@ -69,6 +69,21 @@ class AndroidOutputVerificationRepositoryTest {
     }
 
     @Test
+    fun loadRecoversTheLegacyAtomicBackupAfterAnInterruptedReplacement() = runBlocking {
+        val repository = repository()
+        assertTrue(repository.import(ByteArrayInputStream(signedDocument(keyPair))) is OutputVerificationImportResult.Success)
+        val backup = File(registryFile.path + ".bak")
+        assertTrue(registryFile.renameTo(backup))
+
+        val reloaded = repository()
+        reloaded.load()
+
+        assertTrue(reloaded.state.value is OutputVerificationRegistryState.Ready)
+        assertNotNull(reloaded.match(activeStatus()))
+        assertTrue(registryFile.isFile)
+    }
+
+    @Test
     fun invalidSignatureCannotReplaceExistingRegistry() = runBlocking {
         val repository = repository()
         assertTrue(repository.import(ByteArrayInputStream(signedDocument(keyPair))) is OutputVerificationImportResult.Success)

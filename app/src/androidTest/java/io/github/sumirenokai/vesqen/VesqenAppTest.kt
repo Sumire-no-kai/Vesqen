@@ -17,6 +17,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.performClick
@@ -321,6 +322,24 @@ class VesqenAppTest {
     }
 
     @Test
+    fun catalog_mutation_failure_keeps_existing_library_rows_visible() {
+        render(
+            state = VesqenUiState(
+                library = LibraryUiState(
+                    musicAccess = MusicAccess.GRANTED,
+                    tracks = sampleTracks,
+                    catalogMutationFailed = true,
+                ),
+            ),
+        )
+
+        composeRule.onNodeWithTag("vesqen.library.mutation-failed").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.library_change_save_failed))
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.library.track.1").assertIsDisplayed()
+    }
+
+    @Test
     fun settings_opens_a_real_about_surface_with_the_build_version() {
         render(grantedState(), versionName = "0.1.0", versionCode = 1)
 
@@ -340,6 +359,29 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.about.back").performClick()
         composeRule.onNodeWithTag("vesqen.settings").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.nav.settings").assertIsSelected()
+    }
+
+    @Test
+    fun settings_groups_output_proof_and_application_controls_in_reading_order() {
+        render(grantedState())
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.section.playback-output").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.settings.output.system").assertIsSelected()
+        val systemOutput = composeRule.onNodeWithTag("vesqen.settings.output.system")
+            .fetchSemanticsNode().boundsInRoot
+        val strictUsb = composeRule.onNodeWithTag("vesqen.settings.output.strict-usb")
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue("Strict USB must follow System output", strictUsb.top >= systemOutput.bottom)
+
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.section.audio-proof"))
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.settings.verification-registry").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.section.application"))
+        composeRule.onNodeWithTag("vesqen.settings.about").assertIsDisplayed()
     }
 
     @Test
@@ -697,6 +739,43 @@ class VesqenAppTest {
         composeRule.onAllNodesWithTag("vesqen.now.player-page").assertCountEquals(0)
         composeRule.mainClock.autoAdvance = true
         composeRule.onNodeWithTag("vesqen.mini-player.open-now").assertIsDisplayed()
+    }
+
+    @Test
+    fun library_favorites_uses_a_reversible_hierarchy_transition() {
+        val tracks = listOf(
+            sampleTracks.first().copy(isFavorite = true, favoritePosition = 0L),
+            sampleTracks.last(),
+        )
+        render(
+            state = grantedState(tracks = tracks),
+            motionPolicy = VesqenMotionPolicy(reduceMotion = false),
+        )
+        composeRule.mainClock.autoAdvance = false
+
+        composeRule.onNodeWithTag("vesqen.library.favorites").performClick()
+        composeRule.mainClock.advanceTimeBy(72)
+        val enteringFavorites = composeRule.onNodeWithTag("vesqen.library.title.favorites")
+            .fetchSemanticsNode().positionInRoot
+        composeRule.mainClock.advanceTimeBy(240)
+        val favoritesRest = composeRule.onNodeWithTag("vesqen.library.title.favorites")
+            .fetchSemanticsNode().positionInRoot
+        assertTrue(
+            "Favorites must enter from the detail side",
+            enteringFavorites.x > favoritesRest.x + 8f,
+        )
+
+        composeRule.onNodeWithContentDescription(context.getString(R.string.show_all_music)).performClick()
+        composeRule.mainClock.advanceTimeBy(72)
+        val leavingFavorites = composeRule.onNodeWithTag("vesqen.library.title.favorites")
+            .fetchSemanticsNode().positionInRoot
+        assertTrue(
+            "Favorites must reverse toward the detail side",
+            leavingFavorites.x > favoritesRest.x + 8f,
+        )
+        composeRule.mainClock.advanceTimeBy(240)
+        composeRule.mainClock.autoAdvance = true
+        composeRule.onNodeWithTag("vesqen.library.title.root").assertIsDisplayed()
     }
 
     @Test
@@ -1780,6 +1859,28 @@ class VesqenAppTest {
         assertTrue(
             "The floating mini-player must leave the compact navigation unobscured",
             miniPlayerBounds.bottom <= compactNavigationBounds.top,
+        )
+    }
+
+    @Test
+    fun compact_navigation_labels_keep_bottom_breathing_room() {
+        render(
+            state = grantedState(),
+            containerWidth = 360.dp,
+            containerHeight = 720.dp,
+        )
+
+        val rootBounds = composeRule.onRoot().fetchSemanticsNode().boundsInRoot
+        val settingsLabelBounds = composeRule.onNodeWithText(
+            context.getString(R.string.destination_settings),
+            useUnmergedTree = true,
+        ).fetchSemanticsNode().boundsInRoot
+        val minimumBottomSpace = with(fixtureDensity) { 3.dp.toPx() }
+        val bottomSpace = rootBounds.bottom - settingsLabelBounds.bottom
+        assertTrue(
+            "Compact navigation labels must not sit on the bottom edge: " +
+                "root=$rootBounds, label=$settingsLabelBounds, bottomSpace=$bottomSpace",
+            bottomSpace >= minimumBottomSpace,
         )
     }
 

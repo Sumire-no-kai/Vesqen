@@ -68,6 +68,9 @@ internal class TreeAudioScanner(
                 null,
             ) ?: throw IllegalStateException("Documents provider returned no cursor")
             val entries = cursor.use { cursor ->
+                if (!directoryQueryIsComplete(cursor.extras.getBoolean(DocumentsContract.EXTRA_LOADING, false))) {
+                    throw IllegalStateException("Documents provider returned an incomplete directory cursor")
+                }
                 val documentIdIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
                 val displayNameIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
                 val mimeTypeIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
@@ -197,6 +200,9 @@ internal fun TreeAudioDocument.toTrackCandidate(): LibraryTrackCandidate = Libra
     folderName = folderName,
     fingerprint = fingerprint,
 )
+
+/** A loading directory cursor is a partial snapshot and must never authorize catalog pruning. */
+internal fun directoryQueryIsComplete(providerIsLoading: Boolean): Boolean = !providerIsLoading
 
 internal fun isSupportedAudioDocument(mimeType: String?, displayName: String): Boolean {
     if (mimeType?.startsWith("audio/", ignoreCase = true) == true) return true

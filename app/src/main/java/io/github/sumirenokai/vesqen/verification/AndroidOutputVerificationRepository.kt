@@ -9,6 +9,7 @@ import android.util.JsonReader
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.nio.charset.StandardCharsets
@@ -101,12 +102,11 @@ class AndroidOutputVerificationRepository internal constructor(
 
     override suspend fun load() {
         mutation.withLock {
-            if (!registryFile.exists()) {
+            val bytes = try {
+                AtomicFile(registryFile).openRead().use(::readBounded)
+            } catch (_: FileNotFoundException) {
                 mutableState.value = OutputVerificationRegistryState.Empty
                 return
-            }
-            val bytes = try {
-                registryFile.inputStream().use(::readBounded)
             } catch (_: InputTooLargeException) {
                 mutableState.value = OutputVerificationRegistryState.Invalid(
                     OutputVerificationImportFailure.INPUT_TOO_LARGE,

@@ -881,6 +881,7 @@ private fun VesqenDestinationFrame(
                         onRemoveTrackFromPlaylist = onRemoveTrackFromPlaylist,
                         onMovePlaylistTrack = onMovePlaylistTrack,
                         onSaveTrackOrder = onSaveTrackOrder,
+                        motionPolicy = motionPolicy,
                         modifier = destinationModifier,
                     )
 
