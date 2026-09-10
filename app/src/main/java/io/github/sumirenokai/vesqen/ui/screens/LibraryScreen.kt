@@ -80,6 +80,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -185,6 +186,7 @@ fun LibraryScreen(
     motionPolicy: VesqenMotionPolicy? = null,
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
+    val listStateHolder = rememberSaveableStateHolder()
     var query by rememberSaveable { mutableStateOf("") }
     var detailsTrack by remember { mutableStateOf<AudioTrack?>(null) }
     var browseModeName by rememberSaveable { mutableStateOf(LibraryBrowseMode.SONGS.name) }
@@ -395,7 +397,12 @@ fun LibraryScreen(
                 val activeFavorites = activeView == LibraryContentView.Favorites
                 val activeVisibleTracks = if (activeFavorites) favoriteVisibleTracks else rootVisibleTracks
                 val activeCollection = (activeView as? LibraryContentView.Collection)?.let { view ->
-                    collections.firstOrNull { it.key == view.key }
+                    val current = collections.firstOrNull { it.key == view.key }
+                    val transitionSnapshot = remember(view.key) { current }
+                    // Keep the outgoing collection alive until AnimatedContent disposes its
+                    // provider. Otherwise a disappearing collection can fall through to the
+                    // incoming root list and use the same saveable-state key twice.
+                    current ?: transitionSnapshot
                 }
                 when {
                     state.isLoading && state.tracks.isEmpty() -> LibraryLoading()
@@ -445,60 +452,70 @@ fun LibraryScreen(
                         modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
                     )
 
-                    activeCollection != null -> CollectionTrackList(
-                        collection = activeCollection.copy(
-                            tracks = orderTarget?.second ?: activeCollection.tracks,
-                        ),
-                        playback = playback,
-                        onBack = {
-                            if (orderTarget != null) {
-                                if (!orderSaving) orderTarget = null
-                            } else {
-                                selectedCollectionKey = null
-                            }
-                        },
-                        onPlayQueue = onPlayQueue,
-                        onTrackSelected = { track ->
-                            onPlayQueue(activeCollection.tracks, activeCollection.tracks.indexOf(track))
-                        },
-                        onTrackMore = { detailsTrack = it },
-                        editing = orderTarget != null,
-                        saving = orderSaving,
-                        onReorder = { tracks -> orderTarget = orderTarget?.copy(second = tracks) },
-                        onEditPlaylist = activeCollection.playlistId
-                            ?.takeIf { orderTarget == null }
-                            ?.let { playlistId ->
-                                { playlistToEdit = state.playlists.firstOrNull { it.id == playlistId } }
+                    activeCollection != null -> listStateHolder.SaveableStateProvider(
+                        key = "collection:${activeCollection.key}",
+                    ) {
+                        CollectionTrackList(
+                            collection = activeCollection.copy(
+                                tracks = orderTarget?.second ?: activeCollection.tracks,
+                            ),
+                            playback = playback,
+                            onBack = {
+                                if (orderTarget != null) {
+                                    if (!orderSaving) orderTarget = null
+                                } else {
+                                    selectedCollectionKey = null
+                                }
                             },
-                    )
+                            onPlayQueue = onPlayQueue,
+                            onTrackSelected = { track ->
+                                onPlayQueue(activeCollection.tracks, activeCollection.tracks.indexOf(track))
+                            },
+                            onTrackMore = { detailsTrack = it },
+                            editing = orderTarget != null,
+                            saving = orderSaving,
+                            onReorder = { tracks -> orderTarget = orderTarget?.copy(second = tracks) },
+                            onEditPlaylist = activeCollection.playlistId
+                                ?.takeIf { orderTarget == null }
+                                ?.let { playlistId ->
+                                    { playlistToEdit = state.playlists.firstOrNull { it.id == playlistId } }
+                                },
+                        )
+                    }
 
-                    browseMode == LibraryBrowseMode.SONGS -> LibraryTrackList(
-                        tracks = orderTarget?.second ?: activeVisibleTracks,
-                        editing = orderTarget != null,
-                        saving = orderSaving,
-                        onReorder = { tracks -> orderTarget = orderTarget?.copy(second = tracks) },
-                        currentTrackId = playback.trackId,
-                        isPlaying = playback.isPlaying,
-                        alphabetSections = if (
-                            titleIndexIsCurrent && alphabetEnabled && !activeFavorites &&
-                            query.isBlank() && rootSortOrder == LibrarySortOrder.TITLE
-                        ) titleIndex?.sections.orEmpty() else emptyMap(),
-                        onTrackSelected = { track ->
-                            onPlayQueue(activeVisibleTracks, activeVisibleTracks.indexOf(track))
-                        },
-                        onTrackMore = { detailsTrack = it },
-                    )
+                    browseMode == LibraryBrowseMode.SONGS -> listStateHolder.SaveableStateProvider(
+                        key = if (activeFavorites) "tracks:favorites" else "tracks:root",
+                    ) {
+                        LibraryTrackList(
+                            tracks = orderTarget?.second ?: activeVisibleTracks,
+                            editing = orderTarget != null,
+                            saving = orderSaving,
+                            onReorder = { tracks -> orderTarget = orderTarget?.copy(second = tracks) },
+                            currentTrackId = playback.trackId,
+                            isPlaying = playback.isPlaying,
+                            alphabetSections = if (
+                                titleIndexIsCurrent && alphabetEnabled && !activeFavorites &&
+                                query.isBlank() && rootSortOrder == LibrarySortOrder.TITLE
+                            ) titleIndex?.sections.orEmpty() else emptyMap(),
+                            onTrackSelected = { track ->
+                                onPlayQueue(activeVisibleTracks, activeVisibleTracks.indexOf(track))
+                            },
+                            onTrackMore = { detailsTrack = it },
+                        )
+                    }
 
-                    else -> CollectionList(
-                        mode = browseMode,
-                        collections = collections,
-                        onCollectionSelected = { selectedCollectionKey = it.key },
-                        onCreatePlaylist = if (browseMode == LibraryBrowseMode.PLAYLISTS) {
-                            { showCreatePlaylist = true }
-                        } else {
-                            null
-                        },
-                    )
+                    else -> listStateHolder.SaveableStateProvider(key = "collections:${browseMode.name}") {
+                        CollectionList(
+                            mode = browseMode,
+                            collections = collections,
+                            onCollectionSelected = { selectedCollectionKey = it.key },
+                            onCreatePlaylist = if (browseMode == LibraryBrowseMode.PLAYLISTS) {
+                                { showCreatePlaylist = true }
+                            } else {
+                                null
+                            },
+                        )
+                    }
                 }
             }
         }

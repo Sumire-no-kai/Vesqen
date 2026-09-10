@@ -690,7 +690,7 @@ private fun ChainCorePanel(
                 TelemetryMetricCatalog.PLAYBACK_CURRENT_MEDIA_READ_BITRATE,
                 TelemetryMetricCatalog.PLAYBACK_ESTIMATED_TOTAL_BUFFERED_DURATION,
                 TelemetryMetricCatalog.PLAYBACK_UNDERRUN_COUNT,
-            ).forEach { id -> ChainCoreFact(id, metrics, nowElapsedRealtimeMs, unitDisplayMode, inline = true) }
+            ).forEach { id -> ChainCoreFact(id, metrics, nowElapsedRealtimeMs, unitDisplayMode) }
             Text(stringResource(R.string.chain_core_boundary), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -714,12 +714,13 @@ private fun ChainCoreFact(
     nowElapsedRealtimeMs: Long,
     unitDisplayMode: ChainUnitDisplayMode,
     prominent: Boolean = false,
-    inline: Boolean = false,
 ) {
     val context = LocalContext.current
     val evidence = metrics[id]?.evidence
     val label = telemetryMetricLabel(context, id)
     val value = rememberedTelemetryReading(evidence?.reading, unitDisplayMode)
+    val numericValue = evidence?.reading is TelemetryReading.Integer ||
+        evidence?.reading is TelemetryReading.Decimal
     var expanded by remember(id) { mutableStateOf(false) }
     val action = stringResource(R.string.chain_evidence_details)
     Column(
@@ -729,18 +730,16 @@ private fun ChainCoreFact(
             .semantics(mergeDescendants = true) {},
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        if (inline && LocalDensity.current.fontScale < ChainLargeTextFontScale) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
-                Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(value, Modifier.weight(.8f), textAlign = TextAlign.End,
-                    style = MaterialTheme.typography.titleSmall.copy(fontFamily = FontFamily.Monospace))
-            }
-        } else {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, style = (if (prominent) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium)
-                .copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium))
-        }
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            value,
+            style = (if (prominent) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium)
+                .copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium),
+            textAlign = if (numericValue) TextAlign.End else TextAlign.Start,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("vesqen.chain.core-value.${id.value}"),
+        )
         Text(
             evidence?.let { telemetryConfidenceLabel(context, it.confidence) + " · " + telemetryEvidenceAge(context, it, nowElapsedRealtimeMs) }
                 ?: stringResource(R.string.chain_sampling_starting_short),
@@ -1915,23 +1914,28 @@ private fun ChainMetricCard(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            // Identifiers and route descriptions need the full card width even when they contain
-            // few characters. Numeric values retain the aligned readout column at normal text size.
-            val stackedValue = evidence?.reading is TelemetryReading.Text ||
-                evidence?.reading is TelemetryReading.UsbInventory ||
-                    LocalDensity.current.fontScale >= ChainLargeTextFontScale
+            // Keep changing readings out of the title row. A digit boundary must not wrap the
+            // value under its label and resize the card while telemetry is sampling.
+            val numericValue = evidence?.reading is TelemetryReading.Integer ||
+                evidence?.reading is TelemetryReading.Decimal
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                 if (pinned) Icon(Icons.Filled.PushPin, stringResource(R.string.chain_pinned), Modifier.size(14.dp))
-                if (!stackedValue) Text(
-                    value, style = MaterialTheme.typography.titleSmall.copy(fontFamily = FontFamily.Monospace),
-                    textAlign = TextAlign.End, modifier = Modifier.weight(.85f).testTag("vesqen.chain.metric-value.${metricId.value}"),
-                )
                 Icon(if (evidenceExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                     null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (stackedValue) Text(value, style = VesqenDataStyle,
-                modifier = Modifier.fillMaxWidth().testTag("vesqen.chain.metric-value.${metricId.value}"))
+            Text(
+                text = value,
+                style = if (numericValue) {
+                    MaterialTheme.typography.titleSmall.copy(fontFamily = FontFamily.Monospace)
+                } else {
+                    VesqenDataStyle
+                },
+                textAlign = if (numericValue) TextAlign.End else TextAlign.Start,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("vesqen.chain.metric-value.${metricId.value}"),
+            )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
                 Box(Modifier.weight(1f)) { ChainConfidenceChip(evidence?.confidence, confidence) }
                 if (viewMode != ChainMetricViewMode.COMPACT) updated?.let {

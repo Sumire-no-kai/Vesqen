@@ -22,6 +22,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performSemanticsAction
@@ -780,6 +781,30 @@ class VesqenAppTest {
     }
 
     @Test
+    fun library_restores_scroll_position_after_settings_round_trip() {
+        val tracks = (0L..149L).map { id ->
+            AudioTrack(
+                id = id,
+                contentUri = "content://media/external/audio/media/$id",
+                title = "Track ${id.toString().padStart(3, '0')}",
+                artist = "Fixture",
+                album = "Scroll state",
+                durationMs = 1_000,
+            )
+        }
+        render(state = grantedState(tracks = tracks))
+
+        composeRule.onNodeWithTag("vesqen.library.tracks").performScrollToIndex(80)
+        composeRule.onNodeWithText("Track 080").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.nav.library").performClick()
+
+        composeRule.onNodeWithText("Track 080").assertIsDisplayed()
+    }
+
+    @Test
     fun reduced_motion_changes_destinations_without_spatial_movement() {
         render(state = activePlaybackState(), motionPolicy = VesqenMotionPolicy(reduceMotion = true))
         composeRule.mainClock.autoAdvance = false
@@ -1314,6 +1339,21 @@ class VesqenAppTest {
             container.right <= codecLabel.left || codecLabel.right <= container.left,
         )
         composeRule.onAllNodesWithTag("vesqen.chain.summary").assertCountEquals(0)
+    }
+
+    @Test
+    fun chain_numeric_readouts_do_not_reflow_at_360dp_in_raw_units() {
+        assertChainNumericReadoutsStayStable(360.dp, ChainUnitDisplayMode.RAW)
+    }
+
+    @Test
+    fun chain_numeric_readouts_do_not_reflow_at_600dp_in_raw_units() {
+        assertChainNumericReadoutsStayStable(600.dp, ChainUnitDisplayMode.RAW)
+    }
+
+    @Test
+    fun chain_numeric_readouts_do_not_reflow_at_600dp_in_auto_units() {
+        assertChainNumericReadoutsStayStable(600.dp, ChainUnitDisplayMode.AUTO)
     }
 
     @Test
@@ -2478,6 +2518,87 @@ class VesqenAppTest {
         return composeRule.onNodeWithTag(tag, useUnmergedTree)
     }
 
+    private fun assertChainNumericReadoutsStayStable(
+        containerWidth: Dp,
+        unitDisplayMode: ChainUnitDisplayMode,
+    ) {
+        val metricId = TelemetryMetricCatalog.PLAYBACK_ESTIMATED_TOTAL_BUFFERED_DURATION
+        val readings = listOf(9_000L, 99_000L, 999_900L, 1_000_000L, 99_999_900L, 1_000_000_000L)
+        val telemetry = FakePlaybackTelemetry(bufferedDurationSnapshot(readings.first()))
+        val preferences = InMemoryChainDashboardPreferencesRepository(
+            ChainDashboardPreferences(
+                selectedMetricIds = listOf(metricId),
+                pinnedMetricIds = listOf(metricId),
+                metricOrder = listOf(metricId),
+                viewMode = ChainMetricViewMode.COMPACT,
+                unitDisplayMode = unitDisplayMode,
+            ),
+        )
+        render(
+            state = activePlaybackState(),
+            playbackTelemetry = telemetry,
+            chainPreferencesRepository = preferences,
+            containerWidth = containerWidth,
+            containerHeight = 720.dp,
+        )
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+
+        val coreRootTag = "vesqen.chain.core.${metricId.value}"
+        val coreValueTag = "vesqen.chain.core-value.${metricId.value}"
+        val coreHeights = mutableSetOf<Int>()
+        readings.forEach { reading ->
+            telemetry.publish(bufferedDurationSnapshot(reading))
+            val expected = formatTelemetryReading(
+                context,
+                TelemetryReading.Integer(reading, TelemetryUnit.MILLISECONDS),
+                unitDisplayMode,
+            )
+            waitForChainValue(coreValueTag, expected)
+            assertSingleLineChainValue(coreValueTag, expected)
+            coreHeights += composeRule.onNodeWithTag(coreRootTag).fetchSemanticsNode().size.height
+        }
+        assertEquals("Core readout height must not change at a digit or unit boundary", 1, coreHeights.size)
+
+        openAdvancedChain()
+        val metricRootTag = "vesqen.chain.metric.${metricId.value}"
+        val metricValueTag = "vesqen.chain.metric-value.${metricId.value}"
+        val metricHeights = mutableSetOf<Int>()
+        readings.asReversed().forEach { reading ->
+            telemetry.publish(bufferedDurationSnapshot(reading))
+            chainNode(metricRootTag)
+            val expected = formatTelemetryReading(
+                context,
+                TelemetryReading.Integer(reading, TelemetryUnit.MILLISECONDS),
+                unitDisplayMode,
+            )
+            waitForChainValue(metricValueTag, expected)
+            assertSingleLineChainValue(metricValueTag, expected)
+            metricHeights += composeRule.onNodeWithTag(metricRootTag).fetchSemanticsNode().size.height
+        }
+        assertEquals("Metric card height must not change at a digit or unit boundary", 1, metricHeights.size)
+    }
+
+    private fun waitForChainValue(tag: String, expected: String) {
+        composeRule.waitUntil(5_000) {
+            runCatching {
+                composeRule.onNodeWithTag(tag, useUnmergedTree = true).assertTextEquals(expected)
+            }.isSuccess
+        }
+    }
+
+    private fun assertSingleLineChainValue(tag: String, expected: String) {
+        val layouts = mutableListOf<TextLayoutResult>()
+        composeRule.onNodeWithTag(tag, useUnmergedTree = true)
+            .assertTextEquals(expected)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val layout = layouts.single()
+        assertEquals("$tag must stay on one line", 1, layout.lineCount)
+        assertTrue("$tag must show the complete value", !layout.hasVisualOverflow)
+    }
+
     private fun render(
         state: VesqenUiState,
         stateProvider: (() -> VesqenUiState)? = null,
@@ -2690,6 +2811,26 @@ class VesqenAppTest {
                         observedAtEpochMs = epochMs,
                         observedAtElapsedRealtimeMs = elapsedMs,
                     ),
+                ),
+            ),
+        )
+    }
+
+    private fun bufferedDurationSnapshot(valueMs: Long): TelemetrySnapshot {
+        val snapshot = chainTelemetrySnapshot()
+        val epochMs = System.currentTimeMillis()
+        val elapsedMs = SystemClock.elapsedRealtime()
+        return snapshot.copy(
+            capturedAtEpochMs = epochMs,
+            capturedAtElapsedRealtimeMs = elapsedMs,
+            metrics = snapshot.metrics + TelemetryMetric(
+                id = TelemetryMetricCatalog.PLAYBACK_ESTIMATED_TOTAL_BUFFERED_DURATION,
+                section = TelemetrySection.PLAYBACK,
+                evidence = TelemetryEvidence.Measured(
+                    reading = TelemetryReading.Integer(valueMs, TelemetryUnit.MILLISECONDS),
+                    source = TelemetryDataSource(TelemetrySourceId("test.telemetry")),
+                    observedAtEpochMs = epochMs,
+                    observedAtElapsedRealtimeMs = elapsedMs,
                 ),
             ),
         )
