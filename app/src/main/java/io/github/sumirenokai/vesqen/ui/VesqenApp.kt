@@ -45,7 +45,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.SaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -365,6 +367,7 @@ fun VesqenAppContent(
     val appliedChainPreferencesRepository = chainPreferencesRepository ?: remember {
         InMemoryChainDashboardPreferencesRepository()
     }
+    val destinationStateHolder = rememberSaveableStateHolder()
     var destinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
     var returnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
     var playerReturnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
@@ -461,6 +464,7 @@ fun VesqenAppContent(
             VesqenDestinationFrame(
                 state = state,
                 destination = destination,
+                destinationStateHolder = destinationStateHolder,
                 showNavigation = false,
                 motionPolicy = appliedMotionPolicy,
                 playbackTelemetry = playbackTelemetry,
@@ -519,6 +523,7 @@ fun VesqenAppContent(
         VesqenDestinationFrame(
             state = state,
             destination = destination,
+            destinationStateHolder = destinationStateHolder,
             showNavigation = true,
             motionPolicy = appliedMotionPolicy,
             playbackTelemetry = playbackTelemetry,
@@ -579,6 +584,7 @@ fun VesqenAppContent(
 private fun VesqenDestinationFrame(
     state: VesqenUiState,
     destination: VesqenDestination,
+    destinationStateHolder: SaveableStateHolder,
     showNavigation: Boolean,
     motionPolicy: VesqenMotionPolicy,
     playbackTelemetry: PlaybackTelemetry?,
@@ -861,32 +867,36 @@ private fun VesqenDestinationFrame(
                         .padding(bottom = miniPlayerContentClearance)
                 }
                 when (activeDestination) {
-                    VesqenDestination.LIBRARY -> LibraryScreen(
-                        state = state.library,
-                        playback = state.playback,
-                        onRequestMusicAccess = onRequestMusicAccess,
-                        onOpenAppSettings = onOpenAppSettings,
-                        onOpenNotificationSettings = onOpenNotificationSettings,
-                        onRescan = onRescan,
-                        onAddLibraryFolder = onAddLibraryFolder,
-                        onRemoveLibraryFolder = onRemoveLibraryFolder,
-                        onPauseLibraryScan = onPauseLibraryScan,
-                        onResumeLibraryScan = onResumeLibraryScan,
-                        onTrackSelected = onTrackSelected,
-                        onPlayQueue = onPlayQueue,
-                        onToggleFavorite = onToggleFavorite,
-                        onPlayNext = onPlayNext,
-                        onAddToQueue = onAddToQueue,
-                        onCreatePlaylist = onCreatePlaylist,
-                        onRenamePlaylist = onRenamePlaylist,
-                        onDeletePlaylist = onDeletePlaylist,
-                        onAddTrackToPlaylist = onAddTrackToPlaylist,
-                        onRemoveTrackFromPlaylist = onRemoveTrackFromPlaylist,
-                        onMovePlaylistTrack = onMovePlaylistTrack,
-                        onSaveTrackOrder = onSaveTrackOrder,
-                        motionPolicy = motionPolicy,
-                        modifier = destinationModifier,
-                    )
+                    VesqenDestination.LIBRARY -> destinationStateHolder.SaveableStateProvider(
+                        key = VesqenDestination.LIBRARY.name,
+                    ) {
+                        LibraryScreen(
+                            state = state.library,
+                            playback = state.playback,
+                            onRequestMusicAccess = onRequestMusicAccess,
+                            onOpenAppSettings = onOpenAppSettings,
+                            onOpenNotificationSettings = onOpenNotificationSettings,
+                            onRescan = onRescan,
+                            onAddLibraryFolder = onAddLibraryFolder,
+                            onRemoveLibraryFolder = onRemoveLibraryFolder,
+                            onPauseLibraryScan = onPauseLibraryScan,
+                            onResumeLibraryScan = onResumeLibraryScan,
+                            onTrackSelected = onTrackSelected,
+                            onPlayQueue = onPlayQueue,
+                            onToggleFavorite = onToggleFavorite,
+                            onPlayNext = onPlayNext,
+                            onAddToQueue = onAddToQueue,
+                            onCreatePlaylist = onCreatePlaylist,
+                            onRenamePlaylist = onRenamePlaylist,
+                            onDeletePlaylist = onDeletePlaylist,
+                            onAddTrackToPlaylist = onAddTrackToPlaylist,
+                            onRemoveTrackFromPlaylist = onRemoveTrackFromPlaylist,
+                            onMovePlaylistTrack = onMovePlaylistTrack,
+                            onSaveTrackOrder = onSaveTrackOrder,
+                            motionPolicy = motionPolicy,
+                            modifier = destinationModifier,
+                        )
+                    }
 
                     VesqenDestination.NOW -> NowScreen(
                         onToggleFavorite = onToggleFavorite,
