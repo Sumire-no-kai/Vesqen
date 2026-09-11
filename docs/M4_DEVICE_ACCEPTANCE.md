@@ -104,3 +104,12 @@
 - M4 UI follow-up 在 Honor API 28 与 iQOO API 35 的字体比例 1.3 上复现了 Chain 核心证据列不等高：右列 `实测 · 未验证 · N 秒前` 会换行，且秒数变化可能动态改变卡片高度。根因是 1.3 仍走双列布局，并且 OEM 非线性字体缩放可能略低于名义值。提交 `24c5279` 将大字体边界留出 OEM 容差，统一核心事实、选择器、展开控件和指标值的堆叠规则，并让堆叠后的证据行占满可用宽度；没有截断置信度、验证状态或观测时间。
 - 新增的 360 dp / 字体 1.3 / 120 秒证据年龄回归先以 `overflowWidth=true` 失败，修复后在 Honor 通过；随后 8 个定向 Chain 布局用例全部通过，覆盖 320/480 dp、字体 1.3/1.5/2.0、600 dp 指标列和 840 dp 高级布局。iQOO 上的 runner 再次受 vivo 前台 Activity 启动限制停滞，本次不计为 instrumentation 通过；改用真实应用、UI hierarchy 与截图人工复测。证据年龄从两位数进入三位数后，两个 AudioTrack 证据行仍分别保持 `[120,1475][960,1525]` 与 `[120,1706][960,1756]`，单行内容完整且卡片未跳高。
 - 本地 199 项 JVM 测试通过，Lint 为 0 error / 21 个既有 warning，Debug 与 instrumentation APK 编译通过；PR CI 的 Debug/test、Profile、Release 均通过。系统栏颜色、默认字体动态年龄和已完成的 M4 矩阵不重复执行。复测结束后两台设备均恢复字体比例 1.0、浅色模式并停止应用；iQOO 31/31、Honor 4/4 个备份文件逐文件 SHA-256 匹配。长时播放、真实 DAC、外部数字逐样本和 `VERIFIED` 仍按上表保持开放或暂缓。
+
+### 2026-09-10 · Library/Chain 修复的双机功能回归与受限 Beta 决定
+
+- PR #27 已将 `ac64438` 合并为 `738da97`；修复 Library 跨页面/内部层级的滚动位置保存、集合消失时的状态冲突、Chain 数值位数变化导致换行。最终本地 unit/lint/Debug/androidTest 构建通过，PR CI 的 Debug/tests、Profile、Release 通过。
+- 同一 Debug app APK SHA-256 为 `c14f91fe8dce10fd81a64a6d6f456e561c8ee558db7027efecd8263277a11ee5`，test APK 为 `5a1c93ba005c05e55ee7aeca826d42fef01647c0a81d1a3c42419779fb8486bf`。本轮补验前核对主机产物和两机安装 app 的 SHA-256，一致；Honor 安装 test 的 SHA-256 也与主机一致。
+- iQOO Android 15 的最终独立 runner 为 6/6，通过记录沿用 `build/qa/ui-fix-20260910/final-targeted-after-review/`，本轮未重复执行。更早因 vivo 前台宿主确认而中断的批次不计通过。
+- Honor STF-AL00 / Android 9 本轮接入时未安装 Vesqen，使用上述产物新装 app/test，没有卸载或清理任何用户应用；同样 6 项 runner 单批 6/6，0 失败/跳过，instrumentation 时间 17.052 秒。覆盖全部歌曲与喜欢独立位置、Settings 往返、集合消失与缩短后的索引夹紧，以及 360 dp RAW、600 dp RAW/AUTO 的核心和高级数值完整性/固定高度。原始记录在 `build/qa/limited-beta-20260910/honor-ui/`，测试后停止 Vesqen 进程。
+- 上述是同一修复 APK 的双机功能证据；没有重跑快滑性能 A/B、长时、真实 USB、Release 签名或完整无障碍矩阵，不关闭这些门禁。
+- 用户确认受限 Beta 发布到 GitHub Releases 和 Google Play 测试渠道，第二款 DAC 缺失公开列限，不再阻挡本次受限 Beta；真实 iQOO + JBL Flip 7 USB 短测仍待执行。长期发布密钥留到最后创建，尚未执行签名、tag、Release 发布或 Play 上传。
