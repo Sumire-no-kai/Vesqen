@@ -1,5 +1,10 @@
 # Vesqen
 
+[![Android CI](https://github.com/Sumire-no-kai/Vesqen/actions/workflows/android.yml/badge.svg?branch=master)](https://github.com/Sumire-no-kai/Vesqen/actions/workflows/android.yml)
+[![Candidate version](https://img.shields.io/badge/candidate%20version-0.4.0--beta.1-7A4F00)](version.properties)
+[![Android](https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-3DDC84?logo=android&logoColor=white)](app/build.gradle.kts)
+[![License](https://img.shields.io/badge/license-Apache--2.0-536B1E)](LICENSE)
+
 Vesqen is a lightweight, offline-first Android player for local lossless audio. Its defining goal is to expose an auditable playback chain and use Android's official USB bit-perfect path only when the device, ROM, DAC, and source format genuinely support it.
 
 The repository contains implementation candidates for the local player, Audio Proof, Android 14+ official strict USB output, and the M4 signed verification registry. MediaStore and persistently authorised multi-folder SAF discovery, a private incremental catalog, local browsing and metadata, playlists, an editable persistent queue, Media3 background playback, selected-system-route observation, and the adaptive `Library / Now / Settings` shell feed one Chain evidence surface. Strict USB fails closed, and `BIT-PERFECT VERIFIED` is available only when a maintainer-signed record exactly matches the installed APK, phone/ROM, DAC, source, and sink while strict output is active. These implementation candidates do not complete M1–M4: real format fixtures, endurance, accessibility, performance, Android 14+ phone/DAC matrices, and at least one external digital verification remain acceptance gates. See the [product requirements](docs/PRD.md), [roadmap](docs/ROADMAP.md), [M4 device acceptance gate](docs/M4_DEVICE_ACCEPTANCE.md), and [development log](docs/DEVELOPMENT_LOG.md) for the evidence boundary.
