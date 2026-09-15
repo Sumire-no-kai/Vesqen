@@ -297,7 +297,7 @@ private fun SettingsChoiceRow(
 }
 
 @Composable
-private fun strictUsbOutputBody(status: UsbOutputStatus): String {
+internal fun strictUsbOutputBody(status: UsbOutputStatus): String {
     if (status.mode != UsbOutputMode.STRICT_BIT_PERFECT) {
         return stringResource(R.string.settings_strict_usb_output_body)
     }
@@ -319,7 +319,7 @@ private fun strictUsbOutputBody(status: UsbOutputStatus): String {
 }
 
 @Composable
-private fun strictUsbFailureLabel(failure: UsbOutputFailure): String = stringResource(
+internal fun strictUsbFailureLabel(failure: UsbOutputFailure): String = stringResource(
     when (failure) {
         UsbOutputFailure.UNSUPPORTED_ANDROID_VERSION -> R.string.usb_failure_android_version
         UsbOutputFailure.USB_HOST_UNAVAILABLE -> R.string.usb_failure_host_unavailable

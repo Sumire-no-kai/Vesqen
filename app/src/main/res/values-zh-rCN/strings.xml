@@ -174,7 +174,16 @@
     <string name="chain_verified_title">输出已通过外部验证</string>
     <string name="chain_verified_body">记录 %1$s 精确验证了当前应用构建、手机/ROM、DAC、源格式与输出格式。方法：%2$s。</string>
     <string name="chain_strict_failed_title">严格输出已停止</string>
-    <string name="chain_strict_failed_body">Fail-closed 决策：%1$s。如需 Android 普通路由，请在设置中选择“系统输出”。</string>
+    <string name="chain_strict_failed_body">%1$s 为保持严格输出，播放已停止。如需普通播放，可在播放器或设置中更改输出模式。</string>
+    <string name="player_output_mode">输出模式</string>
+    <string name="player_output_mode_body">关闭：使用 Android 系统输出。开启：要求 USB bit-perfect 输出；条件不满足时停止播放。打开开关不代表 bit-perfect 已生效，也不代表通过外部验证。</string>
+    <string name="player_output_done">完成</string>
+    <string name="player_strict_failure_body">%1$s\n\n严格 USB 模式已停止播放，没有自动降级到系统输出。请连接兼容 DAC 后重试，或切换为系统输出后再点击播放。</string>
+    <string name="player_use_system_output">切换为系统输出</string>
+    <string name="player_keep_strict_output">保留严格模式</string>
+    <string name="chain_core_source">01 · 源文件</string>
+    <string name="chain_core_output">02 · AudioTrack</string>
+    <string name="chain_core_route">03 · 路由与稳定性</string>
     <string name="unavailable">不可用</string>
     <string name="library_songs">歌曲</string>
     <string name="library_albums">专辑</string>

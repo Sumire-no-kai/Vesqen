@@ -49,11 +49,16 @@ import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Switch
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -99,6 +104,7 @@ import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
 import io.github.sumirenokai.vesqen.playback.PlaybackProblem
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.components.PlaybackControls
@@ -166,6 +172,7 @@ fun NowScreen(
     motionPolicy: VesqenMotionPolicy,
     modifier: Modifier = Modifier,
     onToggleFavorite: (Long, Boolean) -> Unit = { _, _ -> },
+    onSetUsbOutputMode: (UsbOutputMode) -> Unit = {},
 ) {
     if (!snapshot.hasActiveTrack) {
         NowEmbeddedEmptyState(modifier = modifier)
@@ -174,6 +181,7 @@ fun NowScreen(
 
     var showDetails by rememberSaveable { mutableStateOf(false) }
     var showQueue by rememberSaveable { mutableStateOf(false) }
+    var showOutputMode by rememberSaveable { mutableStateOf(false) }
     var trackTransitionDirection by remember { mutableStateOf(TrackTransitionDirection.FORWARD) }
     var focusContent by rememberSaveable { mutableStateOf(NowFocusContent.ARTWORK) }
     val trackPresentation = NowTrackPresentation(
@@ -241,6 +249,30 @@ fun NowScreen(
     }
 
     VesqenTheme(darkTheme = true) {
+        val outputModeDescription = stringResource(
+            if (snapshot.usbOutputStatus.mode == UsbOutputMode.STRICT_BIT_PERFECT) {
+                R.string.settings_strict_usb_output
+            } else R.string.settings_system_output,
+        )
+        val strictOutputLabel = stringResource(R.string.settings_strict_usb_output)
+        val playerActions: @Composable () -> Unit = {
+            Row {
+                IconButton(
+                    onClick = { showOutputMode = true },
+                    modifier = Modifier.size(48.dp).testTag("vesqen.now.output-mode")
+                        .semantics { stateDescription = outputModeDescription },
+                ) {
+                    Icon(
+                        Icons.Filled.Usb,
+                        stringResource(R.string.player_output_mode),
+                        tint = if (snapshot.usbOutputStatus.mode == UsbOutputMode.STRICT_BIT_PERFECT) {
+                            MaterialTheme.colorScheme.primary
+                        } else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                NowFavoriteButton(currentTrack, onToggleFavorite)
+            }
+        }
         FullPlayerSystemBars(immersive = isLandscape)
         Surface(
             modifier = modifier
@@ -289,7 +321,7 @@ fun NowScreen(
                 )
                 if (useLandscapeLayout) {
                     NowLandscapePlayerPage(
-                        favoriteAction = { NowFavoriteButton(currentTrack, onToggleFavorite) },
+                        commandActions = playerActions,
                         snapshot = snapshot,
                         trackPresentation = trackPresentation,
                         trackTransitionDirection = trackTransitionDirection,
@@ -320,7 +352,7 @@ fun NowScreen(
                 } else {
                     Column(modifier = Modifier.fillMaxSize()) {
                         NowHeader(
-                            favoriteAction = { NowFavoriteButton(currentTrack, onToggleFavorite) },
+                            commandActions = playerActions,
                             onBack = onBackToLibrary,
                             onToggleOrientation = onToggleOrientation,
                             showOrientationToggle = showOrientationToggle,
@@ -379,6 +411,42 @@ fun NowScreen(
             }
         }
 
+        if (showOutputMode) {
+            AlertDialog(
+                onDismissRequest = { showOutputMode = false },
+                title = { Text(stringResource(R.string.player_output_mode)) },
+                text = {
+                    Column(
+                        Modifier.verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(VesqenSpacing.md),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                stringResource(R.string.settings_strict_usb_output),
+                                modifier = Modifier.weight(1f).padding(end = VesqenSpacing.sm),
+                            )
+                            Switch(
+                                checked = snapshot.usbOutputStatus.mode == UsbOutputMode.STRICT_BIT_PERFECT,
+                                onCheckedChange = { enabled ->
+                                    onSetUsbOutputMode(if (enabled) UsbOutputMode.STRICT_BIT_PERFECT else UsbOutputMode.SYSTEM)
+                                    showOutputMode = false
+                                },
+                                enabled = snapshot.isControllerReady,
+                                modifier = Modifier.testTag("vesqen.now.strict-usb-switch")
+                                    .semantics { contentDescription = strictOutputLabel },
+                            )
+                        }
+                        Text(stringResource(R.string.player_output_mode_body))
+                        Text(strictUsbOutputBody(snapshot.usbOutputStatus))
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showOutputMode = false }) {
+                        Text(stringResource(R.string.player_output_done))
+                    }
+                },
+            )
+        }
         if (showDetails && currentTrack != null) {
             TrackDetailsSheet(
                 track = currentTrack,
@@ -673,7 +741,7 @@ private fun NowPlayerPage(
 /** Landscape is a dedicated listening surface, not a compressed portrait dock. */
 @Composable
 private fun NowLandscapePlayerPage(
-    favoriteAction: @Composable () -> Unit,
+    commandActions: @Composable () -> Unit,
     snapshot: PlaybackSnapshot,
     trackPresentation: NowTrackPresentation,
     trackTransitionDirection: TrackTransitionDirection,
@@ -812,7 +880,7 @@ private fun NowLandscapePlayerPage(
             onClick = onBack,
             modifier = Modifier.align(Alignment.TopStart),
         )
-        Box(Modifier.align(Alignment.TopStart).padding(start = 48.dp)) { favoriteAction() }
+        Box(Modifier.align(Alignment.TopStart).padding(start = 48.dp)) { commandActions() }
     }
 }
 
@@ -1563,7 +1631,7 @@ private fun NowInfoButton(
 
 @Composable
 private fun NowHeader(
-    favoriteAction: @Composable () -> Unit,
+    commandActions: @Composable () -> Unit,
     onBack: () -> Unit,
     onToggleOrientation: () -> Unit,
     showOrientationToggle: Boolean,
@@ -1587,7 +1655,7 @@ private fun NowHeader(
             softWrap = false,
             overflow = TextOverflow.Ellipsis,
         )
-        favoriteAction()
+        commandActions()
         if (showOrientationToggle) {
             NowOrientationButton(onClick = onToggleOrientation, isLandscape = isLandscape)
         } else {

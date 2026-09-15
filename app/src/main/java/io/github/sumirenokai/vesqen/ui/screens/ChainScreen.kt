@@ -520,6 +520,7 @@ private fun ChainSummaryScreen(
             verticalArrangement = Arrangement.spacedBy(VesqenSpacing.md),
         ) {
             item(key = "current-source") { ChainCurrentSource(playback) }
+            item(key = "output-status") { ChainSummaryPanel(playback = playback) }
             item {
                 ChainObservationNotice(
                     state = observationState,
@@ -546,9 +547,6 @@ private fun ChainSummaryScreen(
                     Spacer(Modifier.width(VesqenSpacing.xs))
                     Text(stringResource(R.string.chain_open_advanced))
                 }
-            }
-            item {
-                ChainSummaryPanel(playback = playback)
             }
             item {
                 ChainPathSummary(
@@ -616,7 +614,7 @@ private fun ChainSummaryPanel(playback: PlaybackSnapshot) {
                 status.sinkFormat?.displayName ?: stringResource(R.string.settings_format_unknown),
             )
         io.github.sumirenokai.vesqen.playback.UsbOutputPhase.FAILED ->
-            stringResource(R.string.chain_strict_failed_body, status.decisionCode)
+            stringResource(R.string.chain_strict_failed_body, strictUsbFailureLabel(requireNotNull(status.failure)))
     }
     Surface(
         modifier = Modifier.fillMaxWidth().testTag("vesqen.chain.summary"),
@@ -662,10 +660,12 @@ private fun ChainCorePanel(
             }
             BoxWithConstraints {
                 val source: @Composable () -> Unit = {
+                    ChainCoreSectionTitle(stringResource(R.string.chain_core_source))
                     ChainCoreFact(TelemetryMetricCatalog.SOURCE_SAMPLE_RATE, metrics, nowElapsedRealtimeMs, unitDisplayMode, prominent = true)
                     ChainCoreFact(TelemetryMetricCatalog.SOURCE_BIT_DEPTH, metrics, nowElapsedRealtimeMs, unitDisplayMode)
                 }
                 val pcm: @Composable () -> Unit = {
+                    ChainCoreSectionTitle(stringResource(R.string.chain_core_output))
                     ChainCoreFact(TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE, metrics, nowElapsedRealtimeMs, unitDisplayMode, prominent = true)
                     ChainCoreFact(TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_ENCODING, metrics, nowElapsedRealtimeMs, unitDisplayMode)
                 }
@@ -685,6 +685,7 @@ private fun ChainCorePanel(
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            ChainCoreSectionTitle(stringResource(R.string.chain_core_route))
             ChainCoreFact(TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_NAME, metrics, nowElapsedRealtimeMs, unitDisplayMode)
             listOf(
                 TelemetryMetricCatalog.PLAYBACK_CURRENT_MEDIA_READ_BITRATE,
@@ -695,6 +696,16 @@ private fun ChainCorePanel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+}
+
+@Composable
+private fun ChainCoreSectionTitle(title: String) {
+    Text(
+        title,
+        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp).semantics { heading() },
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+    )
 }
 
 @Composable
@@ -719,8 +730,6 @@ private fun ChainCoreFact(
     val evidence = metrics[id]?.evidence
     val label = telemetryMetricLabel(context, id)
     val value = rememberedTelemetryReading(evidence?.reading, unitDisplayMode)
-    val numericValue = evidence?.reading is TelemetryReading.Integer ||
-        evidence?.reading is TelemetryReading.Decimal
     var expanded by remember(id) { mutableStateOf(false) }
     val action = stringResource(R.string.chain_evidence_details)
     Column(
@@ -735,7 +744,7 @@ private fun ChainCoreFact(
             value,
             style = (if (prominent) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium)
                 .copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium),
-            textAlign = if (numericValue) TextAlign.End else TextAlign.Start,
+            textAlign = TextAlign.Start,
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("vesqen.chain.core-value.${id.value}"),
@@ -1931,7 +1940,7 @@ private fun ChainMetricCard(
                 } else {
                     VesqenDataStyle
                 },
-                textAlign = if (numericValue) TextAlign.End else TextAlign.Start,
+                textAlign = TextAlign.Start,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("vesqen.chain.metric-value.${metricId.value}"),

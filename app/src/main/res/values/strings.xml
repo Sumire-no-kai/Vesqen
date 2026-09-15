@@ -177,7 +177,16 @@
     <string name="chain_verified_title">Externally verified output</string>
     <string name="chain_verified_body">Record %1$s verifies this exact app build, phone/ROM, DAC, source format, and sink format. Method: %2$s.</string>
     <string name="chain_strict_failed_title">Strict output stopped</string>
-    <string name="chain_strict_failed_body">Fail-closed decision: %1$s. Select System output in Settings to use Android’s normal route.</string>
+    <string name="chain_strict_failed_body">%1$s Playback is stopped to preserve strict output. Change the output mode in the player or Settings to use Android’s normal route.</string>
+    <string name="player_output_mode">Output mode</string>
+    <string name="player_output_mode_body">Off: Android system output. On: require USB bit-perfect output; playback stops when the conditions are not met. Enabling this switch is not proof of bit-perfect output or external verification.</string>
+    <string name="player_output_done">Done</string>
+    <string name="player_strict_failure_body">%1$s\n\nStrict USB output has stopped playback instead of falling back to system output. Connect a compatible DAC and try again, or switch to System output and press Play.</string>
+    <string name="player_use_system_output">Use System output</string>
+    <string name="player_keep_strict_output">Keep strict mode</string>
+    <string name="chain_core_source">01 · Source file</string>
+    <string name="chain_core_output">02 · AudioTrack</string>
+    <string name="chain_core_route">03 · Route and stability</string>
     <string name="unavailable">UNAVAILABLE</string>
     <string name="library_songs">Songs</string>
     <string name="library_albums">Albums</string>

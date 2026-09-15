@@ -4,6 +4,8 @@ import android.content.res.Configuration
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -36,6 +38,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,6 +67,7 @@ import io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode
 import io.github.sumirenokai.vesqen.playback.AudioFormatSummary
 import io.github.sumirenokai.vesqen.playback.UsbHardwareIdentity
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
+import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.telemetry.FakePlaybackTelemetry
@@ -124,6 +129,81 @@ class VesqenAppTest {
 
     private val context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
+
+    @Test
+    fun strict_output_failure_explains_reason_and_requires_explicit_fallback() {
+        val failure = UsbOutputStatus(
+            mode = UsbOutputMode.STRICT_BIT_PERFECT,
+            phase = UsbOutputPhase.FAILED,
+            failure = UsbOutputFailure.NO_USB_AUDIO_DEVICE,
+            generation = 1,
+        )
+        var state by mutableStateOf(activePlaybackState().let {
+            it.copy(playback = it.playback.copy(usbOutputStatus = failure))
+        })
+        val modes = mutableListOf<UsbOutputMode>()
+        render(state, stateProvider = { state }, onSetUsbOutputMode = { modes += it })
+        composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(
+            R.string.player_strict_failure_body, context.getString(R.string.usb_failure_no_device),
+        )).assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.output.keep-strict").performClick()
+        composeRule.runOnIdle {
+            assertTrue(modes.isEmpty())
+            state = state.copy(playback = state.playback.copy(positionMs = 1000))
+        }
+        composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertDoesNotExist()
+        composeRule.runOnIdle {
+            state = state.copy(playback = state.playback.copy(
+                usbOutputStatus = failure.copy(generation = 2), isControllerReady = false,
+            ))
+        }
+        composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.output.use-system").assertIsNotEnabled()
+        composeRule.runOnIdle { state = state.copy(playback = state.playback.copy(isControllerReady = true)) }
+        composeRule.onNodeWithTag("vesqen.output.use-system").performClick()
+        composeRule.runOnIdle { assertEquals(listOf(UsbOutputMode.SYSTEM), modes) }
+        // A command request alone is not success; wait for the service snapshot to confirm it.
+        composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertIsDisplayed()
+        composeRule.runOnIdle {
+            state = state.copy(playback = state.playback.copy(usbOutputStatus = UsbOutputStatus()))
+        }
+        composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertDoesNotExist()
+    }
+
+    @Test
+    fun player_output_switch_is_reachable_in_portrait() = assertPlayerOutputSwitch(360.dp, 720.dp, 1f)
+
+    @Test
+    fun player_output_switch_is_reachable_with_large_text() = assertPlayerOutputSwitch(320.dp, 533.dp, 2f)
+
+    @Test
+    fun player_output_switch_is_reachable_in_landscape() = assertPlayerOutputSwitch(720.dp, 360.dp, 1f)
+
+    private fun assertPlayerOutputSwitch(width: Dp, height: Dp, fontScale: Float) {
+        var state by mutableStateOf(activePlaybackState())
+        val modes = mutableListOf<UsbOutputMode>()
+        render(
+            state, stateProvider = { state }, containerWidth = width, containerHeight = height,
+            fontScale = fontScale,
+            onSetUsbOutputMode = { mode ->
+                modes += mode
+                state = state.copy(playback = state.playback.copy(usbOutputStatus = UsbOutputStatus(
+                    mode = mode,
+                    phase = if (mode == UsbOutputMode.SYSTEM) UsbOutputPhase.SYSTEM else UsbOutputPhase.APPLYING,
+                )))
+            },
+        )
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        assertNodesAreFullyVisibleIn("vesqen.now.focus-surface", arrayOf("vesqen.now.output-mode"))
+        assertFooterActionsDoNotOverlap("vesqen.now.back", "vesqen.now.output-mode", "vesqen.now.favorite")
+        composeRule.onNodeWithTag("vesqen.now.output-mode").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("vesqen.now.strict-usb-switch").assertIsOff().performClick()
+        composeRule.runOnIdle { assertEquals(listOf(UsbOutputMode.STRICT_BIT_PERFECT), modes) }
+        composeRule.onNodeWithTag("vesqen.now.output-mode").performClick()
+        composeRule.onNodeWithTag("vesqen.now.strict-usb-switch").assertIsOn().performClick()
+        composeRule.runOnIdle { assertEquals(listOf(UsbOutputMode.STRICT_BIT_PERFECT, UsbOutputMode.SYSTEM), modes) }
+    }
 
     @Test
     fun navigation_exposes_library_now_and_settings_with_chain_as_a_secondary_action() {
@@ -871,31 +951,39 @@ class VesqenAppTest {
         )
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
 
-        val sourceBounds = composeRule.onNodeWithTag("vesqen.chain.core.source.sample_rate")
-            .fetchSemanticsNode().boundsInRoot
-        val playbackBounds = composeRule.onNodeWithTag("vesqen.chain.core.playback.audio_track_sample_rate")
-            .fetchSemanticsNode().boundsInRoot
+        composeRule.onNodeWithTag("vesqen.chain.summary-list")
+            .performScrollToNode(hasTestTag("vesqen.chain.core.source.sample_rate"))
+        // Compare layout positions, not viewport-clipped rectangles: large text scrolls the
+        // second group below the fold, where boundsInRoot becomes an empty rectangle.
+        val sourcePosition = composeRule.onNodeWithTag("vesqen.chain.core.source.sample_rate")
+            .assertIsDisplayed().fetchSemanticsNode().positionInRoot
+        val playbackPosition = composeRule.onNodeWithTag("vesqen.chain.core.playback.audio_track_sample_rate")
+            .fetchSemanticsNode().positionInRoot
         assertEquals(
             "Large text must give paired core facts the same full-width column",
-            sourceBounds.left,
-            playbackBounds.left,
+            sourcePosition.x,
+            playbackPosition.x,
             1f,
         )
-        assertTrue("Playback facts must follow source facts vertically", playbackBounds.top > sourceBounds.top)
+        assertTrue("Playback facts must follow source facts vertically", playbackPosition.y > sourcePosition.y)
 
+        composeRule.onNodeWithTag("vesqen.chain.summary-list")
+            .performScrollToNode(hasTestTag("vesqen.chain.core.playback.audio_track_sample_rate"))
         val layouts = mutableListOf<TextLayoutResult>()
         composeRule.onNodeWithTag(
             "vesqen.chain.core-evidence.playback.audio_track_sample_rate",
             useUnmergedTree = true,
-        ).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        ).assertIsDisplayed().performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         val layout = layouts.single()
         assertEquals(1, layout.lineCount)
         assertTrue(
             "Core evidence annotation must not be clipped: " +
                 "size=${layout.size}, overflowWidth=${layout.didOverflowWidth}, " +
-                "overflowHeight=${layout.didOverflowHeight}, source=$sourceBounds, playback=$playbackBounds",
+                "overflowHeight=${layout.didOverflowHeight}, source=$sourcePosition, playback=$playbackPosition",
             !layout.hasVisualOverflow,
         )
     }
@@ -2320,7 +2408,7 @@ class VesqenAppTest {
         )
         assertNodesAreFullyVisibleIn(
             containerTag = "vesqen.now.focus-surface",
-            tags = arrayOf("vesqen.now.back"),
+            tags = arrayOf("vesqen.now.back", "vesqen.now.output-mode"),
         )
         assertNodesAreFullyVisibleIn(
             containerTag = "vesqen.now.player-page",
@@ -2406,6 +2494,7 @@ class VesqenAppTest {
         val minimumTouchTargetPx = with(fixtureDensity) { 48.dp.toPx() }
         val epsilon = 1f
         val touchTargetTags = setOf(
+            "vesqen.now.output-mode",
             "vesqen.now.back",
             "vesqen.now.progress",
             "vesqen.now.previous",
@@ -2549,6 +2638,8 @@ class VesqenAppTest {
         val coreRootTag = "vesqen.chain.core.${metricId.value}"
         val coreValueTag = "vesqen.chain.core-value.${metricId.value}"
         val coreHeights = mutableSetOf<Int>()
+        composeRule.onNodeWithTag("vesqen.chain.summary-list")
+            .performScrollToNode(hasTestTag(coreRootTag))
         readings.forEach { reading ->
             telemetry.publish(bufferedDurationSnapshot(reading))
             val expected = formatTelemetryReading(
@@ -2597,6 +2688,7 @@ class VesqenAppTest {
         val layout = layouts.single()
         assertEquals("$tag must stay on one line", 1, layout.lineCount)
         assertTrue("$tag must show the complete value", !layout.hasVisualOverflow)
+        assertTrue("$tag must align its reading with the left-aligned label", abs(layout.getLineLeft(0)) <= 1f)
     }
 
     private fun render(
@@ -2607,6 +2699,7 @@ class VesqenAppTest {
         onRefreshPlaybackPosition: () -> Unit = {},
         onNext: () -> Unit = {},
         onCyclePlaybackOrder: () -> Unit = {},
+        onSetUsbOutputMode: (UsbOutputMode) -> Unit = {},
         onRequestMusicAccess: () -> Unit = {},
         onOpenAppSettings: () -> Unit = {},
         onOpenNotificationSettings: () -> Unit = {},
@@ -2650,6 +2743,7 @@ class VesqenAppTest {
                         onNext = onNext,
                         onSeek = {},
                         onCyclePlaybackOrder = onCyclePlaybackOrder,
+                        onSetUsbOutputMode = onSetUsbOutputMode,
                         onAddLibraryFolder = onAddLibraryFolder,
                         onRemoveLibraryFolder = onRemoveLibraryFolder,
                         onResumeLibraryScan = onResumeLibraryScan,
