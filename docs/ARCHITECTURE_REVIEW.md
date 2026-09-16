@@ -1,4 +1,4 @@
-# Vesqen 架构审查 · 2026-09-05
+# Vesqen 架构审查 · 2026-09-05（2026-09-16 发版候选复审）
 
 ## 结论与审查边界
 
@@ -7,6 +7,24 @@
 Vesqen 的产品本体是轻量、离线优先的 Android 本地音乐播放器：普通用户先完成听歌，高级用户按需核查 source / decoder / processing / observable output 的证据。USB bit-perfect 是受能力与验证约束的目标；AI、自研内核、旧系统 USB 引擎是条件性扩展。
 
 本次审查以 `feature/m2-audio-proof` 开始时的工作区为基线，保留已有 M1/M2 未提交修改。阅读了产品、设计、PRD、路线图、构建配置及各包的职责与关键调用链，重点追踪曲库读取、播放命令、队列恢复、服务生命周期、遥测采样和诊断导出。不是逐行穷尽审计，也不是设备验收。使用 `grill-me` / `grilling` 的逐项设计质询方式；按本次要求，将代码无法决定的产品问题留在文末，没有将建议当作已经批准的决定。
+
+## 2026-09-16 发版候选复审增量
+
+本次在当前 `master` 候选上复查播放安全边界、MediaStore/SAF 数据保留、数据库访问、Compose 重组身份、控制器断连和发布门禁。没有引入新框架或重写现有分层；修复集中在已经存在的所有权边界内。
+
+| 范围 | 发现 | 处理 |
+| --- | --- | --- |
+| 严格 USB 输出 | 仅把 AudioTrack 音量设为 0 不能证明 PCM 没有进入错误链路；暂停、duck、路由丢失和控制器断连还存在短暂沿用 ACTIVE 的竞态。 | 在 `AudioOutput.write` 前增加同步门，只有 AudioTrack 格式、mixer readback、实际 route 和中性处理全部复核后才开放；暂停/非中性音量立即关门，路由丢失 fail closed。输出模式能力来自 MediaSession 实际命令集合；快照禁止“不连接但可发命令”的状态。 |
+| MediaStore 多卷与升级 | Android 10+ 的 `external` 是合并视图；把跨卷 `_ID` 当全局身份会碰撞，扫描期间卷/generation 变化还可能错误清理。 | 每个具体卷拥有卷作用域 remote ID；升级时只迁移可唯一归属的旧行并保留稳定 catalog ID。歧义旧行隔离保留，不挂到任一新歌；只有完整且卷集合/version/generation 未变的扫描可清理本轮实际扫描卷。未挂载卷的行、收藏、历史和歌单关系保留但不展示。 |
+| SAF 完整性 | provider 可通过 `EXTRA_ERROR` 返回失败 cursor；只检查 `EXTRA_LOADING` 会把失败结果当完整目录并授权清理。 | loading 或 error 任一存在都按不完整扫描处理，不清理未见行。 |
+| 播放历史与列表卡顿 | 每次记播成功都会整库读取、重建播放列表投影并同步队列；Now 的动画身份又包含收藏/次数等可变字段。 | SQLite 写入原子返回单曲最终历史值，UI 只替换对应行，并以 overlay 防止较早的并发快照回滚；播放列表读取由 1+N 查询改为固定两次；Now 动画只跟随曲目/封面身份。 |
+| 断连交互与证据视觉 | 部分队列命令在 Controller 未连接时静默 no-op；状态 chip 主要依赖颜色，Now 的中性色还能覆盖证据色。 | 队列编辑和“下一首/加入队列”在断连时禁用并解释原因；AVAILABLE/REQUESTED/ACTIVE/VERIFIED/FAILED 使用不同图形线索和受保护的语义色。 |
+| 缓存失败边界 | 冷启动缓存读取异常可中止后续 provider 刷新；过宽兜底又会隐藏取消。 | 只在 UI 恢复入口捕获缓存异常，协程取消继续抛出，冷启动仍执行完整刷新；目录 mutation 的失败语义不变。 |
+
+复审后仍不建议为发版前“整洁”而迁移 Room、引入完整 Clean Architecture 或抽象第二套播放引擎。当前有两个明确但不宜在本候选扩大修改面的架构债务：
+
+- 队列检查点由服务写入，但进程死亡后的恢复仍由 UI/Controller 在取得曲库后协调；当前保证重新打开应用后的暂停恢复，不保证仅靠耳机键或系统 MediaSession resumption 恢复。若首版要承诺后一场景，应在服务侧实现 Media3 playback resumption，并先明确不得自动发声的用户意图规则。
+- 大曲库刷新仍持有 catalog operation gate 遍历 provider 和元数据。播放历史整库重载与 playlist 1+N 已移除，但 1k/10k 曲库及慢 SAF provider 的 mutation 等待仍需量化后再决定是否拆分扫描事务或引入分页。
 
 ## 当前职责与数据流
 
@@ -57,7 +75,7 @@ flowchart LR
 
 - 完成已有 M1/M2 设备验收，尤其是实际服务重连、撤权、队列重复项、后台控制、长时间播放和遥测开销。纯逻辑测试无法证明 OEM 行为。
 - `AndroidPlaybackTelemetry.kt` 同时容纳 Media3 事件归属、采样调度、平台 probe 和大量指标构造；`ChainScreen.kt` 同时容纳观察生命周期、配置、录制操作和展示。它们是后续改动集中的风险点，但文件长度本身不是重写理由。新增职责时，按实际变化抽出纯快照构造或平台 probe，保留 `PlaybackTelemetry` 一个外部接口和现有事件归属测试。
-- 大曲库存在具体的等待路径：`AndroidLibraryCatalog.refresh()` 持有 operation gate 遍历 provider 与元数据，期间收藏、歌单编辑和缓存读取等待；历史写入成功还会触发整库读取和队列元数据比对。必须测量 1k/10k 曲库、慢 SAF provider 与歌曲切换场景。若影响交互，再将扫描生命周期与短数据库事务分离，同时保留撤源、取消、关闭数据库和完成扫描的原子性。
+- 大曲库仍存在具体等待路径：`AndroidLibraryCatalog.refresh()` 持有 operation gate 遍历 provider 与元数据，期间收藏、歌单编辑和缓存读取等待。2026-09-16 已移除历史写入后的整库读取/队列同步及 playlist 1+N，但仍须测量 1k/10k 曲库、慢 SAF provider 与歌曲切换场景。若影响交互，再将扫描生命周期与短数据库事务分离，同时保留撤源、取消、关闭数据库和完成扫描的原子性。
 - 当前曲库排序、分组与筛选仍以完整列表在 UI 层处理。先测主线程耗时；达到卡顿门槛后再做后台投影或数据库查询分页，避免只换数据库框架却保留相同全量路径。
 
 ### M3：输出控制必须在服务侧形成唯一事实来源
@@ -65,7 +83,7 @@ flowchart LR
 PRD 已要求 `UsbOutputStrategyResolver` / `UsbOutputDecision`，方向正确。需要在 M3 就落实以下所有权，而不是等 M6：
 
 1. 解析器只返回候选策略、可用性与原因；执行 mixer 设置、停止/重建输出和处理失败的是服务侧输出控制器。
-2. 区分用户请求、设置调用结果、当前输出状态和外部验证记录。`PlaybackSnapshot.declaration` 与遥测里的 declaration 必须来自同一份服务状态；目前二者各自固定为 `SYSTEM MIXED`，在当前阶段一致，扩展多个状态后会出现漂移风险。
+2. 区分用户请求、设置调用结果、当前输出状态和外部验证记录。当前 `PlaybackSnapshot.declaration`、Chain 与遥测已读取同一份服务状态；后续不得在 UI 或 adapter 另建可写声明。
 3. 曲目格式、USB 设备、路由、权限、焦点或处理设置变化时，按同一事件序列重新判断。严格模式先停止不满足约束的输出，并撤销过期声明；兼容模式转换由用户明确选择。
 4. M3 先使用当前 Media3 播放链，隔离 API 34 输出实现，避免把 API/version 分支散落在 UI、队列和各个 adapter。没有第二套完整引擎时不必引入 `NativePlaybackEngine`。
 

@@ -923,3 +923,28 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - 发布清单区分首次公开发布与已有公开版本的升级验证，明确开发签名包不能直接作为新生产签名的覆盖升级来源。Release 反馈流程不要求启用诊断；权限核对改为检查最终 INTERNET 声明并准确披露依赖的 ACCESS_NETWORK_STATE。
 - 复用 PR #27 已验证的 Debug app/test，核对两机安装身份；Honor 新装后新增 UI 回归单批 6/6 通过，沿用 iQOO 同一产物的最终 6/6，未重复其用例。具体哈希、功能范围和证据目录见 M4_DEVICE_ACCEPTANCE 文末。
 - 本轮只更新范围和验收记录，未修改生产代码、创建签名、触发发布或执行用户暂缓的长时测试。下一硬件步骤为 iQOO + JBL Flip 7 USB 短测。
+
+## 2026-09-16 · 发版候选详细 Code Review 与加固
+
+在准备候选冻结前，对当前 `master` 的播放安全、曲库存储、升级兼容、UI 状态、性能路径和架构边界做详细复审；修改保持在既有 Media3、Catalog/SQLite 与 Compose 边界内，没有引入新依赖、替换播放内核或扩大 M4 声明。
+
+### 审查发现与修复
+
+- 严格 USB 输出不再只依赖 AudioTrack 音量为 0。`StrictGatedAudioOutput` 在 route、实际 AudioTrack 格式、mixer readback、中性处理和播放意图全部复核前拒绝 PCM write；renderer pause、duck/非 1.0 音量和 mute 会同步关闭门，路由从 ACTIVE 变为不可观测时 fail closed。24-bit source 不再接受不兼容的实际 AudioTrack 格式。
+- 严格模式重配前先封闭旧输出并暂停播放；Controller 断连撤销本地 AVAILABLE/APPLYING/ACTIVE 证明，重连可接受同 generation 的服务真值。设置页、Now 和失败弹窗按 MediaSession 实际命令能力启用；`PlaybackSnapshot` 明确禁止“不连接但可发严格输出命令”的状态。
+- Android 10+ 不再通过合并的 MediaStore `external` URI 扫描。每个具体挂载卷使用卷作用域身份；旧 synthetic 行只在 `_ID -> volume` 唯一时迁移并保留 catalog ID。中断扫描已产生的重复行会合并收藏、历史与歌单关系；歧义旧行隔离保留，不能被主卷同 ID 歌曲接管。只有完整且卷集合/version/generation 未变化的扫描能清理本轮实际扫描卷，卸载卷数据保留但不展示。
+- SAF cursor 的 `EXTRA_LOADING` 和 `EXTRA_ERROR` 都会阻止完成清理；provider 失败不再被当成空目录。
+- 播放历史写入由 SQLite transaction 返回单曲权威值，UI 只替换该行；latest-history overlay 防止较早开始的 catalog read 回滚新计数。播放列表快照从 1+N 查询降为两次查询，缓存恢复异常不再中止冷启动完整刷新。
+- Now 的转场 key 只跟随曲目/封面身份，收藏和播放次数更新不再重播整套动画。输出 chip 增加非颜色图形线索并保护 ACTIVE/VERIFIED/FAILED 语义色；控制器未连接时，队列编辑及“下一首/加入队列”禁用并显示原因。
+
+详细架构结论见 [架构审查](ARCHITECTURE_REVIEW.md)，播放事件整库刷新案例见 [P05](ENGINEERING_CASEBOOK.md)。服务无 Activity 的队列 resumption 和大曲库扫描 operation gate 仍是明确架构债务；发版前不以高风险重写掩盖它们。
+
+### 本地与设备验证
+
+- 最终完整命令 `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleProfile :app:assembleRelease :app:assembleDebugAndroidTest --console=plain` 通过：230 项 JVM tests，0 failures/errors/skipped；lint 0 errors、26 warnings；Debug、Profile、未签名 Release 和 instrumentation APK 均完成。`git diff --check` 通过。
+- `python3 -m unittest discover -s tools/tests -v` 通过 13/13。
+- 本机只有 Oracle JDK 25.0.4.1，本轮 Gradle 证据来自 JDK 25，不冒称满足发布清单要求的 JDK 21；JDK 21/远端 CI 仍须在推送后单独确认。
+- iQOO V2171A / Android 15 上，最终 Debug app/test 取得 11/11 曲库存储与迁移、3/3 新增输出/断连 UI 用例通过；严格输出失败提示首个合批被 vivo 前台宿主提前销毁 Activity，失败批次保留，独立方法级复测 1/1 通过。较早一次该用例真实断言失败暴露测试夹具可构造不可能快照，随后把约束提升为生产模型不变量并独立复测，没有删除或放宽断言。
+- 设备上旧测试包签名与当前测试 APK 不同；只卸载并替换 `io.github.sumirenokai.vesqen.test`，未卸载主应用或清除主数据。测试结束后测试包已移除，主应用恢复最终不可调试 Profile。设备 base APK 与本地 `app-profile.apk` 的 SHA-256 同为 `ac6a3ad2678279ac838e88e734b62ad09d9b20ab24bcab8eeb8de9279eb12177`。
+
+上述结果形成可提交的软件候选，但不关闭完整 M4：真实 DAC 严格路由/拔插、外部数字逐样本 VERIFIED、JDK 21/远端 CI、发布签名与同签名升级、完整 TalkBack/适配、长时矩阵及 M3-R1 最终双机配对性能验收仍开放。本轮未创建 tag、Release 或商店产物。

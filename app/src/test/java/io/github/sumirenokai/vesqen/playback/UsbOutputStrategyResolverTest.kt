@@ -98,6 +98,31 @@ class UsbOutputStrategyResolverTest {
     }
 
     @Test
+    fun `actual AudioTrack profile must remain compatible with the source`() {
+        val resampledProfile = MixerProfile(
+            format = float96.copy(sampleRateHz = 48_000),
+            bitPerfect = true,
+        )
+
+        assertRejected(
+            UsbOutputFailure.AUDIO_TRACK_FORMAT_MISMATCH,
+            resolve(
+                mixerProfiles = listOf(floatProfile, resampledProfile),
+                audioTrackFormat = resampledProfile.format,
+            ),
+        )
+    }
+
+    @Test
+    fun `an unavailable active route fails closed while initial route discovery may wait`() {
+        assertNull(strictRouteUnavailableFailure(UsbOutputPhase.APPLYING))
+        assertEquals(
+            UsbOutputFailure.ROUTE_UNAVAILABLE,
+            strictRouteUnavailableFailure(UsbOutputPhase.ACTIVE),
+        )
+    }
+
+    @Test
     fun `default mixer behavior cannot satisfy strict mode`() {
         assertRejected(
             UsbOutputFailure.NO_MATCHING_MIXER_ATTRIBUTE,

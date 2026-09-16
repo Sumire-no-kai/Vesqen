@@ -63,6 +63,35 @@ class PlaybackControllerPolicyTest {
     }
 
     @Test
+    fun `controller disconnect revokes active strict output declaration`() {
+        val active = UsbOutputStatus(
+            mode = UsbOutputMode.STRICT_BIT_PERFECT,
+            phase = UsbOutputPhase.ACTIVE,
+            decisionCode = "strict_usb.active",
+            generation = 7,
+        )
+
+        val disconnected = PlaybackSnapshot(
+            isControllerReady = true,
+            isPlaying = true,
+            showsPauseAction = true,
+            usbOutputStatus = active,
+        ).withDisconnectedController(
+            observedAtEpochMs = 123,
+            observedAtElapsedRealtimeMs = 456,
+        )
+
+        assertEquals(false, disconnected.isControllerReady)
+        assertEquals(false, disconnected.canSetUsbOutputMode)
+        assertEquals(false, disconnected.isPlaying)
+        assertEquals(false, disconnected.showsPauseAction)
+        assertEquals(UsbOutputPhase.APPLYING, disconnected.usbOutputStatus.phase)
+        assertEquals("strict_usb.session_disconnected", disconnected.usbOutputStatus.decisionCode)
+        assertEquals(OutputDeclaration.BIT_PERFECT_REQUESTED, disconnected.declaration)
+        assertNull(disconnected.outputVerification)
+    }
+
+    @Test
     fun `reconnect delay backs off and remains bounded`() {
         assertEquals(500, reconnectDelayMs(0))
         assertEquals(1_000, reconnectDelayMs(1))

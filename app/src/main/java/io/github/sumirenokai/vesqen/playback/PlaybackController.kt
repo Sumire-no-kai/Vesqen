@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.media3.common.C
@@ -14,6 +15,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionCommands
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import io.github.sumirenokai.vesqen.library.AudioTrack
@@ -86,19 +88,24 @@ class PlaybackController(
             }
         }
 
+        override fun onAvailableSessionCommandsChanged(
+            controller: MediaController,
+            availableCommands: SessionCommands,
+        ) {
+            if (this@PlaybackController.controller === controller) publish(controller)
+        }
+
         override fun onDisconnected(disconnectedController: MediaController) {
             if (controller !== disconnectedController || released) return
             disconnectedController.removeListener(playerListener)
             controller = null
             queueCache = PlaybackQueueCache()
-            updateSnapshot(
-                latestSnapshot.copy(
-                    isControllerReady = false,
-                    isPlaying = false,
-                    showsPauseAction = false,
-                    outputVerification = null,
-                ),
+            val disconnectedSnapshot = latestSnapshot.withDisconnectedController(
+                observedAtEpochMs = System.currentTimeMillis(),
+                observedAtElapsedRealtimeMs = SystemClock.elapsedRealtime(),
             )
+            usbOutputStatus = disconnectedSnapshot.usbOutputStatus
+            updateSnapshot(disconnectedSnapshot)
             scheduleReconnect()
         }
     }
@@ -152,6 +159,7 @@ class PlaybackController(
                         updateSnapshot(
                             latestSnapshot.copy(
                                 isControllerReady = false,
+                                canSetUsbOutputMode = false,
                                 isPlaying = false,
                                 showsPauseAction = false,
                                 outputVerification = null,
@@ -268,6 +276,7 @@ class PlaybackController(
             updateSnapshot(
                 PlaybackSnapshot(
                     isControllerReady = true,
+                    canSetUsbOutputMode = player.isSessionCommandAvailable(usbOutputCommand),
                     usbOutputStatus = usbOutputStatus,
                     outputVerification = outputVerificationLookup(usbOutputStatus),
                 ),
@@ -411,6 +420,8 @@ class PlaybackController(
         updateSnapshot(
             PlaybackSnapshot(
                 isControllerReady = true,
+                canSetUsbOutputMode = (player as? MediaController)
+                    ?.isSessionCommandAvailable(usbOutputCommand) == true,
                 isPlaying = player.isPlaying,
                 showsPauseAction = playbackToggleAction(player.playWhenReady, player.playbackState) ==
                     PlaybackToggleAction.PAUSE,
@@ -783,6 +794,31 @@ internal fun PlaybackSnapshot.withPlayerPosition(
     durationMs = durationMs.coerceAtLeast(0),
     positionMs = positionMs.coerceAtLeast(0),
 )
+
+/** A disconnected controller cannot continue to prove a service-owned strict output claim. */
+internal fun PlaybackSnapshot.withDisconnectedController(
+    observedAtEpochMs: Long,
+    observedAtElapsedRealtimeMs: Long,
+): PlaybackSnapshot {
+    val disconnectedOutputStatus = usbOutputStatus.takeUnless {
+        it.mode == UsbOutputMode.STRICT_BIT_PERFECT &&
+            it.phase in setOf(UsbOutputPhase.AVAILABLE, UsbOutputPhase.APPLYING, UsbOutputPhase.ACTIVE)
+    } ?: usbOutputStatus.copy(
+        phase = UsbOutputPhase.APPLYING,
+        failure = null,
+        decisionCode = "strict_usb.session_disconnected",
+        observedAtEpochMs = observedAtEpochMs.coerceAtLeast(0),
+        observedAtElapsedRealtimeMs = observedAtElapsedRealtimeMs.coerceAtLeast(0),
+    )
+    return copy(
+        isControllerReady = false,
+        canSetUsbOutputMode = false,
+        isPlaying = false,
+        showsPauseAction = false,
+        usbOutputStatus = disconnectedOutputStatus,
+        outputVerification = null,
+    )
+}
 
 internal fun reconnectDelayMs(attempt: Int): Long =
     (RECONNECT_BASE_DELAY_MS shl attempt.coerceIn(0, RECONNECT_MAX_SHIFT))

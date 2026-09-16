@@ -86,7 +86,9 @@ internal class UsbOutputStrategyResolver {
         val selected = if (audioTrackFormat == null) {
             bitPerfectProfiles.firstOrNull { it.format.isCompatibleWith(resolvedSource) }
         } else {
-            bitPerfectProfiles.firstOrNull { it.format == audioTrackFormat }
+            bitPerfectProfiles.firstOrNull {
+                it.format == audioTrackFormat && it.format.isCompatibleWith(resolvedSource)
+            }
         } ?: return rejected(
             if (audioTrackFormat == null) {
                 UsbOutputFailure.NO_MATCHING_MIXER_ATTRIBUTE

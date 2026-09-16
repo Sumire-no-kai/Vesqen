@@ -102,3 +102,10 @@ Manual follow-up: original-list Favorites drag, Save, process restart and persis
 - 本地 Gradle 验证通过：JVM 209 项、0 失败/错误/跳过（测试任务复用 up-to-date 结果，本轮没有修改 JVM 源码）；Lint 0 errors / 18 warnings；Debug、优化 Profile、优化 Release 构建成功。没有新增或执行 instrumentation，也没有把先前 10 项实机 UI 结果算作优化 APK 的测试结果。
 - 在最终优化 APK 上实际检查：曲库滚动、数字搜索及清除搜索、原歌曲恢复播放和暂停、播放器真实封面、进入/返回链路页、源格式与 AudioTrack 证据、无 DAC 严格模式失败提示及明确恢复系统输出均正常。首次英文注入被输入法改写，不作为有效搜索用例。最后停留在曲库、原曲目暂停、系统输出模式；私有数据、原音乐和备份保留。
 - 本轮只有 iQOO 短时证据，未执行 Honor、高刷新率、真实 DAC、长时或远端 CI 验收。构建配置修复不关闭 M3-R1 的完整业务/双机门禁，也不表示 M4 完成。原始资料位于忽略的 `build/qa/jank-20260916/`，不提交歌曲信息和设备原始日志。
+
+## 2026-09-16 · 发版复审的存储与连接状态定向回归
+
+- 设备为 iQOO V2171A / Android 15。使用本轮最终 Debug app/test 配对执行曲库存储定向 runner，11/11 通过；覆盖旧 synthetic MediaStore 身份的唯一迁移、跨卷 `_ID` 歧义隔离、扫描中断重复项合并、只清理实际完整扫描卷、历史原子更新和播放列表批量读取等回归。
+- 同一候选的 3 个输出状态／控制器断连 UI 用例均有通过证据。严格失败提示首个合批在断言前被 vivo 前台宿主销毁 Activity，该原始失败不计通过；相同方法随后独立 1/1 完整通过，未删除或放宽断言。
+- 旧 test APK 与当前调试证书不一致时，只卸载并替换 `io.github.sumirenokai.vesqen.test`；主应用未卸载、未清数据，用户曲库和音乐文件未修改。测试结束后移除 test 包，并恢复不可调试 Profile。设备 `base.apk` 与本地 Profile 的 SHA-256 均为 `ac6a3ad2678279ac838e88e734b62ad09d9b20ab24bcab8eeb8de9279eb12177`。
+- 这些结果关闭本次改动对应的定向回归，不替代完整格式、跨设备、TalkBack、长时播放或 M3-R1 双机同条件性能门禁；M1 整体状态不因此改写。

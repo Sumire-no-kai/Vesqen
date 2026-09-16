@@ -155,7 +155,9 @@ internal class AndroidLibraryCatalog(
         var scanPaused = false
         if (includeDeviceLibrary) {
             when (scanDeviceLibrary(onProgress)) {
-                SourceScanOutcome.FAILED -> hadFailure = true
+                SourceScanOutcome.FAILED,
+                SourceScanOutcome.INTERRUPTED,
+                -> hadFailure = true
                 SourceScanOutcome.PAUSED -> scanPaused = true
                 else -> Unit
             }
@@ -169,7 +171,9 @@ internal class AndroidLibraryCatalog(
                 .forEach { source ->
                     if (scanPaused || source.scanState == LibraryScanState.PAUSED) return@forEach
                     when (scanTreeSource(source, onProgress)) {
-                        SourceScanOutcome.FAILED -> hadFailure = true
+                        SourceScanOutcome.FAILED,
+                        SourceScanOutcome.INTERRUPTED,
+                        -> hadFailure = true
                         SourceScanOutcome.PAUSED -> scanPaused = true
                         else -> Unit
                     }
@@ -187,10 +191,16 @@ internal class AndroidLibraryCatalog(
     ): SourceScanOutcome = try {
         val source = store.ensureDeviceSource()
         if (source.scanState == LibraryScanState.PAUSED) return SourceScanOutcome.SKIPPED
-        val currentGeneration = mediaStore.currentGeneration()
-        if (currentGeneration != null && source.generation == currentGeneration) {
-            store.finishSourceScan(source.id, generation = currentGeneration)
+        val scanScope = mediaStore.currentScanScope()
+        if (scanScope.generation != null && source.generation == scanScope.generation) {
+            store.finishSourceScan(source.id, generation = scanScope.generation)
             return SourceScanOutcome.COMPLETED
+        }
+        if (
+            mediaStoreScanUsesConcreteVolumes(scanScope) &&
+            store.hasLegacyMediaStoreIdentities()
+        ) {
+            store.migrateLegacyMediaStoreIdentities(mediaStore.legacyIdentityMappings(scanScope))
         }
         val session = store.beginSourceScan(source.id)
         onProgress(
@@ -201,17 +211,26 @@ internal class AndroidLibraryCatalog(
             ),
         )
         val iteration = mediaStore.scanTracks(
+            scope = scanScope,
             shouldPause = scanGate::isPaused,
         ) { candidate ->
             if (!store.markSeenIfFingerprintMatches(session, candidate.remoteId, candidate.fingerprint)) {
                 store.upsertTrack(session, metadataReader.enrich(candidate))
             }
         }
+        if (
+            iteration.completed &&
+            !mediaStoreScanCanCommit(iteration, scanScope, mediaStore.currentScanScope())
+        ) {
+            store.markSourceInterrupted(source.id)
+            return SourceScanOutcome.INTERRUPTED
+        }
         finishIteration(
             source = source,
             session = session,
             iteration = iteration,
-            generation = currentGeneration,
+            generation = scanScope.generation,
+            scannedMediaStoreVolumes = scanScope.volumeNames,
             onProgress = onProgress,
         )
     } catch (cancelled: CancellationException) {
@@ -263,6 +282,7 @@ internal class AndroidLibraryCatalog(
         session: SourceScanSession,
         iteration: ScanIterationResult,
         generation: String?,
+        scannedMediaStoreVolumes: Collection<String>? = null,
         onProgress: suspend (LibraryScanProgress) -> Unit,
     ): SourceScanOutcome {
         if (!iteration.completed) {
@@ -277,12 +297,21 @@ internal class AndroidLibraryCatalog(
             )
             return SourceScanOutcome.PAUSED
         }
-        store.completeSourceScan(session, generation)
+        if (scannedMediaStoreVolumes == null) {
+            store.completeSourceScan(session, generation)
+        } else {
+            store.completeMediaStoreScan(session, generation, scannedMediaStoreVolumes)
+        }
         return SourceScanOutcome.COMPLETED
     }
 
     private fun snapshotInternal(includeDeviceLibrary: Boolean): LibraryCatalogSnapshot {
         val readableTreeUris = persistedReadableTreeUris()
+        val mountedMediaStoreVolumes = if (includeDeviceLibrary) {
+            mediaStore.currentVolumeNames()
+        } else {
+            emptyList()
+        }
         val sources = store.readSources().map { source ->
             val available = when (source.kind) {
                 LibrarySourceKind.DEVICE -> includeDeviceLibrary
@@ -302,9 +331,30 @@ internal class AndroidLibraryCatalog(
             .filter(LibrarySource::isAvailable)
             .map(LibrarySource::id)
             .toList()
+        val deviceTrackLocations = if (includeDeviceLibrary) {
+            store.readTrackContentUris(LibrarySourceId.DEVICE)
+        } else {
+            emptyMap()
+        }
+        val hiddenDeviceTrackIds = deviceTrackLocations.asSequence()
+            .filterNot { (_, contentUri) ->
+                mediaStoreTrackIsMounted(contentUri, mountedMediaStoreVolumes)
+            }
+            .map { it.key }
+            .toSet()
+        val visibleTracks = store.readTracks(visibleSourceIds).filterNot { track ->
+            track.id in hiddenDeviceTrackIds
+        }
+        val visibleDeviceTrackCount = deviceTrackLocations.size - hiddenDeviceTrackIds.size
         return LibraryCatalogSnapshot(
-            tracks = store.readTracks(visibleSourceIds),
-            sources = sources,
+            tracks = visibleTracks,
+            sources = sources.map { source ->
+                if (source.kind == LibrarySourceKind.DEVICE && source.isAvailable) {
+                    source.copy(trackCount = visibleDeviceTrackCount)
+                } else {
+                    source
+                }
+            },
             playlists = store.readPlaylists(),
         )
     }
@@ -381,6 +431,7 @@ internal class LibraryCatalogOperationGate {
 private enum class SourceScanOutcome {
     COMPLETED,
     PAUSED,
+    INTERRUPTED,
     SKIPPED,
     FAILED,
 }

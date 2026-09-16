@@ -22,7 +22,7 @@ import io.github.sumirenokai.vesqen.ui.screens.strictUsbFailureLabel
 @Composable
 internal fun StrictUsbFailureDialog(
     status: UsbOutputStatus,
-    isControllerReady: Boolean,
+    canChangeOutputMode: Boolean,
     onSetUsbOutputMode: (UsbOutputMode) -> Unit,
 ) {
     var dismissedFailure by rememberSaveable { mutableStateOf<String?>(null) }
@@ -46,7 +46,7 @@ internal fun StrictUsbFailureDialog(
                 onClick = {
                     onSetUsbOutputMode(UsbOutputMode.SYSTEM)
                 },
-                enabled = isControllerReady,
+                enabled = canChangeOutputMode,
                 modifier = Modifier.testTag("vesqen.output.use-system"),
             ) { Text(stringResource(R.string.player_use_system_output)) }
         },

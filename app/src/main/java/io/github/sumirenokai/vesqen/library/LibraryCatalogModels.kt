@@ -59,6 +59,12 @@ data class LibraryRefreshResult(
     val hadFailure: Boolean,
 )
 
+/** Persisted values returned after one atomic listening-history increment. */
+internal data class TrackPlaybackHistory(
+    val playCount: Int,
+    val lastPlayedAtMs: Long,
+)
+
 /** A scanner closes its provider cursor before reporting a pause, so resume can safely restart. */
 internal data class ScanIterationResult(
     val completed: Boolean,
@@ -104,7 +110,7 @@ internal object LibrarySourceId {
 }
 
 /** Bump when provider/container enrichment semantics change, invalidating scan cache keys. */
-internal const val LIBRARY_METADATA_REVISION = 3
+internal const val LIBRARY_METADATA_REVISION = 6
 
 internal data class MediaStoreVolumeVersion(
     val volumeName: String,

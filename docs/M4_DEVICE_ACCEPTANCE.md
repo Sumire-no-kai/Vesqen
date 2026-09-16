@@ -113,3 +113,10 @@
 - Honor STF-AL00 / Android 9 本轮接入时未安装 Vesqen，使用上述产物新装 app/test，没有卸载或清理任何用户应用；同样 6 项 runner 单批 6/6，0 失败/跳过，instrumentation 时间 17.052 秒。覆盖全部歌曲与喜欢独立位置、Settings 往返、集合消失与缩短后的索引夹紧，以及 360 dp RAW、600 dp RAW/AUTO 的核心和高级数值完整性/固定高度。原始记录在 `build/qa/limited-beta-20260910/honor-ui/`，测试后停止 Vesqen 进程。
 - 上述是同一修复 APK 的双机功能证据；没有重跑快滑性能 A/B、长时、真实 USB、Release 签名或完整无障碍矩阵，不关闭这些门禁。
 - 用户确认受限 Beta 发布到 GitHub Releases 和 Google Play 测试渠道，第二款 DAC 缺失公开列限，不再阻挡本次受限 Beta；真实 iQOO + JBL Flip 7 USB 短测仍待执行。长期发布密钥留到最后创建，尚未执行签名、tag、Release 发布或 Play 上传。
+
+### 2026-09-16 · 发版候选详细复审与最终软件回归
+
+- 本轮详细复审修复严格输出 PCM 闸门、Controller 断连后的证明撤销、MediaSession 命令能力、MediaStore 多卷身份迁移与歧义隔离、完整扫描清理边界、SAF provider 错误、播放历史整库刷新、播放列表 1+N 查询以及无关 Now 转场。完整发现和保留的架构债务见 [架构审查](ARCHITECTURE_REVIEW.md)。
+- 本地完整软件门禁为 230 项 JVM tests 全部通过、Lint 0 errors / 26 warnings，Debug、Profile、未签名 Release 与 instrumentation APK 构建完成；Python 工具测试 13/13。该次本机构建使用 Oracle JDK 25.0.4.1，不冒充发布要求的 JDK 21 证据，JDK 21/远端 CI 必须在推送后单列确认。
+- iQOO V2171A / Android 15 上，曲库存储与迁移 11/11 通过，三个输出／断连 UI 用例通过，严格失败提示在 vivo 销毁 Activity 的合批失败后独立 1/1 通过。测试 APK 签名不一致时只替换 test 包，主应用未卸载或清数据；最终移除 test 包并恢复不可调试 Profile，设备与本地 Profile SHA-256 均为 `ac6a3ad2678279ac838e88e734b62ad09d9b20ab24bcab8eeb8de9279eb12177`。
+- 这形成可推送的软件冻结候选，但没有连接真实 DAC，不关闭严格路由／拔插、外部逐样本 VERIFIED、发布签名与同签名升级、完整 TalkBack／适配、长时矩阵或 M3-R1 双机性能门禁；没有创建 tag、Release 或商店产物。

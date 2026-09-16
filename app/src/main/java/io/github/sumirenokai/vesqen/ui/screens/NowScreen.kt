@@ -146,6 +146,41 @@ private data class NowTrackPresentation(
     val artist: String,
     val album: String,
     val artworkTrack: AudioTrack?,
+    val animationIdentity: NowTrackAnimationIdentity,
+)
+
+/**
+ * Track-change motion follows listening/artwork identity, not mutable catalog annotations.
+ * Favorites and listening history live on [AudioTrack], but neither changes what the listener is
+ * hearing or the bitmap being shown, so they must not restart the full-player transitions.
+ */
+@Immutable
+internal data class NowTrackAnimationIdentity(
+    val trackId: Long?,
+    val artwork: NowArtworkIdentity?,
+)
+
+@Immutable
+internal data class NowArtworkIdentity(
+    val contentUri: String,
+    val albumArtworkUri: String?,
+    val dateModifiedSeconds: Long,
+    val artworkRevision: Long,
+)
+
+internal fun nowTrackAnimationIdentity(
+    trackId: Long?,
+    artworkTrack: AudioTrack?,
+): NowTrackAnimationIdentity = NowTrackAnimationIdentity(
+    trackId = trackId,
+    artwork = artworkTrack?.let { track ->
+        NowArtworkIdentity(
+            contentUri = track.contentUri,
+            albumArtworkUri = track.albumArtworkUri,
+            dateModifiedSeconds = track.dateModifiedSeconds,
+            artworkRevision = track.artworkRevision,
+        )
+    },
 )
 
 @Composable
@@ -190,6 +225,7 @@ fun NowScreen(
         artist = snapshot.artist,
         album = snapshot.album,
         artworkTrack = artworkTrack,
+        animationIdentity = nowTrackAnimationIdentity(snapshot.trackId, artworkTrack),
     )
     val playbackOrderMode = snapshot.playbackOrderMode
     val playbackOrderState = stringResource(
@@ -316,7 +352,7 @@ fun NowScreen(
                 )
 
                 FullPlayerBackdrop(
-                    artworkTrack = artworkTrack,
+                    trackPresentation = trackPresentation,
                     motionPolicy = motionPolicy,
                 )
                 if (useLandscapeLayout) {
@@ -431,9 +467,16 @@ fun NowScreen(
                                     onSetUsbOutputMode(if (enabled) UsbOutputMode.STRICT_BIT_PERFECT else UsbOutputMode.SYSTEM)
                                     showOutputMode = false
                                 },
-                                enabled = snapshot.isControllerReady,
+                                enabled = snapshot.canSetUsbOutputMode,
                                 modifier = Modifier.testTag("vesqen.now.strict-usb-switch")
                                     .semantics { contentDescription = strictOutputLabel },
+                            )
+                        }
+                        if (!snapshot.canSetUsbOutputMode) {
+                            Text(
+                                text = stringResource(R.string.playback_controls_connecting),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         Text(stringResource(R.string.player_output_mode_body))
@@ -473,7 +516,7 @@ fun NowScreen(
 
 @Composable
 private fun FullPlayerBackdrop(
-    artworkTrack: AudioTrack?,
+    trackPresentation: NowTrackPresentation,
     motionPolicy: VesqenMotionPolicy,
 ) {
     Box(
@@ -486,11 +529,13 @@ private fun FullPlayerBackdrop(
         // On API 26–30, render the opaque Canvas fallback rather than an unblurred cover at low
         // opacity: a vague photo is not the same as a controlled light source.
         AnimatedContent(
-            targetState = artworkTrack,
+            targetState = trackPresentation,
             modifier = Modifier.fillMaxSize(),
             transitionSpec = { artworkReflectionTransition(motionPolicy) },
+            contentKey = NowTrackPresentation::animationIdentity,
             label = "vesqen.now.artwork-reflection",
-        ) { reflectionTrack ->
+        ) { presentation ->
+            val reflectionTrack = presentation.artworkTrack
             if (
                 isArtworkReflectionSupported(Build.VERSION.SDK_INT) &&
                 !reflectionTrack?.contentUri.isNullOrBlank()
@@ -522,7 +567,7 @@ private fun FullPlayerBackdrop(
 internal fun isArtworkReflectionSupported(sdkInt: Int): Boolean =
     sdkInt >= Build.VERSION_CODES.S
 
-private fun androidx.compose.animation.AnimatedContentTransitionScope<AudioTrack?>.artworkReflectionTransition(
+private fun androidx.compose.animation.AnimatedContentTransitionScope<NowTrackPresentation>.artworkReflectionTransition(
     motionPolicy: VesqenMotionPolicy,
 ) = fadeIn(
     animationSpec = tween(motionPolicy.trackChangeMillis, easing = TrackTransitionEasing),
@@ -823,6 +868,7 @@ private fun NowLandscapePlayerPage(
                             transitionSpec = {
                                 trackPresentationTransition(trackTransitionDirection, motionPolicy)
                             },
+                            contentKey = NowTrackPresentation::animationIdentity,
                             label = "vesqen.now.landscape-identity-transition",
                         ) { presentation ->
                             NowTrackIdentity(
@@ -839,8 +885,8 @@ private fun NowLandscapePlayerPage(
                                 declaration = snapshot.declaration,
                                 onClick = onOpenChain,
                                 modifier = Modifier.testTag("vesqen.now.open-chain"),
-                                containerColor = FocusedPlayerMaterial.Raised,
-                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                neutralContainerColor = FocusedPlayerMaterial.Raised,
+                                neutralContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         Spacer(Modifier.weight(1f))
@@ -917,6 +963,7 @@ private fun NowFocusStage(
                     transitionSpec = {
                         trackPresentationTransition(trackTransitionDirection, motionPolicy)
                     },
+                    contentKey = NowTrackPresentation::animationIdentity,
                     contentAlignment = Alignment.Center,
                     label = "vesqen.now.artwork-transition",
                 ) { presentation ->
@@ -1065,6 +1112,7 @@ private fun NowTransportDock(
                 transitionSpec = {
                     trackPresentationTransition(trackTransitionDirection, motionPolicy)
                 },
+                contentKey = NowTrackPresentation::animationIdentity,
                 label = "vesqen.now.identity-transition",
             ) { presentation ->
                 NowTrackIdentity(
@@ -1080,8 +1128,8 @@ private fun NowTransportDock(
                     declaration = snapshot.declaration,
                     onClick = onOpenChain,
                     modifier = Modifier.testTag("vesqen.now.open-chain"),
-                    containerColor = FocusedPlayerMaterial.Raised,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    neutralContainerColor = FocusedPlayerMaterial.Raised,
+                    neutralContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             PlaybackProgress(snapshot = snapshot, onSeek = onSeek)

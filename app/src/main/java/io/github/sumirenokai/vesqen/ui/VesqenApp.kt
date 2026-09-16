@@ -366,7 +366,7 @@ fun VesqenAppContent(
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     StrictUsbFailureDialog(
         status = state.playback.usbOutputStatus,
-        isControllerReady = state.playback.isControllerReady,
+        canChangeOutputMode = state.playback.canSetUsbOutputMode,
         onSetUsbOutputMode = onSetUsbOutputMode,
     )
     val appliedChainPreferencesRepository = chainPreferencesRepository ?: remember {
@@ -931,6 +931,7 @@ private fun VesqenDestinationFrame(
 
                     VesqenDestination.SETTINGS -> SettingsScreen(
                         outputStatus = state.playback.usbOutputStatus,
+                        outputModeSelectionEnabled = state.playback.canSetUsbOutputMode,
                         outputVerification = state.playback.outputVerification,
                         verificationRegistryState = verificationRegistryState,
                         verificationImportResult = verificationImportResult,

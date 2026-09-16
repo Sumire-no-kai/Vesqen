@@ -26,13 +26,16 @@ class PlaybackHistoryRecorderTest {
             clock = { 456L },
         )
         val nextRecorded = async(start = CoroutineStart.UNDISPATCHED) {
-            recorder.recordedTrackIds.first()
+            recorder.recordedUpdates.first()
         }
 
         recorder.recordPlayback(1)
         recorder.recordPlayback(2)
 
-        assertEquals(2L, withTimeout(2_000) { nextRecorded.await() })
+        assertEquals(
+            PlaybackHistoryUpdate(trackId = 2, playCount = 1, lastPlayedAtMs = 456),
+            withTimeout(2_000) { nextRecorded.await() },
+        )
         assertEquals(listOf(1L to 456L, 2L to 456L), backend.attempts.toList())
 
         ownerJob.cancel()
@@ -73,9 +76,13 @@ class PlaybackHistoryRecorderTest {
         val attempts = Collections.synchronizedList(mutableListOf<Pair<Long, Long>>())
         val closed = CompletableDeferred<Unit>()
 
-        override suspend fun recordPlayback(trackId: Long, playedAtMs: Long) {
+        override suspend fun recordPlayback(
+            trackId: Long,
+            playedAtMs: Long,
+        ): PlaybackHistoryUpdate? {
             attempts += trackId to playedAtMs
             if (trackId == failTrackId) error("simulated write failure")
+            return PlaybackHistoryUpdate(trackId, playCount = 1, lastPlayedAtMs = playedAtMs)
         }
 
         override fun close() {
@@ -90,13 +97,17 @@ class PlaybackHistoryRecorderTest {
         val lastWriteCompleted = CompletableDeferred<Unit>()
         val closed = CompletableDeferred<Unit>()
 
-        override suspend fun recordPlayback(trackId: Long, playedAtMs: Long) {
+        override suspend fun recordPlayback(
+            trackId: Long,
+            playedAtMs: Long,
+        ): PlaybackHistoryUpdate? {
             attempts += trackId
             if (trackId == 0L) {
                 firstWriteStarted.complete(Unit)
                 releaseFirstWrite.await()
             }
             if (trackId == 6L) lastWriteCompleted.complete(Unit)
+            return PlaybackHistoryUpdate(trackId, playCount = 1, lastPlayedAtMs = playedAtMs)
         }
 
         override fun close() {

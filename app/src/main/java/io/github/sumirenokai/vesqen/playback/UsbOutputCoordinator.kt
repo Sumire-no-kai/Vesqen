@@ -30,6 +30,7 @@ import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
 import androidx.media3.exoplayer.audio.ForwardingAudioOutputProvider
 import androidx.media3.exoplayer.audio.ForwardingAudioOutput
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMediaItemExtras
+import java.nio.ByteBuffer
 
 /**
  * Service-owned strict USB state machine and AudioTrack creation seam.
@@ -151,6 +152,16 @@ internal class UsbOutputCoordinator(
             if (currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
             val status = stateRepository.snapshot()
             if (status.phase == UsbOutputPhase.ACTIVE) {
+                // Pause/focus-loss callbacks can race the playback thread. Close the gate before
+                // revoking ACTIVE so buffered or newly resumed PCM cannot pass until reverified.
+                val activeOutput = synchronized(lock) { currentAudioOutput }
+                if (activeOutput == null || runCatching(activeOutput::mute).isFailure) {
+                    failClosed(
+                        UsbOutputFailure.PLATFORM_ERROR,
+                        "strict_usb.output_mute_failed",
+                    )
+                    return
+                }
                 publish(
                     phase = UsbOutputPhase.APPLYING,
                     device = synchronized(lock) { selectedDevice },
@@ -198,6 +209,8 @@ internal class UsbOutputCoordinator(
             mainHandler.post { scheduleReconfigure(resume) }
             return
         }
+        val activePlayer = player
+        val wasPlaying = activePlayer?.playWhenReady == true
         val scheduled = synchronized(lock) {
             if (closed || mode != UsbOutputMode.STRICT_BIT_PERFECT) return@synchronized null
             configurationGeneration += 1
@@ -207,10 +220,10 @@ internal class UsbOutputCoordinator(
             selectedMixerFormat = null
             selectedAudioAttributes = null
             selectedPlanGeneration = NO_GENERATION
-            resumeAfterConfiguration = resumeAfterConfiguration || resume
+            resumeAfterConfiguration = resumeAfterConfiguration || resume || wasPlaying
             val shouldPost = !reconfigurePosted
             if (shouldPost) reconfigurePosted = true
-            ReconfigurationSchedule(previousPreference, shouldPost)
+            ReconfigurationSchedule(previousPreference, shouldPost, wasPlaying)
         } ?: return
         detachRoutingListener()
         clearMixerPreference(scheduled.previousPreference)
@@ -219,6 +232,10 @@ internal class UsbOutputCoordinator(
             source = sourceFormat,
             decisionCode = "strict_usb.reconfiguration_requested",
         )
+        if (scheduled.pausePlayer) {
+            synchronized(lock) { internalPauseInProgress = true }
+            activePlayer?.pause()
+        }
         if (scheduled.shouldPost) {
             mainHandler.post {
                 synchronized(lock) { reconfigurePosted = false }
@@ -409,9 +426,29 @@ internal class UsbOutputCoordinator(
                 expectedGeneration = strictPlan.generation,
             )
         }
-        val (output, gatedOutput) = try {
+        val (_, gatedOutput, track) = try {
             val createdOutput = super.getAudioOutput(outputConfig)
-            createdOutput to StrictGatedAudioOutput(createdOutput)
+            val createdTrack = (createdOutput as? AudioTrackAudioOutput)?.audioTrack
+            Triple(
+                createdOutput,
+                StrictGatedAudioOutput(
+                    delegateOutput = createdOutput,
+                    onGatedPlay = {
+                        createdTrack?.let(::requestRouteReverification)
+                    },
+                    onNonNeutralVolume = {
+                        failClosed(
+                            UsbOutputFailure.PROCESSING_NOT_NEUTRAL,
+                            "strict_usb.output_volume_not_neutral",
+                            device,
+                            request,
+                            strictPlan.generation,
+                            audioAttributes,
+                        )
+                    },
+                ),
+                createdTrack,
+            )
         } catch (failure: Exception) {
             mixerAdapter.clearPreferred(device, audioAttributes)
             failClosed(
@@ -428,7 +465,6 @@ internal class UsbOutputCoordinator(
             mixerAdapter.clearPreferred(device, audioAttributes)
             return gatedOutput
         }
-        val track = (output as? AudioTrackAudioOutput)?.audioTrack
         if (track == null) {
             failClosed(
                 UsbOutputFailure.PLATFORM_ERROR,
@@ -481,12 +517,55 @@ internal class UsbOutputCoordinator(
         return gatedOutput
     }
 
+    /** A renderer-level pause closes the PCM gate even when playWhenReady stays true. */
+    private fun requestRouteReverification(track: AudioTrack) {
+        mainHandler.post {
+            val routePlan = synchronized(lock) {
+                if (
+                    mode == UsbOutputMode.STRICT_BIT_PERFECT && currentAudioTrack === track &&
+                    currentAudioTrackGeneration == configurationGeneration &&
+                    selectedPlanGeneration == configurationGeneration
+                ) {
+                    StrictRoutePlan(
+                        device = selectedDevice,
+                        mixerFormat = selectedMixerFormat,
+                        audioAttributes = selectedAudioAttributes,
+                        generation = configurationGeneration,
+                    )
+                } else {
+                    null
+                }
+            } ?: return@post
+            if (stateRepository.snapshot().phase == UsbOutputPhase.ACTIVE) {
+                publish(
+                    phase = UsbOutputPhase.APPLYING,
+                    device = routePlan.device,
+                    source = sourceFormat,
+                    sink = routePlan.mixerFormat,
+                    decisionCode = "strict_usb.reverifying_after_output_resume",
+                )
+            }
+            evaluateRoute(track)
+            scheduleRouteVerificationTimeout(track)
+        }
+    }
+
     private fun pendingStrictOutput(config: AudioOutputProvider.OutputConfig): AudioOutput {
         val expectedGeneration = synchronized(lock) {
             configurationGeneration.takeIf { mode == UsbOutputMode.STRICT_BIT_PERFECT && !closed }
         }
         return try {
-            StrictGatedAudioOutput(super.getAudioOutput(config))
+            StrictGatedAudioOutput(super.getAudioOutput(config)) {
+                if (expectedGeneration != null) {
+                    failClosed(
+                        UsbOutputFailure.PROCESSING_NOT_NEUTRAL,
+                        "strict_usb.output_volume_not_neutral",
+                        sink = config.toPlatformFormat(),
+                        expectedGeneration = expectedGeneration,
+                        audioAttributes = config.audioAttributes.getPlatformAudioAttributes(),
+                    )
+                }
+            }
         } catch (creationFailure: Exception) {
             if (expectedGeneration != null) {
                 failClosed(
@@ -607,7 +686,20 @@ internal class UsbOutputCoordinator(
         } ?: return
         val targetDevice = routePlan.device
         val targetFormat = routePlan.mixerFormat
-        val routed = runCatching { track.routedDevice }.getOrNull() ?: return
+        val routed = runCatching { track.routedDevice }.getOrNull()
+        if (routed == null) {
+            if (strictRouteUnavailableFailure(stateRepository.snapshot().phase) != null) {
+                failClosed(
+                    UsbOutputFailure.ROUTE_UNAVAILABLE,
+                    "strict_usb.route_unavailable",
+                    targetDevice,
+                    targetFormat,
+                    routePlan.generation,
+                    routePlan.audioAttributes,
+                )
+            }
+            return
+        }
         if (targetDevice == null || routed.id != targetDevice.id) {
             failClosed(
                 UsbOutputFailure.ROUTE_MISMATCH,
@@ -657,7 +749,27 @@ internal class UsbOutputCoordinator(
         val activeOutput = synchronized(lock) {
             currentAudioOutput.takeIf { currentAudioTrack === track }
         }
-        if (activeOutput == null || !activeOutput.activate()) {
+        if (activeOutput == null) {
+            failClosed(
+                UsbOutputFailure.PLATFORM_ERROR,
+                "strict_usb.output_unmute_failed",
+                targetDevice,
+                targetFormat,
+                routePlan.generation,
+            )
+            return
+        }
+        if (!activeOutput.isReadyForActivation()) {
+            publish(
+                phase = UsbOutputPhase.APPLYING,
+                device = targetDevice,
+                source = sourceFormat,
+                sink = targetFormat,
+                decisionCode = "strict_usb.waiting_for_output_play",
+            )
+            return
+        }
+        if (!activeOutput.activate()) {
             failClosed(
                 UsbOutputFailure.PLATFORM_ERROR,
                 "strict_usb.output_unmute_failed",
@@ -968,6 +1080,7 @@ internal class UsbOutputCoordinator(
 private data class ReconfigurationSchedule(
     val previousPreference: MixerPreference,
     val shouldPost: Boolean,
+    val pausePlayer: Boolean,
 )
 
 private data class MixerPreference(
@@ -1008,36 +1121,98 @@ private data class ClosingOutputState(
     val audioAttributes: AudioAttributes?,
 )
 
-/** Holds later sink volume calls at silence until the coordinator has verified the strict route. */
+/** Blocks PCM until strict-route verification and closes again on pause or non-neutral volume. */
 @androidx.annotation.OptIn(UnstableApi::class)
-private class StrictGatedAudioOutput(
+internal class StrictGatedAudioOutput(
     private val delegateOutput: AudioOutput,
+    private val onGatedPlay: () -> Unit = {},
+    private val onNonNeutralVolume: (Float) -> Unit = {},
 ) : ForwardingAudioOutput(delegateOutput) {
-    private val volumeLock = Any()
+    private val gateLock = Any()
     private var gated = true
     private var requestedVolume = 1f
+    private var playRequested = false
+    private var routeProbeStarted = false
+    private var invalidated = false
 
     init {
         delegateOutput.setVolume(0f)
     }
 
     override fun setVolume(volume: Float) {
-        synchronized(volumeLock) {
+        var nonNeutralVolume = false
+        synchronized(gateLock) {
             requestedVolume = volume
-            delegateOutput.setVolume(if (gated) 0f else volume)
+            if (volume != 1f) {
+                invalidated = true
+                gated = true
+                routeProbeStarted = false
+                // Closing the write gate is synchronous. The coordinator then pauses/stops the
+                // player so Media3 can touch its position tracker on the renderer thread.
+                runCatching { delegateOutput.setVolume(0f) }
+                nonNeutralVolume = true
+            } else {
+                delegateOutput.setVolume(if (gated) 0f else volume)
+            }
+        }
+        if (nonNeutralVolume) onNonNeutralVolume(volume)
+    }
+
+    override fun play() {
+        var requestRouteReverification = false
+        synchronized(gateLock) {
+            playRequested = true
+            // A first empty play lets AudioTrack establish its routed device. PCM writes remain
+            // blocked until activate(), so this does not depend on volume scaling for silence.
+            if (!gated || !routeProbeStarted) {
+                delegateOutput.play()
+                requestRouteReverification = gated && !invalidated
+                routeProbeStarted = true
+            }
+        }
+        if (requestRouteReverification) onGatedPlay()
+    }
+
+    override fun pause() {
+        synchronized(gateLock) {
+            gated = true
+            playRequested = false
+            routeProbeStarted = false
+            delegateOutput.pause()
         }
     }
 
-    fun activate(): Boolean = runCatching {
-        synchronized(volumeLock) {
-            delegateOutput.setVolume(requestedVolume)
-            gated = false
+    override fun write(buffer: ByteBuffer, accessUnitCount: Int, presentationTimeUs: Long): Boolean =
+        synchronized(gateLock) {
+            if (gated) false else delegateOutput.write(buffer, accessUnitCount, presentationTimeUs)
         }
-    }.isSuccess
+
+    fun isReadyForActivation(): Boolean = synchronized(gateLock) {
+        !gated || (!invalidated && playRequested && routeProbeStarted)
+    }
+
+    fun activate(): Boolean = synchronized(gateLock) {
+        if (!isReadyForActivation() || invalidated || requestedVolume != 1f) {
+            return@synchronized false
+        }
+        try {
+            delegateOutput.setVolume(requestedVolume)
+            if (playRequested) delegateOutput.play()
+            gated = false
+            true
+        } catch (_: Exception) {
+            gated = true
+            runCatching { delegateOutput.setVolume(0f) }
+            false
+        }
+    }
 
     fun mute() {
-        synchronized(volumeLock) {
+        synchronized(gateLock) {
             gated = true
+            routeProbeStarted = false
+            // Do not call AudioOutput.pause() from the application listener thread. Media3 owns
+            // the delegate's playback-thread state; the coordinator pauses the player separately.
             delegateOutput.setVolume(0f)
         }
     }
@@ -1065,3 +1240,7 @@ internal fun platformEncodingName(encoding: Int): String = when (encoding) {
     android.media.AudioFormat.ENCODING_PCM_FLOAT -> "PCM float"
     else -> "encoding $encoding"
 }
+
+/** Initial route discovery may be pending, but loss of an already-active route must fail closed. */
+internal fun strictRouteUnavailableFailure(phase: UsbOutputPhase): UsbOutputFailure? =
+    UsbOutputFailure.ROUTE_UNAVAILABLE.takeIf { phase == UsbOutputPhase.ACTIVE }

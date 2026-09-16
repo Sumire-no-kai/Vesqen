@@ -99,6 +99,8 @@ internal fun PlaybackOrderMode.toSettings(): PlaybackOrderSettings = when (this)
 
 data class PlaybackSnapshot(
     val isControllerReady: Boolean = false,
+    /** True only when the connected MediaSession currently grants the strict-output command. */
+    val canSetUsbOutputMode: Boolean = isControllerReady,
     val isPlaying: Boolean = false,
     val trackId: Long? = null,
     /** Opaque source URI retained from Media3 so artwork can survive a UI/controller reconnect. */
@@ -130,6 +132,12 @@ data class PlaybackSnapshot(
     /** Pause remains available during buffering or transient suppression of requested playback. */
     val showsPauseAction: Boolean = isPlaying,
 ) {
+    init {
+        require(isControllerReady || !canSetUsbOutputMode) {
+            "A disconnected controller cannot expose the strict-output command"
+        }
+    }
+
     val hasActiveTrack: Boolean
         get() = trackId != null
 

@@ -67,13 +67,24 @@ fun QueueSheet(
                         onClearQueue()
                         onDismiss()
                     },
-                    enabled = snapshot.queue.isNotEmpty(),
+                    enabled = snapshot.isControllerReady && snapshot.queue.isNotEmpty(),
                 ) {
                     Text(stringResource(R.string.clear_queue))
                 }
                 IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close))
                 }
+            }
+            if (!snapshot.isControllerReady) {
+                Text(
+                    text = stringResource(R.string.playback_controls_connecting),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(
+                        start = VesqenSpacing.sm,
+                        bottom = VesqenSpacing.xs,
+                    ),
+                )
             }
             LazyColumn(modifier = Modifier.heightIn(max = 520.dp)) {
                 itemsIndexed(
@@ -96,7 +107,10 @@ fun QueueSheet(
                             modifier = Modifier.padding(start = VesqenSpacing.sm),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            IconButton(onClick = { onPlayItem(index) }) {
+                            IconButton(
+                                onClick = { onPlayItem(index) },
+                                enabled = snapshot.isControllerReady,
+                            ) {
                                 Icon(
                                     Icons.Filled.PlayArrow,
                                     contentDescription = stringResource(R.string.play_this_track),
@@ -120,17 +134,20 @@ fun QueueSheet(
                             }
                             IconButton(
                                 onClick = { onMoveItem(index, index - 1) },
-                                enabled = index > 0,
+                                enabled = snapshot.isControllerReady && index > 0,
                             ) {
                                 Icon(Icons.Filled.ArrowUpward, contentDescription = stringResource(R.string.move_up))
                             }
                             IconButton(
                                 onClick = { onMoveItem(index, index + 1) },
-                                enabled = index < snapshot.queue.lastIndex,
+                                enabled = snapshot.isControllerReady && index < snapshot.queue.lastIndex,
                             ) {
                                 Icon(Icons.Filled.ArrowDownward, contentDescription = stringResource(R.string.move_down))
                             }
-                            IconButton(onClick = { onRemoveItem(index) }) {
+                            IconButton(
+                                onClick = { onRemoveItem(index) },
+                                enabled = snapshot.isControllerReady,
+                            ) {
                                 Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.remove_from_queue))
                             }
                         }

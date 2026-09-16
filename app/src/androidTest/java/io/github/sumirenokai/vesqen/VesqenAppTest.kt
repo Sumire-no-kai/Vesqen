@@ -4,6 +4,7 @@ import android.content.res.Configuration
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertContentDescriptionEquals
@@ -35,6 +36,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -64,6 +66,7 @@ import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
 import io.github.sumirenokai.vesqen.playback.PlaybackQueueItem
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode
+import io.github.sumirenokai.vesqen.playback.OutputDeclaration
 import io.github.sumirenokai.vesqen.playback.AudioFormatSummary
 import io.github.sumirenokai.vesqen.playback.UsbHardwareIdentity
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
@@ -101,6 +104,7 @@ import io.github.sumirenokai.vesqen.ui.chain.InMemoryChainDashboardPreferencesRe
 import io.github.sumirenokai.vesqen.ui.chain.DiagnosticExportFeedback
 import io.github.sumirenokai.vesqen.ui.chain.formatSeconds
 import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
+import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
@@ -155,12 +159,21 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertDoesNotExist()
         composeRule.runOnIdle {
             state = state.copy(playback = state.playback.copy(
-                usbOutputStatus = failure.copy(generation = 2), isControllerReady = false,
+                usbOutputStatus = failure.copy(generation = 2),
+                isControllerReady = false,
+                canSetUsbOutputMode = false,
             ))
         }
         composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.output.use-system").assertIsNotEnabled()
-        composeRule.runOnIdle { state = state.copy(playback = state.playback.copy(isControllerReady = true)) }
+        composeRule.runOnIdle {
+            state = state.copy(
+                playback = state.playback.copy(
+                    isControllerReady = true,
+                    canSetUsbOutputMode = true,
+                ),
+            )
+        }
         composeRule.onNodeWithTag("vesqen.output.use-system").performClick()
         composeRule.runOnIdle { assertEquals(listOf(UsbOutputMode.SYSTEM), modes) }
         // A command request alone is not success; wait for the service snapshot to confirm it.
@@ -448,8 +461,12 @@ class VesqenAppTest {
         render(grantedState())
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
-        composeRule.onNodeWithTag("vesqen.settings.section.playback-output").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.settings.section.playback-output")
+            .assertIsDisplayed()
+            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.SelectableGroup))
         composeRule.onNodeWithTag("vesqen.settings.output.system").assertIsSelected()
+        composeRule.onNodeWithTag("vesqen.settings.output.system").assertIsNotEnabled()
+        composeRule.onNodeWithTag("vesqen.settings.output.strict-usb").assertIsNotEnabled()
         val systemOutput = composeRule.onNodeWithTag("vesqen.settings.output.system")
             .fetchSemanticsNode().boundsInRoot
         val strictUsb = composeRule.onNodeWithTag("vesqen.settings.output.strict-usb")
@@ -464,6 +481,39 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.settings")
             .performScrollToNode(hasTestTag("vesqen.settings.section.application"))
         composeRule.onNodeWithTag("vesqen.settings.about").assertIsDisplayed()
+    }
+
+    @Test
+    fun output_status_chips_render_distinct_non_color_cues() {
+        composeRule.setContent {
+            VesqenTheme {
+                Column {
+                    OutputDeclaration.entries.forEach { declaration ->
+                        OutputStatusChip(declaration = declaration)
+                    }
+                }
+            }
+        }
+
+        listOf("route", "availability", "requested", "activity", "verified", "failure").forEach { cue ->
+            composeRule.onNodeWithTag("vesqen.output-status.cue.$cue").assertIsDisplayed()
+        }
+    }
+
+    @Test
+    fun settings_output_modes_enable_only_when_session_grants_the_command() {
+        render(
+            grantedState(
+                playback = PlaybackSnapshot(
+                    isControllerReady = true,
+                    canSetUsbOutputMode = true,
+                ),
+            ),
+        )
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.output.system").assertIsEnabled()
+        composeRule.onNodeWithTag("vesqen.settings.output.strict-usb").assertIsEnabled()
     }
 
     @Test
@@ -530,6 +580,19 @@ class VesqenAppTest {
                 "gap=${viewportBottom - finalActionBottom}px",
             viewportBottom - finalActionBottom <= maximumBottomGap,
         )
+    }
+
+    @Test
+    fun track_details_disables_queue_mutations_until_playback_controls_connect() {
+        render(grantedState(tracks = sampleTracks))
+
+        composeRule.onNodeWithTag("vesqen.library.track.1.more").performClick()
+        composeRule.onNodeWithTag("vesqen.track-details.add-to-queue").performScrollTo()
+
+        composeRule.onNodeWithText(context.getString(R.string.play_next)).assertIsNotEnabled()
+        composeRule.onNodeWithTag("vesqen.track-details.add-to-queue").assertIsNotEnabled()
+        composeRule.onNodeWithText(context.getString(R.string.playback_controls_connecting))
+            .assertIsDisplayed()
     }
 
     @Test

@@ -2,6 +2,7 @@ package io.github.sumirenokai.vesqen.playback
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class PlaybackSnapshotTest {
@@ -14,6 +15,16 @@ class PlaybackSnapshotTest {
     @Test
     fun `default declaration never overclaims bit perfect playback`() {
         assertEquals(OutputDeclaration.SYSTEM_MIXED, PlaybackSnapshot().declaration)
+    }
+
+    @Test
+    fun `disconnected controller cannot expose a session command`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            PlaybackSnapshot(
+                isControllerReady = false,
+                canSetUsbOutputMode = true,
+            )
+        }
     }
 
     @Test

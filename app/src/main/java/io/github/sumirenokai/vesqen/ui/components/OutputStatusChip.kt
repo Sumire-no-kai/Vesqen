@@ -7,7 +7,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
@@ -22,18 +27,71 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.playback.OutputDeclaration
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
+
+internal enum class OutputStatusTreatment {
+    NEUTRAL,
+    SIGNAL_OUTLINE,
+    SIGNAL_FILL,
+    SIGNAL_TONAL,
+    ERROR,
+}
+
+internal enum class OutputStatusCue(val tag: String) {
+    ROUTE("route"),
+    AVAILABILITY("availability"),
+    REQUESTED("requested"),
+    ACTIVITY("activity"),
+    VERIFIED("verified"),
+    FAILURE("failure"),
+}
+
+internal data class OutputStatusVisualSpec(
+    val treatment: OutputStatusTreatment,
+    val cue: OutputStatusCue,
+    val acceptsNeutralColorOverride: Boolean = false,
+)
+
+internal fun outputStatusVisualSpec(declaration: OutputDeclaration): OutputStatusVisualSpec = when (declaration) {
+    OutputDeclaration.SYSTEM_MIXED -> OutputStatusVisualSpec(
+        treatment = OutputStatusTreatment.NEUTRAL,
+        cue = OutputStatusCue.ROUTE,
+        acceptsNeutralColorOverride = true,
+    )
+    OutputDeclaration.BIT_PERFECT_AVAILABLE -> OutputStatusVisualSpec(
+        treatment = OutputStatusTreatment.SIGNAL_OUTLINE,
+        cue = OutputStatusCue.AVAILABILITY,
+    )
+    OutputDeclaration.BIT_PERFECT_REQUESTED -> OutputStatusVisualSpec(
+        treatment = OutputStatusTreatment.NEUTRAL,
+        cue = OutputStatusCue.REQUESTED,
+        acceptsNeutralColorOverride = true,
+    )
+    OutputDeclaration.BIT_PERFECT_ACTIVE -> OutputStatusVisualSpec(
+        treatment = OutputStatusTreatment.SIGNAL_FILL,
+        cue = OutputStatusCue.ACTIVITY,
+    )
+    OutputDeclaration.BIT_PERFECT_VERIFIED -> OutputStatusVisualSpec(
+        treatment = OutputStatusTreatment.SIGNAL_TONAL,
+        cue = OutputStatusCue.VERIFIED,
+    )
+    OutputDeclaration.BIT_PERFECT_FAILED -> OutputStatusVisualSpec(
+        treatment = OutputStatusTreatment.ERROR,
+        cue = OutputStatusCue.FAILURE,
+    )
+}
 
 @Composable
 fun OutputStatusChip(
     declaration: OutputDeclaration,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    containerColor: Color? = null,
-    contentColor: Color? = null,
+    neutralContainerColor: Color? = null,
+    neutralContentColor: Color? = null,
 ) {
     val label = when (declaration) {
         OutputDeclaration.SYSTEM_MIXED -> androidx.compose.ui.res.stringResource(R.string.system_mixed)
@@ -65,18 +123,41 @@ fun OutputStatusChip(
                 onClick = onClick,
             )
     }
-    val verified = declaration == OutputDeclaration.BIT_PERFECT_VERIFIED
-    val resolvedContainerColor = containerColor ?: when {
-        verified -> MaterialTheme.colorScheme.tertiaryContainer
-        declaration == OutputDeclaration.BIT_PERFECT_FAILED -> MaterialTheme.colorScheme.errorContainer
-        declaration == OutputDeclaration.BIT_PERFECT_ACTIVE -> MaterialTheme.colorScheme.primaryContainer
-        else -> MaterialTheme.colorScheme.surfaceContainerHigh
+    val visualSpec = outputStatusVisualSpec(declaration)
+    val defaultContainerColor = when (visualSpec.treatment) {
+        OutputStatusTreatment.NEUTRAL -> MaterialTheme.colorScheme.surfaceContainerHigh
+        OutputStatusTreatment.SIGNAL_OUTLINE -> Color.Transparent
+        OutputStatusTreatment.SIGNAL_FILL -> MaterialTheme.colorScheme.primary
+        OutputStatusTreatment.SIGNAL_TONAL -> MaterialTheme.colorScheme.primaryContainer
+        OutputStatusTreatment.ERROR -> MaterialTheme.colorScheme.errorContainer
     }
-    val resolvedContentColor = contentColor ?: when {
-        verified -> MaterialTheme.colorScheme.onTertiaryContainer
-        declaration == OutputDeclaration.BIT_PERFECT_FAILED -> MaterialTheme.colorScheme.onErrorContainer
-        declaration == OutputDeclaration.BIT_PERFECT_ACTIVE -> MaterialTheme.colorScheme.onPrimaryContainer
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    val defaultContentColor = when (visualSpec.treatment) {
+        OutputStatusTreatment.NEUTRAL -> MaterialTheme.colorScheme.onSurfaceVariant
+        OutputStatusTreatment.SIGNAL_OUTLINE -> MaterialTheme.colorScheme.primary
+        OutputStatusTreatment.SIGNAL_FILL -> MaterialTheme.colorScheme.onPrimary
+        OutputStatusTreatment.SIGNAL_TONAL -> MaterialTheme.colorScheme.onPrimaryContainer
+        OutputStatusTreatment.ERROR -> MaterialTheme.colorScheme.onErrorContainer
+    }
+    // Protected surfaces such as Now may provide their own neutral material. Evidence colors are
+    // fixed semantic roles and must never be flattened back to that neutral surface.
+    val resolvedContainerColor = if (visualSpec.acceptsNeutralColorOverride) {
+        neutralContainerColor ?: defaultContainerColor
+    } else defaultContainerColor
+    val resolvedContentColor = if (visualSpec.acceptsNeutralColorOverride) {
+        neutralContentColor ?: defaultContentColor
+    } else defaultContentColor
+    val border = when (visualSpec.treatment) {
+        OutputStatusTreatment.SIGNAL_OUTLINE,
+        OutputStatusTreatment.SIGNAL_TONAL -> BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+        else -> null
+    }
+    val icon = when (visualSpec.cue) {
+        OutputStatusCue.ROUTE -> Icons.Filled.Route
+        OutputStatusCue.AVAILABILITY -> Icons.Filled.RadioButtonUnchecked
+        OutputStatusCue.REQUESTED -> Icons.Filled.HourglassTop
+        OutputStatusCue.ACTIVITY -> Icons.Filled.FiberManualRecord
+        OutputStatusCue.VERIFIED -> Icons.Filled.VerifiedUser
+        OutputStatusCue.FAILURE -> Icons.Filled.Error
     }
 
     Box(
@@ -92,7 +173,7 @@ fun OutputStatusChip(
             shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
             color = resolvedContainerColor,
             contentColor = resolvedContentColor,
-            border = if (verified) BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary) else null,
+            border = border,
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -100,9 +181,11 @@ fun OutputStatusChip(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    imageVector = if (verified) Icons.Filled.VerifiedUser else Icons.Filled.Route,
+                    imageVector = icon,
                     contentDescription = null,
-                    modifier = Modifier.defaultMinSize(minWidth = 14.dp, minHeight = 14.dp),
+                    modifier = Modifier
+                        .size(16.dp)
+                        .testTag("vesqen.output-status.cue.${visualSpec.cue.tag}"),
                 )
                 Text(text = label, style = MaterialTheme.typography.labelMedium)
             }

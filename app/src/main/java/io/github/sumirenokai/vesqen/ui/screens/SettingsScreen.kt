@@ -7,6 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -70,6 +72,7 @@ fun SettingsScreen(
     onOpenAbout: () -> Unit,
     versionName: String,
     modifier: Modifier = Modifier,
+    outputModeSelectionEnabled: Boolean = true,
     outputVerification: OutputVerificationMatch? = null,
     verificationRegistryState: OutputVerificationRegistryState = OutputVerificationRegistryState.Empty,
     verificationImportResult: OutputVerificationImportResult? = null,
@@ -102,14 +105,23 @@ fun SettingsScreen(
             item {
                 SettingsSection(
                     title = stringResource(R.string.settings_playback_output),
-                    body = stringResource(R.string.settings_playback_output_body),
-                    modifier = Modifier.testTag("vesqen.settings.section.playback-output"),
+                    body = stringResource(
+                        if (outputModeSelectionEnabled) {
+                            R.string.settings_playback_output_body
+                        } else {
+                            R.string.playback_controls_connecting
+                        },
+                    ),
+                    modifier = Modifier
+                        .testTag("vesqen.settings.section.playback-output")
+                        .selectableGroup(),
                 ) {
                     SettingsChoiceRow(
                         icon = { Icon(Icons.Filled.Speaker, contentDescription = null) },
                         title = stringResource(R.string.settings_system_output),
                         body = stringResource(R.string.settings_system_output_body),
                         selected = outputStatus.mode == UsbOutputMode.SYSTEM,
+                        enabled = outputModeSelectionEnabled,
                         onClick = { onSetUsbOutputMode(UsbOutputMode.SYSTEM) },
                         modifier = Modifier.testTag("vesqen.settings.output.system"),
                     )
@@ -119,6 +131,7 @@ fun SettingsScreen(
                         title = stringResource(R.string.settings_strict_usb_output),
                         body = strictUsbOutputBody(outputStatus),
                         selected = outputStatus.mode == UsbOutputMode.STRICT_BIT_PERFECT,
+                        enabled = outputModeSelectionEnabled,
                         onClick = { onSetUsbOutputMode(UsbOutputMode.STRICT_BIT_PERFECT) },
                         modifier = Modifier.testTag("vesqen.settings.output.strict-usb"),
                     )
@@ -233,6 +246,7 @@ private fun SettingsChoiceRow(
     title: String,
     body: String,
     selected: Boolean,
+    enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -264,7 +278,13 @@ private fun SettingsChoiceRow(
         modifier = modifier
             .fillMaxWidth()
             .background(backgroundColor)
-            .selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
+            .selectable(
+                selected = selected,
+                enabled = enabled,
+                onClick = onClick,
+                role = Role.RadioButton,
+            )
+            .alpha(if (enabled) 1f else 0.56f)
             .defaultMinSize(minHeight = 88.dp)
             .padding(VesqenSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
@@ -292,7 +312,7 @@ private fun SettingsChoiceRow(
             )
         }
         Spacer(Modifier.width(VesqenSpacing.xs))
-        RadioButton(selected = selected, onClick = null)
+        RadioButton(selected = selected, onClick = null, enabled = enabled)
     }
 }
 

@@ -5,6 +5,7 @@ import android.database.sqlite.SQLiteException
 import android.database.sqlite.SQLiteDatabase
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -63,6 +64,64 @@ class LibraryCatalogStoreTest {
                 assertTrue(track.isFavorite)
                 assertEquals(1, track.playCount)
                 assertEquals(listOf(trackId), reopened.readPlaylists().single().trackIds)
+            }
+        } finally {
+            context.deleteDatabase(databaseName)
+        }
+    }
+
+    @Test
+    fun playbackHistoryWriteReturnsCommittedValuesAndIgnoresMissingTracks() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val databaseName = "library-history-${System.nanoTime()}.db"
+        try {
+            LibraryCatalogStore(context, databaseName).use { store ->
+                val source = store.ensureDeviceSource()
+                val scan = store.beginSourceScan(source.id)
+                store.upsertTrack(scan, candidate("history", "History"))
+                store.completeSourceScan(scan, generation = "1")
+                val trackId = store.readTracks(listOf(source.id)).single().id
+
+                assertEquals(
+                    TrackPlaybackHistory(playCount = 1, lastPlayedAtMs = 100),
+                    store.recordPlayback(trackId, playedAtMs = 100),
+                )
+                assertEquals(
+                    TrackPlaybackHistory(playCount = 2, lastPlayedAtMs = 200),
+                    store.recordPlayback(trackId, playedAtMs = 200),
+                )
+                assertNull(store.recordPlayback(trackId + 999, playedAtMs = 300))
+            }
+        } finally {
+            context.deleteDatabase(databaseName)
+        }
+    }
+
+    @Test
+    fun playlistSnapshotPreservesEmptyPlaylistsAndItemOrderAcrossMultiplePlaylists() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val databaseName = "library-playlists-${System.nanoTime()}.db"
+        try {
+            LibraryCatalogStore(context, databaseName).use { store ->
+                val source = store.ensureDeviceSource()
+                val scan = store.beginSourceScan(source.id)
+                store.upsertTrack(scan, candidate("first", "First"))
+                store.upsertTrack(scan, candidate("second", "Second"))
+                store.completeSourceScan(scan, generation = "1")
+                val tracks = store.readTracks(listOf(source.id)).associateBy(AudioTrack::title)
+                val emptyId = requireNotNull(store.createPlaylist("A Empty"))
+                val mixId = requireNotNull(store.createPlaylist("B Mix"))
+                store.addTrackToPlaylist(mixId, requireNotNull(tracks["Second"]).id)
+                store.addTrackToPlaylist(mixId, requireNotNull(tracks["First"]).id)
+
+                val playlists = store.readPlaylists()
+
+                assertEquals(listOf(emptyId, mixId), playlists.map(LibraryPlaylist::id))
+                assertTrue(playlists.first().trackIds.isEmpty())
+                assertEquals(
+                    listOf(requireNotNull(tracks["Second"]).id, requireNotNull(tracks["First"]).id),
+                    playlists.last().trackIds,
+                )
             }
         } finally {
             context.deleteDatabase(databaseName)
@@ -160,6 +219,247 @@ class LibraryCatalogStoreTest {
                 val completedSource = store.readSources().single()
                 assertEquals("2", completedSource.generation)
                 assertEquals(LibraryScanState.IDLE, completedSource.scanState)
+            }
+        } finally {
+            context.deleteDatabase(databaseName)
+        }
+    }
+
+    @Test
+    fun legacySyntheticVolumeMigrationPreservesStableIdAndMergesInterruptedDuplicateState() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val databaseName = "library-catalog-legacy-volume-${System.nanoTime()}.db"
+        try {
+            LibraryCatalogStore(context, databaseName).use { store ->
+                val source = store.ensureDeviceSource()
+                val legacySession = store.beginSourceScan(source.id)
+                store.upsertTrack(
+                    legacySession,
+                    candidate(
+                        remoteId = "7",
+                        title = "Legacy card track",
+                        contentUri = "content://media/external/audio/media/7",
+                    ),
+                )
+                store.completeSourceScan(legacySession, generation = "legacy-generation")
+                val legacy = store.readTracks(listOf(source.id)).single()
+                store.setFavorite(legacy.id, true)
+                store.recordPlayback(legacy.id, playedAtMs = 100)
+                val playlistId = requireNotNull(store.createPlaylist("Legacy card"))
+                store.addTrackToPlaylist(playlistId, legacy.id)
+
+                val targetRemoteId = mediaStoreRemoteId("1234-5678", 7)
+                val interruptedSession = store.beginSourceScan(source.id)
+                store.upsertTrack(
+                    interruptedSession,
+                    candidate(
+                        remoteId = targetRemoteId,
+                        title = "Concrete duplicate",
+                        contentUri = "content://media/1234-5678/audio/media/7",
+                    ),
+                )
+                val duplicate = store.readTracks(listOf(source.id)).single {
+                    it.title == "Concrete duplicate"
+                }
+                store.recordPlayback(duplicate.id, playedAtMs = 200)
+
+                assertTrue(
+                    store.migrateLegacyMediaStoreIdentities(
+                        listOf(
+                            MediaStoreLegacyIdentity(
+                                legacyRemoteId = "7",
+                                targetRemoteId = targetRemoteId,
+                                targetContentUri = "content://media/1234-5678/audio/media/7",
+                            ),
+                        ),
+                    ),
+                )
+
+                val migrated = store.readTracks(listOf(source.id)).single()
+                assertEquals(legacy.id, migrated.id)
+                assertEquals("content://media/1234-5678/audio/media/7", migrated.contentUri)
+                assertTrue(migrated.isFavorite)
+                assertEquals(2, migrated.playCount)
+                assertEquals(200, migrated.lastPlayedAtMs)
+                assertEquals(listOf(legacy.id), store.readPlaylists().single().trackIds)
+                assertNull(store.readSources().single().generation)
+
+                val reconciliation = store.beginSourceScan(source.id)
+                store.upsertTrack(
+                    reconciliation,
+                    candidate(
+                        remoteId = targetRemoteId,
+                        title = "Current card track",
+                        contentUri = "content://media/1234-5678/audio/media/7",
+                    ),
+                )
+                store.completeMediaStoreScan(
+                    reconciliation,
+                    generation = "concrete-generation",
+                    scannedVolumeNames = listOf("1234-5678"),
+                )
+                assertEquals(legacy.id, store.readTracks(listOf(source.id)).single().id)
+            }
+        } finally {
+            context.deleteDatabase(databaseName)
+        }
+    }
+
+    @Test
+    fun mediaStoreCompletionRetainsUnmountedVolumesAndPrunesDeletedTracksOnMountedVolumes() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val databaseName = "library-catalog-volumes-${System.nanoTime()}.db"
+        try {
+            LibraryCatalogStore(context, databaseName).use { store ->
+                val source = store.ensureDeviceSource()
+                val primaryRemoteId = mediaStoreRemoteId("external_primary", 1)
+                val firstSession = store.beginSourceScan(source.id)
+                store.upsertTrack(
+                    firstSession,
+                    candidate(
+                        remoteId = "1",
+                        title = "Primary",
+                        contentUri = "content://media/external/audio/media/1",
+                    ),
+                )
+                store.upsertTrack(
+                    firstSession,
+                    candidate(
+                        remoteId = mediaStoreRemoteId("external_primary", 3),
+                        title = "Deleted primary",
+                        contentUri = "content://media/external_primary/audio/media/3",
+                    ),
+                )
+                store.upsertTrack(
+                    firstSession,
+                    candidate(
+                        remoteId = mediaStoreRemoteId("1234-5678", 2),
+                        title = "Card",
+                        contentUri = "content://media/1234-5678/audio/media/2",
+                    ),
+                )
+                store.completeMediaStoreScan(
+                    firstSession,
+                    generation = "both-mounted",
+                    scannedVolumeNames = listOf("external_primary", "1234-5678"),
+                )
+                assertTrue(
+                    store.migrateLegacyMediaStoreIdentities(
+                        listOf(
+                            MediaStoreLegacyIdentity(
+                                legacyRemoteId = "1",
+                                targetRemoteId = primaryRemoteId,
+                                targetContentUri = "content://media/external_primary/audio/media/1",
+                            ),
+                        ),
+                    ),
+                )
+                val primary = store.readTracks(listOf(source.id)).single { it.title == "Primary" }
+                val card = store.readTracks(listOf(source.id)).single { it.title == "Card" }
+                store.setFavorite(card.id, true)
+                store.recordPlayback(card.id, playedAtMs = 123_456)
+                val playlistId = requireNotNull(store.createPlaylist("Card tracks"))
+                store.addTrackToPlaylist(playlistId, card.id)
+
+                val primaryOnlySession = store.beginSourceScan(source.id)
+                store.upsertTrack(
+                    primaryOnlySession,
+                    candidate(
+                        remoteId = primaryRemoteId,
+                        title = "Primary",
+                        contentUri = "content://media/external_primary/audio/media/1",
+                    ),
+                )
+                store.completeMediaStoreScan(
+                    primaryOnlySession,
+                    generation = "card-unmounted",
+                    scannedVolumeNames = listOf("external_primary"),
+                )
+
+                val retainedCard = store.readTracks(listOf(source.id)).single { it.title == "Card" }
+                val migratedPrimary = store.readTracks(listOf(source.id)).single { it.title == "Primary" }
+                assertEquals(primary.id, migratedPrimary.id)
+                assertEquals("content://media/external_primary/audio/media/1", migratedPrimary.contentUri)
+                assertTrue(
+                    store.readTracks(listOf(source.id)).none { it.title == "Deleted primary" },
+                )
+                assertEquals(card.id, retainedCard.id)
+                assertTrue(retainedCard.isFavorite)
+                assertEquals(1, retainedCard.playCount)
+                assertEquals(listOf(card.id), store.readPlaylists().single().trackIds)
+
+                val cardMountedAgainSession = store.beginSourceScan(source.id)
+                store.upsertTrack(
+                    cardMountedAgainSession,
+                    candidate(
+                        remoteId = primaryRemoteId,
+                        title = "Primary",
+                        contentUri = "content://media/external_primary/audio/media/1",
+                    ),
+                )
+                store.completeMediaStoreScan(
+                    cardMountedAgainSession,
+                    generation = "card-mounted-again",
+                    scannedVolumeNames = listOf("external_primary", "1234-5678"),
+                )
+
+                assertEquals(
+                    listOf("Primary"),
+                    store.readTracks(listOf(source.id)).map(AudioTrack::title),
+                )
+                assertTrue(store.readPlaylists().single().trackIds.isEmpty())
+            }
+        } finally {
+            context.deleteDatabase(databaseName)
+        }
+    }
+
+    @Test
+    fun ambiguousLegacySyntheticIdentityIsRetainedWithoutStealingAConcreteTrack() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val databaseName = "library-catalog-ambiguous-volume-${System.nanoTime()}.db"
+        try {
+            LibraryCatalogStore(context, databaseName).use { store ->
+                val source = store.ensureDeviceSource()
+                val legacySession = store.beginSourceScan(source.id)
+                store.upsertTrack(
+                    legacySession,
+                    candidate(
+                        remoteId = "9",
+                        title = "Ambiguous legacy track",
+                        contentUri = "content://media/external/audio/media/9",
+                    ),
+                )
+                store.completeSourceScan(legacySession, generation = "legacy-generation")
+                val legacyId = store.readTracks(listOf(source.id)).single().id
+                store.setFavorite(legacyId, true)
+
+                assertTrue(store.hasLegacyMediaStoreIdentities())
+                assertTrue(store.migrateLegacyMediaStoreIdentities(emptyList()))
+                assertFalse(store.hasLegacyMediaStoreIdentities())
+
+                val concreteSession = store.beginSourceScan(source.id)
+                store.upsertTrack(
+                    concreteSession,
+                    candidate(
+                        remoteId = mediaStoreRemoteId("external_primary", 9),
+                        title = "Concrete primary track",
+                        contentUri = "content://media/external_primary/audio/media/9",
+                    ),
+                )
+                store.completeMediaStoreScan(
+                    concreteSession,
+                    generation = "concrete-generation",
+                    scannedVolumeNames = listOf("external_primary"),
+                )
+
+                val retained = store.readTracks(listOf(source.id))
+                val legacy = retained.single { it.title == "Ambiguous legacy track" }
+                val concrete = retained.single { it.title == "Concrete primary track" }
+                assertEquals(legacyId, legacy.id)
+                assertTrue(legacy.isFavorite)
+                assertFalse(concrete.isFavorite)
+                assertFalse(legacy.id == concrete.id)
             }
         } finally {
             context.deleteDatabase(databaseName)
@@ -324,9 +624,13 @@ class LibraryCatalogStoreTest {
         assertEquals(mapOf("A" to 0, "B" to 1, "Z" to 2, "#" to 3), index.sections)
     }
 
-    private fun candidate(remoteId: String, title: String) = LibraryTrackCandidate(
+    private fun candidate(
+        remoteId: String,
+        title: String,
+        contentUri: String = "content://fixture/$remoteId",
+    ) = LibraryTrackCandidate(
         remoteId = remoteId,
-        contentUri = "content://fixture/$remoteId",
+        contentUri = contentUri,
         title = title,
         artist = "Artist",
         album = "Album",

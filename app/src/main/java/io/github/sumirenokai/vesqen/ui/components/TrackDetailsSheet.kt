@@ -46,6 +46,7 @@ fun TrackDetailsSheet(
     onToggleFavorite: (() -> Unit)? = null,
     onPlayNext: (() -> Unit)? = null,
     onAddToQueue: (() -> Unit)? = null,
+    queueActionsEnabled: Boolean = true,
     onAddToPlaylist: ((Long) -> Unit)? = null,
     onRemoveFromPlaylist: (() -> Unit)? = null,
     onMoveUp: (() -> Unit)? = null,
@@ -191,13 +192,25 @@ fun TrackDetailsSheet(
                     }
                 }
                 onPlayNext?.let { action ->
-                    TrackActionButton(stringResource(R.string.play_next), action)
+                    TrackActionButton(
+                        label = stringResource(R.string.play_next),
+                        onClick = action,
+                        enabled = queueActionsEnabled,
+                    )
                 }
                 onAddToQueue?.let { action ->
                     TrackActionButton(
                         label = stringResource(R.string.add_to_queue),
                         onClick = action,
+                        enabled = queueActionsEnabled,
                         modifier = Modifier.testTag("vesqen.track-details.add-to-queue"),
+                    )
+                }
+                if (!queueActionsEnabled && (onPlayNext != null || onAddToQueue != null)) {
+                    Text(
+                        text = stringResource(R.string.playback_controls_connecting),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 onRemoveFromPlaylist?.let { action ->
@@ -230,9 +243,14 @@ fun TrackDetailsSheet(
 private fun TrackActionButton(
     label: String,
     onClick: () -> Unit,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    OutlinedButton(onClick = onClick, modifier = modifier.fillMaxWidth()) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.fillMaxWidth(),
+    ) {
         Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

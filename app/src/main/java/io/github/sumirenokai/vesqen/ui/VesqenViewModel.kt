@@ -20,6 +20,7 @@ import io.github.sumirenokai.vesqen.library.LibrarySource
 import io.github.sumirenokai.vesqen.library.LibrarySourceKind
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
 import io.github.sumirenokai.vesqen.playback.PlaybackController
+import io.github.sumirenokai.vesqen.playback.PlaybackHistoryUpdate
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import kotlinx.coroutines.CancellationException
@@ -63,6 +64,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     private var activeLibraryScan: Job? = null
     private var libraryRefreshQueued = false
     private var lastMusicPermissionGranted: Boolean? = null
+    private val latestPlaybackHistory = mutableMapOf<Long, PlaybackHistoryUpdate>()
 
     var uiState by mutableStateOf(VesqenUiState())
         private set
@@ -70,8 +72,16 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     init {
         (application as? VesqenApplication)?.let { vesqenApplication ->
             viewModelScope.launch {
-                vesqenApplication.playbackHistoryRecorder.recordedTrackIds.collect {
-                    loadCachedLibrary()
+                vesqenApplication.playbackHistoryRecorder.recordedUpdates.collect { update ->
+                    latestPlaybackHistory[update.trackId] = update
+                    updateLibrary { library ->
+                        library.copy(
+                            tracks = applyPlaybackHistoryUpdates(
+                                tracks = library.tracks,
+                                updates = listOf(update),
+                            ),
+                        )
+                    }
                 }
             }
             viewModelScope.launch {
@@ -193,11 +203,14 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                 refreshQueuedLibrary()
                 return@launch
             }
+            val refreshedTracks = result.getOrNull()?.snapshot?.let { snapshot ->
+                mergeLatestPlaybackHistory(snapshot.tracks)
+            }
             updateLibrary {
                 val snapshot = result.getOrNull()?.snapshot
                 it.copy(
                     isLoading = false,
-                    tracks = snapshot?.tracks ?: it.tracks,
+                    tracks = refreshedTracks ?: it.tracks,
                     playlists = snapshot?.playlists ?: it.playlists,
                     sources = snapshot?.sources ?: it.sources,
                     scanProgress = it.scanProgress?.takeIf(LibraryScanProgress::isPaused)
@@ -206,7 +219,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                 )
             }
             result.getOrNull()?.snapshot?.let { snapshot ->
-                playbackController().syncLibrary(snapshot.tracks)
+                playbackController().syncLibrary(refreshedTracks ?: snapshot.tracks)
             }
             activeLibraryScan = null
             refreshQueuedLibrary()
@@ -346,13 +359,29 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun restoreCatalogThenRefresh() {
         viewModelScope.launch {
-            loadCachedLibrary()
+            try {
+                loadCachedLibrary()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // A corrupt or temporarily unavailable cache must not prevent a provider rescan.
+                updateLibrary { it.copy(loadingFailed = true) }
+            }
             refreshLibrary()
         }
     }
 
     private fun refreshCachedLibrary() {
-        viewModelScope.launch { loadCachedLibrary() }
+        viewModelScope.launch {
+            try {
+                loadCachedLibrary()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Keep the last good projection; the user can still request a full refresh.
+                updateLibrary { it.copy(loadingFailed = true) }
+            }
+        }
     }
 
     private fun refreshQueuedLibrary() {
@@ -367,18 +396,37 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         cachedLibraryReader.read(
             load = { withContext(Dispatchers.IO) { catalog.snapshot(includeDeviceLibrary) } },
             publish = { snapshot ->
+                val refreshedTracks = mergeLatestPlaybackHistory(snapshot.tracks)
                 updateLibrary { current ->
                     current.copy(
-                        tracks = snapshot.tracks,
+                        tracks = refreshedTracks,
                         playlists = snapshot.playlists,
                         sources = snapshot.sources,
                         scanProgress = snapshot.pausedProgress()
                             ?: current.scanProgress?.takeIf(LibraryScanProgress::isPaused),
                     )
                 }
-                playbackController().syncLibrary(snapshot.tracks)
+                playbackController().syncLibrary(refreshedTracks)
             },
         )
+    }
+
+    /**
+     * A catalog read can begin before a history write and publish afterward. Overlay post-write
+     * values until a later snapshot proves it contains the same or newer database state.
+     */
+    private fun mergeLatestPlaybackHistory(tracks: List<AudioTrack>): List<AudioTrack> {
+        val merged = applyPlaybackHistoryUpdates(tracks, latestPlaybackHistory.values)
+        tracks.forEach { track ->
+            val update = latestPlaybackHistory[track.id] ?: return@forEach
+            if (
+                track.playCount > update.playCount ||
+                (track.playCount == update.playCount && track.lastPlayedAtMs >= update.lastPlayedAtMs)
+            ) {
+                latestPlaybackHistory.remove(track.id)
+            }
+        }
+        return merged
     }
 
     private fun mutateCatalog(action: suspend () -> Unit) {
@@ -405,6 +453,33 @@ private fun LibraryCatalogSnapshot.pausedProgress(): LibraryScanProgress? = sour
         scannedTrackCount = 0,
         isPaused = true,
     )
+}
+
+/** Applies authoritative history fields while preserving every playback/catalog identity field. */
+internal fun applyPlaybackHistoryUpdates(
+    tracks: List<AudioTrack>,
+    updates: Collection<PlaybackHistoryUpdate>,
+): List<AudioTrack> {
+    if (tracks.isEmpty() || updates.isEmpty()) return tracks
+    val updatesByTrackId = updates.associateBy(PlaybackHistoryUpdate::trackId)
+    var result: MutableList<AudioTrack>? = null
+    tracks.forEachIndexed { index, track ->
+        val update = updatesByTrackId[track.id] ?: return@forEachIndexed
+        val updatedTrack = when {
+            update.playCount > track.playCount -> track.copy(
+                playCount = update.playCount,
+                lastPlayedAtMs = update.lastPlayedAtMs,
+            )
+            update.playCount == track.playCount && update.lastPlayedAtMs > track.lastPlayedAtMs ->
+                track.copy(lastPlayedAtMs = update.lastPlayedAtMs)
+            else -> track
+        }
+        if (updatedTrack !== track) {
+            val mutable = result ?: tracks.toMutableList().also { result = it }
+            mutable[index] = updatedTrack
+        }
+    }
+    return result ?: tracks
 }
 
 private fun pausedProgressFrom(sources: List<LibrarySource>): LibraryScanProgress? = sources.firstOrNull {

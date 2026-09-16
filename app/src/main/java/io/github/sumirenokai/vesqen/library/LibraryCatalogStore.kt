@@ -191,6 +191,159 @@ internal class LibraryCatalogStore(
         }
     }
 
+    /** Lightweight source-owned locations used to build the currently playable projection. */
+    fun readTrackContentUris(sourceId: String): Map<Long, String> = readableDatabase.query(
+        TRACKS_TABLE,
+        arrayOf(TRACK_ID, TRACK_CONTENT_URI),
+        "$TRACK_SOURCE_ID = ?",
+        arrayOf(sourceId),
+        null,
+        null,
+        null,
+    ).use { cursor ->
+        buildMap {
+            while (cursor.moveToNext()) put(cursor.getLong(0), cursor.getString(1))
+        }
+    }
+
+    fun hasLegacyMediaStoreIdentities(): Boolean = readableDatabase.query(
+        TRACKS_TABLE,
+        arrayOf(TRACK_ID),
+        "$TRACK_SOURCE_ID = ? AND $TRACK_CONTENT_URI GLOB ? AND $TRACK_REMOTE_ID NOT GLOB ?",
+        arrayOf(
+            LibrarySourceId.DEVICE,
+            "content://media/external/*",
+            "$UNRESOLVED_LEGACY_MEDIASTORE_PREFIX*",
+        ),
+        null,
+        null,
+        null,
+        "1",
+    ).use(Cursor::moveToFirst)
+
+    /**
+     * Re-keys rows written through MediaStore's synthetic `external` view without changing their
+     * stable catalog ID. If an interrupted newer scan already inserted the concrete identity, its
+     * user state and playlist memberships are folded back into the legacy row before deletion.
+     * Rows that cannot be attributed to exactly one concrete volume are assigned an isolated
+     * remote identity and retained. This prevents a later primary-volume scan from attaching their
+     * favorites, history, or playlist membership to a different song with the same provider ID.
+     */
+    fun migrateLegacyMediaStoreIdentities(
+        identities: Collection<MediaStoreLegacyIdentity>,
+    ): Boolean {
+        var changed = false
+        writableDatabase.transaction {
+            identities.forEach { identity ->
+                val legacy = readTrackMigrationState(
+                    database = this,
+                    remoteId = identity.legacyRemoteId,
+                    requireSyntheticExternalUri = true,
+                ) ?: return@forEach
+                val target = readTrackMigrationState(
+                    database = this,
+                    remoteId = identity.targetRemoteId,
+                    requireSyntheticExternalUri = false,
+                )
+                if (target != null && target.trackId != legacy.trackId) {
+                    val mergedFavorite = legacy.isFavorite || target.isFavorite
+                    val mergedFavoritePosition = when {
+                        !mergedFavorite -> null
+                        legacy.isFavorite && target.isFavorite ->
+                            listOfNotNull(legacy.favoritePosition, target.favoritePosition).minOrNull()
+                        legacy.isFavorite -> legacy.favoritePosition
+                        else -> target.favoritePosition
+                    }
+                    update(
+                        TRACKS_TABLE,
+                        ContentValues().apply {
+                            put(TRACK_IS_FAVORITE, if (mergedFavorite) 1 else 0)
+                            putNullableLong(TRACK_FAVORITE_POSITION, mergedFavoritePosition)
+                            put(
+                                TRACK_PLAY_COUNT,
+                                (legacy.playCount.toLong() + target.playCount.toLong())
+                                    .coerceAtMost(Int.MAX_VALUE.toLong()),
+                            )
+                            put(
+                                TRACK_LAST_PLAYED_AT_MS,
+                                maxOf(legacy.lastPlayedAtMs, target.lastPlayedAtMs),
+                            )
+                        },
+                        "$TRACK_ID = ?",
+                        arrayOf(legacy.trackId.toString()),
+                    )
+                    execSQL(
+                        """
+                        INSERT OR IGNORE INTO $PLAYLIST_ITEMS_TABLE (
+                            $PLAYLIST_ITEM_PLAYLIST_ID,
+                            $PLAYLIST_ITEM_TRACK_ID,
+                            $PLAYLIST_ITEM_POSITION,
+                            $PLAYLIST_ITEM_ADDED_AT_MS
+                        )
+                        SELECT $PLAYLIST_ITEM_PLAYLIST_ID, ?, $PLAYLIST_ITEM_POSITION,
+                               $PLAYLIST_ITEM_ADDED_AT_MS
+                          FROM $PLAYLIST_ITEMS_TABLE
+                         WHERE $PLAYLIST_ITEM_TRACK_ID = ?
+                        """.trimIndent(),
+                        arrayOf(legacy.trackId, target.trackId),
+                    )
+                    delete(TRACKS_TABLE, "$TRACK_ID = ?", arrayOf(target.trackId.toString()))
+                }
+                val updated = update(
+                    TRACKS_TABLE,
+                    ContentValues().apply {
+                        put(TRACK_REMOTE_ID, identity.targetRemoteId)
+                        put(TRACK_CONTENT_URI, identity.targetContentUri)
+                    },
+                    "$TRACK_ID = ?",
+                    arrayOf(legacy.trackId.toString()),
+                )
+                if (updated == 1) changed = true
+            }
+            val unresolved = query(
+                TRACKS_TABLE,
+                arrayOf(TRACK_ID, TRACK_REMOTE_ID),
+                "$TRACK_SOURCE_ID = ? AND $TRACK_CONTENT_URI GLOB ? AND " +
+                    "$TRACK_REMOTE_ID NOT GLOB ?",
+                arrayOf(
+                    LibrarySourceId.DEVICE,
+                    "content://media/external/*",
+                    "$UNRESOLVED_LEGACY_MEDIASTORE_PREFIX*",
+                ),
+                null,
+                null,
+                null,
+            ).use { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) add(cursor.getLong(0) to cursor.getString(1))
+                }
+            }
+            unresolved.forEach { (trackId, remoteId) ->
+                val updated = update(
+                    TRACKS_TABLE,
+                    ContentValues().apply {
+                        put(
+                            TRACK_REMOTE_ID,
+                            "$UNRESOLVED_LEGACY_MEDIASTORE_PREFIX$trackId:$remoteId",
+                        )
+                    },
+                    "$TRACK_ID = ?",
+                    arrayOf(trackId.toString()),
+                )
+                if (updated == 1) changed = true
+            }
+            if (changed) {
+                update(
+                    SOURCES_TABLE,
+                    ContentValues().apply { putNull(SOURCE_GENERATION) },
+                    "$SOURCE_ID = ?",
+                    arrayOf(LibrarySourceId.DEVICE),
+                )
+            }
+        }
+        return changed
+    }
+
     fun setFavorite(trackId: Long, favorite: Boolean) {
         val db = writableDatabase
         db.transaction {
@@ -225,40 +378,86 @@ internal class LibraryCatalogStore(
         }
     }
 
-    fun recordPlayback(trackId: Long, playedAtMs: Long) {
-        writableDatabase.execSQL(
-            """
-            UPDATE $TRACKS_TABLE
-               SET $TRACK_PLAY_COUNT = $TRACK_PLAY_COUNT + 1,
-                   $TRACK_LAST_PLAYED_AT_MS = ?
-             WHERE $TRACK_ID = ?
-            """.trimIndent(),
-            arrayOf(playedAtMs, trackId),
-        )
-    }
-
-    fun readPlaylists(): List<LibraryPlaylist> = readableDatabase.query(
-        PLAYLISTS_TABLE,
-        arrayOf(PLAYLIST_ID, PLAYLIST_NAME, PLAYLIST_CREATED_AT_MS, PLAYLIST_UPDATED_AT_MS),
-        null,
-        null,
-        null,
-        null,
-        "$PLAYLIST_NAME COLLATE NOCASE ASC, $PLAYLIST_ID ASC",
-    ).use { cursor ->
-        buildList {
-            while (cursor.moveToNext()) {
-                val playlistId = cursor.getLong(cursor.getColumnIndexOrThrow(PLAYLIST_ID))
-                add(
-                    LibraryPlaylist(
-                        id = playlistId,
-                        name = cursor.getString(cursor.getColumnIndexOrThrow(PLAYLIST_NAME)),
-                        trackIds = readPlaylistTrackIds(playlistId),
-                        createdAtMs = cursor.getLong(cursor.getColumnIndexOrThrow(PLAYLIST_CREATED_AT_MS)),
-                        updatedAtMs = cursor.getLong(cursor.getColumnIndexOrThrow(PLAYLIST_UPDATED_AT_MS)),
-                    ),
-                )
+    fun recordPlayback(trackId: Long, playedAtMs: Long): TrackPlaybackHistory? =
+        writableDatabase.transaction {
+            execSQL(
+                """
+                UPDATE $TRACKS_TABLE
+                   SET $TRACK_PLAY_COUNT = $TRACK_PLAY_COUNT + 1,
+                       $TRACK_LAST_PLAYED_AT_MS = ?
+                 WHERE $TRACK_ID = ?
+                """.trimIndent(),
+                arrayOf(playedAtMs, trackId),
+            )
+            query(
+                TRACKS_TABLE,
+                arrayOf(TRACK_PLAY_COUNT, TRACK_LAST_PLAYED_AT_MS),
+                "$TRACK_ID = ?",
+                arrayOf(trackId.toString()),
+                null,
+                null,
+                null,
+            ).use { cursor ->
+                if (!cursor.moveToFirst()) {
+                    null
+                } else {
+                    TrackPlaybackHistory(
+                        playCount = cursor.getInt(0),
+                        lastPlayedAtMs = cursor.getLong(1),
+                    )
+                }
             }
+        }
+
+    fun readPlaylists(): List<LibraryPlaylist> {
+        val database = readableDatabase
+        val playlists = database.query(
+            PLAYLISTS_TABLE,
+            arrayOf(PLAYLIST_ID, PLAYLIST_NAME, PLAYLIST_CREATED_AT_MS, PLAYLIST_UPDATED_AT_MS),
+            null,
+            null,
+            null,
+            null,
+            "$PLAYLIST_NAME COLLATE NOCASE ASC, $PLAYLIST_ID ASC",
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(
+                        LibraryPlaylist(
+                            id = cursor.getLong(cursor.getColumnIndexOrThrow(PLAYLIST_ID)),
+                            name = cursor.getString(cursor.getColumnIndexOrThrow(PLAYLIST_NAME)),
+                            trackIds = emptyList(),
+                            createdAtMs = cursor.getLong(
+                                cursor.getColumnIndexOrThrow(PLAYLIST_CREATED_AT_MS),
+                            ),
+                            updatedAtMs = cursor.getLong(
+                                cursor.getColumnIndexOrThrow(PLAYLIST_UPDATED_AT_MS),
+                            ),
+                        ),
+                    )
+                }
+            }
+        }
+        if (playlists.isEmpty()) return playlists
+
+        val trackIdsByPlaylist = database.query(
+            PLAYLIST_ITEMS_TABLE,
+            arrayOf(PLAYLIST_ITEM_PLAYLIST_ID, PLAYLIST_ITEM_TRACK_ID),
+            null,
+            null,
+            null,
+            null,
+            "$PLAYLIST_ITEM_PLAYLIST_ID ASC, $PLAYLIST_ITEM_POSITION ASC, " +
+                "$PLAYLIST_ITEM_ADDED_AT_MS ASC, $PLAYLIST_ITEM_TRACK_ID ASC",
+        ).use { cursor ->
+            buildMap<Long, MutableList<Long>> {
+                while (cursor.moveToNext()) {
+                    getOrPut(cursor.getLong(0), ::mutableListOf).add(cursor.getLong(1))
+                }
+            }
+        }
+        return playlists.map { playlist ->
+            playlist.copy(trackIds = trackIdsByPlaylist[playlist.id].orEmpty())
         }
     }
 
@@ -450,12 +649,62 @@ internal class LibraryCatalogStore(
      * paused or failed scan never prunes rows that were not reached by that iteration.
      */
     fun completeSourceScan(session: SourceScanSession, generation: String? = null) {
+        completeSourceScan(
+            session = session,
+            generation = generation,
+            prunableMediaStoreVolumes = null,
+        )
+    }
+
+    /**
+     * Completes a device scan without treating an unmounted volume as an empty one. Tracks on
+     * volumes absent from this scan retain their catalog rows and user-owned metadata.
+     */
+    fun completeMediaStoreScan(
+        session: SourceScanSession,
+        generation: String?,
+        scannedVolumeNames: Collection<String>,
+    ) {
+        require(session.sourceId == LibrarySourceId.DEVICE)
+        require(scannedVolumeNames.isNotEmpty())
+        completeSourceScan(
+            session = session,
+            generation = generation,
+            prunableMediaStoreVolumes = mediaStorePrunableVolumeNames(scannedVolumeNames),
+        )
+    }
+
+    private fun completeSourceScan(
+        session: SourceScanSession,
+        generation: String?,
+        prunableMediaStoreVolumes: Set<String>?,
+    ) {
         val database = writableDatabase
         database.transaction {
+            val prunePatterns = prunableMediaStoreVolumes?.map { volumeName ->
+                "content://media/$volumeName/*"
+            }
+            val pruneSelection = buildString {
+                append("$TRACK_SOURCE_ID = ? AND $TRACK_SEEN_EPOCH != ?")
+                if (prunePatterns != null) {
+                    append(" AND (")
+                    append(
+                        prunePatterns.joinToString(separator = " OR ") {
+                            "$TRACK_CONTENT_URI GLOB ?"
+                        },
+                    )
+                    append(")")
+                }
+            }
+            val pruneArguments = buildList {
+                add(session.sourceId)
+                add(session.epoch.toString())
+                if (prunePatterns != null) addAll(prunePatterns)
+            }.toTypedArray()
             database.delete(
                 TRACKS_TABLE,
-                "$TRACK_SOURCE_ID = ? AND $TRACK_SEEN_EPOCH != ?",
-                arrayOf(session.sourceId, session.epoch.toString()),
+                pruneSelection,
+                pruneArguments,
             )
             check(updateCompletedSource(database, session.sourceId, generation) == 1) {
                 "Cannot complete a scan for a missing source"
@@ -519,6 +768,51 @@ internal class LibraryCatalogStore(
         scanEpoch = getLong(getColumnIndexOrThrow(SOURCE_SCAN_EPOCH)),
         trackCount = trackCount ?: getInt(getColumnIndexOrThrow("track_count")),
     )
+
+    private fun readTrackMigrationState(
+        database: SQLiteDatabase,
+        remoteId: String,
+        requireSyntheticExternalUri: Boolean,
+    ): TrackMigrationState? {
+        val selection = buildString {
+            append("$TRACK_SOURCE_ID = ? AND $TRACK_REMOTE_ID = ?")
+            if (requireSyntheticExternalUri) {
+                append(" AND $TRACK_CONTENT_URI GLOB ?")
+            }
+        }
+        val arguments = buildList {
+            add(LibrarySourceId.DEVICE)
+            add(remoteId)
+            if (requireSyntheticExternalUri) add("content://media/external/*")
+        }.toTypedArray()
+        return database.query(
+            TRACKS_TABLE,
+            arrayOf(
+                TRACK_ID,
+                TRACK_IS_FAVORITE,
+                TRACK_FAVORITE_POSITION,
+                TRACK_LAST_PLAYED_AT_MS,
+                TRACK_PLAY_COUNT,
+            ),
+            selection,
+            arguments,
+            null,
+            null,
+            null,
+        ).use { cursor ->
+            if (!cursor.moveToFirst()) {
+                null
+            } else {
+                TrackMigrationState(
+                    trackId = cursor.getLong(0),
+                    isFavorite = cursor.getInt(1) != 0,
+                    favoritePosition = if (cursor.isNull(2)) null else cursor.getLong(2),
+                    lastPlayedAtMs = cursor.getLong(3),
+                    playCount = cursor.getInt(4),
+                )
+            }
+        }
+    }
 
     private fun Cursor.toAudioTrack(): AudioTrack = AudioTrack(
         id = getLong(getColumnIndexOrThrow(TRACK_ID)),
@@ -774,6 +1068,7 @@ internal class LibraryCatalogStore(
         private const val TRACK_FINGERPRINT = "fingerprint"
         private const val TRACK_ARTWORK_REVISION = "artwork_revision"
         private const val TRACK_SEEN_EPOCH = "seen_epoch"
+        private const val UNRESOLVED_LEGACY_MEDIASTORE_PREFIX = "legacy-unresolved:"
 
         private const val PLAYLISTS_TABLE = "library_playlists"
         private const val PLAYLIST_ID = "playlist_id"
@@ -843,4 +1138,12 @@ internal data class StoredLibrarySource(
 internal data class SourceScanSession(
     val sourceId: String,
     val epoch: Long,
+)
+
+private data class TrackMigrationState(
+    val trackId: Long,
+    val isFavorite: Boolean,
+    val favoritePosition: Long?,
+    val lastPlayedAtMs: Long,
+    val playCount: Int,
 )

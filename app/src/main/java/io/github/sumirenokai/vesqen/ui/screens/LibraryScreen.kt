@@ -550,6 +550,7 @@ fun LibraryScreen(
                 onAddToQueue(track)
                 detailsTrack = null
             },
+            queueActionsEnabled = playback.isControllerReady,
             onAddToPlaylist = { targetPlaylistId ->
                 onAddTrackToPlaylist(targetPlaylistId, track.id)
                 detailsTrack = null

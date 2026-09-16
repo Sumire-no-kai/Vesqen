@@ -34,16 +34,23 @@ internal class PlaybackHistoryRecorder(
         capacity = requestCapacity.also { require(it > 0) },
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
-    private val _recordedTrackIds = MutableSharedFlow<Long>(extraBufferCapacity = 1)
-    val recordedTrackIds = _recordedTrackIds.asSharedFlow()
+    private val _recordedUpdates = MutableSharedFlow<PlaybackHistoryUpdate>(
+        extraBufferCapacity = requestCapacity,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val recordedUpdates = _recordedUpdates.asSharedFlow()
 
     init {
         scope.launch(Dispatchers.IO) {
             try {
                 for (request in requests) {
                     try {
-                        backend.recordPlayback(request.trackId, request.playedAtMs)
-                        _recordedTrackIds.emit(request.trackId)
+                        backend.recordPlayback(request.trackId, request.playedAtMs)?.let { update ->
+                            // UI refresh is secondary to the durable write. A slow catalog screen
+                            // must never suspend this application-lifetime writer and cause the
+                            // playback-facing request queue to overflow.
+                            _recordedUpdates.tryEmit(update)
+                        }
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (_: Exception) {
@@ -70,15 +77,20 @@ internal class PlaybackHistoryRecorder(
 internal const val PLAYBACK_HISTORY_REQUEST_CAPACITY = 64
 
 internal interface PlaybackHistoryBackend : Closeable {
-    suspend fun recordPlayback(trackId: Long, playedAtMs: Long)
+    suspend fun recordPlayback(trackId: Long, playedAtMs: Long): PlaybackHistoryUpdate?
 }
 
 private class AndroidPlaybackHistoryBackend(context: Context) : PlaybackHistoryBackend {
     private val store = LibraryCatalogStore(context)
 
-    override suspend fun recordPlayback(trackId: Long, playedAtMs: Long) {
-        store.recordPlayback(trackId, playedAtMs)
-    }
+    override suspend fun recordPlayback(trackId: Long, playedAtMs: Long): PlaybackHistoryUpdate? =
+        store.recordPlayback(trackId, playedAtMs)?.let { history ->
+            PlaybackHistoryUpdate(
+                trackId = trackId,
+                playCount = history.playCount,
+                lastPlayedAtMs = history.lastPlayedAtMs,
+            )
+        }
 
     override fun close() {
         store.close()
@@ -88,4 +100,11 @@ private class AndroidPlaybackHistoryBackend(context: Context) : PlaybackHistoryB
 private data class PlaybackHistoryRequest(
     val trackId: Long,
     val playedAtMs: Long,
+)
+
+/** Authoritative post-write values used to patch one UI row without reloading the whole catalog. */
+internal data class PlaybackHistoryUpdate(
+    val trackId: Long,
+    val playCount: Int,
+    val lastPlayedAtMs: Long,
 )
