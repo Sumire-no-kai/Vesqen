@@ -117,6 +117,6 @@
 ### 2026-09-16 · 发版候选详细复审与最终软件回归
 
 - 本轮详细复审修复严格输出 PCM 闸门、Controller 断连后的证明撤销、MediaSession 命令能力、MediaStore 多卷身份迁移与歧义隔离、完整扫描清理边界、SAF provider 错误、播放历史整库刷新、播放列表 1+N 查询以及无关 Now 转场。完整发现和保留的架构债务见 [架构审查](ARCHITECTURE_REVIEW.md)。
-- 本地完整软件门禁为 230 项 JVM tests 全部通过、Lint 0 errors / 26 warnings，Debug、Profile、未签名 Release 与 instrumentation APK 构建完成；Python 工具测试 13/13。该次本机构建使用 Oracle JDK 25.0.4.1，不冒充发布要求的 JDK 21 证据，JDK 21/远端 CI 必须在推送后单列确认。
+- 本地完整软件门禁为 230 项 JVM tests 全部通过、Lint 0 errors / 26 warnings，Debug、Profile、未签名 Release 与 instrumentation APK 构建完成；Python 工具测试 13/13。本机构建使用 Oracle JDK 25.0.4.1；推送 `c6dd340` 后，GitHub Actions [Android CI #35057717601](https://github.com/Sumire-no-kai/Vesqen/actions/runs/35057717601) 在 Temurin JDK 21 下通过证据工具、unit/lint/Debug/test APK、Profile 和 Release，JDK 21 门禁独立关闭。
 - iQOO V2171A / Android 15 上，曲库存储与迁移 11/11 通过，三个输出／断连 UI 用例通过，严格失败提示在 vivo 销毁 Activity 的合批失败后独立 1/1 通过。测试 APK 签名不一致时只替换 test 包，主应用未卸载或清数据；最终移除 test 包并恢复不可调试 Profile，设备与本地 Profile SHA-256 均为 `ac6a3ad2678279ac838e88e734b62ad09d9b20ab24bcab8eeb8de9279eb12177`。
-- 这形成可推送的软件冻结候选，但没有连接真实 DAC，不关闭严格路由／拔插、外部逐样本 VERIFIED、发布签名与同签名升级、完整 TalkBack／适配、长时矩阵或 M3-R1 双机性能门禁；没有创建 tag、Release 或商店产物。
+- 这形成已推送且远端 CI 通过的软件冻结候选，但没有连接真实 DAC，不关闭严格路由／拔插、外部逐样本 VERIFIED、发布签名与同签名升级、完整 TalkBack／适配、长时矩阵或 M3-R1 双机性能门禁；没有创建 tag、Release 或商店产物。

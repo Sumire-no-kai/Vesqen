@@ -943,8 +943,8 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 
 - 最终完整命令 `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleProfile :app:assembleRelease :app:assembleDebugAndroidTest --console=plain` 通过：230 项 JVM tests，0 failures/errors/skipped；lint 0 errors、26 warnings；Debug、Profile、未签名 Release 和 instrumentation APK 均完成。`git diff --check` 通过。
 - `python3 -m unittest discover -s tools/tests -v` 通过 13/13。
-- 本机只有 Oracle JDK 25.0.4.1，本轮 Gradle 证据来自 JDK 25，不冒称满足发布清单要求的 JDK 21；JDK 21/远端 CI 仍须在推送后单独确认。
+- 本机只有 Oracle JDK 25.0.4.1，本轮本地 Gradle 证据来自 JDK 25。推送 `c6dd340` 后，GitHub Actions [Android CI #35057717601](https://github.com/Sumire-no-kai/Vesqen/actions/runs/35057717601) 在 Temurin JDK 21 下依次通过证据工具、unit/lint/Debug/test APK、Profile 和 Release，补齐本机缺少的 JDK 21 门禁。
 - iQOO V2171A / Android 15 上，最终 Debug app/test 取得 11/11 曲库存储与迁移、3/3 新增输出/断连 UI 用例通过；严格输出失败提示首个合批被 vivo 前台宿主提前销毁 Activity，失败批次保留，独立方法级复测 1/1 通过。较早一次该用例真实断言失败暴露测试夹具可构造不可能快照，随后把约束提升为生产模型不变量并独立复测，没有删除或放宽断言。
 - 设备上旧测试包签名与当前测试 APK 不同；只卸载并替换 `io.github.sumirenokai.vesqen.test`，未卸载主应用或清除主数据。测试结束后测试包已移除，主应用恢复最终不可调试 Profile。设备 base APK 与本地 `app-profile.apk` 的 SHA-256 同为 `ac6a3ad2678279ac838e88e734b62ad09d9b20ab24bcab8eeb8de9279eb12177`。
 
-上述结果形成可提交的软件候选，但不关闭完整 M4：真实 DAC 严格路由/拔插、外部数字逐样本 VERIFIED、JDK 21/远端 CI、发布签名与同签名升级、完整 TalkBack/适配、长时矩阵及 M3-R1 最终双机配对性能验收仍开放。本轮未创建 tag、Release 或商店产物。
+上述结果形成已推送并通过远端 CI 的软件候选，但不关闭完整 M4：真实 DAC 严格路由/拔插、外部数字逐样本 VERIFIED、发布签名与同签名升级、完整 TalkBack/适配、长时矩阵及 M3-R1 最终双机配对性能验收仍开放。本轮未创建 tag、Release 或商店产物。
