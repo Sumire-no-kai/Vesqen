@@ -20,7 +20,7 @@ Library 首页快速滑动的具体根因定位与代码修复现列为 **M3 正
 
 | 编号 | 未完成项 | 当前状态与下一步 | 关闭条件 |
 | --- | --- | --- | --- |
-| M3-R1 | Library 业务根因与实际修复 | 已确认 Debug 冷路径开销；iQOO 的 60 Hz Profile 样本较稳定，但没有完成可归因的业务修复。可继续分析已有 trace，后续测量需对应设备。 | 具体业务调用路径与慢帧证据、最小代码修复；Honor/iQOO 使用同一最终 APK 各至少三轮修复前后配对，jank/p95 改善超过自然波动，核心曲库功能无回归。实际高刷新率另保留验证，不能把 60 Hz 结果外推。 |
+| M3-R1 | Library 业务根因与实际修复 | 9 月 16 日确认交付 Debug 和 Release/Profile 关闭 R8 的构建问题；开启 R8 后 iQOO 三轮 p95 为 10/10/10 ms，首次输入、布局与主线程 CPU 成本下降。仍有偶发纹理上传/慢帧，业务级修复与双机门禁未完整闭环，详见工程案例 P04。 | 具体业务调用路径与慢帧证据、最小代码修复；Honor/iQOO 使用同一最终 APK 各至少三轮修复前后配对，jank/p95 改善超过自然波动，核心曲库功能无回归。实际高刷新率另保留验证，不能把 60 Hz 结果外推。 |
 | M3-R2 | 真实 USB 能力与严格输出矩阵 | **缺少 DAC，等待硬件**。无 DAC 失败、模式切换和 Controller 重连已通过，真实格式匹配、设置/读回、路由和拔插未验收。 | 至少两台 Android 14+ 手机 × 两款 DAC，覆盖支持/不支持格式、拔插、路由变化及失败清理；无错误 ACTIVE。Honor Android 9 不计作第二台现代设备。 |
 | M3-R3 | 最终 M3 候选的旧系统兼容 | Honor 的旧版验收不能替代最终 M3 代码验证；当前仅有 iQOO 证据，本机尚无旧系统模拟器镜像。 | 补齐 API 26–33 兼容证据，确认不加载或调用 API 34 专属实现，并验证普通播放和明确的降级状态；模拟器与真机结果分开记录。 |
 | M3-R4 | 严格模式中断、恢复及长期资源释放 | 短时普通播放、无 USB 故障及观察者释放已有证据；真实严格输出的焦点/路由变化、后台/锁屏、服务恢复和长期资源释放仍待验证。**长时间测试按用户要求暂缓**。 | 相关事件顺序和资源清理有最终候选证据；失效后撤销 ACTIVE，恢复普通输出须由用户选择。长时执行等待用户后续安排，脚本准备可以先做。 |
@@ -37,7 +37,7 @@ M2 遗留的 Chain 250 ms 跨设备性能、完整格式/无障碍/适配及 Blu
 | Android 14 官方 mixer 接入 | **代码候选完成** | API 34 adapter 已隔离；Media3 1.11 `AudioOutputProvider` 在创建 `AudioTrack` 前设置 preference，并在实际输出格式、readback 和路由一致后才声明 ACTIVE。仍缺 Android 14+ 与真实 DAC 证明。 |
 | 严格模式 fail-closed | **无设备失败路径已通过 iQOO 回归** | 无 USB 时停止并报告 NO_USB_AUDIO_DEVICE，Controller 重连保持失败，只有主动选择 SYSTEM 后恢复；从未错误声明 AVAILABLE/ACTIVE。真实路由、拔插及长时资源压力仍缺硬件。 |
 | 设置、播放器、Chain、诊断 | **已取得部分真机回归** | 47 项 UI 用例分别取得通过结果，覆盖 Chain 入口/窄屏/大字；100 次 Chain 进出、前后台录制和旋转返回通过。新增 USB 全状态的实物展示、中英完整矩阵仍开放。 |
-| Release/profileable 性能入口 | **已在 iQOO 执行** | 取得 Debug/Profile 三轮帧统计、Perfetto 及 Simpleperf。脚本核验实际 APK 哈希/调试标志，默认拒绝 Debug 作为验收构建；当前 Release/Profile 的 R8 仍关闭。 |
+| Release/profileable 性能入口 | **已在 iQOO 执行** | 取得 Debug/Profile 三轮帧统计、Perfetto 及 Simpleperf。脚本核验实际 APK 哈希/调试标志，默认拒绝 Debug 作为验收构建；9 月 16 日起 Release/Profile 开启 R8，保留对应 APK 与 mapping，结果见工程案例 P04。 |
 | Library 首页卡顿 | **已确认 Debug 冷路径是重要因素，完成门禁仍开放** | Debug 慢帧主要为主线程 CPU 执行，集中在新行组成/测量；同源码非 debuggable 构建显著改善。完整现场数据与边界见工程案例 P02；Honor、实际高刷新率和唯一业务修复尚未闭环。 |
 
 修复真机发现的 Media3 1.11 会话授权回归后，本地门禁通过 `testDebugUnitTest`（195 项，0 失败/错误/跳过）、`lintDebug`（0 错误、21 个既有告警）、Debug/Profile/Release 构建和 instrumentation APK 构建。iQOO 共有 **65 个不同用例取得通过结果**，包含修复后的分批和独立复测，不能描述成一次 65/65 全套成功。原失败与中断批次均保留。证据见 [设备验收记录](M2_DEVICE_ACCEPTANCE.md) 和 [中文工程案例 R06/P02](ENGINEERING_CASEBOOK.md)。**M3 里程碑尚未完成**：无 USB 故障回归不能代替 DAC 输出验证，单台 60 Hz 的性能结果也不能关闭双机门禁。

@@ -93,3 +93,12 @@ Manual follow-up: original-list Favorites drag, Save, process restart and persis
 - 三份实际 24-bit 无损音源在两机验证；新增容器头回归修复 Honor 源位深误报。系统媒体通知得到封面和返回入口；iQOO 紧凑模板的封面展示及箭头是 OEM 限制。
 - Library 快滑在两机完成帧统计；有效 iQOO Perfetto/CPU 栈和 Honor atrace 指向布局、文本及预取热点。尚无可靠优化收益，M1 性能体验仍未关闭。可复现步骤、失效实验和调用栈解释见 [中文工程案例 P01](ENGINEERING_CASEBOOK.md)。
 - 两机原曲目 ID、来源身份、收藏和歌单保留。Honor 从 37 首增加到 40 首，iQOO 保持 112 首；保留用户导入，恢复测试前播放/浏览偏好和系统字体/方向/超时设置，清理本轮私有夹具。没有用旧数据库覆盖新音源或历史。
+
+## 2026-09-16 · iQOO 曲库滑动与优化构建交付
+
+- 当前 iQOO V2171A / Android 15、112 首真实曲库、实际 60 Hz。确认先前安装的是 Debug，改用同签名 Profile 保留数据覆盖。随后仅开启 Release/Profile 的 R8 优化；未更改列表、调度策略、刷新率或音乐文件。对照、逐帧定位与限制详见 [工程案例 P04](ENGINEERING_CASEBOOK.md#p04--曲库偶发慢帧构建优化与首次触摸成本2026-09-16)。
+- 未优化 Profile SHA-256：`00050a0d7d16b5746ff54a60414abe0ce645c0af039fe8d7de0e8ff28e557c2f`；最终优化 Profile：`0857b74b55e41f18c294cd16a148e9e28017b0a648d8b4eeb7f44a138da83cb8`。设备 base.apk 哈希与后者一致，包标记不含 DEBUGGABLE，仍为 `0.4.0-beta.1` / code 9。对应 Profile/Release mapping 已保存在本地验收目录。
+- 每组 3 轮固定滑动：Debug p95 为 31/20/20 ms，未优化 Profile 为 12/12/11 ms，最终 Profile 为 10/10/10 ms。另有各 3 次冷进程 Perfetto 和各 1 次 Simpleperf；不能把有 profiler 的结果与常规帧统计合并。未优化/优化追踪仍分别记录到 2/4/4 与 1/2/1 个 App Deadline Missed，不宣称零卡顿。
+- 本地 Gradle 验证通过：JVM 209 项、0 失败/错误/跳过（测试任务复用 up-to-date 结果，本轮没有修改 JVM 源码）；Lint 0 errors / 18 warnings；Debug、优化 Profile、优化 Release 构建成功。没有新增或执行 instrumentation，也没有把先前 10 项实机 UI 结果算作优化 APK 的测试结果。
+- 在最终优化 APK 上实际检查：曲库滚动、数字搜索及清除搜索、原歌曲恢复播放和暂停、播放器真实封面、进入/返回链路页、源格式与 AudioTrack 证据、无 DAC 严格模式失败提示及明确恢复系统输出均正常。首次英文注入被输入法改写，不作为有效搜索用例。最后停留在曲库、原曲目暂停、系统输出模式；私有数据、原音乐和备份保留。
+- 本轮只有 iQOO 短时证据，未执行 Honor、高刷新率、真实 DAC、长时或远端 CI 验收。构建配置修复不关闭 M3-R1 的完整业务/双机门禁，也不表示 M4 完成。原始资料位于忽略的 `build/qa/jank-20260916/`，不提交歌曲信息和设备原始日志。

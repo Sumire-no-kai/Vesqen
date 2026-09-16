@@ -44,7 +44,7 @@ android {
         release {
             buildConfigField("boolean", "DEVELOPER_DIAGNOSTICS_ENABLED", "false")
             optimization {
-                enable = false
+                enable = true
             }
         }
         create("profile") {

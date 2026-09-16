@@ -41,6 +41,14 @@ On macOS or Linux:
 
 Generated debug APKs are written under `app/build/outputs/apk/debug/`.
 
+For everyday device previews and scrolling performance checks, use the non-debuggable Profile build:
+
+```bash
+./gradlew :app:installProfile
+```
+
+On Windows, use `.\gradlew.bat :app:installProfile`. Profile uses the local debug signing key and inherits Release's R8 code/resource optimization; its APK is under `app/build/outputs/apk/profile/`. Debug is for debugging and instrumentation, and its frame timings are not representative of release performance. Retain the matching `app/build/outputs/mapping/<variant>/mapping.txt` with each optimized APK to decode crash traces. Updating an existing installation requires the same signing key.
+
 ## Product boundaries
 
 Vesqen distinguishes lossless source files, Android direct-playback support, an active bit-perfect request, and externally verified bit-perfect output. No implementation or UI may promote one evidence level into another. Core playback remains offline and does not require an account or network permission.

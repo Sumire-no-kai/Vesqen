@@ -348,3 +348,33 @@ iQOO 再次接入后，确认已安装的 Profile SHA-256 为 `87974fcd8362ab785
 核对本地 Compose 源码：String Text 的 ParagraphLayoutCache.slowCreateTextLayoutResultOrNull 为语义查询按最大约束重建 MultiParagraph，却保留原始较窄的 layoutSize；TextLayoutResult.didOverflowWidth 比较的是 size.width 和 multiParagraph.width。因此这里的 true 不能直接证明字形被裁切。修正测试代理指标为实际行文字宽度不超过绘制宽度（允许 1 px 取整差）、无垂直溢出、单行且无省略号。实际显示契约没有放宽，原始失败和诊断输出保留；不把这两次误报描述成修复后仍有真实省略。
 
 最终英文 4 项定向回归和中文 1 项分别通过；测试参数、APK 身份和实际 Profile 复查结果见 M2_DEVICE_ACCEPTANCE 文末。本例说明测试要对齐用户可见的契约：完整语义不能证明画面完整，而一个宽度代理标志也不能代替字形和省略状态。
+
+## P04 · 曲库偶发慢帧：构建优化与首次触摸成本（2026-09-16）
+
+**用户场景。** iQOO V2171A / Android 15，真实 112 首曲库，暂停且迷你播放器可见、索引关闭、扫描结束，实测 60 Hz。用户在 9 月 15 日界面修复后仍反馈上下滑动偶发小顿。手机安装标记确认当时交付的是 Debug：这是交付构建选择的问题，不能用功能测试通过代替顺滑度验证。
+
+**三组常规采样。** 使用 `tools/measure_library_scroll.py`，新鲜 UI XML 确认视口 `[0,594][1080,1938]`，4 次预热、每轮 48 次 100 ms 手势、每 8 次反向、每组 3 轮。基线源码为 `17bb9b2`；优化候选只将 Release 的 `optimization.enable` 改为 `true`，Profile 继承同一配置。
+
+| 构建 | 三轮 HWUI jank | 三轮 p95 / p99（ms） | 三轮帧数 |
+| --- | --- | --- | --- |
+| Debug | 3.47 / 0.17 / 0.34% | 31/20/20；44/26/23 | 576/582/596 |
+| Profile，R8 关闭 | 0 / 0 / 0% | 12/12/11；14/13/13 | 571/581/571 |
+| Profile，R8 开启 | 0 / 0 / 0% | 10/10/10；11/11/11 | 532/581/575 |
+
+**深入到具体帧。** 另对两个 Profile 各执行 3 次冷进程 Perfetto：每次重新启动、确认无扫描后采集 20 秒，执行 72 次同形手势。不把 profiler 轮与常规采样混算。未优化首轮最慢 App Deadline Missed 帧为 27.376 ms，对应 doFrame 18.239 ms、主线程 Running 17.662 ms，measureAndLayout 9.380 ms。耗时主要是主线程计算，而非调度器长期未给它 CPU；并能看到 TrackRow 的 JIT 编译。另一轮的慢帧有 11.122 ms 的 postAndWait，同时 RenderThread 在做 72×72 纹理上传（10.822 ms）：这是另一类渲染等待，不能把它也归因于列表计算。
+
+| 冷进程追踪指标 | 未优化 Profile，三轮 | R8 Profile，三轮 |
+| --- | --- | --- |
+| 首次 deliverInputEvent（ms） | 14.051 / 13.845 / 15.972 | 9.725 / 9.901 / 9.583 |
+| 主线程 Running 总量（ms） | 5831 / 5516.85 / 5569.85 | 4847.47 / 4807.95 / 4927.13 |
+| measureAndLayout 累计（ms） | 1683.13 / 1559.92 / 1576.15 | 1246.54 / 1231.24 / 1267.24 |
+| Compose:recompose 累计（ms） | 747.71 / 686.04 / 706.44 | 496.53 / 499.58 / 503.03 |
+| App Deadline Missed / 表面帧数 | 2/872、4/829、4/860 | 1/863、2/850、1/851 |
+
+切片有嵌套，不能把布局、重组和 Running 相加。两份独立 500 Hz Simpleperf 的样本数分别为 4598 和 4152；未优化包的 TrackRow inclusive 为 4.07%、文字 measure 为 3.72%，封面 loader 位于后台 DefaultDispatcher。优化后符号会被重命名，保留对应 mapping，不用无法还原的方法名制造业务热点结论。直接 CPU 数据和重复布局/输入耗时支持保留 R8 配置修复；不是所有慢帧都由同一个问题产生。
+
+**修复边界。** 开启项目原先关闭的 R8 代码和资源优化，沿用 AGP 9.3 默认 Android keep rules；没有添加宽泛 keep/dontwarn，也没有改变列表功能、封面、线程优先级或系统刷新率。官方 [Compose 性能指南](https://developer.android.com/develop/ui/compose/performance) 与 [AGP 9.3 优化配置](https://developer.android.com/topic/performance/app-optimization/enable-app-optimization) 说明了这一构建要求。README 增加 `installProfile` 作为日常预览入口，并要求保留 matching mapping。Profile APK 从 16,006,436 bytes 降至 2,986,550 bytes；体积变化不能独自证明帧率收益。
+
+**限制与失效样本。** 常规采样基线/候选电池温度分别为 33.3/35.4°C，冷进程追踪为 34.0–34.7/35.5–35.7°C；ART 编译状态和系统缩略图缓存没有重置，采样时长与帧数略有不同，因此不宣称严格等条件的精确提速比例。候选第三份 trace 丢弃 1 条负时间戳事件，其余 5 份无非零 error/data_loss；所有轮次保留。首次 Perfetto 配置文件被设备拒绝读取，改为标准输入后重采；首次优化包安装被 vivo 拒绝，安装尚未完成时启动的测量缺少 XML、没有有效帧，两个目录均不计结果。用户在手机上确认后才采集优化候选。不同轮次的 Buffer Stuffing 波动大，仅作呈现排队证据，不当作全部掉帧；候选仍有零星超时帧，未关闭全部卡顿或 M3-R1 双机/高刷新率门禁。
+
+原始 APK、mapping、帧统计、追踪、SQL、CPU 报告与数据备份保存在忽略的 `build/qa/jank-20260916/`，不上传歌曲、截图或设备原始日志。安装身份与功能验证见 M1_DEVICE_ACCEPTANCE 本日记录。
