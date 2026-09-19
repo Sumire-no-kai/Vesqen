@@ -1,7 +1,7 @@
 # Vesqen
 
 [![Android CI](https://github.com/Sumire-no-kai/Vesqen/actions/workflows/android.yml/badge.svg?branch=master)](https://github.com/Sumire-no-kai/Vesqen/actions/workflows/android.yml)
-[![Candidate version](https://img.shields.io/badge/candidate%20version-0.4.0--beta.1-7A4F00)](version.properties)
+[![Candidate version](https://img.shields.io/badge/candidate%20version-1.0.0--beta.1-7A4F00)](version.properties)
 [![Android](https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-3DDC84?logo=android&logoColor=white)](app/build.gradle.kts)
 [![License](https://img.shields.io/badge/license-Apache--2.0-536B1E)](LICENSE)
 
@@ -17,7 +17,7 @@ The [architecture review](docs/ARCHITECTURE_REVIEW.md) records current ownership
 
 ## Development baseline
 
-The M4 software candidate adds offline signed verification records, deterministic PCM vectors and comparison tooling, explicit evidence linkage, a repeatable device baseline collector, and a `0.4.0-beta.1` limited-Beta version candidate. Local validation covers 230 JVM tests, 13 Python tool tests, Debug lint, and Debug/Profile/Release/test APK assembly. Honor Android 9 has current ordinary-output and legacy-system evidence; iQOO Android 15 has no-DAC fail-closed, UI/lifecycle, Profile-baseline, data-retention, and focused release-review evidence. Real DAC strict USB, external digital sample comparison, deferred endurance runs, final accessibility coverage, and the remaining M3 Library paired-performance gate remain open. Passing software checks or an Android-side `ACTIVE` state does not imply `VERIFIED` or milestone acceptance. See the [M4 acceptance record](docs/M4_DEVICE_ACCEPTANCE.md) and [limited-Beta release checklist](docs/M4_BETA_RELEASE.md).
+The frozen public-release line is `1.0.0-beta.1` / versionCode `10`. The existing M4 software and device evidence was collected against earlier `0.4.0-beta.1` / `9` artifacts and remains historical evidence; exact-version, artifact-hash, signing, and final release checks must be repeated or explicitly re-established for the frozen candidate. Local validation covers 230 JVM tests, 13 Python tool tests, Debug lint, and Debug/Profile/Release/test APK assembly. Honor Android 9 has ordinary-output and legacy-system evidence; iQOO Android 15 has no-DAC fail-closed, UI/lifecycle, Profile-baseline, data-retention, and focused release-review evidence. Real DAC strict USB, external digital sample comparison, deferred endurance runs, final accessibility coverage, and the remaining M3 Library paired-performance gate remain open. Passing software checks or an Android-side `ACTIVE` state does not imply `VERIFIED` or milestone acceptance. See the [M4 acceptance record](docs/M4_DEVICE_ACCEPTANCE.md) and [limited-Beta release checklist](docs/M4_BETA_RELEASE.md).
 
 - Android 8.0+ (`minSdk 26`)
 - `compileSdk 36` and `targetSdk 36`
