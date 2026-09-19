@@ -7,6 +7,7 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioMixerAttributes
 import android.os.Build
+import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.annotation.RequiresApi
 
 internal interface MixerBitPerfectAdapter {
@@ -28,8 +29,14 @@ internal interface MixerBitPerfectAdapter {
 }
 
 internal object MixerBitPerfectAdapterFactory {
+    @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    fun isPlatformApiAvailable(): Boolean = isPlatformApiAvailable(Build.VERSION.SDK_INT)
+
+    fun isPlatformApiAvailable(apiLevel: Int): Boolean =
+        apiLevel >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+
     fun create(context: Context): MixerBitPerfectAdapter =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        if (isPlatformApiAvailable()) {
             OfficialMixerBitPerfectAdapter(context)
         } else {
             UnsupportedMixerBitPerfectAdapter

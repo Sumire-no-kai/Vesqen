@@ -68,6 +68,7 @@ import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode
 import io.github.sumirenokai.vesqen.playback.OutputDeclaration
 import io.github.sumirenokai.vesqen.playback.AudioFormatSummary
+import io.github.sumirenokai.vesqen.playback.OfficialMixerApiSupport
 import io.github.sumirenokai.vesqen.playback.UsbHardwareIdentity
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
@@ -514,6 +515,42 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
         composeRule.onNodeWithTag("vesqen.settings.output.system").assertIsEnabled()
         composeRule.onNodeWithTag("vesqen.settings.output.strict-usb").assertIsEnabled()
+    }
+
+    @Test
+    fun unavailable_official_mixer_path_is_dimmed_explained_and_never_requested() {
+        val modes = mutableListOf<UsbOutputMode>()
+        val unsupportedStatus = UsbOutputStatus(
+            officialMixerApiSupport = OfficialMixerApiSupport(
+                androidRelease = "9",
+                apiLevel = 28,
+                mixerApiAvailable = false,
+            ),
+        )
+        render(
+            state = activePlaybackState().let { state ->
+                state.copy(
+                    playback = state.playback.copy(usbOutputStatus = unsupportedStatus),
+                )
+            },
+            onSetUsbOutputMode = modes::add,
+        )
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.output.strict-usb").performClick()
+        composeRule.onNodeWithTag("vesqen.output.unavailable-dialog").assertIsDisplayed()
+        composeRule.onNodeWithText(
+            context.getString(R.string.strict_usb_unavailable_body, "9", 28),
+        ).assertIsDisplayed()
+        composeRule.runOnIdle { assertTrue(modes.isEmpty()) }
+        composeRule.onNodeWithTag("vesqen.output.unavailable-dismiss").performClick()
+
+        composeRule.onNodeWithTag("vesqen.nav.now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.output-mode").performClick()
+        composeRule.onNodeWithTag("vesqen.now.strict-usb-switch").assertIsNotEnabled()
+        composeRule.onNodeWithTag("vesqen.now.strict-usb-row").performClick()
+        composeRule.onNodeWithTag("vesqen.output.unavailable-dialog").assertIsDisplayed()
+        composeRule.runOnIdle { assertTrue(modes.isEmpty()) }
     }
 
     @Test

@@ -54,6 +54,11 @@ internal class UsbOutputCoordinator(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val lock = Any()
+    private val officialMixerApiSupport = OfficialMixerApiSupport(
+        androidRelease = Build.VERSION.RELEASE.orEmpty().ifBlank { Build.VERSION.SDK_INT.toString() },
+        apiLevel = Build.VERSION.SDK_INT,
+        mixerApiAvailable = MixerBitPerfectAdapterFactory.isPlatformApiAvailable(),
+    )
 
     private var player: ExoPlayer? = null
     private var mode = preferences.getString(MODE_KEY, null)?.let { stored ->
@@ -941,6 +946,7 @@ internal class UsbOutputCoordinator(
                 observedAtEpochMs = System.currentTimeMillis(),
                 observedAtElapsedRealtimeMs = SystemClock.elapsedRealtime(),
                 generation = statusGeneration,
+                officialMixerApiSupport = officialMixerApiSupport,
             )
         }
         stateRepository.publish(status)

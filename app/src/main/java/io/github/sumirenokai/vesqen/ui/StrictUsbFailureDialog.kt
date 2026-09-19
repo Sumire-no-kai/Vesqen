@@ -14,9 +14,39 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.playback.OfficialMixerApiSupport
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.ui.screens.strictUsbFailureLabel
+
+@Composable
+internal fun StrictUsbUnavailableDialog(
+    support: OfficialMixerApiSupport?,
+    onDismiss: () -> Unit,
+) {
+    support?.takeUnless(OfficialMixerApiSupport::mixerApiAvailable) ?: return
+    AlertDialog(
+        modifier = Modifier.testTag("vesqen.output.unavailable-dialog"),
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.strict_usb_unavailable_title)) },
+        text = {
+            Text(
+                stringResource(
+                    R.string.strict_usb_unavailable_body,
+                    support.androidRelease,
+                    support.apiLevel,
+                ),
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("vesqen.output.unavailable-dismiss"),
+            ) { Text(stringResource(R.string.player_output_done)) }
+        },
+    )
+}
 
 /** The app shell owns feedback, including failures started from Library or the mini-player. */
 @Composable

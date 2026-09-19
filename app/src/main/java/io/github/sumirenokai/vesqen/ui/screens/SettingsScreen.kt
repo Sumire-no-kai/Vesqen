@@ -76,7 +76,10 @@ fun SettingsScreen(
     outputVerification: OutputVerificationMatch? = null,
     verificationRegistryState: OutputVerificationRegistryState = OutputVerificationRegistryState.Empty,
     verificationImportResult: OutputVerificationImportResult? = null,
+    onExplainStrictUsbUnavailable: () -> Unit = {},
 ) {
+    val strictUsbPlatformUnavailable =
+        outputStatus.officialMixerApiSupport?.mixerApiAvailable == false
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             modifier = Modifier
@@ -131,8 +134,11 @@ fun SettingsScreen(
                         title = stringResource(R.string.settings_strict_usb_output),
                         body = strictUsbOutputBody(outputStatus),
                         selected = outputStatus.mode == UsbOutputMode.STRICT_BIT_PERFECT,
-                        enabled = outputModeSelectionEnabled,
+                        enabled = outputModeSelectionEnabled && !strictUsbPlatformUnavailable,
                         onClick = { onSetUsbOutputMode(UsbOutputMode.STRICT_BIT_PERFECT) },
+                        onUnavailableClick = onExplainStrictUsbUnavailable.takeIf {
+                            outputModeSelectionEnabled && strictUsbPlatformUnavailable
+                        },
                         modifier = Modifier.testTag("vesqen.settings.output.strict-usb"),
                     )
                 }
@@ -249,6 +255,7 @@ private fun SettingsChoiceRow(
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onUnavailableClick: (() -> Unit)? = null,
 ) {
     val motionPolicy = rememberVesqenMotionPolicy()
     val durationMillis = motionPolicy.stateChangeMillis
@@ -278,11 +285,24 @@ private fun SettingsChoiceRow(
         modifier = modifier
             .fillMaxWidth()
             .background(backgroundColor)
-            .selectable(
-                selected = selected,
-                enabled = enabled,
-                onClick = onClick,
-                role = Role.RadioButton,
+            .then(
+                when {
+                    enabled -> Modifier.selectable(
+                        selected = selected,
+                        onClick = onClick,
+                        role = Role.RadioButton,
+                    )
+                    onUnavailableClick != null -> Modifier.clickable(
+                        onClick = onUnavailableClick,
+                        role = Role.Button,
+                    )
+                    else -> Modifier.selectable(
+                        selected = selected,
+                        enabled = false,
+                        onClick = onClick,
+                        role = Role.RadioButton,
+                    )
+                },
             )
             .alpha(if (enabled) 1f else 0.56f)
             .defaultMinSize(minHeight = 88.dp)
@@ -319,6 +339,13 @@ private fun SettingsChoiceRow(
 @Composable
 internal fun strictUsbOutputBody(status: UsbOutputStatus): String {
     if (status.mode != UsbOutputMode.STRICT_BIT_PERFECT) {
+        status.officialMixerApiSupport?.takeUnless { it.mixerApiAvailable }?.let { support ->
+            return stringResource(
+                R.string.settings_strict_usb_platform_unavailable,
+                support.androidRelease,
+                support.apiLevel,
+            )
+        }
         return stringResource(R.string.settings_strict_usb_output_body)
     }
     val device = status.deviceName ?: stringResource(R.string.settings_usb_device_unknown)

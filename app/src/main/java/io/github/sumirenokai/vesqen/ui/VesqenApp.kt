@@ -364,10 +364,21 @@ fun VesqenAppContent(
     onImportVerificationRegistry: () -> Unit = {},
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
+    var showStrictUsbUnavailable by rememberSaveable { mutableStateOf(false) }
+    val officialMixerApiSupport = state.playback.usbOutputStatus.officialMixerApiSupport
+    LaunchedEffect(officialMixerApiSupport?.mixerApiAvailable) {
+        if (officialMixerApiSupport?.mixerApiAvailable != false) {
+            showStrictUsbUnavailable = false
+        }
+    }
     StrictUsbFailureDialog(
         status = state.playback.usbOutputStatus,
         canChangeOutputMode = state.playback.canSetUsbOutputMode,
         onSetUsbOutputMode = onSetUsbOutputMode,
+    )
+    StrictUsbUnavailableDialog(
+        support = officialMixerApiSupport.takeIf { showStrictUsbUnavailable },
+        onDismiss = { showStrictUsbUnavailable = false },
     )
     val appliedChainPreferencesRepository = chainPreferencesRepository ?: remember {
         InMemoryChainDashboardPreferencesRepository()
@@ -513,6 +524,7 @@ fun VesqenAppContent(
                 onSeek = onSeek,
                 onCyclePlaybackOrder = onCyclePlaybackOrder,
                 onSetUsbOutputMode = onSetUsbOutputMode,
+                onExplainStrictUsbUnavailable = { showStrictUsbUnavailable = true },
                 verificationRegistryState = verificationRegistryState,
                 verificationImportResult = verificationImportResult,
                 onImportVerificationRegistry = onImportVerificationRegistry,
@@ -572,6 +584,7 @@ fun VesqenAppContent(
             onSeek = onSeek,
             onCyclePlaybackOrder = onCyclePlaybackOrder,
             onSetUsbOutputMode = onSetUsbOutputMode,
+            onExplainStrictUsbUnavailable = { showStrictUsbUnavailable = true },
             verificationRegistryState = verificationRegistryState,
             verificationImportResult = verificationImportResult,
             onImportVerificationRegistry = onImportVerificationRegistry,
@@ -633,6 +646,7 @@ private fun VesqenDestinationFrame(
     onSeek: (Long) -> Unit,
     onCyclePlaybackOrder: () -> Unit,
     onSetUsbOutputMode: (UsbOutputMode) -> Unit,
+    onExplainStrictUsbUnavailable: () -> Unit,
     verificationRegistryState: OutputVerificationRegistryState,
     verificationImportResult: OutputVerificationImportResult?,
     onImportVerificationRegistry: () -> Unit,
@@ -905,6 +919,7 @@ private fun VesqenDestinationFrame(
 
                     VesqenDestination.NOW -> NowScreen(
                         onSetUsbOutputMode = onSetUsbOutputMode,
+                        onExplainStrictUsbUnavailable = onExplainStrictUsbUnavailable,
                         onToggleFavorite = onToggleFavorite,
                         snapshot = state.playback,
                         currentTrack = currentTrack,
@@ -936,6 +951,7 @@ private fun VesqenDestinationFrame(
                         verificationRegistryState = verificationRegistryState,
                         verificationImportResult = verificationImportResult,
                         onSetUsbOutputMode = onSetUsbOutputMode,
+                        onExplainStrictUsbUnavailable = onExplainStrictUsbUnavailable,
                         onOpenPlaybackChain = onOpenChain,
                         onImportVerificationRegistry = onImportVerificationRegistry,
                         onOpenAbout = onOpenAbout,

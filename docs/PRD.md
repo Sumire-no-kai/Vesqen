@@ -554,6 +554,7 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 - Library 首页快速滑动的可复现 Release/profileable 双机基线、慢帧/呈现排队/调用栈归因、最小代码修复和修复前后配对验证。
 - `UsbOutputStrategyResolver` Module 和可测试的 `UsbOutputDecision` 状态模型。
 - 启动时 API level/USB Host feature 检测，以及设备、格式和路由变化时的重新判定。
+- 播放服务向 UI 发布当前系统的官方 mixer API 可用性；不可用时严格模式呈灰色但可点击查看系统版本与原因，且不会发送模式切换命令。
 - API 34+ `OfficialMixerBitPerfectAdapter` Implementation。
 - USB 数字音频设备识别。
 - `getSupportedMixerAttributes()` 能力查询。

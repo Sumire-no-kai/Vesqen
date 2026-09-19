@@ -66,6 +66,18 @@ data class UsbHardwareIdentity(
     }
 }
 
+/** Runtime support for Android's official API 34+ mixer path. */
+data class OfficialMixerApiSupport(
+    val androidRelease: String,
+    val apiLevel: Int,
+    val mixerApiAvailable: Boolean,
+) {
+    init {
+        require(androidRelease.isNotBlank()) { "Android release cannot be blank" }
+        require(apiLevel > 0) { "Android API level must be positive" }
+    }
+}
+
 data class UsbOutputStatus(
     val mode: UsbOutputMode = UsbOutputMode.SYSTEM,
     val phase: UsbOutputPhase = UsbOutputPhase.SYSTEM,
@@ -78,6 +90,7 @@ data class UsbOutputStatus(
     val observedAtEpochMs: Long = 0,
     val observedAtElapsedRealtimeMs: Long = 0,
     val generation: Long = 0,
+    val officialMixerApiSupport: OfficialMixerApiSupport? = null,
 ) {
     init {
         require(observedAtEpochMs >= 0) { "Output state timestamp cannot be negative" }
@@ -154,6 +167,9 @@ internal object UsbOutputSessionContract {
     private const val SINK_RATE = "usb_output_sink_rate"
     private const val SINK_CHANNELS = "usb_output_sink_channels"
     private const val SINK_ENCODING = "usb_output_sink_encoding"
+    private const val ANDROID_RELEASE = "usb_output_android_release"
+    private const val ANDROID_API_LEVEL = "usb_output_android_api_level"
+    private const val OFFICIAL_MIXER_API_AVAILABLE = "usb_output_official_mixer_api_available"
 
     fun modeArguments(mode: UsbOutputMode): Bundle = Bundle().apply {
         putString(MODE_ARGUMENT, mode.name)
@@ -176,6 +192,11 @@ internal object UsbOutputSessionContract {
         putLong(OBSERVED_AT, status.observedAtEpochMs)
         putLong(OBSERVED_AT_ELAPSED, status.observedAtElapsedRealtimeMs)
         putLong(GENERATION, status.generation)
+        status.officialMixerApiSupport?.let { support ->
+            putString(ANDROID_RELEASE, support.androidRelease)
+            putInt(ANDROID_API_LEVEL, support.apiLevel)
+            putBoolean(OFFICIAL_MIXER_API_AVAILABLE, support.mixerApiAvailable)
+        }
         status.sourceFormat?.writeTo(this, SOURCE_RATE, SOURCE_CHANNELS, SOURCE_ENCODING)
         status.sinkFormat?.writeTo(this, SINK_RATE, SINK_CHANNELS, SINK_ENCODING)
     }
@@ -204,6 +225,7 @@ internal object UsbOutputSessionContract {
                 observedAtEpochMs = bundle.getLong(OBSERVED_AT).coerceAtLeast(0),
                 observedAtElapsedRealtimeMs = bundle.getLong(OBSERVED_AT_ELAPSED).coerceAtLeast(0),
                 generation = bundle.getLong(GENERATION).coerceAtLeast(0),
+                officialMixerApiSupport = bundle.readOfficialMixerApiSupport(),
             )
         }.getOrNull()
     }
@@ -233,6 +255,17 @@ internal object UsbOutputSessionContract {
             vendorId = getInt(DEVICE_VENDOR_ID),
             productId = getInt(DEVICE_PRODUCT_ID),
             descriptorVersion = version,
+        )
+    }
+
+    private fun Bundle.readOfficialMixerApiSupport(): OfficialMixerApiSupport? {
+        val release = getString(ANDROID_RELEASE)?.takeIf(String::isNotBlank) ?: return null
+        val apiLevel = getInt(ANDROID_API_LEVEL).takeIf { it > 0 } ?: return null
+        if (!containsKey(OFFICIAL_MIXER_API_AVAILABLE)) return null
+        return OfficialMixerApiSupport(
+            androidRelease = release,
+            apiLevel = apiLevel,
+            mixerApiAvailable = getBoolean(OFFICIAL_MIXER_API_AVAILABLE),
         )
     }
 }

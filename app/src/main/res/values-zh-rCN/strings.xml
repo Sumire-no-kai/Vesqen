@@ -69,6 +69,9 @@
     <string name="settings_system_output_body">使用 Android 普通路由，保留系统混音、重采样和手机音量。</string>
     <string name="settings_strict_usb_output">严格 USB bit-perfect</string>
     <string name="settings_strict_usb_output_body">要求 Android 14+、兼容 USB DAC、精确 mixer profile 和未经改写的 PCM；任一条件失效都会停止播放。</string>
+    <string name="settings_strict_usb_platform_unavailable">当前系统 Android %1$s（API %2$d）未提供官方 bit-perfect mixer 接口。点击查看说明。</string>
+    <string name="strict_usb_unavailable_title">严格 USB 不可用</string>
+    <string name="strict_usb_unavailable_body">检测到当前系统：Android %1$s（API %2$d）。此版本未提供 Android 官方 bit-perfect mixer 接口，因此 Vesqen 无法启用官方严格 USB 路径；系统输出仍可正常使用。</string>
     <string name="settings_strict_usb_available">%1$s 存在兼容输出能力。</string>
     <string name="settings_strict_usb_applying">正在为 %1$s 准备精确输出链路…</string>
     <string name="settings_strict_usb_active">已在 %1$s 生效 · %2$s。这是 Android mixer 证据，不是外部验证。</string>

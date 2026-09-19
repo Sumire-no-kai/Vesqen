@@ -72,6 +72,9 @@
     <string name="settings_system_output_body">Use Android’s normal route. System mixing, resampling, and phone volume remain available.</string>
     <string name="settings_strict_usb_output">Strict USB bit-perfect</string>
     <string name="settings_strict_usb_output_body">Require Android 14+, a compatible USB DAC, an exact mixer profile, and unchanged PCM. Playback stops if any condition fails.</string>
+    <string name="settings_strict_usb_platform_unavailable">Android %1$s (API %2$d) does not provide the official bit-perfect mixer API. Tap for details.</string>
+    <string name="strict_usb_unavailable_title">Strict USB unavailable</string>
+    <string name="strict_usb_unavailable_body">Detected system: Android %1$s (API %2$d). This version does not provide Android’s official bit-perfect mixer API, so Vesqen cannot enable the official strict USB path. System output remains available.</string>
     <string name="settings_strict_usb_available">Compatible output is available on %1$s.</string>
     <string name="settings_strict_usb_applying">Preparing an exact output path for %1$s…</string>
     <string name="settings_strict_usb_active">Active on %1$s · %2$s. This is Android mixer evidence, not external verification.</string>

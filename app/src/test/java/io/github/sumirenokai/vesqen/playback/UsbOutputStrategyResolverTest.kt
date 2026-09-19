@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen.playback
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -16,6 +17,12 @@ class UsbOutputStrategyResolverTest {
         channelCount = 2,
     )
     private val floatProfile = MixerProfile(float96, bitPerfect = true)
+
+    @Test
+    fun `official mixer API availability follows runtime API level`() {
+        assertFalse(MixerBitPerfectAdapterFactory.isPlatformApiAvailable(33))
+        assertTrue(MixerBitPerfectAdapterFactory.isPlatformApiAvailable(34))
+    }
 
     @Test
     fun `system mode never evaluates unavailable strict requirements`() {

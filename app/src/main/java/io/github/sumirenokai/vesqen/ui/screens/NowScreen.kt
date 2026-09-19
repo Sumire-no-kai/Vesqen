@@ -21,6 +21,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -93,6 +94,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
@@ -208,6 +210,7 @@ fun NowScreen(
     modifier: Modifier = Modifier,
     onToggleFavorite: (Long, Boolean) -> Unit = { _, _ -> },
     onSetUsbOutputMode: (UsbOutputMode) -> Unit = {},
+    onExplainStrictUsbUnavailable: () -> Unit = {},
 ) {
     if (!snapshot.hasActiveTrack) {
         NowEmbeddedEmptyState(modifier = modifier)
@@ -448,6 +451,8 @@ fun NowScreen(
         }
 
         if (showOutputMode) {
+            val strictUsbPlatformUnavailable =
+                snapshot.usbOutputStatus.officialMixerApiSupport?.mixerApiAvailable == false
             AlertDialog(
                 onDismissRequest = { showOutputMode = false },
                 title = { Text(stringResource(R.string.player_output_mode)) },
@@ -456,7 +461,30 @@ fun NowScreen(
                         Modifier.verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(VesqenSpacing.md),
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier
+                                .testTag("vesqen.now.strict-usb-row")
+                                .fillMaxWidth()
+                                .then(
+                                    if (snapshot.canSetUsbOutputMode && strictUsbPlatformUnavailable) {
+                                        Modifier.clickable(
+                                            onClick = onExplainStrictUsbUnavailable,
+                                            role = Role.Button,
+                                        )
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .alpha(
+                                    if (snapshot.canSetUsbOutputMode && !strictUsbPlatformUnavailable) {
+                                        1f
+                                    } else {
+                                        0.56f
+                                    },
+                                )
+                                .padding(vertical = VesqenSpacing.xs),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             Text(
                                 stringResource(R.string.settings_strict_usb_output),
                                 modifier = Modifier.weight(1f).padding(end = VesqenSpacing.sm),
@@ -467,7 +495,7 @@ fun NowScreen(
                                     onSetUsbOutputMode(if (enabled) UsbOutputMode.STRICT_BIT_PERFECT else UsbOutputMode.SYSTEM)
                                     showOutputMode = false
                                 },
-                                enabled = snapshot.canSetUsbOutputMode,
+                                enabled = snapshot.canSetUsbOutputMode && !strictUsbPlatformUnavailable,
                                 modifier = Modifier.testTag("vesqen.now.strict-usb-switch")
                                     .semantics { contentDescription = strictOutputLabel },
                             )
