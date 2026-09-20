@@ -16,7 +16,8 @@ import re
 from typing import Any
 
 
-SCHEMA_VERSION = 1
+PAYLOAD_SCHEMA_VERSION = 1
+ENVELOPE_SCHEMA_VERSION = 2
 RESULTS = {"VERIFIED", "FAILED", "NOT_TESTED", "MISSING_DEVICE", "DEFERRED"}
 STABLE_ID = re.compile(r"[a-z][a-z0-9_]*(\.[a-z0-9_]+)*\Z")
 SHA256 = re.compile(r"[0-9a-fA-F]{64}\Z")
@@ -73,8 +74,8 @@ def _format(value: Any, name: str) -> None:
 def validate_payload(payload: Any) -> dict[str, Any]:
     if not isinstance(payload, dict) or set(payload) != {"schemaVersion", "records"}:
         raise ValidationError("payload must contain exactly schemaVersion and records")
-    if payload["schemaVersion"] != SCHEMA_VERSION:
-        raise ValidationError(f"schemaVersion must be {SCHEMA_VERSION}")
+    if payload["schemaVersion"] != PAYLOAD_SCHEMA_VERSION:
+        raise ValidationError(f"schemaVersion must be {PAYLOAD_SCHEMA_VERSION}")
     records = payload["records"]
     if not isinstance(records, list) or len(records) > 128:
         raise ValidationError("records must be an array with at most 128 entries")
@@ -135,11 +136,13 @@ def prepare(source: Path, output: Path) -> None:
 
 def inspect_registry(source: Path) -> None:
     envelope = load_json(source)
-    expected = {"schemaVersion", "signatureAlgorithm", "payload", "signature"}
+    expected = {"schemaVersion", "keyId", "signatureAlgorithm", "payload", "signature"}
     if not isinstance(envelope, dict) or set(envelope) != expected:
         raise ValidationError(f"registry envelope must contain exactly {sorted(expected)}")
-    if envelope["schemaVersion"] != SCHEMA_VERSION:
-        raise ValidationError(f"schemaVersion must be {SCHEMA_VERSION}")
+    if envelope["schemaVersion"] != ENVELOPE_SCHEMA_VERSION:
+        raise ValidationError(f"schemaVersion must be {ENVELOPE_SCHEMA_VERSION}")
+    if not STABLE_ID.fullmatch(_text(envelope["keyId"], "keyId")):
+        raise ValidationError("keyId must be a stable dotted id")
     if envelope["signatureAlgorithm"] not in {"SHA256withRSA", "SHA256withECDSA"}:
         raise ValidationError("unsupported signature algorithm")
     try:
@@ -150,6 +153,7 @@ def inspect_registry(source: Path) -> None:
         raise ValidationError(f"invalid registry encoding: {failure}") from failure
     validate_payload(payload)
     print(json.dumps({
+        "keyId": envelope["keyId"],
         "records": len(payload["records"]),
         "payloadSha256": hashlib.sha256(payload_bytes).hexdigest(),
         "signatureBytes": len(signature_bytes),

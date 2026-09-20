@@ -54,6 +54,10 @@ internal class UsbOutputCoordinator(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val lock = Any()
+    private val mixerMutationLock = Any()
+    private val mixerPreferences = MixerPreferenceCleanupTracker<MixerPreference> { preference ->
+        mixerAdapter.clearPreferred(preference.device, preference.audioAttributes)
+    }
     private val officialMixerApiSupport = OfficialMixerApiSupport(
         androidRelease = Build.VERSION.RELEASE.orEmpty().ifBlank { Build.VERSION.SDK_INT.toString() },
         apiLevel = Build.VERSION.SDK_INT,
@@ -122,16 +126,19 @@ internal class UsbOutputCoordinator(
             return
         }
         if (closed) return
-        val previousMode = synchronized(lock) {
-            val previous = mode
-            configurationGeneration += 1
-            mode = requestedMode
-            previous
-        }
-        preferences.edit { putString(MODE_KEY, requestedMode.name) }
         if (requestedMode == UsbOutputMode.SYSTEM) {
+            val previousMode = synchronized(lock) {
+                val previous = mode
+                configurationGeneration += 1
+                previous
+            }
             restoreSystemOutput(rebuild = previousMode != UsbOutputMode.SYSTEM)
         } else {
+            synchronized(lock) {
+                configurationGeneration += 1
+                mode = requestedMode
+            }
+            preferences.edit { putString(MODE_KEY, requestedMode.name) }
             scheduleReconfigure(resume = player?.playWhenReady == true)
         }
     }
@@ -219,7 +226,8 @@ internal class UsbOutputCoordinator(
         val scheduled = synchronized(lock) {
             if (closed || mode != UsbOutputMode.STRICT_BIT_PERFECT) return@synchronized null
             configurationGeneration += 1
-            val previousPreference = MixerPreference(selectedDevice, selectedAudioAttributes)
+            val previousDevice = selectedDevice
+            val previousSink = selectedMixerFormat
             selectedDevice = null
             selectedProfiles = null
             selectedMixerFormat = null
@@ -228,10 +236,26 @@ internal class UsbOutputCoordinator(
             resumeAfterConfiguration = resumeAfterConfiguration || resume || wasPlaying
             val shouldPost = !reconfigurePosted
             if (shouldPost) reconfigurePosted = true
-            ReconfigurationSchedule(previousPreference, shouldPost, wasPlaying)
+            ReconfigurationSchedule(
+                device = previousDevice,
+                sink = previousSink,
+                generation = configurationGeneration,
+                shouldPost = shouldPost,
+                pausePlayer = wasPlaying,
+            )
         } ?: return
         detachRoutingListener()
-        clearMixerPreference(scheduled.previousPreference)
+        if (!synchronized(mixerMutationLock) { mixerPreferences.clearAll() }) {
+            failClosed(
+                failure = UsbOutputFailure.MIXER_CLEAR_FAILED,
+                code = "strict_usb.mixer_clear_failed",
+                device = scheduled.device,
+                sink = scheduled.sink,
+                expectedGeneration = scheduled.generation,
+                attemptMixerCleanup = false,
+            )
+            return
+        }
         publish(
             phase = UsbOutputPhase.APPLYING,
             source = sourceFormat,
@@ -244,7 +268,9 @@ internal class UsbOutputCoordinator(
         if (scheduled.shouldPost) {
             mainHandler.post {
                 synchronized(lock) { reconfigurePosted = false }
-                reconfigureStrictOutput()
+                if (stateRepository.snapshot().phase != UsbOutputPhase.FAILED) {
+                    reconfigureStrictOutput()
+                }
             }
         }
     }
@@ -397,11 +423,14 @@ internal class UsbOutputCoordinator(
         val candidate = resolved as UsbOutputDecision.Candidate
         val mixerFormat = requireNotNull(candidate.mixerProfile).format
         if (!isPlanCurrent(strictPlan)) return pendingStrictOutput(outputConfig)
-        val preferredSetResult = mixerAdapter.setPreferred(device, mixerFormat, audioAttributes)
-        if (!isPlanCurrent(strictPlan)) {
-            mixerAdapter.clearPreferred(device, audioAttributes)
-            return pendingStrictOutput(outputConfig)
-        }
+        val mixerPreference = MixerPreference(device, audioAttributes)
+        val preferredSetResult = synchronized(mixerMutationLock) {
+            if (!isPlanCurrent(strictPlan)) return@synchronized null
+            mixerPreferences.track(mixerPreference)
+            runCatching {
+                mixerAdapter.setPreferred(device, mixerFormat, audioAttributes).getOrThrow()
+            }
+        } ?: return pendingStrictOutput(outputConfig)
         val preferredSet = preferredSetResult.getOrElse {
             return mutedFailureOutput(
                 outputConfig,
@@ -418,9 +447,13 @@ internal class UsbOutputCoordinator(
                 expectedGeneration = strictPlan.generation,
             )
         }
+        if (!isPlanCurrent(strictPlan)) {
+            clearMixerPreferenceOrFail(mixerPreference, device, request)
+            return pendingStrictOutput(outputConfig)
+        }
         val preferredMatches = mixerAdapter.isPreferred(device, mixerFormat, audioAttributes).getOrDefault(false)
         if (!isPlanCurrent(strictPlan)) {
-            mixerAdapter.clearPreferred(device, audioAttributes)
+            clearMixerPreferenceOrFail(mixerPreference, device, request)
             return pendingStrictOutput(outputConfig)
         }
         if (!preferredMatches) {
@@ -455,7 +488,6 @@ internal class UsbOutputCoordinator(
                 createdTrack,
             )
         } catch (failure: Exception) {
-            mixerAdapter.clearPreferred(device, audioAttributes)
             failClosed(
                 UsbOutputFailure.PLATFORM_ERROR,
                 "strict_usb.audio_output_creation_failed",
@@ -467,7 +499,7 @@ internal class UsbOutputCoordinator(
             throw failure
         }
         if (!isPlanCurrent(strictPlan)) {
-            mixerAdapter.clearPreferred(device, audioAttributes)
+            clearMixerPreferenceOrFail(mixerPreference, device, request)
             return gatedOutput
         }
         if (track == null) {
@@ -493,7 +525,7 @@ internal class UsbOutputCoordinator(
             return gatedOutput
         }
         if (!attachRoutingListener(track, gatedOutput, mixerFormat, audioAttributes, strictPlan)) {
-            mixerAdapter.clearPreferred(device, audioAttributes)
+            clearMixerPreferenceOrFail(mixerPreference, device, request)
             return gatedOutput
         }
         mainHandler.post {
@@ -827,10 +859,19 @@ internal class UsbOutputCoordinator(
         sink: PlatformPcmFormat? = synchronized(lock) { selectedMixerFormat },
         expectedGeneration: Long? = null,
         audioAttributes: AudioAttributes? = synchronized(lock) { selectedAudioAttributes },
+        attemptMixerCleanup: Boolean = true,
     ) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             mainHandler.post {
-                failClosed(failure, code, device, sink, expectedGeneration, audioAttributes)
+                failClosed(
+                    failure,
+                    code,
+                    device,
+                    sink,
+                    expectedGeneration,
+                    audioAttributes,
+                    attemptMixerCleanup,
+                )
             }
             return
         }
@@ -853,17 +894,22 @@ internal class UsbOutputCoordinator(
             selectedMixerFormat = null
             selectedAudioAttributes = null
             resumeAfterConfiguration = false
+            reconfigurePosted = false
             state
         } ?: return
         detachRoutingListener()
-        clearMixerPreference(MixerPreference(failedState.device, failedState.audioAttributes))
+        val cleanupSucceeded = !attemptMixerCleanup || synchronized(mixerMutationLock) {
+            mixerPreferences.clearAll()
+        }
+        val reportedFailure = if (cleanupSucceeded) failure else UsbOutputFailure.MIXER_CLEAR_FAILED
+        val reportedCode = if (cleanupSucceeded) code else "strict_usb.mixer_clear_failed"
         publish(
             phase = UsbOutputPhase.FAILED,
-            failure = failure,
+            failure = reportedFailure,
             device = failedState.device,
             source = sourceFormat,
             sink = failedState.sink,
-            decisionCode = code,
+            decisionCode = reportedCode,
         )
         if (currentMode() == UsbOutputMode.STRICT_BIT_PERFECT) {
             player?.run {
@@ -877,17 +923,35 @@ internal class UsbOutputCoordinator(
     private fun restoreSystemOutput(rebuild: Boolean) {
         val activePlayer = player
         val resume = activePlayer?.playWhenReady == true || synchronized(lock) { resumeAfterConfiguration }
-        val oldPreference = synchronized(lock) { MixerPreference(selectedDevice, selectedAudioAttributes) }
+        val oldState = synchronized(lock) { FailedOutputState(selectedDevice, selectedMixerFormat) }
         detachRoutingListener()
-        clearMixerPreference(oldPreference)
-        synchronized(lock) {
-            selectedDevice = null
-            selectedProfiles = null
-            selectedMixerFormat = null
-            selectedAudioAttributes = null
-            selectedPlanGeneration = NO_GENERATION
-            resumeAfterConfiguration = false
+        val cleanupSucceeded = synchronized(mixerMutationLock) {
+            if (!mixerPreferences.clearAll()) {
+                false
+            } else {
+                synchronized(lock) {
+                    mode = UsbOutputMode.SYSTEM
+                    selectedDevice = null
+                    selectedProfiles = null
+                    selectedMixerFormat = null
+                    selectedAudioAttributes = null
+                    selectedPlanGeneration = NO_GENERATION
+                    resumeAfterConfiguration = false
+                }
+                true
+            }
         }
+        if (!cleanupSucceeded) {
+            failClosed(
+                failure = UsbOutputFailure.MIXER_CLEAR_FAILED,
+                code = "strict_usb.mixer_clear_failed",
+                device = oldState.device,
+                sink = oldState.sink,
+                attemptMixerCleanup = false,
+            )
+            return
+        }
+        preferences.edit { putString(MODE_KEY, UsbOutputMode.SYSTEM.name) }
         activePlayer?.setPreferredAudioDevice(null)
         publishSystem()
         if (rebuild && activePlayer != null && activePlayer.mediaItemCount > 0) {
@@ -969,10 +1033,19 @@ internal class UsbOutputCoordinator(
         isGenerationCurrentLocked(plan.generation) && selectedPlanGeneration == plan.generation &&
             selectedDevice?.id == plan.device.id
 
-    private fun clearMixerPreference(preference: MixerPreference) {
-        val device = preference.device ?: return
-        val audioAttributes = preference.audioAttributes ?: return
-        mixerAdapter.clearPreferred(device, audioAttributes)
+    private fun clearMixerPreferenceOrFail(
+        preference: MixerPreference,
+        device: AudioDeviceInfo,
+        sink: PlatformPcmFormat,
+    ) {
+        if (synchronized(mixerMutationLock) { mixerPreferences.clear(preference) }) return
+        failClosed(
+            failure = UsbOutputFailure.MIXER_CLEAR_FAILED,
+            code = "strict_usb.mixer_clear_failed",
+            device = device,
+            sink = sink,
+            attemptMixerCleanup = false,
+        )
     }
 
     fun close() {
@@ -992,15 +1065,23 @@ internal class UsbOutputCoordinator(
         runCatching { audioManager.unregisterAudioDeviceCallback(deviceCallback) }
         player?.removeListener(this)
         detachRoutingListener()
-        clearMixerPreference(MixerPreference(closingState.device, closingState.audioAttributes))
+        val cleanupSucceeded = synchronized(mixerMutationLock) { mixerPreferences.clearAll() }
         if (closingState.mode == UsbOutputMode.STRICT_BIT_PERFECT) {
             publish(
                 phase = UsbOutputPhase.FAILED,
-                failure = UsbOutputFailure.SERVICE_STOPPED,
+                failure = if (cleanupSucceeded) {
+                    UsbOutputFailure.SERVICE_STOPPED
+                } else {
+                    UsbOutputFailure.MIXER_CLEAR_FAILED
+                },
                 device = closingState.device,
                 source = sourceFormat,
                 sink = closingState.sink,
-                decisionCode = "strict_usb.service_stopped",
+                decisionCode = if (cleanupSucceeded) {
+                    "strict_usb.service_stopped"
+                } else {
+                    "strict_usb.mixer_clear_failed"
+                },
             )
         }
         player = null
@@ -1084,14 +1165,16 @@ internal class UsbOutputCoordinator(
 }
 
 private data class ReconfigurationSchedule(
-    val previousPreference: MixerPreference,
+    val device: AudioDeviceInfo?,
+    val sink: PlatformPcmFormat?,
+    val generation: Long,
     val shouldPost: Boolean,
     val pausePlayer: Boolean,
 )
 
 private data class MixerPreference(
-    val device: AudioDeviceInfo?,
-    val audioAttributes: AudioAttributes?,
+    val device: AudioDeviceInfo,
+    val audioAttributes: AudioAttributes,
 )
 
 private data class StrictOutputPlan(
@@ -1117,7 +1200,7 @@ private data class RoutingAttachment(
 private data class FailedOutputState(
     val device: AudioDeviceInfo?,
     val sink: PlatformPcmFormat?,
-    val audioAttributes: AudioAttributes?,
+    val audioAttributes: AudioAttributes? = null,
 )
 
 private data class ClosingOutputState(
@@ -1126,6 +1209,35 @@ private data class ClosingOutputState(
     val sink: PlatformPcmFormat?,
     val audioAttributes: AudioAttributes?,
 )
+
+/** Retains every applied preference until Android confirms that it was cleared. */
+internal class MixerPreferenceCleanupTracker<T>(
+    private val clearPreference: (T) -> Result<Boolean>,
+) {
+    private val tracked = linkedSetOf<T>()
+
+    @Synchronized
+    fun track(preference: T) {
+        tracked += preference
+    }
+
+    @Synchronized
+    fun clear(preference: T): Boolean {
+        if (preference !in tracked) return true
+        val cleared = runCatching { clearPreference(preference).getOrThrow() }.getOrDefault(false)
+        if (cleared) tracked -= preference
+        return cleared
+    }
+
+    @Synchronized
+    fun clearAll(): Boolean {
+        tracked.toList().forEach(::clear)
+        return tracked.isEmpty()
+    }
+
+    @Synchronized
+    internal fun pendingCount(): Int = tracked.size
+}
 
 /** Blocks PCM until strict-route verification and closes again on pause or non-neutral volume. */
 @androidx.annotation.OptIn(UnstableApi::class)

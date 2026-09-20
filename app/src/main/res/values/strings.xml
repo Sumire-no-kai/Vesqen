@@ -91,6 +91,7 @@
     <string name="usb_failure_no_profile">The DAC has no bit-perfect profile compatible with this source.</string>
     <string name="usb_failure_request">Android rejected the mixer preference.</string>
     <string name="usb_failure_readback">Android did not retain the requested mixer preference.</string>
+    <string name="usb_failure_clear">Android could not clear the mixer preference, so playback remains stopped.</string>
     <string name="usb_failure_track_format">Media3’s actual PCM request does not match a bit-perfect mixer profile.</string>
     <string name="usb_failure_preferred_device">The AudioTrack did not accept the selected USB device.</string>
     <string name="usb_failure_route_unavailable">Android did not expose the AudioTrack’s active route in time.</string>
@@ -113,8 +114,9 @@
     <string name="verification_failure_malformed">document is malformed or contains duplicate fields</string>
     <string name="verification_failure_schema">schema version is unsupported</string>
     <string name="verification_failure_algorithm">signature algorithm is unsupported</string>
-    <string name="verification_failure_signature">signature does not match the installed app certificate</string>
-    <string name="verification_failure_certificate">installed app signing certificate is unavailable</string>
+    <string name="verification_failure_unknown_issuer">verification issuer is unknown</string>
+    <string name="verification_failure_signature">registry signature is invalid</string>
+    <string name="verification_failure_issuer_unavailable">this build has no trusted verification issuer</string>
     <string name="verification_failure_io">file could not be read or stored</string>
     <string name="settings_about">About</string>
     <string name="settings_about_vesqen">About Vesqen</string>

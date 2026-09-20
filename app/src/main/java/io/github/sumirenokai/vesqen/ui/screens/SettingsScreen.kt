@@ -240,8 +240,9 @@ private fun verificationFailureLabel(failure: OutputVerificationImportFailure): 
         OutputVerificationImportFailure.UNSUPPORTED_SCHEMA -> R.string.verification_failure_schema
         OutputVerificationImportFailure.UNSUPPORTED_SIGNATURE_ALGORITHM ->
             R.string.verification_failure_algorithm
+        OutputVerificationImportFailure.UNKNOWN_SIGNING_KEY -> R.string.verification_failure_unknown_issuer
         OutputVerificationImportFailure.SIGNATURE_MISMATCH -> R.string.verification_failure_signature
-        OutputVerificationImportFailure.NO_SIGNING_CERTIFICATE -> R.string.verification_failure_certificate
+        OutputVerificationImportFailure.NO_TRUSTED_ISSUER -> R.string.verification_failure_issuer_unavailable
         OutputVerificationImportFailure.IO_ERROR -> R.string.verification_failure_io
     },
 )
@@ -378,6 +379,7 @@ internal fun strictUsbFailureLabel(failure: UsbOutputFailure): String = stringRe
         UsbOutputFailure.NO_MATCHING_MIXER_ATTRIBUTE -> R.string.usb_failure_no_profile
         UsbOutputFailure.MIXER_REQUEST_REJECTED -> R.string.usb_failure_request
         UsbOutputFailure.MIXER_READBACK_MISMATCH -> R.string.usb_failure_readback
+        UsbOutputFailure.MIXER_CLEAR_FAILED -> R.string.usb_failure_clear
         UsbOutputFailure.AUDIO_TRACK_FORMAT_MISMATCH -> R.string.usb_failure_track_format
         UsbOutputFailure.PREFERRED_DEVICE_REJECTED -> R.string.usb_failure_preferred_device
         UsbOutputFailure.ROUTE_UNAVAILABLE -> R.string.usb_failure_route_unavailable

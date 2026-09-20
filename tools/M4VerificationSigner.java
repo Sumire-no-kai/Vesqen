@@ -7,23 +7,30 @@ import java.security.KeyStore;
 import java.security.PrivateKey;
 import java.security.Signature;
 import java.util.Base64;
+import java.util.regex.Pattern;
 
-/** Signs a validated M4 payload with an Android app signing key. Passwords are read only from env. */
+/** Signs a validated M4 payload with a dedicated offline verification issuer key. */
 final class M4VerificationSigner {
+    private static final Pattern STABLE_KEY_ID = Pattern.compile("[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*");
+
     private M4VerificationSigner() {}
 
     public static void main(String[] args) throws Exception {
-        if (args.length != 8 || !"sign".equals(args[0])) {
+        if (args.length != 9 || !"sign".equals(args[0])) {
             throw new IllegalArgumentException(
-                "Usage: java tools/M4VerificationSigner.java sign <payload> <keystore> <type> <alias> <output> --no-overwrite <true>"
+                "Usage: java tools/M4VerificationSigner.java sign <payload> <issuer-keystore> <type> <alias> <key-id> <output> --no-overwrite <true>"
             );
         }
         Path payloadPath = Path.of(args[1]);
         Path keyStorePath = Path.of(args[2]);
         String keyStoreType = args[3];
         String alias = args[4];
-        Path outputPath = Path.of(args[5]);
-        if (!"--no-overwrite".equals(args[6]) || !"true".equals(args[7])) {
+        String keyId = args[5];
+        if (!STABLE_KEY_ID.matcher(keyId).matches()) {
+            throw new IllegalArgumentException("key-id must be a stable dotted identifier");
+        }
+        Path outputPath = Path.of(args[6]);
+        if (!"--no-overwrite".equals(args[7]) || !"true".equals(args[8])) {
             throw new IllegalArgumentException("--no-overwrite true is required");
         }
         if (Files.exists(outputPath)) {
@@ -57,7 +64,8 @@ final class M4VerificationSigner {
             if (!verifier.verify(signature)) {
                 throw new IllegalStateException("Signature self-check failed");
             }
-            String envelope = "{\"schemaVersion\":1,\"signatureAlgorithm\":\"" + algorithm
+            String envelope = "{\"schemaVersion\":2,\"keyId\":\"" + keyId
+                + "\",\"signatureAlgorithm\":\"" + algorithm
                 + "\",\"payload\":\"" + Base64.getEncoder().encodeToString(payload)
                 + "\",\"signature\":\"" + Base64.getEncoder().encodeToString(signature) + "\"}";
             Path parent = outputPath.toAbsolutePath().getParent();
@@ -69,7 +77,7 @@ final class M4VerificationSigner {
             } finally {
                 Files.deleteIfExists(temporary);
             }
-            System.out.println("Signed registry written: " + outputPath + " (" + algorithm + ")");
+            System.out.println("Signed registry written: " + outputPath + " (" + keyId + ", " + algorithm + ")");
         } finally {
             java.util.Arrays.fill(storePassword, '\0');
             java.util.Arrays.fill(keyPassword, '\0');

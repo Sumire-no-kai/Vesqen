@@ -8,7 +8,7 @@
 
 每次记录必须包含：应用版本名/code、已安装 base APK SHA-256、手机 manufacturer/model、Android API、ROM fingerprint SHA-256、DAC VID/PID/名称/USB descriptor version、源和 sink 的采样率/声道/PCM encoding、测试向量 SHA-256、时间、方法、采样信号点和证据位置。APK、ROM、DAC descriptor、源格式或 sink 格式任一变化，都必须重新判定，不能继承旧结果。
 
-应用只接受由当前安装包签名证书对应私钥签署的离线 registry。导入不是 VERIFIED 开关：仅在严格 USB 状态为 `ACTIVE`、唯一物理 USB Audio Class 设备可识别且所有字段精确匹配时，播放器、Chain 与遥测才显示 `VERIFIED`。签名错误、字段重复、未知字段、超出 256 KiB、组合不匹配和非 ACTIVE 状态均 fail closed。诊断可导出稳定 record id、方法和测试向量哈希；证据位置按文本隐私策略脱敏。
+应用只接受由内置公钥明确标识的独立、版本化 verification issuer 签署的离线 registry；issuer 不得复用 Android APK 更新签名。envelope schema v2 必须携带稳定 `keyId`，未知 key、旧 keyless envelope 和错误签名均拒绝。导入不是 VERIFIED 开关：仅在严格 USB 状态为 `ACTIVE`、唯一物理 USB Audio Class 设备可识别且所有字段精确匹配时，播放器、Chain 与遥测才显示 `VERIFIED`。字段重复、未知字段、超出 256 KiB、组合不匹配和非 ACTIVE 状态同样 fail closed。诊断可导出稳定 record id、方法和测试向量哈希；证据位置按文本隐私策略脱敏。
 
 ## 记录准备与签名
 
@@ -31,13 +31,15 @@
    <python> tools/m4_verification.py prepare --source <records.json> --output <new-payload.json>
    ```
 
-4. 使用与候选 APK 相同的 Android 签名私钥签名。密码只从 `VESQEN_KEYSTORE_PASSWORD` 与可选的 `VESQEN_KEY_PASSWORD` 环境变量读取，不能写进命令、仓库或日志：
+4. 使用仓库外保存的专用 verification issuer 私钥签名；不得使用 APK 更新私钥。`keyId` 必须与应用内固定的公钥条目一致。密码只从 `VESQEN_KEYSTORE_PASSWORD` 与可选的 `VESQEN_KEY_PASSWORD` 环境变量读取，不能写进命令、仓库或日志：
 
    ```powershell
-   java tools/M4VerificationSigner.java sign <payload.json> <keystore> <JKS-or-PKCS12> <alias> <new-registry.json> --no-overwrite true
+   java tools/M4VerificationSigner.java sign <payload.json> <issuer-keystore> <JKS-or-PKCS12> <alias> <key-id> <new-registry.json> --no-overwrite true
    ```
 
-5. `tools/m4_verification.py inspect` 只检查 envelope、Base64 和 payload 结构，并明确报告 `signatureCryptographicallyVerified=false`；密码学验签由 signer 自检和应用导入执行。
+5. `tools/m4_verification.py inspect` 只检查 v2 envelope、`keyId`、Base64 和 payload 结构，并明确报告 `signatureCryptographicallyVerified=false`；密码学验签由 signer 自检和应用导入执行。v1 keyless registry 必须使用专用 issuer 重新签发，不能原样迁移。
+
+首个 issuer 的稳定身份是 `vesqen.output_verification.2026_01`；固定 SPKI SHA-256 为 `35619e5cc562b23282aa5bce0aa4e6ba6221e40b97522d96d91ea5c07daf0db4`，当前自签证书 SHA-256 为 `649b405d38d2620a1f69733c2091bbae0917a3c615db72e4ca696d9c25b1149b`。迁移开发机时，只通过受控加密介质复制 PKCS12，并在目标机单独导入密码；迁移后重新核对两项指纹。私钥、PKCS12、密码和解密后的临时文件都不能进入 Git 或普通云同步。密钥轮换应新增 `keyId` 与公钥，并在仍需读取旧 registry 时保留旧公钥。
 
 测试向量是整数算法合成的双声道 PCM，不含第三方录音，manifest 标为 CC0-1.0 并记录每个 WAV 的哈希、采样率、位深、声道、时长和字节数。数字采集必须位于能证明 Android 到 DAC 之间 PCM 的信号点，记录采集设备/固件/时钟/线缆与逐样本比较命令；模拟输出录音只能作为模拟链路观察，不能升级为数字 bit-perfect 证据。
 

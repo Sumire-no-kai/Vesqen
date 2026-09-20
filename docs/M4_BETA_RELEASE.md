@@ -5,6 +5,7 @@
 ## 当前冻结候选
 
 - 版本：`1.0.0-beta.1` / versionCode `10`。这是通向首个稳定版 `1.0.0` 的首个公开 Beta，不代表稳定版已经验收。
+- Verification issuer：`vesqen.output_verification.2026_01`；固定 SPKI SHA-256 为 `35619e5cc562b23282aa5bce0aa4e6ba6221e40b97522d96d91ea5c07daf0db4`。私钥位于仓库外，且不复用 APK 更新签名。
 - 冻结后不接受新功能、普通 UI 优化或非必要重构。只有崩溃/ANR、数据丢失、无法播放、严重卡顿、错误 bit-perfect 声明、关键页面不可操作、签名或安装升级失败可进入当前发布线。
 - 任何已发布的 tag/APK/AAB 不可替换。发布后的阻断修复使用新版本，例如 `1.0.0-beta.2` / `11`，并同步更新发布说明与标签。
 - `0.4.0-beta.1` / `9` 的设备与构建记录保留为历史证据；因验证记录精确匹配应用版本和 APK 哈希，不能直接充当新候选的产物身份证据。
@@ -14,7 +15,7 @@
 1. 收录已合并修复和适用证据，补齐可用设备的短时回归；已有且仍适用的测试不重复执行。
 2. 在 iQOO + JBL Flip 7 上确认 USB 识别、能力、实际路由、格式变化及拔插/失败清理；记录无法取得的证据。第二款 DAC 和外部数字逐样本组合留作公开限制，不用扬声器听感代验。
 3. 完成隐私/权限说明、EN/ZH 发布说明、安装升级与支持范围准备；公开 Release 不提供诊断开关、录制或导出入口，问题反馈不要求用户自行开启日志。
-4. 用户要求长期 keystore 留到最后创建。最终发布时确定签名身份、记录证书指纹、生成并核验签名 APK/AAB，在安装候选上核验数据保留和无诊断入口，再交付两个渠道。Play 测试轨道及账号准入条件在上传前确认。
+4. 用户要求长期密钥留到最后创建。最终发布时分别创建 APK 更新签名与离线 verification issuer，两者不得复用；只把 issuer 公钥和稳定 `keyId` 固定进应用，私钥、alias 和密码留在仓库外。记录两套身份的指纹，生成并核验签名 APK/AAB，在安装候选上核验数据保留和无诊断入口，再交付两个渠道。Play 测试轨道及账号准入条件在上传前确认。
 
 第二款 DAC 不再是本次受限 Beta 的阻断项；崩溃/ANR、数据丢失、错误输出声明、签名/安装升级失败及 Release 诊断开关仍阻断发布。
 
@@ -29,7 +30,7 @@
 
 ### 新增
 
-- 可导入由应用签名证书验证的离线输出验证记录；精确匹配时，播放器、Chain 和 Audio Proof 显示 `BIT-PERFECT VERIFIED`。
+- 可导入由独立、版本化 verification issuer 签署的离线输出验证记录；精确匹配时，播放器、Chain 和 Audio Proof 显示 `BIT-PERFECT VERIFIED`。
 - M4 确定性 PCM 测试向量、记录校验/签名流程及设备/性能采集工具。
 - Settings 显示 registry 状态和失败原因；Chain 可追溯 record id 与验证方法。
 
@@ -52,8 +53,9 @@
 
 - [ ] 所有 Beta blocker 为 0；失败 runner 有结论和修复后独立复测，未通过项没有被删除或弱化。
 - [ ] `version.properties` 使用经审阅的 SemVer 与递增 versionCode；release notes 与 About 一致。
-- [ ] JDK 21 下 unit、Python 工具测试、lint、Debug/Profile/Release、instrumentation compile 通过；CI 通过。
+- [ ] JDK 25 下 unit、Python 工具测试、lint、Debug/Profile/Release、instrumentation compile 通过；CI 通过。
 - [ ] 候选 APK/Bundle 使用预期发布签名，证书指纹和 base APK SHA-256 记录；keystore、alias 和密码不进入仓库或日志。
+- [ ] 专用 verification issuer 与 APK 更新签名相互独立；应用固定受审阅的 issuer 公钥和稳定 `keyId`，私钥不进入仓库。未配置 issuer 的构建必须明确拒绝 registry，不能回退信任 APK signer。
 - [ ] 若已有公开版本，从该版本执行保留数据升级；若为首次公开发布，记录无上一公开版本，并用同一长期签名的前后候选验证升级。核对曲库稳定 ID、收藏、历史、歌单、手动排序、SAF grant、队列 checkpoint、输出模式和 registry；不以卸载重装替代升级。现有 Debug/Profile 使用开发签名，不能视为新生产签名的直接升级来源，也不能卸载用户数据来规避签名不匹配。
 - [ ] 新装、升级、系统回收/重启、存储不可用与回滚限制分别记录；数据库或持久格式变化另做兼容审查。
 - [ ] EN/ZH、窄屏/横屏/大字、深浅主题、减少动效、触控目标、对比度与 TalkBack 的适用矩阵通过或公开列限。
@@ -80,5 +82,5 @@
 
 1. 以上一次完整发版复审的实现提交 `c6dd340` 为 delta 起点，首先审查 `c6dd340..HEAD`，再对发布高风险不变量做定向回看。
 2. 高风险顺序固定为：严格 USB fail-closed 与证据声明、`PlaybackService`/Controller 连接与队列恢复、`LibraryCatalog` 扫描清理与升级保留、签名验证 registry、Release 诊断关闭/权限/混淆、关键页面可操作性。
-3. 审查前采集 `git status`、候选 commit、版本、生成产物和哈希；审查后先跑聚焦回归，再按清单执行 JDK 21 全门禁。
+3. 审查前采集 `git status`、候选 commit、版本、生成产物和哈希；审查后先跑聚焦回归，再按清单执行 JDK 25 全门禁。
 4. 审查输出分开记录：代码发现、本地构建/测试、实机 QA、远程 CI、M4 里程碑验收；任何一类不得代替另一类。

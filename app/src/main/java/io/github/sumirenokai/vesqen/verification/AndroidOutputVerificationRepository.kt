@@ -1,7 +1,6 @@
 package io.github.sumirenokai.vesqen.verification
 
 import android.content.Context
-import android.content.pm.PackageManager
 import android.os.Build
 import android.util.AtomicFile
 import android.util.Base64
@@ -13,10 +12,11 @@ import java.io.FileNotFoundException
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.nio.charset.StandardCharsets
+import java.security.KeyFactory
 import java.security.MessageDigest
 import java.security.PublicKey
 import java.security.Signature
-import java.security.cert.CertificateFactory
+import java.security.spec.X509EncodedKeySpec
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,8 +41,9 @@ enum class OutputVerificationImportFailure {
     MALFORMED_DOCUMENT,
     UNSUPPORTED_SCHEMA,
     UNSUPPORTED_SIGNATURE_ALGORITHM,
+    UNKNOWN_SIGNING_KEY,
     SIGNATURE_MISMATCH,
-    NO_SIGNING_CERTIFICATE,
+    NO_TRUSTED_ISSUER,
     IO_ERROR,
 }
 
@@ -69,26 +70,27 @@ fun interface OutputVerificationRuntimeIdentityProvider {
     fun resolve(): OutputVerificationRuntimeIdentity
 }
 
-fun interface OutputVerificationSigningKeysProvider {
-    fun publicKeys(): List<PublicKey>
+fun interface OutputVerificationIssuerKeysProvider {
+    fun publicKeysById(): Map<String, PublicKey>
 }
 
 /**
  * Private, offline registry for maintainer-signed external verification records.
  *
- * The signature is checked against the certificate that signed the installed APK. A valid record
- * must then match the base APK hash, phone/ROM, DAC identity and active source/sink format exactly.
- * Importing a file is therefore not a user-controlled VERIFIED checkbox.
+ * The signature is checked against a dedicated, versioned verification issuer rather than the APK
+ * update signer. A valid record must then match the base APK hash, phone/ROM, DAC identity and
+ * active source/sink format exactly. Importing a file is therefore not a user-controlled VERIFIED
+ * checkbox.
  */
 class AndroidOutputVerificationRepository internal constructor(
     private val registryFile: File,
     private val runtimeIdentityProvider: OutputVerificationRuntimeIdentityProvider,
-    private val signingKeysProvider: OutputVerificationSigningKeysProvider,
+    private val issuerKeysProvider: OutputVerificationIssuerKeysProvider,
 ) : OutputVerificationRepository {
     constructor(context: Context) : this(
         registryFile = File(context.filesDir, REGISTRY_FILE_NAME),
         runtimeIdentityProvider = AndroidOutputVerificationRuntimeIdentityProvider(context.applicationContext),
-        signingKeysProvider = AndroidOutputVerificationSigningKeysProvider(context.applicationContext),
+        issuerKeysProvider = PinnedOutputVerificationIssuerKeysProvider,
     )
 
     private val mutation = Mutex()
@@ -171,10 +173,10 @@ class AndroidOutputVerificationRepository internal constructor(
     }
 
     private fun decodeState(bytes: ByteArray): OutputVerificationRegistryState {
-        val keys = runCatching(signingKeysProvider::publicKeys).getOrDefault(emptyList())
+        val keys = runCatching(issuerKeysProvider::publicKeysById).getOrDefault(emptyMap())
         if (keys.isEmpty()) {
             return OutputVerificationRegistryState.Invalid(
-                OutputVerificationImportFailure.NO_SIGNING_CERTIFICATE,
+                OutputVerificationImportFailure.NO_TRUSTED_ISSUER,
             )
         }
         val decoded = try {
@@ -248,64 +250,56 @@ private class AndroidOutputVerificationRuntimeIdentityProvider(
     }
 }
 
-private class AndroidOutputVerificationSigningKeysProvider(
-    private val context: Context,
-) : OutputVerificationSigningKeysProvider {
-    @Suppress("DEPRECATION")
-    override fun publicKeys(): List<PublicKey> {
-        val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            context.packageManager.getPackageInfo(
-                context.packageName,
-                PackageManager.GET_SIGNING_CERTIFICATES,
-            )
-        } else {
-            context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_SIGNATURES)
-        }
-        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            packageInfo.signingInfo?.apkContentsSigners.orEmpty()
-        } else {
-            packageInfo.signatures.orEmpty()
-        }
-        val certificates = CertificateFactory.getInstance("X.509")
-        return signatures.map { signature ->
-            certificates.generateCertificate(ByteArrayInputStream(signature.toByteArray())).publicKey
-        }
+/**
+ * Production issuer keys are intentionally independent from Android app-signing certificates.
+ * A key rotation adds a new id/public-key pair while retaining old keys for existing registries.
+ * Failure to parse the pinned key makes imports fail closed instead of falling back to the APK
+ * update signer.
+ */
+internal object PinnedOutputVerificationIssuerKeysProvider : OutputVerificationIssuerKeysProvider {
+    private val keys by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        mapOf(
+            OUTPUT_VERIFICATION_ISSUER_KEY_ID to KeyFactory.getInstance("EC").generatePublic(
+                X509EncodedKeySpec(
+                    java.util.Base64.getDecoder().decode(OUTPUT_VERIFICATION_ISSUER_PUBLIC_KEY_BASE64),
+                ),
+            ),
+        )
     }
+
+    override fun publicKeysById(): Map<String, PublicKey> = keys
+
+    internal const val OUTPUT_VERIFICATION_ISSUER_KEY_ID =
+        "vesqen.output_verification.2026_01"
+    private const val OUTPUT_VERIFICATION_ISSUER_PUBLIC_KEY_BASE64 =
+        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEgeeZWCweEYd3UpoSDtu6lNjnGZwP2gel1fvJ0UNwcM+UM8qDhi1/LiqXI838gE4mFyFDth3vs+DO2rDSGqgUVw=="
 }
 
 private object SignedVerificationDocumentCodec {
-    private const val SCHEMA_VERSION = 1
+    private const val ENVELOPE_SCHEMA_VERSION = 2
+    private const val PAYLOAD_SCHEMA_VERSION = 1
     private const val MAX_RECORDS = 128
 
-    fun decode(document: ByteArray, publicKeys: List<PublicKey>): List<OutputVerificationRecord> {
+    fun decode(document: ByteArray, publicKeysById: Map<String, PublicKey>): List<OutputVerificationRecord> {
         val envelope = readEnvelope(document)
-        if (envelope.schemaVersion != SCHEMA_VERSION) {
+        if (envelope.schemaVersion != ENVELOPE_SCHEMA_VERSION) {
             throw VerificationDocumentException(OutputVerificationImportFailure.UNSUPPORTED_SCHEMA)
-        }
-        if (envelope.signatureAlgorithm !in ALLOWED_SIGNATURE_ALGORITHMS) {
-            throw VerificationDocumentException(
-                OutputVerificationImportFailure.UNSUPPORTED_SIGNATURE_ALGORITHM,
-            )
         }
         val payload = decodeBase64(envelope.payload)
         val signature = decodeBase64(envelope.signature)
-        val verified = publicKeys.any { key ->
-            signatureAlgorithmFor(key) == envelope.signatureAlgorithm && runCatching {
-                Signature.getInstance(envelope.signatureAlgorithm).run {
-                    initVerify(key)
-                    update(payload)
-                    verify(signature)
-                }
-            }.getOrDefault(false)
-        }
-        if (!verified) {
-            throw VerificationDocumentException(OutputVerificationImportFailure.SIGNATURE_MISMATCH)
-        }
+        OutputVerificationSignatureVerifier.failure(
+            keyId = envelope.keyId,
+            signatureAlgorithm = envelope.signatureAlgorithm,
+            payload = payload,
+            signature = signature,
+            publicKeysById = publicKeysById,
+        )?.let { reason -> throw VerificationDocumentException(reason) }
         return readPayload(payload)
     }
 
     private fun readEnvelope(document: ByteArray): SignedEnvelope = jsonReader(document) { reader ->
         var schemaVersion: Int? = null
+        var keyId: String? = null
         var algorithm: String? = null
         var payload: String? = null
         var signature: String? = null
@@ -315,6 +309,7 @@ private object SignedVerificationDocumentCodec {
             val name = reader.nextName().also { require(seen.add(it)) }
             when (name) {
                 "schemaVersion" -> schemaVersion = reader.nextInt()
+                "keyId" -> keyId = reader.nextString().also { require(KEY_ID_PATTERN.matches(it)) }
                 "signatureAlgorithm" -> algorithm = reader.nextString()
                 "payload" -> payload = reader.nextString()
                 "signature" -> signature = reader.nextString()
@@ -324,6 +319,7 @@ private object SignedVerificationDocumentCodec {
         reader.endObject()
         SignedEnvelope(
             schemaVersion = requireNotNull(schemaVersion),
+            keyId = requireNotNull(keyId),
             signatureAlgorithm = requireNotNull(algorithm),
             payload = requireNotNull(payload),
             signature = requireNotNull(signature),
@@ -351,7 +347,7 @@ private object SignedVerificationDocumentCodec {
             }
         }
         reader.endObject()
-        if (schemaVersion != SCHEMA_VERSION) {
+        if (schemaVersion != PAYLOAD_SCHEMA_VERSION) {
             throw VerificationDocumentException(OutputVerificationImportFailure.UNSUPPORTED_SCHEMA)
         }
         requireNotNull(records).also { parsed ->
@@ -444,18 +440,45 @@ private object SignedVerificationDocumentCodec {
         throw VerificationDocumentException(OutputVerificationImportFailure.MALFORMED_DOCUMENT)
     }
 
+    private data class SignedEnvelope(
+        val schemaVersion: Int,
+        val keyId: String,
+        val signatureAlgorithm: String,
+        val payload: String,
+        val signature: String,
+    )
+
+    private val KEY_ID_PATTERN = Regex("[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*")
+}
+
+internal object OutputVerificationSignatureVerifier {
+    fun failure(
+        keyId: String,
+        signatureAlgorithm: String,
+        payload: ByteArray,
+        signature: ByteArray,
+        publicKeysById: Map<String, PublicKey>,
+    ): OutputVerificationImportFailure? {
+        if (signatureAlgorithm !in ALLOWED_SIGNATURE_ALGORITHMS) {
+            return OutputVerificationImportFailure.UNSUPPORTED_SIGNATURE_ALGORITHM
+        }
+        val publicKey = publicKeysById[keyId]
+            ?: return OutputVerificationImportFailure.UNKNOWN_SIGNING_KEY
+        val verified = signatureAlgorithmFor(publicKey) == signatureAlgorithm && runCatching {
+            Signature.getInstance(signatureAlgorithm).run {
+                initVerify(publicKey)
+                update(payload)
+                verify(signature)
+            }
+        }.getOrDefault(false)
+        return if (verified) null else OutputVerificationImportFailure.SIGNATURE_MISMATCH
+    }
+
     private fun signatureAlgorithmFor(key: PublicKey): String? = when (key.algorithm.uppercase()) {
         "RSA" -> "SHA256withRSA"
         "EC", "ECDSA" -> "SHA256withECDSA"
         else -> null
     }
-
-    private data class SignedEnvelope(
-        val schemaVersion: Int,
-        val signatureAlgorithm: String,
-        val payload: String,
-        val signature: String,
-    )
 
     private val ALLOWED_SIGNATURE_ALGORITHMS = setOf("SHA256withRSA", "SHA256withECDSA")
 }
