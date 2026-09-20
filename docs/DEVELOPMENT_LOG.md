@@ -948,3 +948,13 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - 设备上旧测试包签名与当前测试 APK 不同；只卸载并替换 `io.github.sumirenokai.vesqen.test`，未卸载主应用或清除主数据。测试结束后测试包已移除，主应用恢复最终不可调试 Profile。设备 base APK 与本地 `app-profile.apk` 的 SHA-256 同为 `ac6a3ad2678279ac838e88e734b62ad09d9b20ab24bcab8eeb8de9279eb12177`。
 
 上述结果形成已推送并通过远端 CI 的软件候选，但不关闭完整 M4：真实 DAC 严格路由/拔插、外部数字逐样本 VERIFIED、发布签名与同签名升级、完整 TalkBack/适配、长时矩阵及 M3-R1 最终双机配对性能验收仍开放。本轮未创建 tag、Release 或商店产物。
+
+## 2026-09-20 · Beta 发布签名身份创建与本机闭环验证
+
+- PR #29 已以 merge commit `83d4759` 合入 `release/1.0.0-beta.1`；签名准备从该提交创建 `chore/release-signing-preparation`。发布模型保持 Google Play 首次买断，不在冻结候选中增加订阅、Billing SDK、联网许可或反破解运行时。
+- 建立三身份分离：长期 application signing `vesqen-app-signing-v1`、可重置 Play upload `vesqen-play-upload-v1`，以及既有 output verification issuer `vesqen.output_verification.2026_01`。前两者均为 RSA 4096 / SHA256withRSA、自签证书有效期 2026-09-20 至 2126-08-27；它们与 issuer 的公开 SPKI 指纹两两不同。
+- Application signing 证书 SHA-256 为 `74:3E:96:FC:B7:1D:C5:81:88:49:68:19:A0:01:A2:7C:D8:8D:90:91:62:C5:AE:92:9C:87:BF:A2:9A:B8:62:93`，SPKI SHA-256 为 `64e735ac71c0a20ae0f4317d4f99bbfc05a02087cae39d50dc20d71d3fde0fd1`。Play upload 证书 SHA-256 为 `6A:78:82:9F:9C:74:FA:CE:FB:CE:C4:62:57:CF:9B:E6:01:55:1F:3B:86:49:E6:1E:14:6B:1A:98:20:06:31:5B`，SPKI SHA-256 为 `4363564b8ed182dd073ca8047a91dd4c48f04f16f0302215dc9acd32071cb19a`。
+- 两份 PKCS12 位于仓库外的 `~/Library/Application Support/Vesqen/keys/`，文件权限为 `0600`；各自使用独立随机密码，分别保存为 macOS Keychain 的 `Vesqen App Signing / vesqen-app-signing-v1` 与 `Vesqen Play Upload / vesqen-play-upload-v1`。密码、私钥和解密临时材料没有写入仓库或日志；仓库只保存公共 PEM 证书和指纹。
+- 首次创建时，Keychain 的交互式双重密码确认只收到一行输入，导致两份 PKCS12 无法由保存值打开。闭环回读立即发现问题；两把密钥从未签署产物、发布指纹或上传 Play。经用户明确授权删除初始 PKCS12 和错误 Keychain 条目后重新生成，最终通过 Keychain 精确回读、PKCS12 开库、预期 alias 查询、私钥 CSR 签名、证书/SPKI 指纹差异和文件权限检查。
+- JDK 25 `:app:bundleRelease` 通过。随后只在受控临时目录执行签名冒烟：application signing `v1` 签署的临时 Release APK 由 `apksigner` 确认为单一 signer、v2/v3 通过且证书 SHA-256 与记录一致；Play upload `v1` 签署的临时 AAB 由 `jarsigner`/`keytool` 验证并匹配独立上传证书。两份临时签名产物退出时删除，不是发布候选，也未上传或打 tag。
+- 完整身份、路径和迁移边界记录在 [发布签名](RELEASE_SIGNING.md)。当前只完成密钥创建与公共身份留档；加密离线备份及恢复演练、Play App Signing 导入与证书对账、签名 APK/AAB、同签名升级/数据保留、tag、GitHub Release 和 Play 上传均未执行，不能视为发布门禁已经关闭。
