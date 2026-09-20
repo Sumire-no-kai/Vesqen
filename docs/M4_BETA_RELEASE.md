@@ -6,6 +6,8 @@
 
 - 版本：`1.0.0-beta.1` / versionCode `10`。这是通向首个稳定版 `1.0.0` 的首个公开 Beta，不代表稳定版已经验收。
 - Verification issuer：`vesqen.output_verification.2026_01`；固定 SPKI SHA-256 为 `35619e5cc562b23282aa5bce0aa4e6ba6221e40b97522d96d91ea5c07daf0db4`。私钥位于仓库外，且不复用 APK 更新签名。
+- Application signing：`vesqen-app-signing-v1`；证书 SHA-256 为 `74:3E:96:FC:B7:1D:C5:81:88:49:68:19:A0:01:A2:7C:D8:8D:90:91:62:C5:AE:92:9C:87:BF:A2:9A:B8:62:93`。它将用于 GitHub APK，并在首次 Play App Signing 配置时作为同一应用身份导入。
+- Play upload：`vesqen-play-upload-v1`；证书 SHA-256 为 `6A:78:82:9F:9C:74:FA:CE:FB:CE:C4:62:57:CF:9B:E6:01:55:1F:3B:86:49:E6:1E:14:6B:1A:98:20:06:31:5B`。它只用于提交 AAB，不是用户设备上的更新签名。三套身份和本地保管边界见 [发布签名记录](RELEASE_SIGNING.md)。
 - 冻结后不接受新功能、普通 UI 优化或非必要重构。只有崩溃/ANR、数据丢失、无法播放、严重卡顿、错误 bit-perfect 声明、关键页面不可操作、签名或安装升级失败可进入当前发布线。
 - 任何已发布的 tag/APK/AAB 不可替换。发布后的阻断修复使用新版本，例如 `1.0.0-beta.2` / `11`，并同步更新发布说明与标签。
 - `0.4.0-beta.1` / `9` 的设备与构建记录保留为历史证据；因验证记录精确匹配应用版本和 APK 哈希，不能直接充当新候选的产物身份证据。
@@ -15,7 +17,7 @@
 1. 收录已合并修复和适用证据，补齐可用设备的短时回归；已有且仍适用的测试不重复执行。
 2. 在 iQOO + JBL Flip 7 上确认 USB 识别、能力、实际路由、格式变化及拔插/失败清理；记录无法取得的证据。第二款 DAC 和外部数字逐样本组合留作公开限制，不用扬声器听感代验。
 3. 完成隐私/权限说明、EN/ZH 发布说明、安装升级与支持范围准备；公开 Release 不提供诊断开关、录制或导出入口，问题反馈不要求用户自行开启日志。
-4. 用户要求长期密钥留到最后创建。最终发布时分别创建 APK 更新签名与离线 verification issuer，两者不得复用；只把 issuer 公钥和稳定 `keyId` 固定进应用，私钥、alias 和密码留在仓库外。记录两套身份的指纹，生成并核验签名 APK/AAB，在安装候选上核验数据保留和无诊断入口，再交付两个渠道。Play 测试轨道及账号准入条件在上传前确认。
+4. Application signing、Play upload 与离线 verification issuer 已分别创建并完成本机 Keychain 回读、开库和私钥使用验证；私钥、alias 对应密码均留在仓库外。最终发布前仍须完成加密离线备份、Play App Signing 导入与证书对账，生成并核验签名 APK/AAB，在安装候选上核验数据保留和无诊断入口，再交付两个渠道。Play 测试轨道及账号准入条件在上传前确认。
 
 第二款 DAC 不再是本次受限 Beta 的阻断项；崩溃/ANR、数据丢失、错误输出声明、签名/安装升级失败及 Release 诊断开关仍阻断发布。
 
@@ -54,6 +56,8 @@
 - [ ] 所有 Beta blocker 为 0；失败 runner 有结论和修复后独立复测，未通过项没有被删除或弱化。
 - [ ] `version.properties` 使用经审阅的 SemVer 与递增 versionCode；release notes 与 About 一致。
 - [ ] JDK 25 下 unit、Python 工具测试、lint、Debug/Profile/Release、instrumentation compile 通过；CI 通过。
+- [x] Application signing、Play upload 和 verification issuer 为三个独立身份；两份 Android PKCS12 的 Keychain 密码回读、别名查找、私钥 CSR 签名和公共指纹核对通过，公共证书已入库，私钥与密码未进入仓库。
+- [ ] Application signing 与 Play upload 私钥均完成受控加密离线备份和恢复核验；Play App Signing 导入后，Play 应用签名证书与 GitHub APK 证书一致，上传证书保持独立。
 - [ ] 候选 APK/Bundle 使用预期发布签名，证书指纹和 base APK SHA-256 记录；keystore、alias 和密码不进入仓库或日志。
 - [ ] 专用 verification issuer 与 APK 更新签名相互独立；应用固定受审阅的 issuer 公钥和稳定 `keyId`，私钥不进入仓库。未配置 issuer 的构建必须明确拒绝 registry，不能回退信任 APK signer。
 - [ ] 若已有公开版本，从该版本执行保留数据升级；若为首次公开发布，记录无上一公开版本，并用同一长期签名的前后候选验证升级。核对曲库稳定 ID、收藏、历史、歌单、手动排序、SAF grant、队列 checkpoint、输出模式和 registry；不以卸载重装替代升级。现有 Debug/Profile 使用开发签名，不能视为新生产签名的直接升级来源，也不能卸载用户数据来规避签名不匹配。
