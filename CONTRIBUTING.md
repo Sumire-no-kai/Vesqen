@@ -10,7 +10,7 @@ Thank you for helping improve Vesqen.
 
 ## Local checks
 
-Use JDK 21 and Android SDK Platform 36. Before submitting a change, run:
+Use JDK 25 and Android SDK Platform 36. Before submitting a change, run:
 
 ```powershell
 .\gradlew.bat testDebugUnitTest lintDebug assembleDebug

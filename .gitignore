@@ -10,6 +10,11 @@
 .cxx
 gradle/gradle-daemon-jvm.properties
 *.hprof
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.key
 __pycache__/
 *.py[cod]
 # Local acceptance music supplied by the user.

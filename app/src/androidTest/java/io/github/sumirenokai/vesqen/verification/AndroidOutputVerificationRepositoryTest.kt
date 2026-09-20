@@ -104,6 +104,66 @@ class AndroidOutputVerificationRepositoryTest {
     }
 
     @Test
+    fun unknownIssuerCannotReplaceExistingRegistry() = runBlocking {
+        val repository = repository()
+        assertTrue(repository.import(ByteArrayInputStream(signedDocument(keyPair))) is OutputVerificationImportResult.Success)
+        val persisted = registryFile.readBytes()
+
+        val result = repository.import(
+            ByteArrayInputStream(signedDocument(keyPair, keyId = "vesqen.unknown.issuer")),
+        )
+
+        assertEquals(
+            OutputVerificationImportResult.Failure(OutputVerificationImportFailure.UNKNOWN_SIGNING_KEY),
+            result,
+        )
+        assertTrue(persisted.contentEquals(registryFile.readBytes()))
+        assertNotNull(repository.match(activeStatus()))
+    }
+
+    @Test
+    fun legacyEnvelopeCannotReuseTheApkSignerTrustModel() = runBlocking {
+        val result = repository().import(
+            ByteArrayInputStream(signedDocument(keyPair, envelopeSchemaVersion = 1)),
+        )
+
+        assertEquals(
+            OutputVerificationImportResult.Failure(OutputVerificationImportFailure.UNSUPPORTED_SCHEMA),
+            result,
+        )
+    }
+
+    @Test
+    fun missingPinnedIssuerFailsClosed() = runBlocking {
+        val repository = AndroidOutputVerificationRepository(
+            registryFile = registryFile,
+            runtimeIdentityProvider = OutputVerificationRuntimeIdentityProvider { runtime },
+            issuerKeysProvider = OutputVerificationIssuerKeysProvider { emptyMap() },
+        )
+
+        val result = repository.import(ByteArrayInputStream(signedDocument(keyPair)))
+
+        assertEquals(
+            OutputVerificationImportResult.Failure(OutputVerificationImportFailure.NO_TRUSTED_ISSUER),
+            result,
+        )
+    }
+
+    @Test
+    fun productionIssuerPublicKeyIsPinnedAndParseable() {
+        val keys = PinnedOutputVerificationIssuerKeysProvider.publicKeysById()
+
+        assertEquals(
+            setOf(PinnedOutputVerificationIssuerKeysProvider.OUTPUT_VERIFICATION_ISSUER_KEY_ID),
+            keys.keys,
+        )
+        assertEquals(
+            "EC",
+            keys.getValue(PinnedOutputVerificationIssuerKeysProvider.OUTPUT_VERIFICATION_ISSUER_KEY_ID).algorithm,
+        )
+    }
+
+    @Test
     fun repeatedMatchesReuseTheImmutableProcessRuntimeIdentity() = runBlocking {
         val resolutions = AtomicInteger()
         val repository = AndroidOutputVerificationRepository(
@@ -112,7 +172,9 @@ class AndroidOutputVerificationRepositoryTest {
                 resolutions.incrementAndGet()
                 runtime
             },
-            signingKeysProvider = OutputVerificationSigningKeysProvider { listOf(keyPair.public) },
+            issuerKeysProvider = OutputVerificationIssuerKeysProvider {
+                mapOf(TEST_ISSUER_KEY_ID to keyPair.public)
+            },
         )
 
         assertTrue(repository.import(ByteArrayInputStream(signedDocument(keyPair))) is OutputVerificationImportResult.Success)
@@ -125,7 +187,9 @@ class AndroidOutputVerificationRepositoryTest {
     private fun repository() = AndroidOutputVerificationRepository(
         registryFile = registryFile,
         runtimeIdentityProvider = OutputVerificationRuntimeIdentityProvider { runtime },
-        signingKeysProvider = OutputVerificationSigningKeysProvider { listOf(keyPair.public) },
+        issuerKeysProvider = OutputVerificationIssuerKeysProvider {
+            mapOf(TEST_ISSUER_KEY_ID to keyPair.public)
+        },
     )
 
     private fun activeStatus() = UsbOutputStatus(
@@ -139,7 +203,11 @@ class AndroidOutputVerificationRepositoryTest {
         generation = 1,
     )
 
-    private fun signedDocument(keys: KeyPair): ByteArray {
+    private fun signedDocument(
+        keys: KeyPair,
+        keyId: String = TEST_ISSUER_KEY_ID,
+        envelopeSchemaVersion: Int = 2,
+    ): ByteArray {
         val format = JSONObject()
             .put("sampleRateHz", 96_000)
             .put("channelCount", 2)
@@ -176,11 +244,16 @@ class AndroidOutputVerificationRepositoryTest {
             sign()
         }
         return JSONObject()
-            .put("schemaVersion", 1)
+            .put("schemaVersion", envelopeSchemaVersion)
+            .put("keyId", keyId)
             .put("signatureAlgorithm", "SHA256withRSA")
             .put("payload", Base64.encodeToString(payload, Base64.NO_WRAP))
             .put("signature", Base64.encodeToString(signature, Base64.NO_WRAP))
             .toString()
             .toByteArray(Charsets.UTF_8)
+    }
+
+    private companion object {
+        const val TEST_ISSUER_KEY_ID = "vesqen.test.output_verification.2026_01"
     }
 }

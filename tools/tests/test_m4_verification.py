@@ -1,3 +1,4 @@
+import base64
 import copy
 import json
 from pathlib import Path
@@ -7,7 +8,14 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from m4_verification import ValidationError, canonical_bytes, load_json, prepare, validate_payload
+from m4_verification import (
+    ValidationError,
+    canonical_bytes,
+    inspect_registry,
+    load_json,
+    prepare,
+    validate_payload,
+)
 
 
 def payload():
@@ -84,6 +92,49 @@ class M4VerificationTest(unittest.TestCase):
         candidate["records"][0]["androidApiLevel"] = 33
         with self.assertRaises(ValidationError):
             validate_payload(candidate)
+
+    def test_inspect_requires_versioned_issuer_key_id(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "registry.json"
+            encoded = canonical_bytes(validate_payload(payload()))
+            source.write_text(json.dumps({
+                "schemaVersion": 2,
+                "keyId": "vesqen.output_verification.2026_01",
+                "signatureAlgorithm": "SHA256withECDSA",
+                "payload": base64.b64encode(encoded).decode("ascii"),
+                "signature": base64.b64encode(b"signature").decode("ascii"),
+            }), encoding="utf-8")
+
+            inspect_registry(source)
+
+    def test_inspect_rejects_legacy_keyless_envelope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "registry.json"
+            encoded = canonical_bytes(validate_payload(payload()))
+            source.write_text(json.dumps({
+                "schemaVersion": 1,
+                "signatureAlgorithm": "SHA256withRSA",
+                "payload": base64.b64encode(encoded).decode("ascii"),
+                "signature": base64.b64encode(b"signature").decode("ascii"),
+            }), encoding="utf-8")
+
+            with self.assertRaises(ValidationError):
+                inspect_registry(source)
+
+    def test_inspect_rejects_unstable_key_id(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "registry.json"
+            encoded = canonical_bytes(validate_payload(payload()))
+            source.write_text(json.dumps({
+                "schemaVersion": 2,
+                "keyId": "../../apk-signer",
+                "signatureAlgorithm": "SHA256withRSA",
+                "payload": base64.b64encode(encoded).decode("ascii"),
+                "signature": base64.b64encode(b"signature").decode("ascii"),
+            }), encoding="utf-8")
+
+            with self.assertRaises(ValidationError):
+                inspect_registry(source)
 
 
 if __name__ == "__main__":
