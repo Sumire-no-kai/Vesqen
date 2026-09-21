@@ -958,3 +958,10 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - 首次创建时，Keychain 的交互式双重密码确认只收到一行输入，导致两份 PKCS12 无法由保存值打开。闭环回读立即发现问题；两把密钥从未签署产物、发布指纹或上传 Play。经用户明确授权删除初始 PKCS12 和错误 Keychain 条目后重新生成，最终通过 Keychain 精确回读、PKCS12 开库、预期 alias 查询、私钥 CSR 签名、证书/SPKI 指纹差异和文件权限检查。
 - JDK 25 `:app:bundleRelease` 通过。随后只在受控临时目录执行签名冒烟：application signing `v1` 签署的临时 Release APK 由 `apksigner` 确认为单一 signer、v2/v3 通过且证书 SHA-256 与记录一致；Play upload `v1` 签署的临时 AAB 由 `jarsigner`/`keytool` 验证并匹配独立上传证书。两份临时签名产物退出时删除，不是发布候选，也未上传或打 tag。
 - 完整身份、路径和迁移边界记录在 [发布签名](RELEASE_SIGNING.md)。当前只完成密钥创建与公共身份留档；加密离线备份及恢复演练、Play App Signing 导入与证书对账、签名 APK/AAB、同签名升级/数据保留、tag、GitHub Release 和 Play 上传均未执行，不能视为发布门禁已经关闭。
+
+## 2026-09-21 · 首份离线签名备份与恢复演练
+
+- 在 `release/1.0.0-beta.1` 合并提交 `7e1bbe4` 的签名身份基础上，为 application signing 与 Play upload 两份 PKCS12 创建第一份可移动介质备份。介质原有数据和 ExFAT 分区保持不变；新增载荷位于 AES-256 加密 APFS 磁盘映像中，未把密码写入映像、仓库、命令输出或日志。
+- 加密映像为 33,676,800 bytes，SHA-256 为 `a63937172646e1a28c8ecb05bdb81193812d2cf0a455e1c27fcc3ca114c3bd89`。映像内 application PKCS12 SHA-256 为 `b6d4dafb022aa2f73c4abc1eedde19a47da80e96e333cdb1b4586355cdc2a5b0`，upload PKCS12 SHA-256 为 `010355baa4fc225f2acb5ae11916d46b4dce672f4faca47aa2f728a965aca04d`；另含不带密码的恢复清单。
+- 写入后已卸载映像，再从钥匙串密码只读挂载；逐字节哈希、预期 alias、PKCS12 解锁、两把私钥生成并验证 CSR，以及两份证书 SHA-256 均与原始身份一致。随后再次卸载，不保留解密副本。
+- 本轮只形成第一份已验证副本。第二份独立加密介质、丢失发布 Mac 后仍可取得的密码保管，以及 Play App Signing 导入/证书对账仍未完成，因此发布备份门禁保持开放；未生成正式候选、tag、GitHub Release 或 Play 上传。
