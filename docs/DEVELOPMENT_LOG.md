@@ -961,7 +961,8 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 
 ## 2026-09-21 · 首份离线签名备份与恢复演练
 
-- 在 `release/1.0.0-beta.1` 合并提交 `7e1bbe4` 的签名身份基础上，为 application signing 与 Play upload 两份 PKCS12 创建第一份可移动介质备份。介质原有数据和 ExFAT 分区保持不变；新增载荷位于 AES-256 加密 APFS 磁盘映像中，未把密码写入映像、仓库、命令输出或日志。
-- 加密映像为 33,676,800 bytes，SHA-256 为 `a63937172646e1a28c8ecb05bdb81193812d2cf0a455e1c27fcc3ca114c3bd89`。映像内 application PKCS12 SHA-256 为 `b6d4dafb022aa2f73c4abc1eedde19a47da80e96e333cdb1b4586355cdc2a5b0`，upload PKCS12 SHA-256 为 `010355baa4fc225f2acb5ae11916d46b4dce672f4faca47aa2f728a965aca04d`；另含不带密码的恢复清单。
-- 写入后已卸载映像，再从钥匙串密码只读挂载；逐字节哈希、预期 alias、PKCS12 解锁、两把私钥生成并验证 CSR，以及两份证书 SHA-256 均与原始身份一致。随后再次卸载，不保留解密副本。
+- 在 `release/1.0.0-beta.1` 合并提交 `7e1bbe4` 的签名身份基础上，为 application signing 与 Play upload 两份 PKCS12 创建第一份可移动介质备份。介质原有数据和 ExFAT 分区保持不变；正式载荷位于 AES-256 加密、压缩、只读 UDZO 磁盘映像中，未把密码写入映像、仓库、命令输出或日志。
+- 正式加密映像为 150,528 bytes，SHA-256 为 `7a77998a727549c16aff70e4cded8d83700a1734ecd539048e5b64d623a23af8`。映像内 application PKCS12 SHA-256 为 `b6d4dafb022aa2f73c4abc1eedde19a47da80e96e333cdb1b4586355cdc2a5b0`，upload PKCS12 SHA-256 为 `010355baa4fc225f2acb5ae11916d46b4dce672f4faca47aa2f728a965aca04d`；另含不带密码的恢复清单。
+- 初版可写 raw 映像曾通过同一挂载会话内的检查，但在整盘安全弹出并重新插入后出现外层哈希变化且无法挂载。该文件已改名明确标记无效，不计入备份；随后从本机原始 PKCS12 重建只读加密映像，并把“整盘卸载/重挂后仍可恢复”提升为接受条件。
+- 正式映像写入后已卸载，整只可移动卷完成卸载和重挂，再从钥匙串密码只读挂载；UDZO 内部校验、稳定外层哈希、逐字节 PKCS12 哈希、预期 alias、两把私钥生成并验证 CSR，以及两份证书 SHA-256 均与原始身份一致。随后再次卸载，不保留解密副本。U 盘根目录另写入不带秘密的 SHA-256 sidecar 和 Windows 复制说明。
 - 本轮只形成第一份已验证副本。第二份独立加密介质、丢失发布 Mac 后仍可取得的密码保管，以及 Play App Signing 导入/证书对账仍未完成，因此发布备份门禁保持开放；未生成正式候选、tag、GitHub Release 或 Play 上传。
