@@ -57,7 +57,7 @@
 - [ ] `version.properties` 使用经审阅的 SemVer 与递增 versionCode；release notes 与 About 一致。
 - [ ] JDK 25 下 unit、Python 工具测试、lint、Debug/Profile/Release、instrumentation compile 通过；CI 通过。
 - [x] Application signing、Play upload 和 verification issuer 为三个独立身份；两份 Android PKCS12 的 Keychain 密码回读、别名查找、私钥 CSR 签名和公共指纹核对通过，公共证书已入库，私钥与密码未进入仓库。
-- [ ] Application signing 与 Play upload 私钥均完成受控加密离线备份和恢复核验；Play App Signing 导入后，Play 应用签名证书与 GitHub APK 证书一致，上传证书保持独立。
+- [ ] Application signing 与 Play upload 私钥均完成受控加密离线备份和恢复核验；2026-09-21 已完成第一份可移动介质 AES-256 加密副本及只读恢复验证，第二份独立副本和异机密码保管仍待完成。Play App Signing 导入后，Play 应用签名证书与 GitHub APK 证书一致，上传证书保持独立。
 - [ ] 候选 APK/Bundle 使用预期发布签名，证书指纹和 base APK SHA-256 记录；keystore、alias 和密码不进入仓库或日志。
 - [ ] 专用 verification issuer 与 APK 更新签名相互独立；应用固定受审阅的 issuer 公钥和稳定 `keyId`，私钥不进入仓库。未配置 issuer 的构建必须明确拒绝 registry，不能回退信任 APK signer。
 - [ ] 若已有公开版本，从该版本执行保留数据升级；若为首次公开发布，记录无上一公开版本，并用同一长期签名的前后候选验证升级。核对曲库稳定 ID、收藏、历史、歌单、手动排序、SAF grant、队列 checkpoint、输出模式和 registry；不以卸载重装替代升级。现有 Debug/Profile 使用开发签名，不能视为新生产签名的直接升级来源，也不能卸载用户数据来规避签名不匹配。

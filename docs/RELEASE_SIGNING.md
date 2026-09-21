@@ -100,14 +100,42 @@ documented above were generated.
 
 ## Backup, migration, and Play status
 
-As of 2026-09-20:
+As of 2026-09-21:
 
 - local keystores and Keychain passwords: **created and verified**;
 - public certificates and fingerprints: **recorded in Git**;
-- encrypted offline application-key backups: **not yet created**;
-- encrypted offline upload-key backups: **not yet created**;
+- encrypted offline application-key backups: **copy 1 created and
+  recovery-verified; second independent copy pending**;
+- encrypted offline upload-key backups: **copy 1 created and recovery-verified;
+  second independent copy pending**;
+- off-device custody of the passwords needed after loss of the release Mac:
+  **pending**;
 - Play App Signing import and certificate reconciliation: **not yet executed**;
 - signed APK/AAB candidate and same-signer upgrade acceptance: **not yet executed**.
+
+Backup copy 1 was created on 2026-09-21 on controlled removable media as an
+AES-256 encrypted, compressed, read-only UDZO disk image without reformatting
+or modifying unrelated files on the medium. The image is 150,528 bytes with
+SHA-256
+`7a77998a727549c16aff70e4cded8d83700a1734ecd539048e5b64d623a23af8`.
+It contains the two password-protected PKCS12 files and a non-secret manifest;
+it does not contain any password. The removable volume name, device identifier,
+and physical storage location are intentionally excluded from the repository.
+
+Recovery verification detached the newly written image, unmounted and
+remounted the entire removable volume, mounted the image again read-only using
+the separately stored image password, reproduced both PKCS12 file hashes,
+opened the expected aliases, used each recovered private key to produce a valid
+CSR, and reproduced both recorded certificate SHA-256 values. The outer image
+hash remained stable across the remount.
+
+An earlier read/write raw image passed its same-session checks but changed hash
+and became unmountable after the first physical-volume eject/reinsert cycle. It
+was quarantined under an explicit invalid filename and is not a backup. The
+read-only image documented above was rebuilt from the original local PKCS12
+files and passed the stronger post-remount recovery check. This is one verified
+copy, not completion of the backup gate: a second independent encrypted copy
+and separate off-device password custody remain required.
 
 Do not publish a signed release until at least two controlled encrypted backup
 copies of the application keystore have been created and independently restored
