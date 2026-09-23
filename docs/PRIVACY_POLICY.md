@@ -1,19 +1,21 @@
 # Vesqen Privacy Policy
 
 > **Draft — not in effect.** Items marked `[TBD: …]` need a decision before publication.
+>
+> [TBD: Builds that include the Google Play Billing Library add the Internet permission and a Google data-transport component (see [MONETIZATION.md](MONETIZATION.md)). Before the paid version ships, rewrite every statement about Internet access, add the trial start time and cached unlock status to the on-device data, and describe how the purchase is checked, all based on verified device behavior.]
 
 - Effective date: [TBD: effective date]
 - Last updated: [TBD: date]
 - 中文版：[PRIVACY_POLICY.zh-CN.md](PRIVACY_POLICY.zh-CN.md)
 
-This policy explains what information the Vesqen Android app handles, where that information stays, and what we receive when you contact us or buy the app. It applies to every build of Vesqen we distribute, including Google Play and GitHub Releases.
+This policy explains what information the Vesqen Android app handles, where that information stays, and what we receive when you contact us or unlock Vesqen with an in-app purchase. It applies to every build of Vesqen we distribute, including Google Play and GitHub Releases.
 
 ## Summary
 
 - Vesqen plays music stored on your device. It has no account, advertising, analytics or tracking.
 - Vesqen does not request Android's Internet permission, so the app itself cannot send or receive data over the network.
 - Your library, favorites, playlists and listening statistics stay in the app's private storage on your device. We never receive them.
-- We only receive what you choose to send us (for example, a support email) and the limited order information Google Play provides when you buy the app.
+- We only receive what you choose to send us (for example, a support email) and the limited order information Google Play provides when you buy the in-app unlock.
 
 ## Who we are
 
@@ -53,7 +55,7 @@ Vesqen does not request the Internet, location, contacts, phone, camera, microph
 ## Information we receive
 
 - **Emails you send us.** If you contact us, we receive your email address and whatever you include in your message. We use it only to reply to you.
-- **Google Play purchases.** Google handles payment. We never receive your card or other payment details, and Google's privacy policy applies to your purchase. Google Play Console lets us see order records for Vesqen, such as the order number, date, price and country or region, and lets us look up an order by the buyer's email address. We use this only to handle order questions and refunds.
+- **In-app purchase through Google Play.** Vesqen is free to download. After the trial, you can unlock it with a one-time in-app purchase. Google handles payment. We never receive your card or other payment details, and Google's privacy policy applies to your purchase. Google Play Console lets us see order records for the in-app purchase, such as the order number, date, price and country or region, and lets us look up an order by the buyer's email address. We use this only to handle order questions and refunds.
 - **Google Play statistics.** Google may give us aggregated statistics about installs and app stability, including crash reports from people who have chosen to share usage and diagnostics data with Google. We use them only to find and fix problems.
 - **GitHub downloads.** If you download Vesqen from GitHub, GitHub's privacy policy applies to that download.
 
