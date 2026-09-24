@@ -99,6 +99,97 @@ tasks.named("preBuild") {
     dependsOn(checkNoUncontrolledProductionLogs)
 }
 
+/** Copies the published privacy policy into the app, so the in-app text is the web text. */
+abstract class PackagePrivacyPolicyTask : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val englishPolicy: RegularFileProperty
+
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val chinesePolicy: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun packagePolicies() {
+        val privacyDirectory = outputDirectory.get().dir("privacy").asFile
+        privacyDirectory.mkdirs()
+        englishPolicy.get().asFile.copyTo(privacyDirectory.resolve("en.md"), overwrite = true)
+        chinesePolicy.get().asFile.copyTo(privacyDirectory.resolve("zh-CN.md"), overwrite = true)
+    }
+}
+
+/** Blocks store bundles while the policy is a draft or the app has no web address to link to. */
+abstract class CheckPrivacyPolicyFinalTask : DefaultTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val policies: ConfigurableFileCollection
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val stringResources: ConfigurableFileCollection
+
+    @TaskAction
+    fun verifyPolicy() {
+        val draftMarkers = listOf("TBD", "待定", "Draft", "草案")
+        val urlPattern = Regex("""<string name="privacy_policy_url">([^<]*)</string>""")
+        val problems = mutableListOf<String>()
+        policies.files.forEach { policy ->
+            val text = policy.readText()
+            draftMarkers.filter(text::contains).forEach { marker ->
+                problems += "${policy.name} still contains \"$marker\""
+            }
+        }
+        stringResources.files.forEach { strings ->
+            val url = urlPattern.find(strings.readText())?.groupValues?.get(1)?.trim().orEmpty()
+            if (!url.startsWith("https://")) {
+                problems += "${strings.parentFile.name}/${strings.name} has no https privacy_policy_url"
+            }
+        }
+        check(problems.isEmpty()) {
+            "The privacy policy is not ready for a release bundle:\n" + problems.joinToString("\n") { "- $it" }
+        }
+    }
+}
+
+val privacyPolicyFiles = listOf(
+    rootProject.layout.projectDirectory.file("docs/PRIVACY_POLICY.md"),
+    rootProject.layout.projectDirectory.file("docs/PRIVACY_POLICY.zh-CN.md"),
+)
+
+val checkPrivacyPolicyFinal by tasks.registering(CheckPrivacyPolicyFinalTask::class) {
+    group = "verification"
+    description = "Reject release bundles whose privacy policy is a draft or has no web address."
+    policies.from(privacyPolicyFiles)
+    stringResources.from(
+        layout.projectDirectory.file("src/main/res/values/strings.xml"),
+        layout.projectDirectory.file("src/main/res/values-zh-rCN/strings.xml"),
+    )
+}
+
+// Only the Play bundle is gated: CI assembles unsigned APKs from the draft policy, and the GitHub
+// APK release step runs checkPrivacyPolicyFinal explicitly (docs/M4_BETA_RELEASE.md).
+tasks.matching { it.name == "bundleRelease" }.configureEach {
+    dependsOn(checkPrivacyPolicyFinal)
+}
+
+androidComponents {
+    onVariants { variant ->
+        val packagePrivacyPolicy = tasks.register<PackagePrivacyPolicyTask>(
+            "package${variant.name.replaceFirstChar(Char::uppercaseChar)}PrivacyPolicy",
+        ) {
+            englishPolicy.set(privacyPolicyFiles[0])
+            chinesePolicy.set(privacyPolicyFiles[1])
+        }
+        variant.sources.assets?.addGeneratedSourceDirectory(
+            packagePrivacyPolicy,
+            PackagePrivacyPolicyTask::outputDirectory,
+        )
+    }
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)

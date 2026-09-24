@@ -15,8 +15,9 @@
 | [#43](https://github.com/Sumire-no-kai/Vesqen/issues/43) | 官网发布隐私政策页面（Play Console 必填） | 开发 |
 | [#44](https://github.com/Sumire-no-kai/Vesqen/issues/44) | 商品详情与上架材料（基础部分） | 开发 |
 | [#45](https://github.com/Sumire-no-kai/Vesqen/issues/45) | 在 Play Console 创建应用并完成 12 人、14 天封闭测试 | 所有者 |
+| [#36](https://github.com/Sumire-no-kai/Vesqen/issues/36) | 应用内隐私政策（中英文全文 + 网页链接），作为冻结例外加入 beta.1 | 开发 |
 
-**上传前必须再确认一次**：应用内隐私政策（[#36](https://github.com/Sumire-no-kai/Vesqen/issues/36)）是 Google Play 对所有应用的政策要求。封闭测试的版本同样要经过审核，`1.0.0-beta.1` 缺少它，有被拒或者收到政策警告的风险。
+应用内隐私政策的文本在构建时从 `docs/PRIVACY_POLICY*.md` 打包。发布守卫 `checkPrivacyPolicyFinal` 会在文本仍有草稿标记或占位、或者网页地址为空时，拒绝生成上传 Play 的包。因此 #38 和 #43 必须在上传前完成。
 
 ## 封闭测试期间（beta.2）
 
@@ -26,7 +27,6 @@
 | [#33](https://github.com/Sumire-no-kai/Vesqen/issues/33) | 链路页观测时间只按秒显示，旧数据被当作"当前播放链路" | bug |
 | [#34](https://github.com/Sumire-no-kai/Vesqen/issues/34) | 严格 USB 模式下，冷启动即弹出失败对话框 | bug |
 | [#35](https://github.com/Sumire-no-kai/Vesqen/issues/35) | 界面与文案全面重新审核（可读性、美观性、一致性），并修复已发现的界面问题 | 界面 |
-| [#36](https://github.com/Sumire-no-kai/Vesqen/issues/36) | 应用内隐私政策（中英文全文 + 网页链接） | 合规 |
 | [#37](https://github.com/Sumire-no-kai/Vesqen/issues/37) | 应用内第三方开源许可声明 | 合规 |
 | [#39](https://github.com/Sumire-no-kai/Vesqen/issues/39) | 备份与换机迁移规则仍是模板 | 数据 |
 | [#46](https://github.com/Sumire-no-kai/Vesqen/issues/46) | 14 天试用与一次性应用内解锁（Play 构建） | 收费 |
@@ -46,7 +46,7 @@
 
 ## 依赖关系
 
-- #36 依赖 #38（定稿文本）和 #43（网页地址）。
+- #36 的发布守卫要求 #38（定稿文本）和 #43（网页地址）在上传前完成。
 - #45 依赖 #40、#41、#42、#43、#44。
 - #46 依赖 #47（Billing 只进 Play 构建）和 #48（联网权限的结论）。
 - #44 的截图要等 #32 和 #33 修好之后再拍，否则会露出 `<unknown>` 等问题。

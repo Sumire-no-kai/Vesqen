@@ -6,7 +6,6 @@
 
 - Effective date: [TBD: effective date]
 - Last updated: [TBD: date]
-- 中文版：[PRIVACY_POLICY.zh-CN.md](PRIVACY_POLICY.zh-CN.md)
 
 This policy explains what information the Vesqen Android app handles, where that information stays, and what we receive when you contact us or unlock Vesqen with an in-app purchase. It applies to every build of Vesqen we distribute, including Google Play and GitHub Releases.
 
