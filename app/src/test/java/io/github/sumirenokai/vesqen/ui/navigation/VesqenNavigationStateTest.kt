@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen.ui.navigation
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class VesqenNavigationStateTest {
@@ -63,5 +64,29 @@ class VesqenNavigationStateTest {
         val settings = about.back()
         assertEquals(VesqenDestination.SETTINGS, settings.destination)
         assertEquals(VesqenDestination.LIBRARY, settings.back().destination)
+    }
+
+    @Test
+    fun `privacy policy opened from about unwinds through about and settings`() {
+        val privacy = VesqenNavigationState()
+            .selectTopLevel(VesqenDestination.SETTINGS)
+            .openAbout()
+            .openPrivacyPolicy()
+
+        val about = privacy.back()
+        assertEquals(VesqenDestination.ABOUT, about.destination)
+        val settings = about.back()
+        assertEquals(VesqenDestination.SETTINGS, settings.destination)
+        assertEquals(VesqenDestination.LIBRARY, settings.back().destination)
+    }
+
+    @Test
+    fun `details nest at most two levels deep`() {
+        val privacy = VesqenNavigationState()
+            .selectTopLevel(VesqenDestination.SETTINGS)
+            .openAbout()
+            .openPrivacyPolicy()
+
+        assertThrows(IllegalArgumentException::class.java) { privacy.openChain() }
     }
 }

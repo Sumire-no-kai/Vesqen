@@ -130,6 +130,14 @@
     <string name="about_accounts">Account</string>
     <string name="about_accounts_value">Not required</string>
     <string name="about_privacy">Playback works without an account or network connection. Your music and artwork stay on this device.</string>
+    <string name="privacy_policy_title">Privacy policy</string>
+    <string name="privacy_policy_open_web">Open the web version</string>
+    <string name="privacy_policy_no_browser">No app on this device can open web pages.</string>
+    <string name="privacy_policy_unavailable">The privacy policy could not be loaded.</string>
+    <!-- Packaged from docs/PRIVACY_POLICY.md at build time; the path follows the app language. -->
+    <string name="privacy_policy_asset">privacy/en.md</string>
+    <!-- Every published URL must stay reachable or redirect; checkPrivacyPolicyFinal rejects a blank one. -->
+    <string name="privacy_policy_url"></string>
     <string name="back">Back</string>
     <string name="search_local_music">Search local music</string>
     <string name="clear_search">Clear search</string>

@@ -127,6 +127,12 @@
     <string name="about_accounts">账号</string>
     <string name="about_accounts_value">无需账号</string>
     <string name="about_privacy">播放无需账号或网络连接，你的音乐与封面始终留在此设备上。</string>
+    <string name="privacy_policy_title">隐私政策</string>
+    <string name="privacy_policy_open_web">在浏览器中打开网页版</string>
+    <string name="privacy_policy_no_browser">这台设备上没有可以打开网页的应用。</string>
+    <string name="privacy_policy_unavailable">无法载入隐私政策。</string>
+    <string name="privacy_policy_asset">privacy/zh-CN.md</string>
+    <string name="privacy_policy_url"></string>
     <string name="back">返回</string>
     <string name="search_local_music">搜索本地音乐</string>
     <string name="clear_search">清除搜索</string>

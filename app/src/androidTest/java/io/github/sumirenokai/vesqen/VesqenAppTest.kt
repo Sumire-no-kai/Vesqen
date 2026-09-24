@@ -28,6 +28,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.text.TextLayoutResult
@@ -452,6 +453,35 @@ class VesqenAppTest {
         composeRule.onNodeWithText(context.getString(R.string.about_license_value)).assertIsDisplayed()
         composeRule.onAllNodesWithTag("vesqen.nav.settings").assertCountEquals(0)
 
+        composeRule.onNodeWithTag("vesqen.about.back").performClick()
+        composeRule.onNodeWithTag("vesqen.settings").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.nav.settings").assertIsSelected()
+    }
+
+    @Test
+    fun about_opens_the_packaged_privacy_policy_and_back_unwinds_both_levels() {
+        render(grantedState())
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.about"))
+        composeRule.onNodeWithTag("vesqen.settings.about").performClick()
+        composeRule.onNodeWithTag("vesqen.about")
+            .performScrollToNode(hasTestTag("vesqen.about.privacy"))
+        composeRule.onNodeWithTag("vesqen.about.privacy").performClick()
+
+        composeRule.onNodeWithTag("vesqen.privacy").assertIsDisplayed()
+        // The policy is read from the packaged assets off the main thread.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodes(hasText("Vesqen", substring = true))
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        composeRule.onAllNodesWithText(context.getString(R.string.privacy_policy_unavailable))
+            .assertCountEquals(0)
+
+        composeRule.onNodeWithTag("vesqen.privacy.back").performClick()
+        composeRule.onNodeWithTag("vesqen.about").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.about.back").performClick()
         composeRule.onNodeWithTag("vesqen.settings").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.nav.settings").assertIsSelected()

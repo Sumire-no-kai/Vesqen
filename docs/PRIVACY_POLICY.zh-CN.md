@@ -6,7 +6,6 @@
 
 - 生效日期：【待定：生效日期】
 - 最后更新：【待定：日期】
-- English version: [PRIVACY_POLICY.md](PRIVACY_POLICY.md)
 
 本政策说明 Vesqen Android 应用会处理哪些信息、这些信息存放在哪里，以及你联系我们或通过应用内购买解锁 Vesqen 时我们会收到什么。本政策适用于我们分发的所有 Vesqen 版本，包括 Google Play 和 GitHub Releases。
 

@@ -13,6 +13,7 @@ enum class VesqenDestination(
     SETTINGS(R.string.destination_settings, "vesqen.nav.settings"),
     CHAIN(R.string.destination_chain, "vesqen.nav.chain-detail"),
     ABOUT(R.string.settings_about, "vesqen.nav.about-detail"),
+    PRIVACY_POLICY(R.string.privacy_policy_title, "vesqen.nav.privacy-detail"),
 }
 
 internal val TopLevelDestinations = listOf(
@@ -21,5 +22,13 @@ internal val TopLevelDestinations = listOf(
     VesqenDestination.SETTINGS,
 )
 
+/** 0 for top-level surfaces; details opened from a detail sit one level deeper than their parent. */
+internal val VesqenDestination.detailDepth: Int
+    get() = when (this) {
+        VesqenDestination.CHAIN, VesqenDestination.ABOUT -> 1
+        VesqenDestination.PRIVACY_POLICY -> 2
+        else -> 0
+    }
+
 internal val VesqenDestination.isSecondaryDetail: Boolean
-    get() = this == VesqenDestination.CHAIN || this == VesqenDestination.ABOUT
+    get() = detailDepth > 0

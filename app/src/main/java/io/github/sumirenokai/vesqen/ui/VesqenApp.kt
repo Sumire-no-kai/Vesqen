@@ -83,11 +83,13 @@ import io.github.sumirenokai.vesqen.ui.navigation.CompactNavigationBarContentHei
 import io.github.sumirenokai.vesqen.ui.navigation.VesqenDestination
 import io.github.sumirenokai.vesqen.ui.navigation.VesqenNavigation
 import io.github.sumirenokai.vesqen.ui.navigation.VesqenNavigationState
+import io.github.sumirenokai.vesqen.ui.navigation.detailDepth
 import io.github.sumirenokai.vesqen.ui.navigation.isSecondaryDetail
 import io.github.sumirenokai.vesqen.ui.screens.AboutScreen
 import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
 import io.github.sumirenokai.vesqen.ui.screens.LibraryScreen
 import io.github.sumirenokai.vesqen.ui.screens.NowScreen
+import io.github.sumirenokai.vesqen.ui.screens.PrivacyPolicyScreen
 import io.github.sumirenokai.vesqen.ui.screens.SettingsScreen
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
@@ -387,10 +389,12 @@ fun VesqenAppContent(
     var destinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
     var returnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
     var playerReturnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
+    var parentReturnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
     val navigationState = VesqenNavigationState(
         destination = VesqenDestination.valueOf(destinationName),
         returnDestination = VesqenDestination.valueOf(returnDestinationName),
         playerReturnDestination = VesqenDestination.valueOf(playerReturnDestinationName),
+        parentReturnDestination = VesqenDestination.valueOf(parentReturnDestinationName),
     )
     val destination = navigationState.destination
     val hasFocusedPlayer = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
@@ -437,6 +441,7 @@ fun VesqenAppContent(
         destinationName = updated.destination.name
         returnDestinationName = updated.returnDestination.name
         playerReturnDestinationName = updated.playerReturnDestination.name
+        parentReturnDestinationName = updated.parentReturnDestination.name
     }
 
     fun selectTopLevel(destination: VesqenDestination) {
@@ -449,6 +454,10 @@ fun VesqenAppContent(
 
     fun openAbout() {
         applyNavigation(navigationState.openAbout())
+    }
+
+    fun openPrivacyPolicy() {
+        applyNavigation(navigationState.openPrivacyPolicy())
     }
 
     fun togglePlayerOrientation() {
@@ -492,6 +501,7 @@ fun VesqenAppContent(
                 onDestinationSelected = ::selectTopLevel,
                 onOpenChain = ::openChain,
                 onOpenAbout = ::openAbout,
+                onOpenPrivacyPolicy = ::openPrivacyPolicy,
                 onNavigateBack = ::navigateBack,
                 onRequestMusicAccess = onRequestMusicAccess,
                 onOpenAppSettings = onOpenAppSettings,
@@ -552,6 +562,7 @@ fun VesqenAppContent(
             onDestinationSelected = ::selectTopLevel,
             onOpenChain = ::openChain,
             onOpenAbout = ::openAbout,
+            onOpenPrivacyPolicy = ::openPrivacyPolicy,
             onNavigateBack = ::navigateBack,
             onRequestMusicAccess = onRequestMusicAccess,
             onOpenAppSettings = onOpenAppSettings,
@@ -614,6 +625,7 @@ private fun VesqenDestinationFrame(
     onDestinationSelected: (VesqenDestination) -> Unit,
     onOpenChain: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenPrivacyPolicy: () -> Unit,
     onNavigateBack: () -> Unit,
     onRequestMusicAccess: () -> Unit,
     onOpenAppSettings: () -> Unit,
@@ -848,7 +860,7 @@ private fun VesqenDestinationFrame(
                         }
 
                         else -> {
-                            val returning = initialState.isSecondaryDetail ||
+                            val returning = targetState.detailDepth < initialState.detailDepth ||
                                 targetState == VesqenDestination.LIBRARY
                             val direction = if (returning) -1 else 1
                             val duration = motionPolicy.playerExpandMillis
@@ -865,7 +877,7 @@ private fun VesqenDestinationFrame(
                         // Keep the retreating surface above its destination so the incoming opaque
                         // page cannot cover the player's collapse or a detail's return animation.
                         targetContentZIndex = when {
-                            targetState.isSecondaryDetail -> 3f
+                            targetState.isSecondaryDetail -> 2f + targetState.detailDepth
                             targetState == VesqenDestination.NOW -> 2f
                             targetState == VesqenDestination.SETTINGS -> 1f
                             else -> 0f
@@ -975,6 +987,12 @@ private fun VesqenDestinationFrame(
                     VesqenDestination.ABOUT -> AboutScreen(
                         versionName = versionName,
                         versionCode = versionCode,
+                        onOpenPrivacyPolicy = onOpenPrivacyPolicy,
+                        onBack = onNavigateBack,
+                        modifier = destinationModifier,
+                    )
+
+                    VesqenDestination.PRIVACY_POLICY -> PrivacyPolicyScreen(
                         onBack = onNavigateBack,
                         modifier = destinationModifier,
                     )
