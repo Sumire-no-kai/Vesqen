@@ -15,7 +15,7 @@
 | [#43](https://github.com/Sumire-no-kai/Vesqen/issues/43) | 官网发布隐私政策页面（Play Console 必填） | 开发 |
 | [#44](https://github.com/Sumire-no-kai/Vesqen/issues/44) | 商品详情与上架材料（基础部分） | 开发 |
 | [#45](https://github.com/Sumire-no-kai/Vesqen/issues/45) | 在 Play Console 创建应用并完成 12 人、14 天封闭测试 | 所有者 |
-| [#36](https://github.com/Sumire-no-kai/Vesqen/issues/36) | 应用内隐私政策（中英文全文 + 网页链接），作为冻结例外加入 beta.1 | 开发 |
+| [#36](https://github.com/Sumire-no-kai/Vesqen/issues/36) | 应用内隐私政策（中英文全文 + 网页链接），作为冻结例外加入 beta.1。已由 #55 完成 | 开发 |
 
 应用内隐私政策的文本在构建时从 `docs/PRIVACY_POLICY*.md` 打包。发布守卫 `checkPrivacyPolicyFinal` 会在文本仍有草稿标记或占位、或者网页地址为空时，拒绝生成上传 Play 的包。因此 #38 和 #43 必须在上传前完成。
 
