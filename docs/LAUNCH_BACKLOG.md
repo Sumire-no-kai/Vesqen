@@ -16,6 +16,8 @@
 | [#44](https://github.com/Sumire-no-kai/Vesqen/issues/44) | 商品详情与上架材料（基础部分） | 开发 |
 | [#45](https://github.com/Sumire-no-kai/Vesqen/issues/45) | 在 Play Console 创建应用并完成 12 人、14 天封闭测试 | 所有者 |
 | [#36](https://github.com/Sumire-no-kai/Vesqen/issues/36) | 应用内隐私政策（中英文全文 + 网页链接），作为冻结例外加入 beta.1。已由 #55 完成 | 开发 |
+| [#56](https://github.com/Sumire-no-kai/Vesqen/issues/56) | Play Console 前台服务申报（`mediaPlayback`，需要演示视频） | 开发准备视频，所有者提交 |
+| [#57](https://github.com/Sumire-no-kai/Vesqen/issues/57) | Android 开发者验证：为 GitHub 分发登记包名和签名（2026-09-30 起在部分地区生效，2027 年全球） | 所有者 |
 
 应用内隐私政策的文本在构建时从 `docs/PRIVACY_POLICY*.md` 打包。发布守卫 `checkPrivacyPolicyFinal` 会在文本仍有草稿标记或占位、或者网页地址为空时，拒绝生成上传 Play 的包。因此 #38 和 #43 必须在上传前完成。
 
@@ -47,7 +49,8 @@
 ## 依赖关系
 
 - #36 的发布守卫要求 #38（定稿文本）和 #43（网页地址）在上传前完成。
-- #45 依赖 #40、#41、#42、#43、#44。
+- #45 依赖 #40、#41、#42、#43、#44、#56。
+- 首次在 GitHub 发布 APK 之前完成 #57。
 - #46 依赖 #47（Billing 只进 Play 构建）和 #48（联网权限的结论）。
 - #44 的截图要等 #32 和 #33 修好之后再拍，否则会露出 `<unknown>` 等问题。
 - #53 取决于 #49 能否在上架前完成。
