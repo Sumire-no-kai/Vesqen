@@ -1,14 +1,14 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>Paper and Sound — website hero</title>
+<title>纸与声 · 官网首屏（中文）</title>
 <script src="./support.js"></script>
 </head>
 <body>
 <x-dc>
 <helmet>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Noto+Sans+SC:wght@400;500&family=Noto+Serif+SC:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Noto+Sans+SC:wght@400;500&family=Noto+Serif+SC:wght@400&display=swap" rel="stylesheet">
 <style>
 body{margin:0;background:#F3EFE6}
 a{color:#1A1A16}a:hover{color:#536B1E}
@@ -26,32 +26,32 @@ button:focus-visible,a:focus-visible{outline:2px solid #1A1A16;outline-offset:3p
 </helmet>
 <div style="width: 1440px; height: 1024px; box-sizing: border-box; position: relative; overflow: hidden; display: flex; flex-direction: column; background-color: #F3EFE6; color: #1A1A16; font-family: 'Instrument Sans', 'Noto Sans SC', system-ui, sans-serif">
 <header style="display: flex; align-items: center; justify-content: space-between; padding: 26px 80px">
-<a href="#top" aria-label="Vesqen home" style="display: flex; align-items: center; gap: 12px; min-height: 44px; color: #1A1A16; text-decoration: none">
+<a href="#top" aria-label="Vesqen 首页" style="display: flex; align-items: center; gap: 12px; min-height: 44px; color: #1A1A16; text-decoration: none">
 <svg width="38" height="38" viewBox="0 0 108 108" fill="none" aria-hidden="true"><path class="draw" d="M29 32L54 78L79 32" stroke="#1B1C18" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"></path><path class="draw" d="M39 32L54 60L69 32" stroke="#9FBF4B" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
 <span style="font-family: 'Instrument Serif', 'Noto Serif SC', Georgia, serif; font-size: 30px; line-height: 1">Vesqen</span>
 </a>
-<nav aria-label="Primary" style="display: flex; align-items: center; gap: 36px; font-size: 15px">
-<a href="#notes" style="padding: 12px 0; text-decoration: none">Liner notes</a>
-<a href="#privacy" style="padding: 12px 0; text-decoration: none">Privacy</a>
-<a href="#support" style="padding: 12px 0; text-decoration: none">Support</a>
-<a href="B-Web-ZH.dc.html" lang="zh-CN" style="padding: 12px 0; text-decoration: none">中文</a>
+<nav aria-label="主导航" style="display: flex; align-items: center; gap: 36px; font-size: 15px">
+<a href="#notes" style="padding: 12px 0; text-decoration: none">链路注记</a>
+<a href="#privacy" style="padding: 12px 0; text-decoration: none">隐私政策</a>
+<a href="#support" style="padding: 12px 0; text-decoration: none">支持</a>
+<a href="B-Web.dc.html" lang="en" style="padding: 12px 0; text-decoration: none">English</a>
 </nav>
-<a class="cta" href="#beta" style="display: flex; align-items: center; min-height: 44px; padding: 0 22px; border-radius: 22px; background-color: #536B1E; color: #FFFFFF; font-size: 15px; font-weight: 500; text-decoration: none">Join the closed beta</a>
+<a class="cta" href="#beta" style="display: flex; align-items: center; min-height: 44px; padding: 0 22px; border-radius: 22px; background-color: #536B1E; color: #FFFFFF; font-size: 15px; font-weight: 500; text-decoration: none">加入封闭测试</a>
 </header>
 <main style="display: grid; grid-template-columns: minmax(0, 1fr) 640px; gap: 56px; padding: 20px 80px 0; flex-grow: 1">
 <div style="display: flex; flex-direction: column; gap: 26px; padding-top: 40px">
-<span class="rise" style="font-size: 13px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; color: #5E5A50">An offline music player for Android</span>
-<h1 style="margin: 0; display: flex; flex-direction: column; font-family: 'Instrument Serif', 'Noto Serif SC', Georgia, serif; font-size: 104px; line-height: 0.94; font-weight: 400; letter-spacing: -0.02em">
-<span class="rise" style="animation-delay: 0.05s">Every track</span>
-<span class="rise" style="animation-delay: 0.15s">comes with</span>
-<span class="rise" style="animation-delay: 0.25s; font-style: italic; color: {{album.ink}}; transition: color 0.8s ease">liner notes.</span>
+<span class="rise" style="font-size: 14px; font-weight: 500; letter-spacing: 0.2em; color: #5E5A50">离线本地音乐播放器 · Android</span>
+<h1 style="margin: 0; display: flex; flex-direction: column; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 92px; line-height: 1.16; font-weight: 400; letter-spacing: 0.02em">
+<span class="rise" style="animation-delay: 0.05s">每一首歌，</span>
+<span class="rise" style="animation-delay: 0.15s">都附有</span>
+<span class="rise" style="animation-delay: 0.25s"><span style="color: {{album.ink}}; transition: color 0.8s ease">链路注记</span>。</span>
 </h1>
-<p class="rise" style="margin: 0; max-width: 520px; font-size: 19px; line-height: 1.6; color: #3F3C35; animation-delay: 0.3s; text-wrap: pretty">Vesqen plays the music you keep on your phone — no account, no streaming, nothing to sign in to. Beside every song it keeps a quiet record of the path to your ears: the file, the decoder, the route, and how each fact is known.</p>
+<p class="rise" style="margin: 0; max-width: 520px; font-size: 18px; line-height: 1.9; color: #3F3C35; animation-delay: 0.3s">Vesqen 播放你存在手机里的音乐——不用账号，不做流媒体，也不需要登录。每一首歌旁边，它都安静地记下声音到你耳边的路径：文件、解码器、路由，以及每一项是怎么知道的。</p>
 <div class="rise" style="display: flex; align-items: center; gap: 28px; animation-delay: 0.38s">
-<a class="cta" href="#beta" style="display: flex; align-items: center; min-height: 52px; padding: 0 28px; border-radius: 26px; background-color: #536B1E; color: #FFFFFF; font-size: 16px; font-weight: 500; text-decoration: none">Join the closed beta</a>
-<a href="#privacy" style="display: flex; align-items: center; min-height: 44px; font-size: 16px; font-weight: 500; text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 1px">Read the privacy policy</a>
+<a class="cta" href="#beta" style="display: flex; align-items: center; min-height: 52px; padding: 0 28px; border-radius: 26px; background-color: #536B1E; color: #FFFFFF; font-size: 16px; font-weight: 500; text-decoration: none">加入封闭测试</a>
+<a href="#privacy" style="display: flex; align-items: center; min-height: 44px; font-size: 16px; font-weight: 500; text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 1px">阅读隐私政策</a>
 </div>
-<span class="rise" style="font-size: 13px; color: #5E5A50; animation-delay: 0.44s">Android 8.0 or later · Version 1.0 beta</span>
+<span class="rise" style="font-size: 13px; color: #5E5A50; animation-delay: 0.44s">Android 8.0 及以上 · 1.0 测试版</span>
 </div>
 <div id="notes" onMouseMove="{{onMove}}" onMouseLeave="{{onLeave}}" style="position: relative; height: 700px; border-radius: 28px; background-color: {{album.wash}}; transition: background-color 0.8s ease">
 <div style="position: absolute; left: 64px; top: 64px; width: 340px; height: 340px">
@@ -63,31 +63,31 @@ button:focus-visible,a:focus-visible{outline:2px solid #1A1A16;outline-offset:3p
 </div>
 </sc-for>
 </div>
-<div role="group" aria-label="Choose an album" style="position: absolute; left: 52px; top: 452px; display: flex; flex-direction: column; gap: 6px; width: 200px">
-<span style="padding: 0 10px 6px; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #5E5A50">From the library</span>
+<div role="group" aria-label="选择专辑" style="position: absolute; left: 52px; top: 452px; display: flex; flex-direction: column; gap: 6px; width: 200px">
+<span style="padding: 0 10px 6px; font-size: 12px; letter-spacing: 0.2em; color: #5E5A50">来自曲库</span>
 <sc-for list="{{albums}}" as="al" hint-placeholder-count="3">
 <button class="pick" onClick="{{al.pick}}" aria-pressed="{{al.sel}}" style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 10px; border-radius: 12px; border: 1px solid {{al.border}}; background-color: {{al.bg}}; color: #1A1A16; text-align: left; cursor: pointer; font-family: inherit">
 <span style="display: flex; flex-shrink: 0; width: 40px; height: 40px; border-radius: 3px; overflow: hidden"><svg width="40" height="40" viewBox="0 0 48 48" aria-hidden="true" style="display: block"><rect width="48" height="48" fill="{{al.art.bg}}"></rect><circle cx="{{al.art.cx}}" cy="{{al.art.cy}}" r="{{al.art.r}}" fill="{{al.art.fg}}"></circle><rect x="0" y="{{al.art.ly}}" width="48" height="{{al.art.lh}}" fill="{{al.art.lc}}"></rect><rect x="{{al.art.sx}}" y="{{al.art.sy}}" width="{{al.art.sw}}" height="{{al.art.sw}}" fill="{{al.art.sc}}"></rect></svg></span>
 <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
-<span style="font-family: 'Instrument Serif', 'Noto Serif SC', Georgia, serif; font-size: 19px; line-height: 1.1">{{al.title}}</span>
+<span style="font-family: 'Instrument Serif', 'Noto Serif SC', Georgia, serif; font-size: 19px; line-height: 1.15">{{al.title}}</span>
 <span style="font-size: 13px; color: #5E5A50">{{al.artist}}</span>
 </span>
 </button>
 </sc-for>
 </div>
-<article aria-label="Liner notes" style="position: absolute; right: 40px; top: 300px; width: 336px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 24px 24px 22px; border-radius: 6px; background-color: #FBF9F4; box-shadow: 0 24px 60px rgba(48, 38, 22, 0.16), 0 1px 0 rgba(48, 38, 22, 0.06)">
+<article aria-label="链路注记" style="position: absolute; right: 40px; top: 300px; width: 336px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 24px 24px 22px; border-radius: 6px; background-color: #FBF9F4; box-shadow: 0 24px 60px rgba(48, 38, 22, 0.16), 0 1px 0 rgba(48, 38, 22, 0.06)">
 <div style="display: flex; align-items: baseline; justify-content: space-between">
-<span style="font-family: 'Instrument Serif', Georgia, serif; font-size: 26px; font-style: italic">Liner notes</span>
-<span style="font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #5E5A50">Now playing</span>
+<span style="font-family: 'Noto Serif SC', serif; font-size: 24px">链路注记</span>
+<span style="font-size: 12px; letter-spacing: 0.2em; color: #5E5A50">正在播放</span>
 </div>
 <div style="display: flex; flex-direction: column; gap: 2px">
-<span style="font-family: 'Instrument Serif', 'Noto Serif SC', Georgia, serif; font-size: 22px; line-height: 1.2">{{album.track}}</span>
+<span style="font-family: 'Instrument Serif', 'Noto Serif SC', Georgia, serif; font-size: 22px; line-height: 1.25">{{album.track}}</span>
 <span style="font-size: 14px; color: #5E5A50">{{album.artist}} — {{album.title}}</span>
 </div>
 <dl style="margin: 0; display: flex; flex-direction: column; border-top: 1px solid #E2DBCB">
 <sc-for list="{{album.rows}}" as="row" hint-placeholder-count="3">
-<div style="display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid #E2DBCB">
-<dt style="padding-top: 2px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #5E5A50">{{row.k}}</dt>
+<div style="display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid #E2DBCB">
+<dt style="padding-top: 1px; font-size: 13px; letter-spacing: 0.08em; color: #5E5A50">{{row.k}}</dt>
 <dd style="margin: 0; font-size: 15px">{{row.v}}</dd>
 </div>
 </sc-for>
@@ -95,31 +95,31 @@ button:focus-visible,a:focus-visible{outline:2px solid #1A1A16;outline-offset:3p
 <div style="display: flex; flex-direction: column; gap: 8px">
 <sc-if value="{{album.active}}" hint-placeholder-val="{{ true }}"><span style="display: flex; align-items: center; gap: 8px; align-self: flex-start; height: 30px; padding: 0 12px; border-radius: 15px; background-color: #536B1E; color: #FFFFFF; font-size: 12px; font-weight: 600; letter-spacing: 0.06em"><span style="width: 7px; height: 7px; border-radius: 4px; background-color: #FFFFFF"></span>BIT-PERFECT ACTIVE</span></sc-if>
 <sc-if value="{{album.mixed}}" hint-placeholder-val="{{ false }}"><span style="display: flex; align-items: center; gap: 8px; align-self: flex-start; height: 30px; padding: 0 12px; border-radius: 15px; background-color: #ECE7DB; color: #1A1A16; font-size: 12px; font-weight: 600; letter-spacing: 0.06em"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v5c0 3 2 4.5 6 6.5M18 4v5c0 3-2 4.5-6 6.5V20"></path></svg>SYSTEM MIXED</span></sc-if>
-<p style="margin: 0; font-size: 13px; line-height: 1.55; color: #5E5A50">{{album.note}}</p>
+<p style="margin: 0; font-size: 13px; line-height: 1.7; color: #5E5A50">{{album.note}}</p>
 </div>
 </article>
 </div>
 </main>
-<section aria-label="Principles" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 56px; margin: 0 80px; padding: 30px 0 38px; border-top: 1px solid #D8D1C1">
+<section aria-label="三条原则" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 56px; margin: 0 80px; padding: 30px 0 38px; border-top: 1px solid #D8D1C1">
 <div style="display: flex; gap: 18px">
-<span aria-hidden="true" style="font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: 40px; line-height: 1; color: #5E5A50">i.</span>
+<span aria-hidden="true" style="font-family: 'Noto Serif SC', serif; font-size: 36px; line-height: 1; color: #5E5A50">一</span>
 <div style="display: flex; flex-direction: column; gap: 6px">
-<h2 style="margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-size: 26px; font-weight: 400; line-height: 1.1">Offline, always</h2>
-<p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5E5A50">No account and no streaming. Playback never needs the network.</p>
-</div>
-</div>
-<div style="display: flex; gap: 18px">
-<span aria-hidden="true" style="font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: 40px; line-height: 1; color: #5E5A50">ii.</span>
-<div style="display: flex; flex-direction: column; gap: 6px">
-<h2 style="margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-size: 26px; font-weight: 400; line-height: 1.1">Evidence on request</h2>
-<p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5E5A50">Every fact says how it is known. Nothing is dressed up.</p>
+<h2 style="margin: 0; font-family: 'Noto Serif SC', serif; font-size: 24px; font-weight: 400; line-height: 1.25">始终离线</h2>
+<p style="margin: 0; font-size: 15px; line-height: 1.8; color: #5E5A50">不用账号，不做流媒体。播放从不需要联网。</p>
 </div>
 </div>
 <div style="display: flex; gap: 18px">
-<span aria-hidden="true" style="font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: 40px; line-height: 1; color: #5E5A50">iii.</span>
+<span aria-hidden="true" style="font-family: 'Noto Serif SC', serif; font-size: 36px; line-height: 1; color: #5E5A50">二</span>
 <div style="display: flex; flex-direction: column; gap: 6px">
-<h2 style="margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-size: 26px; font-weight: 400; line-height: 1.1">Fails closed</h2>
-<p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5E5A50">When strict output can’t be kept, playback stops instead of pretending.</p>
+<h2 style="margin: 0; font-family: 'Noto Serif SC', serif; font-size: 24px; font-weight: 400; line-height: 1.25">证据随时可查</h2>
+<p style="margin: 0; font-size: 15px; line-height: 1.8; color: #5E5A50">每一项都写明是怎么知道的，不夸大，也不粉饰。</p>
+</div>
+</div>
+<div style="display: flex; gap: 18px">
+<span aria-hidden="true" style="font-family: 'Noto Serif SC', serif; font-size: 36px; line-height: 1; color: #5E5A50">三</span>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-family: 'Noto Serif SC', serif; font-size: 24px; font-weight: 400; line-height: 1.25">做不到就停下</h2>
+<p style="margin: 0; font-size: 15px; line-height: 1.8; color: #5E5A50">保证不了严格输出时，宁可停止播放，也不假装一切正常。</p>
 </div>
 </div>
 </section>
@@ -132,23 +132,23 @@ class Component extends DCLogic {
       {
         key: 'tide', title: 'Low Tide Archive', artist: 'Maren Holt', track: 'Glass Harbor', wash: '#DCE5E0', ink: '#1F5A57',
         art: { bg: '#1D4442', fg: '#E8DFC8', cx: 24, cy: 23, r: 12, ly: 26, lh: 22, lc: '#1D4442', sx: 0, sy: 0, sw: 0, sc: '#1D4442' },
-        rows: [{ k: 'File', v: 'FLAC · 24-bit · 96 kHz' }, { k: 'Decoder', v: 'Android FLAC decoder' }, { k: 'Route', v: 'USB audio · external DAC' }],
+        rows: [{ k: '文件', v: 'FLAC · 24-bit · 96 kHz' }, { k: '解码器', v: 'Android FLAC 解码器' }, { k: '路由', v: 'USB 音频 · 外接 DAC' }],
         active: true,
-        note: 'Android-side evidence: AudioTrack, mixer and route agree. External verification is a separate, signed record.'
+        note: '这是 Android 一侧的证据：AudioTrack、mixer 与路由一致。外部验证是另一份签名记录。'
       },
       {
         key: 'copper', title: 'Copper Hours', artist: 'Otis Vale Quartet', track: 'Brass Lantern', wash: '#EEDDCC', ink: '#9A4A22',
         art: { bg: '#B1613A', fg: '#1B1512', cx: 0, cy: 48, r: 28, ly: 0, lh: 0, lc: '#B1613A', sx: 34, sy: 6, sw: 8, sc: '#F0E2CB' },
-        rows: [{ k: 'File', v: 'FLAC · 16-bit · 44.1 kHz' }, { k: 'Decoder', v: 'Android FLAC decoder' }, { k: 'Route', v: 'Wired headphones' }],
+        rows: [{ k: '文件', v: 'FLAC · 16-bit · 44.1 kHz' }, { k: '解码器', v: 'Android FLAC 解码器' }, { k: '路由', v: '有线耳机' }],
         active: false,
-        note: 'Android may mix, resample or apply system processing on this path — and Vesqen says so.'
+        note: '这条路径上，Android 可能混音、重采样或应用系统处理，Vesqen 会如实标出来。'
       },
       {
         key: 'fog', title: '盐与雾', artist: '林汐', track: '晚风测绘', wash: '#E1E4DC', ink: '#46524E',
         art: { bg: '#D8DBD2', fg: '#F5F3EC', cx: 33, cy: 17, r: 7, ly: 29, lh: 1.5, lc: '#23241F', sx: 0, sy: 0, sw: 0, sc: '#D8DBD2' },
-        rows: [{ k: 'File', v: 'ALAC · 24-bit · 48 kHz' }, { k: 'Decoder', v: 'Platform decoder · software' }, { k: 'Route', v: 'Bluetooth audio' }],
+        rows: [{ k: '文件', v: 'ALAC · 24-bit · 48 kHz' }, { k: '解码器', v: '系统解码器 · 纯软件' }, { k: '路由', v: '蓝牙音频' }],
         active: false,
-        note: 'Bluetooth re-encodes audio before it reaches your headphones, so Vesqen reports this path as system mixed.'
+        note: '蓝牙会在手机上重新编码后再传给耳机，所以 Vesqen 把这条路径标为系统混音。'
       }
     ];
   }

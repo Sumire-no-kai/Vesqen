@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>纸与声 · 设置（深色）</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Noto+Sans+SC:wght@400;500&family=Noto+Serif+SC:wght@400&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#151411}
+a{color:#EDE8DC}a:hover{color:#BFD66B}
+button:focus-visible,a:focus-visible{outline:2px solid #EDE8DC;outline-offset:2px}
+button:disabled{cursor:default}
+.scroller{scrollbar-width:none}
+.scroller::-webkit-scrollbar{display:none}
+.pulse{animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.status-in{animation:statusin .4s cubic-bezier(.22,1,.36,1)}
+@keyframes statusin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.row{transition:background-color .2s ease}
+.row:hover{background-color:rgba(237,232,220,.05) !important}
+.row:disabled:hover{background-color:transparent !important}
+.cta{transition:background-color .2s ease}
+.cta:hover{background-color:#CFE085 !important}
+@media (prefers-reduced-motion: reduce){.pulse,.status-in{animation:none}}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; display: flex; flex-direction: column; background-color: #151411; color: #EDE8DC; font-family: 'Instrument Sans', 'Noto Sans SC', system-ui, sans-serif">
+<div class="scroller" style="display: flex; flex-direction: column; flex-grow: 1; min-height: 0; overflow-y: auto; padding: 44px 24px 28px">
+<h1 style="display: flex; align-items: center; min-height: 56px; margin: 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 32px; font-weight: 400">设置</h1>
+<p style="margin: 2px 0 0; font-size: 14px; line-height: 1.6; color: #A8A294">先决定音乐如何播放，需要时再查看对应证据。</p>
+<section aria-label="Vesqen 完整版" style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px; padding: 18px; border-radius: 16px; background-color: #1E1C18; border: 1px solid rgba(237, 232, 220, 0.06)">
+<span style="display: flex; align-items: center; align-self: flex-start; height: 26px; padding: 0 10px; border-radius: 13px; background-color: rgba(237, 232, 220, 0.08); font-size: 12px; font-weight: 600">{{license.chip}}</span>
+<h2 style="margin: 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 22px; font-weight: 400; line-height: 1.3">{{license.title}}</h2>
+<p style="margin: 0; font-size: 14px; line-height: 1.6; color: #A8A294">{{license.body}}</p>
+<sc-if value="{{license.showBuy}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; align-items: center; gap: 18px; margin-top: 4px">
+<button class="cta" style="min-height: 44px; padding: 0 20px; border: 0; border-radius: 22px; background-color: #BFD66B; color: #151411; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer">一次性解锁 · [价格]</button>
+<button style="min-height: 44px; padding: 0; border: 0; background-color: transparent; color: #EDE8DC; font-family: inherit; font-size: 14px; text-decoration: underline; text-underline-offset: 4px; cursor: pointer">恢复购买</button>
+</div>
+</sc-if>
+</section>
+<h2 style="margin: 30px 0 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 19px; font-weight: 400">播放输出</h2>
+<p style="margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: #A8A294">选择 Vesqen 播放时使用的唯一输出方式。</p>
+<div role="radiogroup" aria-label="播放输出" style="display: flex; flex-direction: column; margin-top: 12px; border-radius: 16px; background-color: #1E1C18; overflow: hidden">
+<sc-for list="{{modes}}" as="md" hint-placeholder-count="2">
+<button class="row" role="radio" aria-checked="{{md.sel}}" onClick="{{md.pick}}" disabled="{{md.locked}}" style="display: flex; align-items: flex-start; gap: 14px; width: 100%; padding: 16px; border: 0; border-top: {{md.divider}}; background-color: transparent; color: #EDE8DC; text-align: left; font-family: inherit; cursor: pointer">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 20px; height: 20px; margin-top: 1px; box-sizing: border-box; border-radius: 10px; border: 1.5px solid {{md.ring}}"><span style="width: 10px; height: 10px; border-radius: 5px; background-color: {{md.dot}}"></span></span>
+<span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+<span style="font-size: 16px; font-weight: 500">{{md.title}}</span>
+<span style="font-size: 13px; line-height: 1.6; color: #A8A294">{{md.body}}</span>
+<sc-if value="{{md.locked}}" hint-placeholder-val="{{ false }}"><span style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #EDE8DC"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>解锁后可用</span></sc-if>
+</span>
+</button>
+</sc-for>
+</div>
+<sc-if value="{{strictSelected}}" hint-placeholder-val="{{ true }}">
+<div class="status-in" style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(237, 232, 220, 0.12)">
+<sc-if value="{{applying}}" hint-placeholder-val="{{ false }}"><span style="display: flex; align-items: center; gap: 7px; align-self: flex-start; height: 26px; box-sizing: border-box; padding: 0 10px; border-radius: 13px; border: 1.5px solid #BFD66B; color: #BFD66B; font-size: 11px; font-weight: 600; letter-spacing: 0.06em"><span class="pulse" style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 4px; border: 1.5px solid #BFD66B"></span>BIT-PERFECT REQUESTED</span></sc-if>
+<sc-if value="{{active}}" hint-placeholder-val="{{ true }}"><span style="display: flex; align-items: center; gap: 7px; align-self: flex-start; height: 26px; padding: 0 10px; border-radius: 13px; background-color: #BFD66B; color: #151411; font-size: 11px; font-weight: 600; letter-spacing: 0.06em"><span style="width: 7px; height: 7px; border-radius: 4px; background-color: #151411"></span>BIT-PERFECT ACTIVE</span></sc-if>
+<span style="font-size: 13px; line-height: 1.6; color: #A8A294">{{strictText}}</span>
+</div>
+</sc-if>
+<h2 style="margin: 30px 0 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 19px; font-weight: 400">音频证据</h2>
+<p style="margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: #A8A294">将 Android 观测到的链路与外部验证结果分开查看。</p>
+<div style="display: flex; flex-direction: column; margin-top: 12px; border-radius: 16px; background-color: #1E1C18; overflow: hidden">
+<a class="row" href="B-Chain-Dark.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 14px 16px; color: #EDE8DC; text-decoration: none">
+<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0"><span style="font-size: 16px; font-weight: 500">播放链路</span><span style="font-size: 13px; line-height: 1.6; color: #A8A294">查看当前播放路径和每一项的证据。</span></span>
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A8A294" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="m9 6 6 6-6 6"></path></svg>
+</a>
+<button class="row" style="display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 14px 16px; border: 0; border-top: 1px solid rgba(237, 232, 220, 0.1); background-color: transparent; color: #EDE8DC; text-align: left; font-family: inherit; cursor: pointer">
+<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0"><span style="font-size: 16px; font-weight: 500">输出验证记录</span><span style="font-size: 13px; line-height: 1.6; color: #A8A294">未导入。只接受维护者签名的记录，而且只对完全相同的应用、手机、DAC 和格式生效。</span></span>
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A8A294" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="m9 6 6 6-6 6"></path></svg>
+</button>
+</div>
+<h2 style="margin: 30px 0 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 19px; font-weight: 400">应用信息</h2>
+<div style="display: flex; flex-direction: column; margin-top: 12px; border-radius: 16px; background-color: #1E1C18; overflow: hidden">
+<button class="row" style="display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 0 16px; border: 0; background-color: transparent; color: #EDE8DC; text-align: left; font-family: inherit; cursor: pointer">
+<span style="flex-grow: 1; font-size: 16px; font-weight: 500">关于 Vesqen</span>
+<span style="font-size: 13px; color: #A8A294; font-variant-numeric: tabular-nums">1.0.0-beta.1</span>
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A8A294" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="m9 6 6 6-6 6"></path></svg>
+</button>
+<button class="row" style="display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 0 16px; border: 0; border-top: 1px solid rgba(237, 232, 220, 0.1); background-color: transparent; color: #EDE8DC; text-align: left; font-family: inherit; cursor: pointer">
+<span style="flex-grow: 1; font-size: 16px; font-weight: 500">隐私政策</span>
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A8A294" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="m9 6 6 6-6 6"></path></svg>
+</button>
+<button class="row" style="display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 0 16px; border: 0; border-top: 1px solid rgba(237, 232, 220, 0.1); background-color: transparent; color: #EDE8DC; text-align: left; font-family: inherit; cursor: pointer">
+<span style="flex-grow: 1; font-size: 16px; font-weight: 500">开源许可</span>
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A8A294" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="m9 6 6 6-6 6"></path></svg>
+</button>
+</div>
+<p style="margin: 18px 0 0; font-size: 12px; line-height: 1.6; color: #A8A294">播放无需账号或网络连接，你的音乐与封面始终留在此设备上。</p>
+</div>
+<nav aria-label="主导航" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); height: 80px; padding: 8px 8px 14px; box-sizing: border-box; background-color: #191814; border-top: 1px solid rgba(237, 232, 220, 0.12)">
+<a href="B-Library-Dark.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #A8A294; font-size: 12px; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4v16"></path><path d="M10 4v16"></path><path d="m14.5 4.8 4.8 14.7"></path></svg>曲库</a>
+<a href="B-Now-Dark.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #A8A294; font-size: 12px; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4.5"></rect><path d="M10 8.8v6.4l5.2-3.2z" fill="currentColor"></path></svg>正在播放</a>
+<a href="B-Chain-Dark.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #A8A294; font-size: 12px; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="2.2"></circle><circle cx="12" cy="12" r="2.2"></circle><circle cx="19" cy="12" r="2.2"></circle><path d="M7.2 12h2.6M14.2 12h2.6"></path></svg>链路</a>
+<a href="B-Settings-Dark.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #EDE8DC; font-size: 12px; font-weight: 600; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"></path><circle cx="15" cy="7" r="2"></circle><circle cx="9" cy="17" r="2"></circle></svg><span style="display: flex; flex-direction: column; align-items: center; gap: 3px">设置<span aria-hidden="true" style="width: 16px; height: 2px; border-radius: 1px; background-color: #BFD66B"></span></span></a>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"license":{"editor":"enum","options":["trial","ended","unlocked"],"default":"unlocked"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  componentWillUnmount() {
+    clearTimeout(this.applyTimer);
+  }
+  defaultMode() {
+    return 'strict';
+  }
+  choose(key, locked) {
+    const s = this.state || {};
+    const current = s.mode ?? this.defaultMode();
+    if (locked || key === current) return;
+    this.setState({ mode: key, applying: key === 'strict' });
+    clearTimeout(this.applyTimer);
+    if (key === 'strict') this.applyTimer = setTimeout(() => this.setState({ applying: false }), 1400);
+  }
+  renderVals() {
+    const s = this.state || {};
+    const known = ['trial', 'ended', 'unlocked'];
+    const license = known.indexOf(this.props.license) >= 0 ? this.props.license : 'unlocked';
+    const strictLocked = license === 'ended';
+    let mode = s.mode ?? this.defaultMode();
+    if (strictLocked && mode === 'strict') mode = 'system';
+    const applying = !!s.applying && mode === 'strict';
+    const licenses = {
+      trial: { chip: '试用中', title: '试用还剩 9 天', body: '试用结束后，基础播放继续免费；严格 USB 输出和完整的音频证据需要一次性解锁。不订阅，也不需要账号。', showBuy: true },
+      ended: { chip: '试用已结束', title: '解锁 Vesqen 完整版', body: '基础播放继续免费。解锁后可以继续使用严格 USB 输出和完整的音频证据。一次购买，不订阅。', showBuy: true },
+      unlocked: { chip: '已解锁', title: 'Vesqen 完整版', body: '感谢支持。购买记录保存在你的 Google Play 账号里，重新安装后会自动恢复。', showBuy: false }
+    };
+    const base = [
+      { key: 'system', title: '系统输出', body: '按 Android 的普通方式播放。系统可能混音、重采样，手机音量照常可调。' },
+      { key: 'strict', title: '严格 USB bit-perfect', body: '只把未经改动的音频交给兼容的 USB DAC。需要 Android 14 以上；条件不满足就停止播放，不会悄悄改回系统输出。' }
+    ];
+    const modes = base.map((m, i) => {
+      const locked = m.key === 'strict' && strictLocked;
+      const sel = m.key === mode;
+      return Object.assign({}, m, {
+        sel: sel,
+        locked: locked,
+        divider: i === 0 ? 'none' : '1px solid rgba(237, 232, 220, 0.1)',
+        ring: sel ? '#BFD66B' : '#8A8578',
+        dot: sel ? '#BFD66B' : 'transparent',
+        pick: () => this.choose(m.key, locked)
+      });
+    });
+    return {
+      license: licenses[license],
+      modes: modes,
+      strictSelected: mode === 'strict',
+      applying: applying,
+      active: !applying,
+      strictText: applying ? '正在为 USB DAC 准备精确输出链路…' : '已在 USB DAC 生效 · 24-bit / 96 kHz。这是 Android 的证据，不是外部验证。'
+    };
+  }
+}
+</script>
+</body>
+</html>
