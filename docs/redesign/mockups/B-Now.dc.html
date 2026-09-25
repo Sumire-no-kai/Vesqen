@@ -8,7 +8,7 @@
 <body>
 <x-dc>
 <helmet>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Noto+Sans+SC:wght@400;500&family=Noto+Serif+SC:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Noto+Sans+SC:wght@400;500&family=Noto+Serif+SC:wght@400&display=swap" rel="stylesheet">
 <style>
 body{margin:0;background:#F3EFE6}
 a{color:#1A1A16}a:hover{color:#536B1E}
@@ -27,7 +27,7 @@ button:focus-visible,a:focus-visible{outline:2px solid #1A1A16;outline-offset:2p
 <div style="display: flex; align-items: center; justify-content: space-between; height: 48px; margin: 0 -8px">
 <button class="icon-btn" aria-label="收起" style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 22px; background-color: transparent; color: #1A1A16; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
 <div style="display: flex; flex-direction: column; align-items: center; gap: 1px">
-<span style="font-family: 'Noto Serif SC', serif; font-size: 14px; font-weight: 600">正在播放</span>
+<span style="font-size: 14px; font-weight: 600">正在播放</span>
 <span style="font-size: 12px; color: #5E5A50">{{queueLabel}}</span>
 </div>
 <button class="icon-btn" aria-label="队列" style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 22px; background-color: transparent; color: #1A1A16; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h11M4 12h11M4 17h7"></path><path d="M17 14.5v5l4-2.5z" fill="currentColor"></path></svg></button>
@@ -73,7 +73,7 @@ button:focus-visible,a:focus-visible{outline:2px solid #1A1A16;outline-offset:2p
 <section aria-label="链路注记" style="margin-top: 16px; border-top: 1px solid rgba(26, 26, 22, 0.16)">
 <button onClick="{{toggleNotes}}" aria-expanded="{{notesOpen}}" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 56px; padding: 0; border: 0; background-color: transparent; color: #1A1A16; text-align: left; cursor: pointer; font-family: inherit">
 <span style="display: flex; flex-direction: column; gap: 3px">
-<span style="font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 16px; font-weight: 600">链路注记</span>
+<span style="font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 17px; font-weight: 400">链路注记</span>
 <span style="font-size: 13px; color: #5E5A50">{{track.summary}}</span>
 </span>
 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; transform: rotate({{chevron}}); transition: transform 0.4s ease"><path d="m6 9 6 6 6-6"></path></svg>
@@ -100,7 +100,7 @@ button:focus-visible,a:focus-visible{outline:2px solid #1A1A16;outline-offset:2p
 <nav aria-label="主导航" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); height: 80px; padding: 8px 8px 14px; box-sizing: border-box; background-color: #F6F3EC; border-top: 1px solid #DDD6C6">
 <a href="B-Library.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #5E5A50; font-size: 12px; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4v16"></path><path d="M10 4v16"></path><path d="m14.5 4.8 4.8 14.7"></path></svg>曲库</a>
 <a href="B-Now.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #1A1A16; font-size: 12px; font-weight: 600; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4.5"></rect><path d="M10 8.8v6.4l5.2-3.2z" fill="currentColor"></path></svg><span style="display: flex; flex-direction: column; align-items: center; gap: 3px">正在播放<span aria-hidden="true" style="width: 16px; height: 2px; border-radius: 1px; background-color: #536B1E"></span></span></a>
-<button style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 0; border: 0; background-color: transparent; color: #5E5A50; font-family: inherit; font-size: 12px; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="2.2"></circle><circle cx="12" cy="12" r="2.2"></circle><circle cx="19" cy="12" r="2.2"></circle><path d="M7.2 12h2.6M14.2 12h2.6"></path></svg>链路</button>
+<a href="B-Chain.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #5E5A50; font-size: 12px; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="2.2"></circle><circle cx="12" cy="12" r="2.2"></circle><circle cx="19" cy="12" r="2.2"></circle><path d="M7.2 12h2.6M14.2 12h2.6"></path></svg>链路</a>
 <button style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 0; border: 0; background-color: transparent; color: #5E5A50; font-family: inherit; font-size: 12px; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"></path><circle cx="15" cy="7" r="2"></circle><circle cx="9" cy="17" r="2"></circle></svg>设置</button>
 </nav>
 </div>

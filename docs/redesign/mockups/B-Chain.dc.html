@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>纸与声 · 链路</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Noto+Sans+SC:wght@400;500&family=Noto+Serif+SC:wght@400&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F3EFE6}
+a{color:#1A1A16}a:hover{color:#536B1E}
+button:focus-visible,a:focus-visible{outline:2px solid #1A1A16;outline-offset:2px}
+.scroller{scrollbar-width:none}
+.scroller::-webkit-scrollbar{display:none}
+.pulse{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.travel{animation:travel 2.8s cubic-bezier(.45,0,.55,1) infinite}
+@keyframes travel{0%{top:0;opacity:0}12%{opacity:1}88%{opacity:1}100%{top:calc(100% - 5px);opacity:0}}
+.evidence-in{animation:evin .4s cubic-bezier(.22,1,.36,1)}
+@keyframes evin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.row{transition:background-color .2s ease}
+.row:hover{background-color:rgba(26,26,22,.04) !important}
+@media (prefers-reduced-motion: reduce){.pulse,.evidence-in{animation:none}.travel{display:none}}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; display: flex; flex-direction: column; background-color: #F3EFE6; color: #1A1A16; font-family: 'Instrument Sans', 'Noto Sans SC', system-ui, sans-serif">
+<div class="scroller" style="display: flex; flex-direction: column; flex-grow: 1; min-height: 0; overflow-y: auto; padding: 44px 24px 28px">
+<div style="display: flex; align-items: center; justify-content: space-between; min-height: 56px">
+<h1 style="margin: 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 32px; font-weight: 400">链路</h1>
+<sc-if value="{{live}}" hint-placeholder-val="{{ true }}"><span style="display: flex; align-items: center; gap: 7px; font-size: 12px; color: #5E5A50"><span class="pulse" style="width: 6px; height: 6px; border-radius: 3px; background-color: #1A1A16"></span>正在实时观测</span></sc-if>
+<sc-if value="{{stopped}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; color: #5E5A50">播放已停止</span></sc-if>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px; margin-top: 4px">
+<span style="font-size: 12px; color: #5E5A50">当前播放</span>
+<span style="display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px"><span style="font-family: 'Instrument Serif', 'Noto Serif SC', Georgia, serif; font-size: 24px; line-height: 1.2">Glass Harbor</span><span style="font-size: 14px; color: #5E5A50">Maren Holt</span></span>
+</div>
+<section aria-label="输出声明" style="display: flex; flex-direction: column; gap: 10px; margin-top: 18px; padding: 18px; border-radius: 16px; background-color: #FBF9F4; box-shadow: 0 1px 0 rgba(48, 38, 22, 0.06), 0 12px 30px rgba(48, 38, 22, 0.08)">
+<sc-if value="{{isMixed}}" hint-placeholder-val="{{ true }}"><span style="display: flex; align-items: center; gap: 6px; align-self: flex-start; height: 28px; padding: 0 11px; border-radius: 14px; background-color: rgba(26, 26, 22, 0.07); color: #1A1A16; font-size: 11px; font-weight: 600; letter-spacing: 0.06em"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v5c0 3 2 4.5 6 6.5M18 4v5c0 3-2 4.5-6 6.5V20"></path></svg>SYSTEM MIXED</span></sc-if>
+<sc-if value="{{isAvailable}}" hint-placeholder-val="{{ false }}"><span style="display: flex; align-items: center; gap: 7px; align-self: flex-start; height: 28px; box-sizing: border-box; padding: 0 11px; border-radius: 14px; border: 1.5px solid #536B1E; color: #536B1E; font-size: 11px; font-weight: 600; letter-spacing: 0.06em"><span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 4px; border: 1.5px solid #536B1E"></span>BIT-PERFECT AVAILABLE</span></sc-if>
+<sc-if value="{{isRequested}}" hint-placeholder-val="{{ false }}"><span style="display: flex; align-items: center; gap: 7px; align-self: flex-start; height: 28px; box-sizing: border-box; padding: 0 11px; border-radius: 14px; border: 1.5px solid #536B1E; color: #536B1E; font-size: 11px; font-weight: 600; letter-spacing: 0.06em"><span class="pulse" style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 4px; border: 1.5px solid #536B1E"></span>BIT-PERFECT REQUESTED</span></sc-if>
+<sc-if value="{{isActive}}" hint-placeholder-val="{{ false }}"><span style="display: flex; align-items: center; gap: 7px; align-self: flex-start; height: 28px; padding: 0 11px; border-radius: 14px; background-color: #536B1E; color: #FFFFFF; font-size: 11px; font-weight: 600; letter-spacing: 0.06em"><span style="width: 7px; height: 7px; border-radius: 4px; background-color: #FFFFFF"></span>BIT-PERFECT ACTIVE</span></sc-if>
+<sc-if value="{{isVerified}}" hint-placeholder-val="{{ false }}"><span style="display: flex; align-items: center; gap: 6px; align-self: flex-start; height: 28px; box-sizing: border-box; padding: 0 11px; border-radius: 14px; border: 1.5px solid #536B1E; color: #536B1E; font-size: 11px; font-weight: 600; letter-spacing: 0.06em"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z"></path><path d="m9 12 2 2 4-4"></path></svg>BIT-PERFECT VERIFIED</span></sc-if>
+<sc-if value="{{isFailed}}" hint-placeholder-val="{{ false }}"><span style="display: flex; align-items: center; gap: 6px; align-self: flex-start; height: 28px; box-sizing: border-box; padding: 0 11px; border-radius: 14px; border: 1.5px solid #7A4F00; color: #7A4F00; font-size: 12px; font-weight: 600"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4 2.8 19.5h18.4z"></path><path d="M12 10v4.5"></path><path d="M12 17.3v.2"></path></svg>严格输出已停止</span></sc-if>
+<h2 style="margin: 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 22px; font-weight: 400; line-height: 1.3">{{claim.title}}</h2>
+<p style="margin: 0; font-size: 14px; line-height: 1.6; color: #5E5A50">{{claim.body}}</p>
+<sc-if value="{{isFailed}}" hint-placeholder-val="{{ false }}"><button style="align-self: flex-start; min-height: 44px; margin-top: 4px; padding: 0 18px; border: 1px solid #1A1A16; border-radius: 22px; background-color: transparent; color: #1A1A16; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer">改用系统输出</button></sc-if>
+</section>
+<div style="display: flex; align-items: baseline; justify-content: space-between; margin-top: 26px">
+<h2 style="margin: 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 19px; font-weight: 400">当前播放路径</h2>
+<span style="font-size: 12px; color: #5E5A50">{{updatedLabel}}</span>
+</div>
+<div style="position: relative; margin-top: 8px">
+<span aria-hidden="true" style="position: absolute; left: 6px; top: 28px; bottom: 28px; width: 1px; background-color: rgba(26, 26, 22, 0.22)"></span>
+<sc-if value="{{flowing}}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="position: absolute; left: 4px; top: 28px; bottom: 28px; width: 5px"><span class="travel" style="position: absolute; left: 0; width: 5px; height: 5px; border-radius: 3px; background-color: #1A1A16"></span></span></sc-if>
+<sc-for list="{{steps}}" as="st" hint-placeholder-count="5">
+<div style="display: flex; flex-direction: column">
+<button class="row" onClick="{{st.toggle}}" aria-expanded="{{st.open}}" style="position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 4px 8px 26px; border: 0; border-radius: 10px; background-color: transparent; color: #1A1A16; text-align: left; cursor: pointer; font-family: inherit">
+<span aria-hidden="true" style="position: absolute; left: 2px; top: 50%; width: 9px; height: 9px; margin-top: -5px; box-sizing: border-box; border-radius: 5px; border: 1.5px solid #1A1A16; background-color: {{st.node}}"></span>
+<span style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0">
+<span style="font-size: 11px; letter-spacing: 0.08em; color: #5E5A50">{{st.step}}</span>
+<span style="font-size: 15px">{{st.value}}</span>
+</span>
+<span style="flex-shrink: 0; font-size: 12px; color: #5E5A50">{{st.conf}}</span>
+</button>
+<sc-if value="{{st.open}}" hint-placeholder-val="{{ false }}">
+<div class="evidence-in" style="display: flex; flex-direction: column; gap: 6px; margin: 0 0 8px 26px; padding: 12px 14px; border-radius: 10px; background-color: #FBF9F4">
+<div style="display: flex; gap: 12px; font-size: 13px; line-height: 1.5"><span style="flex-shrink: 0; width: 28px; color: #5E5A50">来源</span><span>{{st.source}}</span></div>
+<sc-if value="{{st.hasMethod}}" hint-placeholder-val="{{ false }}"><div style="display: flex; gap: 12px; font-size: 13px; line-height: 1.5"><span style="flex-shrink: 0; width: 28px; color: #5E5A50">方法</span><span>{{st.method}}</span></div></sc-if>
+<div style="display: flex; gap: 12px; font-size: 13px; line-height: 1.5"><span style="flex-shrink: 0; width: 28px; color: #5E5A50">更新</span><span>{{st.updated}}</span></div>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+<p style="margin: 8px 0 0; font-size: 13px; line-height: 1.6; color: #5E5A50">源文件与 AudioTrack 数据不等于设备最终输出。轻触参数可查看证据。</p>
+<div style="display: flex; align-items: baseline; justify-content: space-between; margin-top: 28px">
+<h2 style="margin: 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 19px; font-weight: 400">置顶指标</h2>
+<span style="font-size: 12px; color: #5E5A50">每秒刷新</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px">
+<sc-for list="{{figures}}" as="fg" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 14px; border-radius: 14px; background-color: #FBF9F4">
+<span style="display: flex; align-items: baseline; gap: 4px"><span style="font-family: 'Instrument Serif', Georgia, serif; font-size: 34px; line-height: 1">{{fg.value}}</span><span style="font-size: 13px; color: #5E5A50">{{fg.unit}}</span></span>
+<span style="font-size: 13px">{{fg.label}}</span>
+<span style="font-size: 11px; color: #5E5A50">{{fg.conf}}</span>
+</div>
+</sc-for>
+</div>
+<button class="row" style="display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 52px; margin-top: 16px; padding: 0 4px; border: 0; border-top: 1px solid rgba(26, 26, 22, 0.14); border-bottom: 1px solid rgba(26, 26, 22, 0.14); border-radius: 0; background-color: transparent; color: #1A1A16; font-family: inherit; font-size: 15px; cursor: pointer">打开高级仪表盘<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></button>
+</div>
+<nav aria-label="主导航" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); height: 80px; padding: 8px 8px 14px; box-sizing: border-box; background-color: #F6F3EC; border-top: 1px solid #DDD6C6">
+<a href="B-Library.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #5E5A50; font-size: 12px; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4v16"></path><path d="M10 4v16"></path><path d="m14.5 4.8 4.8 14.7"></path></svg>曲库</a>
+<a href="B-Now.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #5E5A50; font-size: 12px; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4.5"></rect><path d="M10 8.8v6.4l5.2-3.2z" fill="currentColor"></path></svg>正在播放</a>
+<a href="B-Chain.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #1A1A16; font-size: 12px; font-weight: 600; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="2.2"></circle><circle cx="12" cy="12" r="2.2"></circle><circle cx="19" cy="12" r="2.2"></circle><path d="M7.2 12h2.6M14.2 12h2.6"></path></svg><span style="display: flex; flex-direction: column; align-items: center; gap: 3px">链路<span aria-hidden="true" style="width: 16px; height: 2px; border-radius: 1px; background-color: #536B1E"></span></span></a>
+<button style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 0; border: 0; background-color: transparent; color: #5E5A50; font-family: inherit; font-size: 12px; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"></path><circle cx="15" cy="7" r="2"></circle><circle cx="9" cy="17" r="2"></circle></svg>设置</button>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"output":{"editor":"enum","options":["mixed","available","requested","active","verified","failed"],"default":"mixed"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  componentDidMount() {
+    this.timer = setInterval(() => {
+      const s = this.state || {};
+      const walk = (v, lo, hi, step) => Math.min(hi, Math.max(lo, v + (Math.random() * 2 - 1) * step));
+      this.setState({
+        buffer: walk(s.buffer ?? 1.24, 1.12, 1.31, 0.03),
+        cpu: walk(s.cpu ?? 2.6, 1.8, 3.6, 0.3),
+        power: walk(s.power ?? 1.1, 0.9, 1.4, 0.05)
+      });
+    }, 1000);
+  }
+  componentWillUnmount() {
+    clearInterval(this.timer);
+  }
+  renderVals() {
+    const s = this.state || {};
+    const known = ['mixed', 'available', 'requested', 'active', 'verified', 'failed'];
+    const output = known.indexOf(this.props.output) >= 0 ? this.props.output : 'mixed';
+    const open = s.open ?? -1;
+    const stopped = output === 'failed';
+    const claims = {
+      mixed: { title: '由 Android 管理的播放', body: 'Vesqen 正在使用 Android 的普通播放路径。Android 可能混音、重采样或应用系统处理。' },
+      available: { title: '发现兼容的严格输出', body: 'USB DAC 报告了匹配的 bit-perfect mixer profile，但播放尚未将其激活。' },
+      requested: { title: '正在准备严格 USB 输出', body: 'Vesqen 正在重建 Media3 AudioTrack，并核对 mixer 读回与实际路由。' },
+      active: { title: '严格 USB 输出已生效', body: 'USB DAC 正使用 24-bit / 96 kHz，AudioTrack、mixer preference 与路由一致；外部信号验证仍是独立证据。' },
+      verified: { title: '输出已通过外部验证', body: '记录 [记录编号] 精确验证了当前应用构建、手机/ROM、DAC、源格式与输出格式。方法：[验证方法]。' },
+      failed: { title: '严格输出已停止', body: 'USB DAC 已断开。为保持严格输出，播放已停止。如需普通播放，可在播放器或设置中更改输出模式。' }
+    };
+    const routes = {
+      mixed: { value: 'USB 音频 · 由 Android 混音', conf: '实测 · 未验证', source: 'Android 音频路由 API' },
+      available: { value: 'USB DAC · 有匹配的 bit-perfect 配置', conf: '实测 · 未验证', source: 'Android 混音器属性能力 API' },
+      requested: { value: 'USB DAC · 正在切换 mixer', conf: '实测 · 未验证', source: 'Vesqen 输出协调器' },
+      active: { value: 'USB DAC · bit-perfect mixer', conf: '实测 · 未验证', source: 'Android 混音器属性能力 API' },
+      verified: { value: 'USB DAC · 与验证记录一致', conf: '推导', source: '签名的外部验证记录', method: '把当前构建、手机/ROM、DAC 和格式与记录逐项比对' },
+      failed: { value: 'USB DAC 已断开', conf: '实测 · 未验证', source: 'Android 音频路由 API' }
+    };
+    const base = [
+      { step: '01 · 源文件', value: 'FLAC · 24-bit · 96 kHz · 立体声', conf: '实测 · 未验证', source: 'Media3 播放器' },
+      { step: '02 · 解码器', value: 'Android FLAC 解码器 · 纯软件', conf: '推导', source: 'Android MediaCodec', method: '根据 Android 解码器的软件、硬件加速和厂商标志推导' },
+      { step: '03 · 应用处理', value: '无 · 未检测到采样率转换', conf: '推导', source: '应用配置', method: '比较解码输入与 AudioTrack 输出采样率' },
+      { step: '04 · AudioTrack', value: 'PCM 24-bit · 96 kHz · 立体声', conf: '实测 · 未验证', source: 'Media3 AudioTrack' },
+      Object.assign({ step: '05 · 路由' }, routes[output])
+    ];
+    const steps = base.map((st, i) => Object.assign({}, st, {
+      open: open === i,
+      node: open === i ? '#1A1A16' : '#F3EFE6',
+      hasMethod: !!st.method,
+      updated: stopped ? '12 秒前' : '刚刚',
+      toggle: () => this.setState({ open: open === i ? -1 : i })
+    }));
+    const num = (v, digits) => (stopped ? '—' : v.toFixed(digits));
+    const unit = (u) => (stopped ? '' : u);
+    const conf = (c) => (stopped ? '当前没有播放' : c);
+    const figures = [
+      { value: num(s.buffer ?? 1.24, 2), unit: unit('秒'), label: '估算的缓冲时长', conf: conf('估算') },
+      { value: stopped ? '—' : '0', unit: unit('次'), label: '音频欠载次数', conf: conf('实测 · 未验证') },
+      { value: num(s.cpu ?? 2.6, 1), unit: unit('%'), label: '进程 CPU 负载', conf: conf('推导') },
+      { value: num(s.power ?? 1.1, 2), unit: unit('W'), label: '整机功耗估算', conf: conf('估算') }
+    ];
+    return {
+      live: !stopped,
+      stopped: stopped,
+      isMixed: output === 'mixed',
+      isAvailable: output === 'available',
+      isRequested: output === 'requested',
+      isActive: output === 'active',
+      isVerified: output === 'verified',
+      isFailed: output === 'failed',
+      claim: claims[output],
+      flowing: !stopped && output !== 'requested',
+      updatedLabel: stopped ? '最后更新 12 秒前' : '刚刚更新',
+      steps: steps,
+      figures: figures
+    };
+  }
+}
+</script>
+</body>
+</html>

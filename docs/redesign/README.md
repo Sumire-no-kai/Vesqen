@@ -10,7 +10,7 @@
 | --- | --- |
 | [B_PAPER_AND_SOUND.md](B_PAPER_AND_SOUND.md) | 选定方案：概念、色彩与封面取色、字体、版式、组件、交互、动效、文案、无障碍、实现要点、待决问题 |
 | [C_KINETIC.md](C_KINETIC.md) | 备用方案，按同样的结构完整记录 |
-| [mockups/](mockups/) | 两套方案的画板源文件：官网首屏、正在播放、曲库各一 |
+| [mockups/](mockups/) | 两套方案的画板源文件。B 有官网首屏，App 的正在播放、曲库、链路（浅色和深色各一套），以及中文标题字体对比；C 有官网首屏、正在播放、曲库 |
 
 可交互的画板在设计画布"Vesqen 视觉方向"：<https://claude.ai/artifact/Jm4AVHe4iEduAQoMXtVFzd>。画布只有所有者本人能打开，仓库里的源文件是它的完整备份。画板里的歌曲、艺术家和封面全部是虚构的。
 
@@ -27,16 +27,16 @@
 在 #35 实施之前，[DESIGN.md](../../DESIGN.md)、[`.impeccable/design.json`](../../.impeccable/design.json) 和[视觉识别系统](../brand/VISUAL_IDENTITY.md)仍是现行基线，本目录记录的是已选定、尚未实施的方向。实施 B 时需要同步修改：
 
 - 视觉识别 §4.1：正在播放页固定使用深色 Nocturne Graphite，且真实封面最多以约 3.96% 进入背景。B 改为跟随系统深浅色，背景按封面取色规则染色（B 文档 §2.3）。
-- 视觉识别 §5 和 DESIGN.md 的字体：Roboto 改为 Instrument Serif、Instrument Sans，中文配思源宋体和思源黑体（B 文档 §3）。技术数据不再用等宽字，改用等宽数字。
-- 视觉识别 §5 规定"不用全大写营造品牌声量"。B 的官网眉题和小标签用了大写，实施时要么改为正常大小写，要么修改这条规则。
-- DESIGN.md 与 `.impeccable/design.json` 的颜色令牌：新增纸色系和深色提案（B 文档 §2）。
+- 视觉识别 §5 和 DESIGN.md 的字体：Roboto 改为 Instrument Serif 和 Instrument Sans。中文标题优先用手机自带的宋体，没有就用系统黑体，App 不打包中文字体（B 文档 §3）。技术数据不再用等宽字，改用等宽数字。
+- 视觉识别 §5 规定"不用全大写营造品牌声量"。用户在 2026-09-25 确认 B 可以用全大写的眉题和小标签，实施时修改这条规则。
+- DESIGN.md 与 `.impeccable/design.json` 的颜色令牌：新增纸色系和深色令牌（B 文档 §2）。
 - 保持不变：证据状态的区分规则、Signal Budget、Twin Paths 标识的构造与用法。
 
 ## 待决问题（在 #35 中处理）
 
-- B 的深色主题只有令牌提案，还没有画板。
-- 中文宋体在 App 里怎么打包（B 文档 §3）。
+- 逐台确认国产 ROM 是否自带中文宋体，先从用户的 iQOO 开始（B 文档 §3）。
+- 深色版在真机上的夜间效果。
 - 封面取色用自写的小算法，还是引入 `androidx.palette`。
-- 链路页、设置页、官网中文版和隐私政策页还没有画板。
+- 设置页、官网中文版和隐私政策页还没有画板。
 - 链路注记里的 AudioTrack、mixer 等开发者术语是否换成用户语言，随 #35 的文案审核决定。
 - 官网主按钮的去向。画板里的"Join the closed beta"只是占位。

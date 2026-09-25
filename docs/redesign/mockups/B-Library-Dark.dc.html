@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>纸与声 · 曲库</title>
+<title>纸与声 · 曲库（深色）</title>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -10,40 +10,40 @@
 <helmet>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Noto+Sans+SC:wght@400;500&family=Noto+Serif+SC:wght@400&display=swap" rel="stylesheet">
 <style>
-body{margin:0;background:#F3EFE6}
-a{color:#1A1A16}a:hover{color:#536B1E}
-button:focus-visible,a:focus-visible{outline:2px solid #1A1A16;outline-offset:2px}
+body{margin:0;background:#151411}
+a{color:#EDE8DC}a:hover{color:#BFD66B}
+button:focus-visible,a:focus-visible{outline:2px solid #EDE8DC;outline-offset:2px}
 .fade-in{animation:fadein .45s cubic-bezier(.22,1,.36,1)}
 @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .icon-btn{transition:background-color .2s ease}
-.icon-btn:hover{background-color:rgba(26,26,22,.06) !important}
+.icon-btn:hover{background-color:rgba(237,232,220,.08) !important}
 .row{transition:background-color .2s ease}
-.row:hover{background-color:rgba(26,26,22,.04) !important}
+.row:hover{background-color:rgba(237,232,220,.05) !important}
 .scroller{scrollbar-width:none}
 .scroller::-webkit-scrollbar{display:none}
 @media (prefers-reduced-motion: reduce){.fade-in{animation:none}.lift{transition:none !important}}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; display: flex; flex-direction: column; background-color: {{wash}}; transition: background-color 0.8s ease; color: #1A1A16; font-family: 'Instrument Sans', 'Noto Sans SC', system-ui, sans-serif">
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; display: flex; flex-direction: column; background-color: {{wash}}; transition: background-color 0.8s ease; color: #EDE8DC; font-family: 'Instrument Sans', 'Noto Sans SC', system-ui, sans-serif">
 <div style="display: flex; flex-direction: column; flex-grow: 1; min-height: 0; padding-top: 44px">
 <div style="display: flex; align-items: center; justify-content: space-between; height: 56px; padding: 0 12px 0 24px">
 <h1 style="margin: 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 32px; font-weight: 400">曲库</h1>
 <div style="display: flex; gap: 2px">
-<button class="icon-btn" aria-label="搜索本地音乐" style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 22px; background-color: transparent; color: #1A1A16; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z"></path><path d="m20 20-4.8-4.8"></path></svg></button>
-<button class="icon-btn" aria-label="曲库排序" style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 22px; background-color: transparent; color: #1A1A16; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16"></path><path d="m4 17 3 3 3-3"></path><path d="M17 20V4"></path><path d="m14 7 3-3 3 3"></path></svg></button>
+<button class="icon-btn" aria-label="搜索本地音乐" style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 22px; background-color: transparent; color: #EDE8DC; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z"></path><path d="m20 20-4.8-4.8"></path></svg></button>
+<button class="icon-btn" aria-label="曲库排序" style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 22px; background-color: transparent; color: #EDE8DC; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16"></path><path d="m4 17 3 3 3-3"></path><path d="M17 20V4"></path><path d="m14 7 3-3 3 3"></path></svg></button>
 </div>
 </div>
-<div class="scroller" role="tablist" aria-label="曲库视图" style="display: flex; gap: 20px; padding: 0 24px; overflow-x: auto; border-bottom: 1px solid rgba(26, 26, 22, 0.12)">
+<div class="scroller" role="tablist" aria-label="曲库视图" style="display: flex; gap: 20px; padding: 0 24px; overflow-x: auto; border-bottom: 1px solid rgba(237, 232, 220, 0.12)">
 <sc-for list="{{tabs}}" as="tb" hint-placeholder-count="6">
 <button role="tab" aria-selected="{{tb.sel}}" onClick="{{tb.pick}}" style="position: relative; flex-shrink: 0; min-height: 44px; padding: 0; border: 0; background-color: transparent; color: {{tb.color}}; font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer">{{tb.label}}<span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background-color: {{tb.bar}}"></span></button>
 </sc-for>
 </div>
 <sc-if value="{{isAlbums}}" hint-placeholder-val="{{ true }}">
 <div class="fade-in" style="display: flex; flex-direction: column; flex-grow: 1; min-height: 0">
-<span style="padding: 16px 24px 4px; font-size: 13px; font-weight: 500; color: #5E5A50">最近添加</span>
+<span style="padding: 16px 24px 4px; font-size: 13px; font-weight: 500; color: #A8A294">最近添加</span>
 <div class="scroller" style="display: flex; gap: 14px; padding: 12px 24px 12px; overflow-x: auto">
 <sc-for list="{{albums}}" as="al" hint-placeholder-count="5">
-<button onClick="{{al.pick}}" aria-pressed="{{al.sel}}" style="display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; width: 124px; padding: 0; border: 0; background-color: transparent; color: #1A1A16; text-align: left; cursor: pointer; font-family: inherit">
+<button onClick="{{al.pick}}" aria-pressed="{{al.sel}}" style="display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; width: 124px; padding: 0; border: 0; background-color: transparent; color: #EDE8DC; text-align: left; cursor: pointer; font-family: inherit">
 <span class="lift" style="display: flex; width: 124px; height: 124px; border-radius: 3px; overflow: hidden; transform: {{al.lift}}; box-shadow: {{al.shadow}}; transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.45s ease">
 <sc-if value="{{al.isTide}}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 380 380" width="100%" height="100%" aria-hidden="true" style="display: block"><rect width="380" height="380" fill="#1D4442"></rect><circle cx="190" cy="176" r="96" fill="#E8DFC8"></circle><rect y="206" width="380" height="174" fill="#1D4442"></rect><rect x="104" y="222" width="172" height="5" rx="2.5" fill="#E8DFC8" opacity="0.75"></rect><rect x="126" y="239" width="128" height="4" rx="2" fill="#E8DFC8" opacity="0.55"></rect><rect x="148" y="254" width="84" height="3" rx="1.5" fill="#E8DFC8" opacity="0.4"></rect><rect x="168" y="267" width="44" height="2" rx="1" fill="#E8DFC8" opacity="0.28"></rect><text x="28" y="46" fill="#E8DFC8" font-size="13" letter-spacing="2.6">MAREN HOLT</text><text x="28" y="350" fill="#E8DFC8" font-size="13" letter-spacing="2.6" opacity="0.8">LOW TIDE ARCHIVE</text></svg></sc-if>
 <sc-if value="{{al.isCopper}}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 380 380" width="100%" height="100%" aria-hidden="true" style="display: block"><rect width="380" height="380" fill="#B1613A"></rect><circle cx="0" cy="380" r="236" fill="none" stroke="#1B1512" stroke-width="64"></circle><rect x="270" y="46" width="64" height="64" fill="#F0E2CB"></rect><circle cx="300" cy="298" r="10" fill="#1B1512"></circle><text x="28" y="46" fill="#1B1512" font-size="13" letter-spacing="2.6">OTIS VALE QUARTET</text><text x="334" y="142" fill="#1B1512" font-size="13" letter-spacing="2.6" text-anchor="end">COPPER HOURS</text></svg></sc-if>
@@ -52,26 +52,26 @@ button:focus-visible,a:focus-visible{outline:2px solid #1A1A16;outline-offset:2p
 </span>
 <span style="display: flex; flex-direction: column; gap: 1px">
 <span style="font-family: 'Instrument Serif', 'Noto Serif SC', Georgia, serif; font-size: 17px; line-height: 1.15">{{al.title}}</span>
-<span style="font-size: 12px; color: #5E5A50">{{al.artist}}</span>
+<span style="font-size: 12px; color: #A8A294">{{al.artist}}</span>
 </span>
 </button>
 </sc-for>
 </div>
-<div style="display: flex; flex-direction: column; flex-grow: 1; min-height: 0; margin: 6px 14px 8px; padding: 18px 16px 0; border-radius: 18px; background-color: #FBF9F4">
+<div style="display: flex; flex-direction: column; flex-grow: 1; min-height: 0; margin: 6px 14px 8px; padding: 18px 16px 0; border-radius: 18px; background-color: #1E1C18">
 <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 12px">
 <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
 <h2 style="margin: 0; font-family: 'Instrument Serif', 'Noto Serif SC', Georgia, serif; font-size: 28px; font-weight: 400; line-height: 1.1">{{album.title}}</h2>
-<span style="font-size: 13px; color: #5E5A50">{{album.artist}} · {{album.fmt}}</span>
+<span style="font-size: 13px; color: #A8A294">{{album.artist}} · {{album.fmt}}</span>
 </div>
-<button aria-label="播放 {{album.title}}" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 24px; background-color: #536B1E; color: #FFFFFF; cursor: pointer"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.8v12.4c0 .8.9 1.3 1.6.9l10-6.2c.6-.4.6-1.4 0-1.8l-10-6.2C8.9 4.5 8 5 8 5.8z"></path></svg></button>
+<button aria-label="播放 {{album.title}}" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 24px; background-color: #BFD66B; color: #151411; cursor: pointer"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.8v12.4c0 .8.9 1.3 1.6.9l10-6.2c.6-.4.6-1.4 0-1.8l-10-6.2C8.9 4.5 8 5 8 5.8z"></path></svg></button>
 </div>
 <ol class="scroller" style="display: flex; flex-direction: column; margin: 12px 0 0; padding: 0; list-style: none; overflow-y: auto">
 <sc-for list="{{album.tracks}}" as="tr" hint-placeholder-count="4">
 <li style="display: flex">
-<button class="row" style="display: flex; align-items: center; gap: 14px; width: 100%; min-height: 48px; padding: 0 4px; border: 0; border-top: 1px solid #E6DFD0; background-color: transparent; color: #1A1A16; text-align: left; cursor: pointer; font-family: inherit">
-<span style="width: 20px; font-size: 13px; color: #5E5A50; font-variant-numeric: tabular-nums">{{tr.no}}</span>
+<button class="row" style="display: flex; align-items: center; gap: 14px; width: 100%; min-height: 48px; padding: 0 4px; border: 0; border-top: 1px solid rgba(237, 232, 220, 0.1); background-color: transparent; color: #EDE8DC; text-align: left; cursor: pointer; font-family: inherit">
+<span style="width: 20px; font-size: 13px; color: #A8A294; font-variant-numeric: tabular-nums">{{tr.no}}</span>
 <span style="flex-grow: 1; font-size: 15px">{{tr.title}}</span>
-<span style="font-size: 13px; color: #5E5A50; font-variant-numeric: tabular-nums">{{tr.dur}}</span>
+<span style="font-size: 13px; color: #A8A294; font-variant-numeric: tabular-nums">{{tr.dur}}</span>
 </button>
 </li>
 </sc-for>
@@ -82,35 +82,35 @@ button:focus-visible,a:focus-visible{outline:2px solid #1A1A16;outline-offset:2p
 <sc-if value="{{isGeneric}}" hint-placeholder-val="{{ false }}">
 <div class="fade-in scroller" style="display: flex; flex-direction: column; flex-grow: 1; min-height: 0; padding: 8px 24px 0; overflow-y: auto">
 <sc-for list="{{generic}}" as="g" hint-placeholder-count="5">
-<button class="row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 64px; padding: 0; border: 0; border-bottom: 1px solid rgba(26, 26, 22, 0.12); background-color: transparent; color: #1A1A16; text-align: left; cursor: pointer; font-family: inherit">
+<button class="row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 64px; padding: 0; border: 0; border-bottom: 1px solid rgba(237, 232, 220, 0.12); background-color: transparent; color: #EDE8DC; text-align: left; cursor: pointer; font-family: inherit">
 <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
 <span style="font-family: 'Instrument Serif', 'Noto Serif SC', Georgia, serif; font-size: 21px; line-height: 1.15">{{g.title}}</span>
-<span style="font-size: 13px; color: #5E5A50">{{g.meta}}</span>
+<span style="font-size: 13px; color: #A8A294">{{g.meta}}</span>
 </span>
-<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5E5A50" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg>
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A8A294" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg>
 </button>
 </sc-for>
 </div>
 </sc-if>
 </div>
-<div style="display: flex; align-items: center; gap: 12px; margin: 0 12px 10px; padding: 8px; border-radius: 14px; background-color: #FBF9F4; border: 1px solid rgba(26, 26, 22, 0.1); box-shadow: 0 10px 30px rgba(40, 30, 16, 0.12)">
-<a href="B-Now.dc.html" style="display: flex; align-items: center; gap: 12px; flex-grow: 1; min-width: 0; min-height: 48px; color: #1A1A16; text-decoration: none">
+<div style="display: flex; align-items: center; gap: 12px; margin: 0 12px 10px; padding: 8px; border-radius: 14px; background-color: #1E1C18; border: 1px solid rgba(237, 232, 220, 0.1); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4)">
+<a href="B-Now-Dark.dc.html" style="display: flex; align-items: center; gap: 12px; flex-grow: 1; min-width: 0; min-height: 48px; color: #EDE8DC; text-decoration: none">
 <span style="display: flex; flex-shrink: 0; width: 44px; height: 44px; border-radius: 3px; overflow: hidden"><svg viewBox="0 0 380 380" width="100%" height="100%" aria-hidden="true" style="display: block"><rect width="380" height="380" fill="#1D4442"></rect><circle cx="190" cy="176" r="96" fill="#E8DFC8"></circle><rect y="206" width="380" height="174" fill="#1D4442"></rect><rect x="104" y="222" width="172" height="5" rx="2.5" fill="#E8DFC8" opacity="0.75"></rect><rect x="126" y="239" width="128" height="4" rx="2" fill="#E8DFC8" opacity="0.55"></rect><rect x="148" y="254" width="84" height="3" rx="1.5" fill="#E8DFC8" opacity="0.4"></rect></svg></span>
 <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
 <span style="font-family: 'Instrument Serif', 'Noto Serif SC', Georgia, serif; font-size: 18px; line-height: 1.15">Glass Harbor</span>
-<span style="font-size: 12px; color: #5E5A50">有线耳机 · SYSTEM MIXED</span>
+<span style="font-size: 12px; color: #A8A294">USB DAC · <span style="color: #BFD66B">BIT-PERFECT ACTIVE</span></span>
 </span>
 </a>
-<button aria-label="{{playLabel}}" onClick="{{togglePlay}}" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 22px; background-color: #536B1E; color: #FFFFFF; cursor: pointer">
+<button aria-label="{{playLabel}}" onClick="{{togglePlay}}" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 22px; background-color: #BFD66B; color: #151411; cursor: pointer">
 <sc-if value="{{playing}}" hint-placeholder-val="{{ true }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1.2"></rect><rect x="13.5" y="5" width="4" height="14" rx="1.2"></rect></svg></sc-if>
 <sc-if value="{{paused}}" hint-placeholder-val="{{ false }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.8v12.4c0 .8.9 1.3 1.6.9l10-6.2c.6-.4.6-1.4 0-1.8l-10-6.2C8.9 4.5 8 5 8 5.8z"></path></svg></sc-if>
 </button>
 </div>
-<nav aria-label="主导航" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); height: 80px; padding: 8px 8px 14px; box-sizing: border-box; background-color: #F6F3EC; border-top: 1px solid #DDD6C6">
-<a href="B-Library.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #1A1A16; font-size: 12px; font-weight: 600; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4v16"></path><path d="M10 4v16"></path><path d="m14.5 4.8 4.8 14.7"></path></svg><span style="display: flex; flex-direction: column; align-items: center; gap: 3px">曲库<span aria-hidden="true" style="width: 16px; height: 2px; border-radius: 1px; background-color: #536B1E"></span></span></a>
-<a href="B-Now.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #5E5A50; font-size: 12px; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4.5"></rect><path d="M10 8.8v6.4l5.2-3.2z" fill="currentColor"></path></svg>正在播放</a>
-<a href="B-Chain.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #5E5A50; font-size: 12px; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="2.2"></circle><circle cx="12" cy="12" r="2.2"></circle><circle cx="19" cy="12" r="2.2"></circle><path d="M7.2 12h2.6M14.2 12h2.6"></path></svg>链路</a>
-<button style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 0; border: 0; background-color: transparent; color: #5E5A50; font-family: inherit; font-size: 12px; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"></path><circle cx="15" cy="7" r="2"></circle><circle cx="9" cy="17" r="2"></circle></svg>设置</button>
+<nav aria-label="主导航" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); height: 80px; padding: 8px 8px 14px; box-sizing: border-box; background-color: #191814; border-top: 1px solid rgba(237, 232, 220, 0.12)">
+<a href="B-Library-Dark.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #EDE8DC; font-size: 12px; font-weight: 600; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4v16"></path><path d="M10 4v16"></path><path d="m14.5 4.8 4.8 14.7"></path></svg><span style="display: flex; flex-direction: column; align-items: center; gap: 3px">曲库<span aria-hidden="true" style="width: 16px; height: 2px; border-radius: 1px; background-color: #BFD66B"></span></span></a>
+<a href="B-Now-Dark.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #A8A294; font-size: 12px; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4.5"></rect><path d="M10 8.8v6.4l5.2-3.2z" fill="currentColor"></path></svg>正在播放</a>
+<a href="B-Chain-Dark.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #A8A294; font-size: 12px; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="2.2"></circle><circle cx="12" cy="12" r="2.2"></circle><circle cx="19" cy="12" r="2.2"></circle><path d="M7.2 12h2.6M14.2 12h2.6"></path></svg>链路</a>
+<button style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 0; border: 0; background-color: transparent; color: #A8A294; font-family: inherit; font-size: 12px; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"></path><circle cx="15" cy="7" r="2"></circle><circle cx="9" cy="17" r="2"></circle></svg>设置</button>
 </nav>
 </div>
 </x-dc>
@@ -119,11 +119,11 @@ class Component extends DCLogic {
   data() {
     return {
       albums: [
-        { key: 'tide', title: 'Low Tide Archive', artist: 'Maren Holt', fmt: 'FLAC 24/96', wash: '#DCE5E0', tracks: [['Glass Harbor', '5:02'], ['Undertow', '4:11'], ['Pale Current', '3:58'], ['Kelp Forest', '6:20']] },
-        { key: 'copper', title: 'Copper Hours', artist: 'Otis Vale Quartet', fmt: 'FLAC 16/44.1', wash: '#EEDDCC', tracks: [['Brass Lantern', '6:38'], ['Slow Furnace', '5:12'], ['Verdigris', '7:04'], ['Last Tram', '4:46']] },
-        { key: 'fog', title: '盐与雾', artist: '林汐', fmt: 'ALAC 24/48', wash: '#E1E4DC', tracks: [['晚风测绘', '3:47'], ['灯塔以北', '4:20'], ['潮间带', '3:33'], ['白噪音的海', '5:01']] },
-        { key: 'transit', title: 'Night Transit', artist: 'Kaede Lune', fmt: 'AIFF 24/48', wash: '#E2E2DF', art: { bg: '#22262A', fg: '#E0873A', cx: 31, cy: 18, r: 4.5, ly: 33, lh: 1, lc: '#4A5158', sx: 0, sy: 0, sw: 0, sc: '#22262A' }, tracks: [['Night Transit', '4:55'], ['Platform Nine', '3:40'], ['Sodium Lights', '4:12'], ['Terminus', '6:02']] },
-        { key: 'airport', title: '空港', artist: '周屿', fmt: 'MP3 320k', wash: '#DCE3E7', art: { bg: '#9FB3C2', fg: '#F4F1EA', cx: 15, cy: 15, r: 6, ly: 37, lh: 11, lc: '#7890A1', sx: 0, sy: 0, sw: 0, sc: '#9FB3C2' }, tracks: [['候车室', '3:29'], ['登机口', '4:02'], ['晚点', '3:15'], ['落地', '4:44']] }
+        { key: 'tide', title: 'Low Tide Archive', artist: 'Maren Holt', fmt: 'FLAC 24/96', wash: '#141A19', tracks: [['Glass Harbor', '5:02'], ['Undertow', '4:11'], ['Pale Current', '3:58'], ['Kelp Forest', '6:20']] },
+        { key: 'copper', title: 'Copper Hours', artist: 'Otis Vale Quartet', fmt: 'FLAC 16/44.1', wash: '#21150F', tracks: [['Brass Lantern', '6:38'], ['Slow Furnace', '5:12'], ['Verdigris', '7:04'], ['Last Tram', '4:46']] },
+        { key: 'fog', title: '盐与雾', artist: '林汐', fmt: 'ALAC 24/48', wash: '#151411', tracks: [['晚风测绘', '3:47'], ['灯塔以北', '4:20'], ['潮间带', '3:33'], ['白噪音的海', '5:01']] },
+        { key: 'transit', title: 'Night Transit', artist: 'Kaede Lune', fmt: 'AIFF 24/48', wash: '#151411', art: { bg: '#22262A', fg: '#E0873A', cx: 31, cy: 18, r: 4.5, ly: 33, lh: 1, lc: '#4A5158', sx: 0, sy: 0, sw: 0, sc: '#22262A' }, tracks: [['Night Transit', '4:55'], ['Platform Nine', '3:40'], ['Sodium Lights', '4:12'], ['Terminus', '6:02']] },
+        { key: 'airport', title: '空港', artist: '周屿', fmt: 'MP3 320k', wash: '#16191B', art: { bg: '#9FB3C2', fg: '#F4F1EA', cx: 15, cy: 15, r: 6, ly: 37, lh: 11, lc: '#7890A1', sx: 0, sy: 0, sw: 0, sc: '#9FB3C2' }, tracks: [['候车室', '3:29'], ['登机口', '4:02'], ['晚点', '3:15'], ['落地', '4:44']] }
       ],
       lists: {
         songs: [
@@ -179,18 +179,18 @@ class Component extends DCLogic {
       isSimple: !!al.art,
       art: al.art || blank,
       lift: i === sel ? 'translateY(-6px)' : 'none',
-      shadow: i === sel ? '0 16px 30px rgba(40, 30, 16, 0.24)' : '0 2px 6px rgba(40, 30, 16, 0.10)',
+      shadow: i === sel ? '0 16px 30px rgba(0, 0, 0, 0.5)' : '0 2px 6px rgba(0, 0, 0, 0.3)',
       pick: () => this.setState({ sel: i })
     }));
     const tabs = [['songs', '歌曲'], ['albums', '专辑'], ['artists', '艺术家'], ['folders', '文件夹'], ['genres', '流派'], ['playlists', '播放列表']].map((p) => ({
       label: p[1],
       sel: p[0] === tab,
-      color: p[0] === tab ? '#1A1A16' : '#5E5A50',
-      bar: p[0] === tab ? '#1A1A16' : 'transparent',
+      color: p[0] === tab ? '#EDE8DC' : '#A8A294',
+      bar: p[0] === tab ? '#EDE8DC' : 'transparent',
       pick: () => this.setState({ tab: p[0] })
     }));
     return {
-      wash: tab === 'albums' ? a.wash : '#F3EFE6',
+      wash: tab === 'albums' ? a.wash : '#151411',
       tabs: tabs,
       albums: albums,
       album: { title: a.title, artist: a.artist, fmt: a.fmt, tracks: a.tracks.map((t, i) => ({ no: '0' + (i + 1), title: t[0], dur: t[1] })) },

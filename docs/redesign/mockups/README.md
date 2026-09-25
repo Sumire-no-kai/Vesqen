@@ -1,12 +1,17 @@
 # 画板源文件
 
-这些文件是设计画布"Vesqen 视觉方向"（<https://claude.ai/artifact/Jm4AVHe4iEduAQoMXtVFzd>）中 B 和 C 两个方向的画板源码，于 2026-09-25 从画布原样保存。
+这些文件是设计画布"Vesqen 视觉方向"（<https://claude.ai/artifact/Jm4AVHe4iEduAQoMXtVFzd>）中 B 和 C 两个方向的画板源码，从画布原样保存（2026-09-25）。
 
 | 文件 | 方向 | 画面 | 尺寸 |
 | --- | --- | --- | --- |
 | `B-Web.dc.html` | B · 纸与声 | 官网首屏（英文） | 1440 × 1024 |
 | `B-Now.dc.html` | B · 纸与声 | 正在播放（中文） | 390 × 844 |
 | `B-Library.dc.html` | B · 纸与声 | 曲库（中文） | 390 × 844 |
+| `B-Chain.dc.html` | B · 纸与声 | 链路（中文） | 390 × 844 |
+| `B-Now-Dark.dc.html` | B · 纸与声 | 正在播放，深色（中文） | 390 × 844 |
+| `B-Library-Dark.dc.html` | B · 纸与声 | 曲库，深色（中文） | 390 × 844 |
+| `B-Chain-Dark.dc.html` | B · 纸与声 | 链路，深色（中文） | 390 × 844 |
+| `B-Fonts.dc.html` | B · 纸与声 | 中文标题：宋体还是黑体 | 880 × 900 |
 | `C-Web.dc.html` | C · 动态版式 | 官网首屏（英文） | 1440 × 1024 |
 | `C-Now.dc.html` | C · 动态版式 | 正在播放（中文） | 390 × 844 |
 | `C-Library.dc.html` | C · 动态版式 | 曲库（中文） | 390 × 844 |
