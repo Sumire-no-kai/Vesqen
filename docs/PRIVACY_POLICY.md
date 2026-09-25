@@ -7,7 +7,7 @@
 - Effective date: [TBD: effective date]
 - Last updated: [TBD: date]
 
-This policy explains what information the Vesqen Android app handles, where that information stays, and what we receive when you contact us or unlock Vesqen with an in-app purchase. It applies to every build of Vesqen we distribute, including Google Play and GitHub Releases.
+This policy explains what information the Vesqen Android app handles, where that information stays, and what we receive when you contact us or unlock Vesqen with an in-app purchase. It applies to every build of Vesqen we distribute, including Google Play and GitHub Releases, and to the Vesqen website.
 
 ## Summary
 
@@ -15,6 +15,7 @@ This policy explains what information the Vesqen Android app handles, where that
 - Vesqen does not request Android's Internet permission, so the app itself cannot send or receive data over the network.
 - Your library, favorites, playlists and listening statistics stay in the app's private storage on your device. We never receive them.
 - We only receive what you choose to send us (for example, a support email) and the limited order information Google Play provides when you buy the in-app unlock.
+- The Vesqen website has no analytics or advertising. It uses a cookie to remember your language only if you allow it.
 
 ## Who we are
 
@@ -57,6 +58,21 @@ Vesqen does not request the Internet, location, contacts, phone, camera, microph
 - **In-app purchase through Google Play.** Vesqen is free to download. After the trial, you can unlock it with a one-time in-app purchase. Google handles payment. We never receive your card or other payment details, and Google's privacy policy applies to your purchase. Google Play Console lets us see order records for the in-app purchase, such as the order number, date, price and country or region, and lets us look up an order by the buyer's email address. We use this only to handle order questions and refunds.
 - **Google Play statistics.** Google may give us aggregated statistics about installs and app stability, including crash reports from people who have chosen to share usage and diagnostics data with Google. We use them only to find and fix problems.
 - **GitHub downloads.** If you download Vesqen from GitHub, GitHub's privacy policy applies to that download.
+
+## The Vesqen website
+
+The Vesqen website (vesqen.sumirenokai.com) is hosted by Cloudflare. It has no accounts, forms, advertising or analytics.
+
+- **Serving the site.** To deliver pages and protect the site from abuse, Cloudflare processes each request, including your IP address, browser information and the address of the page. Cloudflare's privacy policy applies to this processing. Cloudflare shows us aggregated statistics, such as the number of requests by country or region. We don't use this information to identify visitors.
+- **Choosing a language.** When you open the home page, the site shows English or Chinese based on your browser's language setting. If that doesn't decide it, the site uses the country or region Cloudflare estimates from your IP address. This check runs on each visit and stores nothing.
+- **Cookies.** On your first visit, the site asks whether it may remember your language. It sets at most two cookies, and neither is used for tracking:
+
+| Cookie | Purpose | Kept for |
+| --- | --- | --- |
+| `vesqen-consent` | Remembers whether you accepted or rejected cookies, so the site doesn't ask again. | 12 months |
+| `vesqen-lang` | Remembers your language. Set only after you accept. | 12 months |
+
+You can change your answer at any time with "Cookie settings" at the bottom of each page. If you reject, the site deletes `vesqen-lang`. If Cloudflare needs to check that a visit isn't automated, it may set its own security cookie, such as `cf_clearance`. Cloudflare needs this cookie to run the service, and it isn't used to track you.
 
 ## Retention and deletion
 

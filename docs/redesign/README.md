@@ -2,6 +2,8 @@
 
 2026-09-25 决定：官网和 App 界面重设计（[#35](https://github.com/Sumire-no-kai/Vesqen/issues/35)）采用 **B · 纸与声（Paper & Sound）**；**C · 动态版式（Kinetic）** 完整保留为备用方案。同一轮还探索过 A · 信号（Signal），没有采用。
 
+**#35 的 UI 重构以本目录为设计依据。** 实施时按 [B_PAPER_AND_SOUND.md](B_PAPER_AND_SOUND.md) 和 [mockups/](mockups/) 里的 B 画板来做。画布上的改动要同步回本目录，两边不一致时以本目录为准。
+
 起因是 2026-09-24 的真机界面审查：现有界面不算过时，但"AI 味"明显，主要来自过度解释的文案、开发者术语和常见的 Material 套路（见[开发日志](../DEVELOPMENT_LOG.md) 2026-09-24）。用户要求官网和 App 共用一套设计语言，整体更大胆，有交互和动态感，色调更高级，并保留 Twin Paths 标识。
 
 ## 文件
