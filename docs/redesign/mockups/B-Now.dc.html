@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>纸与声 · 正在播放</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Noto+Sans+SC:wght@400;500&family=Noto+Serif+SC:wght@400;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F3EFE6}
+a{color:#1A1A16}a:hover{color:#536B1E}
+button:focus-visible,a:focus-visible{outline:2px solid #1A1A16;outline-offset:2px}
+.art-in{animation:artin .7s cubic-bezier(.22,1,.36,1)}
+@keyframes artin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.notes-in{animation:notesin .5s cubic-bezier(.22,1,.36,1)}
+@keyframes notesin{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.icon-btn{transition:background-color .2s ease}
+.icon-btn:hover{background-color:rgba(26,26,22,.06) !important}
+@media (prefers-reduced-motion: reduce){.art-in,.notes-in{animation:none}.sleeve{transition:none !important}}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; display: flex; flex-direction: column; background-color: {{track.wash}}; transition: background-color 0.9s ease; color: #1A1A16; font-family: 'Instrument Sans', 'Noto Sans SC', system-ui, sans-serif">
+<div style="display: flex; flex-direction: column; flex-grow: 1; padding: 44px 24px 0">
+<div style="display: flex; align-items: center; justify-content: space-between; height: 48px; margin: 0 -8px">
+<button class="icon-btn" aria-label="收起" style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 22px; background-color: transparent; color: #1A1A16; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 1px">
+<span style="font-family: 'Noto Serif SC', serif; font-size: 14px; font-weight: 600">正在播放</span>
+<span style="font-size: 12px; color: #5E5A50">{{queueLabel}}</span>
+</div>
+<button class="icon-btn" aria-label="队列" style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 22px; background-color: transparent; color: #1A1A16; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h11M4 12h11M4 17h7"></path><path d="M17 14.5v5l4-2.5z" fill="currentColor"></path></svg></button>
+</div>
+<div style="display: flex; justify-content: center; margin-top: 14px">
+<div class="sleeve" style="width: {{coverSize}}; height: {{coverSize}}; border-radius: 4px; overflow: hidden; box-shadow: 0 26px 50px rgba(40, 30, 16, 0.24); transition: width 0.55s cubic-bezier(0.22, 1, 0.36, 1), height 0.55s cubic-bezier(0.22, 1, 0.36, 1)">
+<sc-if value="{{track.isTide}}" hint-placeholder-val="{{ true }}">
+<div class="art-in" style="width: 100%; height: 100%"><svg viewBox="0 0 380 380" width="100%" height="100%" aria-hidden="true" style="display: block"><rect width="380" height="380" fill="#1D4442"></rect><circle cx="190" cy="176" r="96" fill="#E8DFC8"></circle><rect y="206" width="380" height="174" fill="#1D4442"></rect><rect x="104" y="222" width="172" height="5" rx="2.5" fill="#E8DFC8" opacity="0.75"></rect><rect x="126" y="239" width="128" height="4" rx="2" fill="#E8DFC8" opacity="0.55"></rect><rect x="148" y="254" width="84" height="3" rx="1.5" fill="#E8DFC8" opacity="0.4"></rect><rect x="168" y="267" width="44" height="2" rx="1" fill="#E8DFC8" opacity="0.28"></rect><text x="28" y="46" fill="#E8DFC8" font-size="13" letter-spacing="2.6">MAREN HOLT</text><text x="28" y="350" fill="#E8DFC8" font-size="13" letter-spacing="2.6" opacity="0.8">LOW TIDE ARCHIVE</text></svg></div>
+</sc-if>
+<sc-if value="{{track.isCopper}}" hint-placeholder-val="{{ false }}">
+<div class="art-in" style="width: 100%; height: 100%"><svg viewBox="0 0 380 380" width="100%" height="100%" aria-hidden="true" style="display: block"><rect width="380" height="380" fill="#B1613A"></rect><circle cx="0" cy="380" r="236" fill="none" stroke="#1B1512" stroke-width="64"></circle><rect x="270" y="46" width="64" height="64" fill="#F0E2CB"></rect><circle cx="300" cy="298" r="10" fill="#1B1512"></circle><text x="28" y="46" fill="#1B1512" font-size="13" letter-spacing="2.6">OTIS VALE QUARTET</text><text x="334" y="142" fill="#1B1512" font-size="13" letter-spacing="2.6" text-anchor="end">COPPER HOURS</text></svg></div>
+</sc-if>
+<sc-if value="{{track.isFog}}" hint-placeholder-val="{{ false }}">
+<div class="art-in" style="width: 100%; height: 100%"><svg viewBox="0 0 380 380" width="100%" height="100%" aria-hidden="true" style="display: block"><rect width="380" height="380" fill="#D8DBD2"></rect><circle cx="262" cy="140" r="50" fill="#F5F3EC"></circle><rect y="232" width="380" height="148" fill="#C8CCC2"></rect><rect y="231" width="380" height="2" fill="#23241F"></rect><rect x="70" y="194" width="4" height="38" fill="#23241F"></rect><rect x="94" y="203" width="4" height="29" fill="#23241F"></rect><rect x="118" y="210" width="4" height="22" fill="#23241F"></rect><rect x="70" y="235" width="4" height="30" fill="#23241F" opacity="0.22"></rect><rect x="94" y="235" width="4" height="22" fill="#23241F" opacity="0.22"></rect><rect x="118" y="235" width="4" height="16" fill="#23241F" opacity="0.22"></rect><text x="28" y="48" fill="#23241F" font-size="16" letter-spacing="4">林汐</text><text x="28" y="350" fill="#23241F" font-size="16" letter-spacing="4">盐与雾</text></svg></div>
+</sc-if>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 22px; text-align: center">
+<span style="font-family: 'Instrument Serif', 'Noto Serif SC', Georgia, serif; font-size: 34px; line-height: 1.12">{{track.title}}</span>
+<span style="font-size: 15px; color: #5E5A50">{{track.artist}} — {{track.album}}</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; margin-top: 18px">
+<div style="position: relative; height: 10px">
+<div style="position: absolute; left: 0; right: 0; top: 4px; height: 2px; background-color: rgba(26, 26, 22, 0.16)"></div>
+<div style="position: absolute; left: 0; top: 4px; height: 2px; width: {{progress.pct}}; background-color: #536B1E"></div>
+<div style="position: absolute; top: 0; left: {{progress.knob}}; width: 10px; height: 10px; border-radius: 5px; background-color: #536B1E"></div>
+</div>
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: #5E5A50; font-variant-numeric: tabular-nums">
+<span>{{progress.elapsed}}</span>
+<span>{{progress.total}}</span>
+</div>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between; margin-top: 8px">
+<button class="icon-btn" aria-label="随机播放" style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 22px; background-color: transparent; color: #5E5A50; cursor: pointer"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h3.5c1.9 0 3 .9 4.1 2.6l2.8 4.8c1.1 1.7 2.2 2.6 4.1 2.6H21"></path><path d="m18 14 3 3-3 3"></path><path d="M3 17h3.5c1.4 0 2.4-.5 3.3-1.5"></path><path d="M14.2 8.5C15 7.5 16 7 17.5 7H21"></path><path d="m18 4 3 3-3 3"></path></svg></button>
+<button class="icon-btn" aria-label="上一首" onClick="{{prev}}" style="display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; border: 0; border-radius: 26px; background-color: transparent; color: #1A1A16; cursor: pointer"><svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 6.2v11.6c0 .8-.9 1.3-1.6.8L8.5 13c-.6-.4-.6-1.4 0-1.8l7.9-5.6c.7-.5 1.6 0 1.6.6z"></path><rect x="5" y="5.5" width="2.2" height="13" rx="1.1"></rect></svg></button>
+<button aria-label="{{playLabel}}" onClick="{{togglePlay}}" style="display: flex; align-items: center; justify-content: center; width: 68px; height: 68px; padding: 0; border: 0; border-radius: 34px; background-color: #536B1E; color: #FFFFFF; cursor: pointer">
+<sc-if value="{{playing}}" hint-placeholder-val="{{ true }}"><svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1.2"></rect><rect x="13.5" y="5" width="4" height="14" rx="1.2"></rect></svg></sc-if>
+<sc-if value="{{paused}}" hint-placeholder-val="{{ false }}"><svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.8v12.4c0 .8.9 1.3 1.6.9l10-6.2c.6-.4.6-1.4 0-1.8l-10-6.2C8.9 4.5 8 5 8 5.8z"></path></svg></sc-if>
+</button>
+<button class="icon-btn" aria-label="下一首" onClick="{{next}}" style="display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; border: 0; border-radius: 26px; background-color: transparent; color: #1A1A16; cursor: pointer"><svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6.2v11.6c0 .8.9 1.3 1.6.8l7.9-5.6c.6-.4.6-1.4 0-1.8L7.6 5.6C6.9 5.1 6 5.6 6 6.2z"></path><rect x="16.8" y="5.5" width="2.2" height="13" rx="1.1"></rect></svg></button>
+<button class="icon-btn" aria-label="列表循环" style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 22px; background-color: transparent; color: #5E5A50; cursor: pointer"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11V9.5A3.5 3.5 0 0 1 7.5 6H20"></path><path d="m17 3 3 3-3 3"></path><path d="M20 13v1.5a3.5 3.5 0 0 1-3.5 3.5H4"></path><path d="m7 21-3-3 3-3"></path></svg></button>
+</div>
+<section aria-label="链路注记" style="margin-top: 16px; border-top: 1px solid rgba(26, 26, 22, 0.16)">
+<button onClick="{{toggleNotes}}" aria-expanded="{{notesOpen}}" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 56px; padding: 0; border: 0; background-color: transparent; color: #1A1A16; text-align: left; cursor: pointer; font-family: inherit">
+<span style="display: flex; flex-direction: column; gap: 3px">
+<span style="font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 16px; font-weight: 600">链路注记</span>
+<span style="font-size: 13px; color: #5E5A50">{{track.summary}}</span>
+</span>
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; transform: rotate({{chevron}}); transition: transform 0.4s ease"><path d="m6 9 6 6 6-6"></path></svg>
+</button>
+<sc-if value="{{notesOpen}}" hint-placeholder-val="{{ false }}">
+<div class="notes-in" style="display: flex; flex-direction: column">
+<sc-for list="{{stages}}" as="sg" hint-placeholder-count="3">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 42px; border-top: 1px solid rgba(26, 26, 22, 0.1)">
+<span style="display: flex; flex-direction: column; gap: 1px">
+<span style="font-size: 11px; letter-spacing: 0.08em; color: #5E5A50">{{sg.step}}</span>
+<span style="font-size: 14px">{{sg.value}}</span>
+</span>
+<span style="flex-shrink: 0; font-size: 12px; color: #5E5A50">{{sg.conf}}</span>
+</div>
+</sc-for>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 10px 0 4px; border-top: 1px solid rgba(26, 26, 22, 0.1)">
+<span style="display: flex; align-items: center; gap: 6px; align-self: flex-start; height: 26px; padding: 0 10px; border-radius: 13px; background-color: rgba(26, 26, 22, 0.07); font-size: 11px; font-weight: 600; letter-spacing: 0.06em"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v5c0 3 2 4.5 6 6.5M18 4v5c0 3-2 4.5-6 6.5V20"></path></svg>SYSTEM MIXED</span>
+<span style="font-size: 13px; line-height: 1.5; color: #5E5A50">Android 可能混音、重采样或应用系统处理。</span>
+</div>
+</div>
+</sc-if>
+</section>
+</div>
+<nav aria-label="主导航" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); height: 80px; padding: 8px 8px 14px; box-sizing: border-box; background-color: #F6F3EC; border-top: 1px solid #DDD6C6">
+<a href="B-Library.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #5E5A50; font-size: 12px; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4v16"></path><path d="M10 4v16"></path><path d="m14.5 4.8 4.8 14.7"></path></svg>曲库</a>
+<a href="B-Now.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #1A1A16; font-size: 12px; font-weight: 600; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4.5"></rect><path d="M10 8.8v6.4l5.2-3.2z" fill="currentColor"></path></svg><span style="display: flex; flex-direction: column; align-items: center; gap: 3px">正在播放<span aria-hidden="true" style="width: 16px; height: 2px; border-radius: 1px; background-color: #536B1E"></span></span></a>
+<button style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 0; border: 0; background-color: transparent; color: #5E5A50; font-family: inherit; font-size: 12px; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="2.2"></circle><circle cx="12" cy="12" r="2.2"></circle><circle cx="19" cy="12" r="2.2"></circle><path d="M7.2 12h2.6M14.2 12h2.6"></path></svg>链路</button>
+<button style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 0; border: 0; background-color: transparent; color: #5E5A50; font-family: inherit; font-size: 12px; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"></path><circle cx="15" cy="7" r="2"></circle><circle cx="9" cy="17" r="2"></circle></svg>设置</button>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  tracks() {
+    return [
+      { key: 'tide', title: 'Glass Harbor', artist: 'Maren Holt', album: 'Low Tide Archive', dur: 302, wash: '#DCE5E0', summary: 'FLAC 24/96 · 有线耳机 · SYSTEM MIXED', source: 'FLAC · 24-bit · 96 kHz', pcm: 'PCM · 96 kHz · 立体声' },
+      { key: 'copper', title: 'Brass Lantern', artist: 'Otis Vale Quartet', album: 'Copper Hours', dur: 398, wash: '#EEDDCC', summary: 'FLAC 16/44.1 · 有线耳机 · SYSTEM MIXED', source: 'FLAC · 16-bit · 44.1 kHz', pcm: 'PCM · 44.1 kHz · 立体声' },
+      { key: 'fog', title: '晚风测绘', artist: '林汐', album: '盐与雾', dur: 227, wash: '#E1E4DC', summary: 'ALAC 24/48 · 有线耳机 · SYSTEM MIXED', source: 'ALAC · 24-bit · 48 kHz', pcm: 'PCM · 48 kHz · 立体声' }
+    ];
+  }
+  snap() {
+    const s = this.state || {};
+    return { idx: s.idx ?? 0, pos: s.pos ?? 97, playing: s.playing ?? true, notes: s.notes ?? false };
+  }
+  componentDidMount() {
+    this.timer = setInterval(() => {
+      const s = this.snap();
+      if (!s.playing) return;
+      const t = this.tracks()[s.idx];
+      if (s.pos + 1 >= t.dur) this.go(1);
+      else this.setState({ pos: s.pos + 1 });
+    }, 1000);
+  }
+  componentWillUnmount() {
+    clearInterval(this.timer);
+  }
+  go(delta) {
+    const s = this.snap();
+    const n = this.tracks().length;
+    this.setState({ idx: (s.idx + delta + n) % n, pos: 0 });
+  }
+  fmt(sec) {
+    const m = Math.floor(sec / 60);
+    const r = sec % 60;
+    return m + ':' + (r < 10 ? '0' : '') + r;
+  }
+  renderVals() {
+    const s = this.snap();
+    const list = this.tracks();
+    const t = list[s.idx];
+    const pct = (s.pos / t.dur) * 100;
+    return {
+      track: Object.assign({}, t, { isTide: t.key === 'tide', isCopper: t.key === 'copper', isFog: t.key === 'fog' }),
+      queueLabel: '第 ' + (s.idx + 1) + ' / ' + list.length + ' 首',
+      coverSize: s.notes ? '164px' : '280px',
+      progress: { pct: pct + '%', knob: 'calc(' + pct + '% - 5px)', elapsed: this.fmt(s.pos), total: this.fmt(t.dur) },
+      playing: s.playing,
+      paused: !s.playing,
+      playLabel: s.playing ? '暂停' : '播放',
+      togglePlay: () => this.setState({ playing: !s.playing }),
+      prev: () => this.go(-1),
+      next: () => this.go(1),
+      notesOpen: s.notes,
+      chevron: s.notes ? '180deg' : '0deg',
+      toggleNotes: () => this.setState({ notes: !s.notes }),
+      stages: [
+        { step: '01 · 源文件', value: t.source, conf: '实测 · 未验证' },
+        { step: '02 · AudioTrack', value: t.pcm, conf: '实测 · 未验证' },
+        { step: '03 · 路由与稳定性', value: '有线耳机 · 欠载 0 次', conf: '实测 · 未验证' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

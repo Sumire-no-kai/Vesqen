@@ -35,6 +35,8 @@
 | [#47](https://github.com/Sumire-no-kai/Vesqen/issues/47) | 不含 Billing 的 GitHub 构建变体 | 收费 |
 | [#48](https://github.com/Sumire-no-kai/Vesqen/issues/48) | 真机验证含 Billing 的构建能否移除 INTERNET | 收费、隐私 |
 
+#35 的视觉方向已在 2026-09-25 选定 B（纸与声），C（动态版式）完整保留为备用，见[官网与界面重设计方向](redesign/README.md)。
+
 ## 正式上架之前
 
 | Issue | 内容 |
