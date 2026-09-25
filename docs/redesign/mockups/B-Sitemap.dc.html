@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>纸与声 · 官网页面结构</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Noto+Sans+SC:wght@400;500&family=Noto+Serif+SC:wght@400&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F3EFE6}
+</style>
+</helmet>
+<div style="width: 1600px; height: 1060px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px; padding: 48px 64px; background-color: #F3EFE6; color: #1A1A16; font-family: 'Instrument Sans', 'Noto Sans SC', system-ui, sans-serif">
+<div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 40px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h1 style="margin: 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 40px; font-weight: 400">官网页面结构</h1>
+<p style="margin: 0; font-size: 15px; line-height: 1.7; color: #5E5A50">vesqen.sumirenokai.com · 英文页面在根路径，中文页面在 /zh/ 下。每一页都有中英两版，页面之间互相链接。</p>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; font-size: 13px; color: #5E5A50">
+<span style="display: flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px; background-color: #1A1A16; color: #F3EFE6; font-size: 12px; font-weight: 600">第一批</span>
+<span>Play 封闭测试上传前</span>
+<span style="display: flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px; background-color: rgba(26, 26, 22, 0.08); font-size: 12px; font-weight: 600">第二批</span>
+<span>正式上架前</span>
+<span style="display: flex; align-items: center; height: 24px; box-sizing: border-box; padding: 0 10px; border-radius: 12px; border: 1px dashed rgba(26, 26, 22, 0.45); font-size: 12px; font-weight: 600">以后</span>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+<div style="display: flex; align-items: center; gap: 14px; min-height: 56px; padding: 0 20px; border-radius: 14px; border: 1px solid rgba(26, 26, 22, 0.14); font-size: 14px; line-height: 1.6">
+<span style="font-family: 'Noto Serif SC', serif; font-size: 18px">页眉</span>
+<span style="color: #3F3C35">标识 · 导航（链路说明、下载、支持、隐私政策）· 语言切换 · 主按钮</span>
+</div>
+<div style="display: flex; align-items: center; gap: 14px; min-height: 56px; padding: 0 20px; border-radius: 14px; border: 1px solid rgba(26, 26, 22, 0.14); font-size: 14px; line-height: 1.6">
+<span style="font-family: 'Noto Serif SC', serif; font-size: 18px">页脚</span>
+<span style="color: #3F3C35">联系邮箱 · GitHub · 隐私政策 · 语言切换 · Sumire Studio</span>
+</div>
+</div>
+<div style="display: flex; justify-content: center">
+<article style="display: flex; flex-direction: column; gap: 10px; width: 760px; box-sizing: border-box; padding: 20px 24px; border-radius: 14px; background-color: #FBF9F4; box-shadow: 0 1px 0 rgba(48, 38, 22, 0.06), 0 12px 30px rgba(48, 38, 22, 0.08)">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<h2 style="margin: 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 26px; font-weight: 400">首页</h2>
+<span style="display: flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px; background-color: #1A1A16; color: #F3EFE6; font-size: 12px; font-weight: 600">第一批</span>
+</div>
+<span style="font-size: 13px; color: #5E5A50; font-variant-numeric: tabular-nums">/ · /zh/</span>
+<p style="margin: 0; font-size: 14px; line-height: 1.6">第一次来的人先弄明白 Vesqen 是什么，再去下载或细看链路。第一批先上简版（首屏、隐私、获取方式），第二批补全。</p>
+<ol style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 32px; margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.6; color: #3F3C35">
+<li>首屏：封面叠层和链路注记卡</li>
+<li>链路怎么看：五站简介</li>
+<li>证据状态：SYSTEM MIXED、ACTIVE、VERIFIED 的意思</li>
+<li>本地曲库：格式、文件夹、歌单</li>
+<li>严格 USB 输出：需要什么条件</li>
+<li>隐私：离线、无账号，链到隐私政策</li>
+<li>获取 Vesqen：Google Play 和 GitHub</li>
+</ol>
+</article>
+</div>
+<svg width="1472" height="40" viewBox="0 0 1472 40" aria-hidden="true" style="display: block"><path d="M736 0V20M175 20H1297M175 20V40M549 20V40M923 20V40M1297 20V40" fill="none" stroke="#1A1A16" stroke-opacity="0.3" stroke-width="1.5"></path></svg>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px">
+<article style="display: flex; flex-direction: column; gap: 8px; padding: 18px 20px; border-radius: 14px; background-color: #FBF9F4; box-shadow: 0 1px 0 rgba(48, 38, 22, 0.06)">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<h2 style="margin: 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 22px; font-weight: 400">链路说明</h2>
+<span style="display: flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px; background-color: rgba(26, 26, 22, 0.08); font-size: 12px; font-weight: 600">第二批</span>
+</div>
+<span style="font-size: 13px; color: #5E5A50; font-variant-numeric: tabular-nums">/how-it-works/ · /zh/how-it-works/</span>
+<p style="margin: 0; font-size: 14px; line-height: 1.6">写给想弄清楚证据的人。</p>
+<ul style="display: flex; flex-direction: column; gap: 3px; margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; color: #3F3C35">
+<li>五站路径：源文件、解码器、应用处理、AudioTrack、路由</li>
+<li>证据等级：从 SYSTEM MIXED 到 VERIFIED</li>
+<li>Android 能证明到哪一步</li>
+<li>严格 USB 的条件，以及什么时候会停止播放</li>
+<li>外部验证记录怎么用</li>
+</ul>
+</article>
+<article style="display: flex; flex-direction: column; gap: 8px; padding: 18px 20px; border-radius: 14px; background-color: #FBF9F4; box-shadow: 0 1px 0 rgba(48, 38, 22, 0.06)">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<h2 style="margin: 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 22px; font-weight: 400">下载</h2>
+<span style="display: flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px; background-color: rgba(26, 26, 22, 0.08); font-size: 12px; font-weight: 600">第二批</span>
+</div>
+<span style="font-size: 13px; color: #5E5A50; font-variant-numeric: tabular-nums">/download/ · /zh/download/</span>
+<p style="margin: 0; font-size: 14px; line-height: 1.6">选渠道，确认手机能不能用。</p>
+<ul style="display: flex; flex-direction: column; gap: 3px; margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; color: #3F3C35">
+<li>Google Play：现在是封闭测试，需要邀请</li>
+<li>GitHub Releases：APK、签名证书指纹、校验值</li>
+<li>系统要求：Android 8.0 以上；严格 USB 需要 Android 14 以上和兼容的 DAC</li>
+<li>价格：收费版上线后再写</li>
+</ul>
+</article>
+<article style="display: flex; flex-direction: column; gap: 8px; padding: 18px 20px; border-radius: 14px; background-color: #FBF9F4; box-shadow: 0 1px 0 rgba(48, 38, 22, 0.06)">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<h2 style="margin: 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 22px; font-weight: 400">支持</h2>
+<span style="display: flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px; background-color: #1A1A16; color: #F3EFE6; font-size: 12px; font-weight: 600">第一批</span>
+</div>
+<span style="font-size: 13px; color: #5E5A50; font-variant-numeric: tabular-nums">/support/ · /zh/support/</span>
+<p style="margin: 0; font-size: 14px; line-height: 1.6">出问题时来这里。</p>
+<ul style="display: flex; flex-direction: column; gap: 3px; margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; color: #3F3C35">
+<li>联系邮箱</li>
+<li>反馈时请附上：版本、手机、系统、DAC、文件格式、链路页截图</li>
+<li>常见问题：为什么显示 SYSTEM MIXED、严格 USB 为什么用不了、换手机后怎么恢复购买</li>
+<li>已知限制：链到 GitHub issues</li>
+</ul>
+</article>
+<article style="display: flex; flex-direction: column; gap: 8px; padding: 18px 20px; border-radius: 14px; background-color: #FBF9F4; box-shadow: 0 1px 0 rgba(48, 38, 22, 0.06)">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<h2 style="margin: 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 22px; font-weight: 400">隐私政策</h2>
+<span style="display: flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px; background-color: #1A1A16; color: #F3EFE6; font-size: 12px; font-weight: 600">第一批</span>
+</div>
+<span style="font-size: 13px; color: #5E5A50; font-variant-numeric: tabular-nums">/privacy/ · /zh/privacy/</span>
+<p style="margin: 0; font-size: 14px; line-height: 1.6">Play Console 必填。地址写在 App 里，上线后不再改。</p>
+<ul style="display: flex; flex-direction: column; gap: 3px; margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; color: #3F3C35">
+<li>内容和 App 用同一份文档生成</li>
+<li>文档里还有草稿标记时，构建直接失败</li>
+<li>中英两版互相链接</li>
+<li>#38 定稿后发布</li>
+</ul>
+</article>
+</div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px">
+<article style="display: flex; flex-direction: column; gap: 8px; padding: 16px 20px; border-radius: 14px; border: 1.5px dashed rgba(26, 26, 22, 0.3)">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<h2 style="margin: 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 20px; font-weight: 400">更新日志</h2>
+<span style="display: flex; align-items: center; height: 24px; box-sizing: border-box; padding: 0 10px; border-radius: 12px; border: 1px dashed rgba(26, 26, 22, 0.45); color: #5E5A50; font-size: 12px; font-weight: 600">以后</span>
+</div>
+<span style="font-size: 13px; color: #5E5A50">/changelog/ · /zh/changelog/</span>
+<p style="margin: 0; font-size: 13px; line-height: 1.6; color: #3F3C35">每个版本改了什么。在这之前先链到 GitHub Releases。</p>
+</article>
+<article style="display: flex; flex-direction: column; gap: 8px; padding: 16px 20px; border-radius: 14px; border: 1.5px dashed rgba(26, 26, 22, 0.3)">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<h2 style="margin: 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 20px; font-weight: 400">设备记录</h2>
+<span style="display: flex; align-items: center; height: 24px; box-sizing: border-box; padding: 0 10px; border-radius: 12px; border: 1px dashed rgba(26, 26, 22, 0.45); color: #5E5A50; font-size: 12px; font-weight: 600">以后</span>
+</div>
+<span style="font-size: 13px; color: #5E5A50">/devices/ · /zh/devices/</span>
+<p style="margin: 0; font-size: 13px; line-height: 1.6; color: #3F3C35">列出有签名验证记录的手机、DAC 和格式组合。有第一条记录后才上线（#49）。</p>
+</article>
+<article style="display: flex; flex-direction: column; gap: 8px; padding: 16px 20px; border-radius: 14px; border: 1.5px dashed rgba(26, 26, 22, 0.3)">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<h2 style="margin: 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 20px; font-weight: 400">使用条款</h2>
+<span style="display: flex; align-items: center; height: 24px; box-sizing: border-box; padding: 0 10px; border-radius: 12px; border: 1px dashed rgba(26, 26, 22, 0.45); color: #5E5A50; font-size: 12px; font-weight: 600">以后</span>
+</div>
+<span style="font-size: 13px; color: #5E5A50">/terms/ · /zh/terms/</span>
+<p style="margin: 0; font-size: 13px; line-height: 1.6; color: #3F3C35">收费版上线前再评估要不要单独写。</p>
+</article>
+<article style="display: flex; flex-direction: column; gap: 8px; padding: 16px 20px; border-radius: 14px; border: 1px solid rgba(26, 26, 22, 0.14)">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<h2 style="margin: 0; font-family: 'Noto Serif SC', 'Instrument Serif', serif; font-size: 20px; font-weight: 400">其他</h2>
+<span style="display: flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px; background-color: #1A1A16; color: #F3EFE6; font-size: 12px; font-weight: 600">第一批</span>
+</div>
+<ul style="display: flex; flex-direction: column; gap: 3px; margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; color: #3F3C35">
+<li>404 页：中英各一份，按目录返回</li>
+<li>/en/… 永久跳转到根路径的同名页面</li>
+<li>自动生成 sitemap.xml、robots.txt 和中英互链</li>
+</ul>
+</article>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":1060}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

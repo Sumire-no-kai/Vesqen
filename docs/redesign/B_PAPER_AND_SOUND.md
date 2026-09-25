@@ -9,7 +9,7 @@
 - 唱片内页记录录音、母带和制作信息。Vesqen 把"文件 → 解码器 → AudioTrack → 路由"这条证据链当作同一类信息，安静地附在歌曲旁边，需要时再展开。
 - 暖纸色底、衬线标题、细线分隔，像印刷品而不是仪表盘。
 - 封面决定环境色：正在播放页随当前专辑轻微染色，除背景外一切保持不变。
-- 官网主标题：*Every track comes with liner notes.* 中文版：每一首歌，都附有链路注记。
+- 官网主标题：*Every track comes with liner notes.* 中文版：每首歌，都有一份链路注记。
 
 适用范围：官网全部页面（中英文）；App 的正在播放、曲库、专辑详情、链路和设置页。
 
@@ -165,7 +165,7 @@ App 只打包 Instrument Serif（Regular、Italic）和 Instrument Sans，都使
 中文版官网（`B-Web-ZH.dc.html`）与英文版版式相同，只调整排版参数：
 
 - 中文不用斜体。英文主标题里斜体加专辑墨色的强调词，中文只保留专辑墨色（"链路注记"四个字）。
-- 主标题：思源宋体 400，92 px，行高 1.16，字距 +0.02em，分三行："每一首歌，" / "都附有" / "链路注记。"。中文比拉丁字母更需要行距，负字距会挤。
+- 主标题：思源宋体 400，92 px，行高 1.16，字距 +0.02em，分三行："每首歌，" / "都有一份" / "链路注记。"。中文比拉丁字母更需要行距，负字距会挤。
 - 正文：18 px，行高 1.9；卡片说明 13 px，行高 1.7；原则说明 15 px，行高 1.8。
 - 小标签（眉题、"正在播放""来自曲库"）不做大写变换，改用 0.2em 字距。
 - 原则编号用宋体的"一、二、三"，替代英文版的斜体罗马数字。
@@ -260,20 +260,20 @@ App 只打包 Instrument Serif（Regular、Italic）和 Instrument Sans，都使
 
 ## 8. 文案
 
-语气：短句、陈述事实，不夸张。证据类措辞沿用现有字符串，例如"实测 · 未验证"。
+语气：短句、陈述事实，不夸张。证据类措辞沿用现有字符串，例如"实测 · 未验证"。官网文案另按官网仓库 `docs/SITE_PLAN.md` §5 的规则写：对举句（如"不是……而是……"）一页最多一次，少用排比、连串否定和破折号，中文不逐句对着英文翻。
 
 官网英文（画板，草稿）：
 
 - 眉题：An offline music player for Android
 - 主标题：Every track comes with *liner notes.*
-- 段落：Vesqen plays the music you keep on your phone — no account, no streaming, nothing to sign in to. Beside every song it keeps a quiet record of the path to your ears: the file, the decoder, the route, and how each fact is known.
+- 段落：Vesqen plays the music stored on your phone. It works offline and needs no account. For each song, it records the path to your headphones step by step: the file, the decoder, the output route, and how each value was measured.
 - 按钮：Join the closed beta（占位）；链接：Read the privacy policy
 - 脚注：Android 8.0 or later · Version 1.0 beta
 - 链路注记卡的说明：
   - ACTIVE：Android-side evidence: AudioTrack, mixer and route agree. External verification is a separate, signed record.
-  - 有线：Android may mix, resample or apply system processing on this path — and Vesqen says so.
-  - 蓝牙：Bluetooth re-encodes audio before it reaches your headphones, so Vesqen reports this path as system mixed.
-- 三条原则：Offline, always / Evidence on request / Fails closed
+  - 有线：On this path Android may mix, resample or add system effects, so Vesqen marks it as system mixed.
+  - 蓝牙：Bluetooth re-encodes audio before it reaches your headphones, so Vesqen marks this path as system mixed too.
+- 三条原则：Offline, always（Playback never uses the network, and there is no account to create.）/ Evidence on request（Each value on the Chain page shows where it came from and how it was measured.）/ Fails closed（If strict USB output can’t be kept, Vesqen stops playback and tells you why.）
 
 App 中文：
 
@@ -293,15 +293,15 @@ App 中文：
 官网中文（画板，草稿）：
 
 - 导航：链路注记、隐私政策、支持、English；按钮：加入封闭测试（占位）；链接：阅读隐私政策
-- 眉题：离线本地音乐播放器 · Android
-- 主标题：每一首歌，都附有链路注记。
-- 段落：Vesqen 播放你存在手机里的音乐——不用账号，不做流媒体，也不需要登录。每一首歌旁边，它都安静地记下声音到你耳边的路径：文件、解码器、路由，以及每一项是怎么知道的。
+- 眉题：Android 离线音乐播放器
+- 主标题：每首歌，都有一份链路注记。
+- 段落：Vesqen 播放你手机里的音乐，离线就能用，也不用注册账号。播放时，它会记下声音从文件到耳机经过的每一步：文件、解码器、输出路由，以及每个数值是怎么测到的。
 - 脚注：Android 8.0 及以上 · 1.0 测试版
 - 链路注记卡的说明：
-  - ACTIVE：这是 Android 一侧的证据：AudioTrack、mixer 与路由一致。外部验证是另一份签名记录。
-  - 有线：这条路径上，Android 可能混音、重采样或应用系统处理，Vesqen 会如实标出来。
-  - 蓝牙：蓝牙会在手机上重新编码后再传给耳机，所以 Vesqen 把这条路径标为系统混音。
-- 三条原则：始终离线（不用账号，不做流媒体。播放从不需要联网。）/ 证据随时可查（每一项都写明是怎么知道的，不夸大，也不粉饰。）/ 做不到就停下（保证不了严格输出时，宁可停止播放，也不假装一切正常。）
+  - ACTIVE：Android 端的证据显示，AudioTrack、mixer 和路由一致。外部验证另有一份签名记录。
+  - 有线：在这条路径上，Android 可能混音、重采样或加系统音效，所以 Vesqen 标为系统混音。
+  - 蓝牙：蓝牙会在手机上重新编码后再发给耳机，所以这条路径也标为系统混音。
+- 三条原则：离线使用（播放从不联网，也不用注册账号。）/ 证据可查（链路页上的每个数值，都写明了来源和测量方式。）/ 做不到就停下（严格 USB 输出保持不了时，Vesqen 会停止播放，并告诉你原因。）
 
 ## 9. 无障碍
 
@@ -346,6 +346,7 @@ App 中文：
 [mockups/](mockups/) 里的 B 相关文件：
 
 - `B-Web.dc.html`、`B-Web-ZH.dc.html`：官网首屏，英文和中文。可以移动指针看视差，点专辑切换；导航里的语言入口互相跳转。
+- `B-Sitemap.dc.html`：官网页面结构，详细规划在官网仓库的 `docs/SITE_PLAN.md`。
 - `B-Settings.dc.html`、`B-Settings-Dark.dc.html`：设置。切换播放输出；在 Tweaks 里用 `license` 切换完整版卡片的三种状态。
 - `B-Now.dc.html`、`B-Now-Dark.dc.html`：正在播放。点上一首或下一首看背景染色过渡，点"链路注记"展开。深色版演示严格 USB 的 REQUESTED → ACTIVE。
 - `B-Library.dc.html`、`B-Library-Dark.dc.html`：曲库。点书架封面换专辑并染色，页签可切换。
