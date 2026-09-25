@@ -175,7 +175,7 @@ App 只打包 Instrument Serif（Regular、Italic）和 Instrument Sans，都使
 
 ### 4.1 官网（画板宽 1440）
 
-- 左右边距 80 px。页眉内边距 26 px 80 px：左侧标识和字标，中间导航（Liner notes、Privacy、Support、中文，间距 36 px），右侧主按钮。
+- 左右边距 80 px。页眉内边距 26 px 80 px：左侧标识和字标，中间导航（Liner notes、Privacy、Support、中文，间距 36 px），最右边是状态标签或主按钮：封闭测试期间显示不可点的"In closed testing / 封闭测试中"，正式上架后换成"Get it on Google Play / 在 Google Play 获取"。
 - 首屏两栏：`minmax(0, 1fr)` 加 640 px，栏间距 56 px。左栏上边距 40 px，元素间距 26 px，依次是眉题、主标题、段落（最宽 520 px）、按钮行、脚注。
 - 右栏是"唱片套"：640 × 700，圆角 28 px，底色是当前专辑的染色。
   - 封面叠层 340 × 340，位于 (64, 64)，圆角 4 px。
@@ -267,7 +267,7 @@ App 只打包 Instrument Serif（Regular、Italic）和 Instrument Sans，都使
 - 眉题：An offline music player for Android
 - 主标题：Every track comes with *liner notes.*
 - 段落：Vesqen plays the music stored on your phone. It works offline and needs no account. For each song, it records the path to your headphones step by step: the file, the decoder, the output route, and how each value was measured.
-- 按钮：Join the closed beta（占位）；链接：Read the privacy policy
+- 封闭测试期间不放按钮。首屏说明下面是一行状态："Vesqen is in closed testing. Downloads open here when it launches on Google Play."，旁边是 Read the privacy policy 链接；页眉右侧是"In closed testing"标签
 - 脚注：Android 8.0 or later · Version 1.0 beta
 - 链路注记卡的说明：
   - ACTIVE：Android-side evidence: AudioTrack, mixer and route agree. External verification is a separate, signed record.
@@ -292,7 +292,7 @@ App 中文：
 
 官网中文（画板，草稿）：
 
-- 导航：链路注记、隐私政策、支持、English；按钮：加入封闭测试（占位）；链接：阅读隐私政策
+- 导航：链路注记、隐私政策、支持、English；页眉右侧是"封闭测试中"标签；首屏状态："Vesqen 目前在封闭测试中，正式版上架后会在这里提供下载。"；链接：阅读隐私政策
 - 眉题：Android 离线音乐播放器
 - 主标题：每首歌，都有一份链路注记。
 - 段落：Vesqen 播放你手机里的音乐，离线就能用，也不用注册账号。播放时，它会记下声音从文件到耳机经过的每一步：文件、解码器、输出路由，以及每个数值是怎么测到的。
@@ -337,7 +337,6 @@ App 中文：
 - 现行规范里"正在播放页固定深色"、约 3.96% 的封面反光上限、Roboto 字体和"不用全大写"都要改（见 [README](README.md)）。
 - 链路注记里 AudioTrack、mixer 这类术语的去留，随 #35 的文案审核决定。
 - 官网的隐私政策页还没画。
-- 官网主按钮的去向待定。
 - 完整版卡片的文案、价格和锁定清单都跟随 #46 和 MONETIZATION 里的暂定方案，价格在画板里是"[价格]"占位。
 - 设置页的白话选项说明是提案，要和 #35 的文案审核一起定。
 

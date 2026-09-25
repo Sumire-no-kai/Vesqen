@@ -18,7 +18,7 @@ This policy explains what information the Vesqen Android app handles, where that
 
 ## Who we are
 
-Vesqen is developed and published by [TBD: developer name], an independent developer. You can contact us about privacy at [TBD: contact email].
+Vesqen is developed and published by [TBD: developer name], an independent developer. You can contact us about privacy at vesqen@sumirenokai.com.
 
 ## Information the app handles on your device
 
@@ -61,7 +61,7 @@ Vesqen does not request the Internet, location, contacts, phone, camera, microph
 ## Retention and deletion
 
 - **On your device.** Data stays until you remove it. Removing a music folder deletes its library records. You can also delete playlists and remove favorites in the app. To delete all app data, open Android Settings → Apps → Vesqen → Storage and clear storage, or uninstall Vesqen.
-- **Emails.** We delete support conversations within [TBD: 12 months] after they end, or sooner if you ask.
+- **Emails.** We delete support conversations within 12 months after they end, or sooner if you ask.
 - **Order records.** Google keeps order records. We do not copy them elsewhere except when handling a specific order question or refund.
 
 ## Security
@@ -76,7 +76,7 @@ Vesqen is not directed at children, and we do not knowingly collect personal inf
 
 ## Your choices and rights
 
-You control everything Vesqen stores on your device, as described above. To ask what information we hold about you, or to correct or delete it, contact us at [TBD: contact email]. Depending on where you live, you may have additional rights under local law.
+You control everything Vesqen stores on your device, as described above. To ask what information we hold about you, or to correct or delete it, contact us at vesqen@sumirenokai.com. Depending on where you live, you may have additional rights under local law.
 
 ## Changes to this policy
 
@@ -84,4 +84,4 @@ When this policy changes, we will update this page and its "Last updated" date. 
 
 ## Contact
 
-[TBD: developer name] — [TBD: contact email]
+[TBD: developer name] — vesqen@sumirenokai.com
