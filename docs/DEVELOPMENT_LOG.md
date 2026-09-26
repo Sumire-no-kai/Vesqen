@@ -1083,3 +1083,13 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 ## 2026-09-26 · 测试者名单与 cookie 期限
 
 - 所有者决定：封闭测试的测试者名单改为测试结束后 2 个月内删除；官网两个 cookie 的保存期限从 12 个月缩短到 6 个月（与 CNIL 对保存同意选择的建议一致），官网代码同步修改。所有者同意先上线官网。强制重跑的 `PrivacyPolicyDocumentTest` 4 项通过（JDK 25）。
+
+## 2026-09-26 · 官网上线，隐私政策网址可用（#43）
+
+- 官网 <https://vesqen.sumirenokai.com> 由 Cloudflare Workers Builds 从官网仓库 `master`（`45b48ac`）部署，隐私政策为本仓库 `1082fdc` 的定稿。英文 <https://vesqen.sumirenokai.com/privacy/>，中文 <https://vesqen.sumirenokai.com/zh/privacy/>。
+- 线上验证：
+  - 首页按浏览器语言跳转，`zh-CN` 和 `zh-TW` 都进 `/zh/`，只有接受 cookie 后才按保存的语言跳转；其他页面不跳转。
+  - `/en/…` 返回 301，中英文 404 返回 404 状态。
+  - 隐私页没有 noindex，站点地图列出了中英文隐私页，安全响应头齐全。
+- 发现 Cloudflare 自动往页面里注入 Web Analytics 的统计脚本。官网的内容安全策略把它拦下了，不会采集数据，与隐私政策一致；仍需在 Cloudflare 控制台关掉自动注入。`http://` 访问还没有自动跳转到 HTTPS，需要打开 Always Use HTTPS。
+- 剩余：App 两份 `strings.xml` 的 `privacy_policy_url` 仍为空（发布守卫要求填写），Play Console 的隐私政策网址和数据安全表单（beta.1：不收集、不分享）待填。
