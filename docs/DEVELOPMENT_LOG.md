@@ -1093,3 +1093,17 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
   - 隐私页没有 noindex，站点地图列出了中英文隐私页，安全响应头齐全。
 - 发现 Cloudflare 自动往页面里注入 Web Analytics 的统计脚本。官网的内容安全策略把它拦下了，不会采集数据，与隐私政策一致；仍需在 Cloudflare 控制台关掉自动注入。`http://` 访问还没有自动跳转到 HTTPS，需要打开 Always Use HTTPS。
 - 剩余：App 两份 `strings.xml` 的 `privacy_policy_url` 仍为空（发布守卫要求填写），Play Console 的隐私政策网址和数据安全表单（beta.1：不收集、不分享）待填。
+
+## 2026-09-26 · 官网启用 Cloudflare Web Analytics
+
+- Cloudflare 对经过它代理的网站默认开启 Web Analytics，会自动往页面里注入统计脚本。上线后，这个脚本被官网的内容安全策略拦下了。所有者决定按正式网站的做法启用它，免得上架时再改一次。
+- 按 Cloudflare 文档核对：
+  - 脚本不使用 cookie、localStorage、sessionStorage 或 IndexedDB，也不读取 IP 地址。
+  - 上报的是页面地址、来源页面和加载性能；国家或地区、浏览器和设备类型由 Cloudflare 根据请求补上。
+  - 控制台最多可查看六个月的数据。
+  - 选择 “Enable, excluding visitor data in the EU” 后，经欧盟、欧洲经济区和英国数据中心的访问不计入统计。
+- 隐私政策中英文同步修改：
+  - 摘要和官网一节改为“没有广告和追踪 cookie，用 Cloudflare Web Analytics 统计访问量”。
+  - 新增“访问统计”一条，说明收集什么、不用 cookie、保留期限，以及不统计欧盟、欧洲经济区和英国。
+  - 处理依据加上“了解官网的使用情况”。
+- 官网的内容安全策略放行 `https://static.cloudflareinsights.com`。数据发回本站的 `/cdn-cgi/rum`，现有的 `'self'` 已允许。所有者需要在 Cloudflare 把 Web Analytics 设为排除欧盟访客的选项。强制重跑的 `PrivacyPolicyDocumentTest` 4 项通过（JDK 25）。

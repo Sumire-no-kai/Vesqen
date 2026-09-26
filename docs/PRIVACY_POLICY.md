@@ -11,7 +11,7 @@ This policy explains what information the Vesqen Android app handles, where that
 - Vesqen does not request Android's Internet permission, so the app itself cannot send or receive data over the network.
 - Your library, favorites, playlists and listening statistics stay in the app's private storage on your device. We never receive them.
 - We only receive what you choose to send us, such as a support email, or your email address if you join a test.
-- The Vesqen website has no advertising, analytics scripts or tracking cookies. It uses a cookie to remember your language only if you allow it.
+- The Vesqen website has no advertising or tracking cookies. It counts visits with Cloudflare Web Analytics, which uses no cookies, and uses a cookie to remember your language only if you allow it.
 
 ## Who we are
 
@@ -60,10 +60,11 @@ Google, Microsoft, Cloudflare and GitHub, the services named in this policy, may
 
 ## The Vesqen website
 
-The Vesqen website (vesqen.sumirenokai.com) is hosted by Cloudflare. It has no accounts, forms, advertising or analytics scripts.
+The Vesqen website (vesqen.sumirenokai.com) is hosted by Cloudflare. It has no accounts, forms or advertising.
 
 - **Serving the site.** To deliver pages and protect the site from abuse, Cloudflare processes each request, including your IP address, browser information and the address of the page. Cloudflare does this on our behalf, and it may also use this network data to protect its own services, as its privacy policy describes. Cloudflare shows us aggregated statistics, such as the number of requests by country or region. We don't use this information to identify visitors.
 - **Choosing a language.** When you open the home page, the site shows English or Chinese based on your browser's language setting. If that doesn't decide it, the site uses the country or region Cloudflare estimates from your IP address. This check runs on each visit and stores nothing.
+- **Visit statistics.** The site counts visits with Cloudflare Web Analytics. A small Cloudflare script on each page reports the address of the page, the page you came from and how quickly the page loaded, and Cloudflare adds the country or region and the type of browser and device. The script uses no cookies and stores nothing in your browser. We only see aggregated statistics, which Cloudflare shows us for up to six months. Visits through Cloudflare's data centers in the EU, the European Economic Area and the UK are not counted.
 - **Cookies.** On your first visit, the site asks whether it may remember your language. It sets at most two cookies, and neither is used for tracking:
 
 | Cookie | Purpose | Kept for |
@@ -95,7 +96,7 @@ You control everything Vesqen stores on your device, as described above.
 
 You can ask us to access, copy, correct or delete the information we hold about you, to explain how we use it, to restrict or object to that use, or to withdraw consent. Email vesqen@sumirenokai.com and we will reply within one month. You can also complain to us at the same address, or to the data protection authority where you live (in the UK, the Information Commissioner's Office).
 
-Where EU or UK data protection law applies, we rely on your consent for the language cookie, and on our legitimate interests in answering you, running tests, and keeping the website available and secure for everything else in this policy.
+Where EU or UK data protection law applies, we rely on your consent for the language cookie, and on our legitimate interests in answering you, running tests, understanding how the website is used, and keeping it available and secure for everything else in this policy.
 
 ## Changes to this policy
 
