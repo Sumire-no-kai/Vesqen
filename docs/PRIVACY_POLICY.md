@@ -68,8 +68,8 @@ The Vesqen website (vesqen.sumirenokai.com) is hosted by Cloudflare. It has no a
 
 | Cookie | Purpose | Kept for |
 | --- | --- | --- |
-| `vesqen-consent` | Remembers whether you accepted or rejected cookies, so the site doesn't ask again. | 12 months |
-| `vesqen-lang` | Remembers your language. Set only after you accept. | 12 months |
+| `vesqen-consent` | Remembers whether you accepted or rejected cookies, so the site doesn't ask again. | 6 months |
+| `vesqen-lang` | Remembers your language. Set only after you accept. | 6 months |
 
 You can change your answer at any time with "Cookie settings" at the bottom of each page. If you reject, the site deletes `vesqen-lang`. If Cloudflare needs to check that a visit isn't automated, it may set its own security cookies, such as `__cf_bm` or `cf_clearance`. Cloudflare needs these cookies to run the service, and they aren't used to track you.
 
@@ -77,7 +77,7 @@ You can change your answer at any time with "Cookie settings" at the bottom of e
 
 - **On your device.** Data stays until you remove it. Removing a music folder deletes its library records. You can also delete playlists and remove favorites in the app. To delete all app data, open Android Settings → Apps → Vesqen → Storage and clear storage, or uninstall Vesqen.
 - **Emails.** We delete support conversations within 12 months after they end, or sooner if you ask.
-- **Tester list.** We remove your address from a test's tester list within 3 months after the test ends, or sooner if you ask.
+- **Tester list.** We remove your address from a test's tester list within 2 months after the test ends, or sooner if you ask.
 
 ## Security
 

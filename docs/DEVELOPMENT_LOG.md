@@ -1079,3 +1079,7 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
   - cookie 保存 12 个月，CNIL 建议 6 个月。
   - 重大变更（#48 的联网）要在 App 内提示，而不只写在发布说明里。
 - 验证：强制重跑的 `PrivacyPolicyDocumentTest` 4 项通过。`checkPrivacyPolicyFinal` 不再报草稿标记，只剩中英文 `privacy_policy_url` 未填，要等官网上线后再填。
+
+## 2026-09-26 · 测试者名单与 cookie 期限
+
+- 所有者决定：封闭测试的测试者名单改为测试结束后 2 个月内删除；官网两个 cookie 的保存期限从 12 个月缩短到 6 个月（与 CNIL 对保存同意选择的建议一致），官网代码同步修改。所有者同意先上线官网。强制重跑的 `PrivacyPolicyDocumentTest` 4 项通过（JDK 25）。
