@@ -19,7 +19,7 @@ This policy explains what information the Vesqen Android app handles, where that
 
 ## Who we are
 
-Vesqen is developed and published by [TBD: developer name], an independent developer. You can contact us about privacy at vesqen@sumirenokai.com.
+Vesqen is developed and published by Sumire Studio. Sumire Studio is the publishing name of an independent developer. You can contact us about privacy at vesqen@sumirenokai.com.
 
 ## Information the app handles on your device
 
@@ -100,4 +100,4 @@ When this policy changes, we will update this page and its "Last updated" date. 
 
 ## Contact
 
-[TBD: developer name] — vesqen@sumirenokai.com
+Sumire Studio — vesqen@sumirenokai.com

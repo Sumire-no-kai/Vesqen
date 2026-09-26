@@ -19,7 +19,7 @@
 
 ## 我们是谁
 
-Vesqen 由独立开发者【待定：开发者名称】开发和发布。有关隐私的问题，请联系 vesqen@sumirenokai.com。
+Vesqen 由 Sumire Studio 开发和发布。Sumire Studio 是一位独立开发者对外使用的名称。有关隐私的问题，请联系 vesqen@sumirenokai.com。
 
 ## 应用在你设备上处理的信息
 
@@ -100,4 +100,4 @@ Vesqen 并非面向儿童设计，我们不会有意收集儿童的个人信息�
 
 ## 联系我们
 
-【待定：开发者名称】——vesqen@sumirenokai.com
+Sumire Studio：vesqen@sumirenokai.com
