@@ -1050,3 +1050,32 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - Play Console 的开发者账号是个人账号，商店页显示的开发者名称是 Sumire Studio。所有者决定隐私政策里不写本人姓名，用两句话说明：Vesqen 由 Sumire Studio 开发和发布；Sumire Studio 是一位独立开发者对外使用的名称。“联系我们”一节也改成 Sumire Studio。
 - 已核对 Google Play 用户数据政策：隐私政策里必须出现商店页上署名的主体（开发者或公司），或者写出 App 名称，并提供隐私联系方式或提问渠道。不要求写开发者本人的法定姓名。欧盟和中国的法律原文要求写明处理者的身份或姓名，个人开发者从严理解应写本人姓名；本 App 几乎不收集个人数据，暂按所有者的决定处理，以后注册公司或有人要求时再补。
 - 剩余待定项：生效日期和最后更新日期、支持邮箱两步验证的确认、顶部的草案提示和 Billing 待办说明。强制重跑的 `PrivacyPolicyDocumentTest` 4 项通过（JDK 25）。
+
+## 2026-09-26 · 隐私政策定稿候选与多方核查（#38）
+
+- 所有者确认支持邮箱（sumirenokai@outlook.com）已开启双重验证，政策里的两步验证承诺去掉了待定标记。顶部的草案说明和 Billing 待办说明已删除，Billing 带来的联网问题由 #48 跟踪，结论出来后按 #48 更新政策。生效日期和最后更新定为 2026-09-26。
+- 按版本对齐：beta.1 没有应用内购买和试用，所以引言、摘要、订单信息和订单记录保留期限里关于购买的内容都删掉了，改为一句“目前没有应用内购买，以后的版本加入前会先更新本政策”。原购买段落见提交 `08464d0`，#48 实施时可以直接取用。
+- 对照代码逐条核对：
+  - Release 合并 Manifest（2026-09-19 生成，依赖未变，Gradle 判定为最新）的权限，和政策的权限表一致：没有 INTERNET；ACCESS_NETWORK_STATE 来自 Media3；另有 AndroidX 自动添加的应用内部权限 `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`，不面向用户；USB 主机为可选。
+  - `allowBackup=false`，设备间迁移仍可能复制数据，和政策说法一致。
+  - Release 与 profile 构建的 `DEVELOPER_DIAGNOSTICS_ENABLED` 为 false。
+  - 代码里没有任何联网、统计或崩溃上报；grep 命中的只是 Media3 的 `AnalyticsListener`。
+  - 没有申请 USB 设备权限；构建指纹在本机做 SHA-256。
+  - `onGetSession` 只接受 `isTrusted` 的控制端。在 Media3 1.11 里，这也包括用户授权过读取通知的应用，所以原句“普通应用无法读取”说得过满，已改为具体说明哪些应用可以连接。
+- 对照官方要求：
+  - **Google Play 用户数据政策：** 隐私政策一节要求的项目都已覆盖。
+  - **数据安全表单：** 按定义，beta.1 应填“不收集任何数据、不与第三方分享数据”。媒体会话属于用户发起、可预期的传递；支持邮件是在应用之外由用户自己发出的。
+  - **GDPR 第 13 条：** 补了处理依据（语言 cookie 基于同意，其余基于正当利益）、完整的权利清单、向我们和向监管机构投诉的途径、邮件经 Cloudflare 转发并存于 Microsoft Outlook，以及境外处理的说明。
+  - **英国：** 2026-06-19 起须提供直接向控制者投诉的渠道，已写明，并点名 ICO。
+  - **《个人信息保护法》第 17 条：** 权利里补了“补充”和“要求解释说明”。
+  - **Cookie 规则：** 用 cookie 记录拒绝的选择是可以的（CNIL、ICO），语言 cookie 只在同意后写入，满足要求。
+- 按实际情况补充了官网部分：
+  - 封闭测试的测试者邮箱和测试反馈，保留期限暂定测试结束后 3 个月内删除，需要所有者确认。
+  - 官网说法改为“没有统计脚本或追踪 cookie”，免得和 Cloudflare 的汇总统计看起来矛盾。
+  - Cloudflare 的安全 cookie 补上 `__cf_bm`。
+- 对照了六款同类播放器公开的隐私政策：Poweramp、Musicolet、USB Audio Player PRO、Symfonium、VLC、foobar2000 mobile。我们的写法比它们都具体。只有 Poweramp（iubenda 模板）写了处理依据、权利和投诉；两家写出了法律主体；没有一家有儿童一节。
+- 暂不处理、以后再定：
+  - 政策只写 Sumire Studio。《个人信息保护法》和 GDPR 从严理解，要求写本人姓名或至少写所在国家；所有者已决定暂不写。
+  - cookie 保存 12 个月，CNIL 建议 6 个月。
+  - 重大变更（#48 的联网）要在 App 内提示，而不只写在发布说明里。
+- 验证：强制重跑的 `PrivacyPolicyDocumentTest` 4 项通过。`checkPrivacyPolicyFinal` 不再报草稿标记，只剩中英文 `privacy_policy_url` 未填，要等官网上线后再填。

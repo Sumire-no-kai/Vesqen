@@ -1,21 +1,17 @@
 # Vesqen Privacy Policy
 
-> **Draft — not in effect.** Items marked `[TBD: …]` need a decision before publication.
->
-> [TBD: Builds that include the Google Play Billing Library add the Internet permission and a Google data-transport component (see [MONETIZATION.md](MONETIZATION.md)). Before the paid version ships, rewrite every statement about Internet access, add the trial start time and cached unlock status to the on-device data, and describe how the purchase is checked, all based on verified device behavior.]
+- Effective date: September 26, 2026
+- Last updated: September 26, 2026
 
-- Effective date: [TBD: effective date]
-- Last updated: [TBD: date]
-
-This policy explains what information the Vesqen Android app handles, where that information stays, and what we receive when you contact us or unlock Vesqen with an in-app purchase. It applies to every build of Vesqen we distribute, including Google Play and GitHub Releases, and to the Vesqen website.
+This policy explains what information the Vesqen Android app handles, where that information stays, and what we receive when you contact us or join a test. It applies to every build of Vesqen we distribute, including Google Play and GitHub Releases, and to the Vesqen website.
 
 ## Summary
 
 - Vesqen plays music stored on your device. It has no account, advertising, analytics or tracking.
 - Vesqen does not request Android's Internet permission, so the app itself cannot send or receive data over the network.
 - Your library, favorites, playlists and listening statistics stay in the app's private storage on your device. We never receive them.
-- We only receive what you choose to send us (for example, a support email) and the limited order information Google Play provides when you buy the in-app unlock.
-- The Vesqen website has no analytics or advertising. It uses a cookie to remember your language only if you allow it.
+- We only receive what you choose to send us, such as a support email, or your email address if you join a test.
+- The Vesqen website has no advertising, analytics scripts or tracking cookies. It uses a cookie to remember your language only if you allow it.
 
 ## Who we are
 
@@ -48,22 +44,25 @@ Vesqen does not request the Internet, location, contacts, phone, camera, microph
 
 ## When information leaves the app
 
-- **Android media controls.** While music plays, Vesqen gives Android the current track's title, artist, album, artwork and playback position for the notification and lock-screen controls. Android may pass this to devices and services you connect or authorize, such as Bluetooth car audio, watches or voice assistants. Vesqen only lets Android's system components and trusted controllers connect to its playback session; ordinary apps on your phone cannot read it.
+- **Android media controls.** While music plays, Vesqen gives Android the current track's title, artist, album, artwork and playback position for the notification and lock-screen controls. Android may pass this to devices and services you connect or authorize, such as Bluetooth car audio, watches or voice assistants. Only Android's system components, and apps you have allowed to read notifications or control media (such as a smartwatch app), can connect to Vesqen's playback session. Other apps on your phone cannot.
 - **Moving to a new phone.** Vesqen turns off Android cloud backup, so its data is not backed up to Google Drive. On some phones, Android's device-to-device transfer can still copy app data directly to a new phone when you choose to transfer your data.
 - **Nothing else.** Vesqen contains no advertising, analytics, crash-reporting or tracking software. Public builds include no diagnostic recording or export.
 
 ## Information we receive
 
-- **Emails you send us.** If you contact us, we receive your email address and whatever you include in your message. We use it only to reply to you.
-- **In-app purchase through Google Play.** Vesqen is free to download. After the trial, you can unlock it with a one-time in-app purchase. Google handles payment. We never receive your card or other payment details, and Google's privacy policy applies to your purchase. Google Play Console lets us see order records for the in-app purchase, such as the order number, date, price and country or region, and lets us look up an order by the buyer's email address. We use this only to handle order questions and refunds.
+- **Emails you send us.** If you contact us, we receive your email address and whatever you include in your message. We use it only to reply to you. Mail to our sumirenokai.com addresses is forwarded by Cloudflare's email routing and stored in our Microsoft Outlook mailbox.
+- **Closed testing.** If you join a test of Vesqen on Google Play, the email address of your Google account is added to the test's tester list in Google Play Console, so Google can give you access. We also see any feedback you send through Google Play. We use this only to run the test.
+- **Purchases.** Vesqen has no in-app purchases yet. If a later version adds one, we will update this policy before that version is released.
 - **Google Play statistics.** Google may give us aggregated statistics about installs and app stability, including crash reports from people who have chosen to share usage and diagnostics data with Google. We use them only to find and fix problems.
 - **GitHub downloads.** If you download Vesqen from GitHub, GitHub's privacy policy applies to that download.
 
+Google, Microsoft, Cloudflare and GitHub, the services named in this policy, may process information outside your country, including in the United States.
+
 ## The Vesqen website
 
-The Vesqen website (vesqen.sumirenokai.com) is hosted by Cloudflare. It has no accounts, forms, advertising or analytics.
+The Vesqen website (vesqen.sumirenokai.com) is hosted by Cloudflare. It has no accounts, forms, advertising or analytics scripts.
 
-- **Serving the site.** To deliver pages and protect the site from abuse, Cloudflare processes each request, including your IP address, browser information and the address of the page. Cloudflare's privacy policy applies to this processing. Cloudflare shows us aggregated statistics, such as the number of requests by country or region. We don't use this information to identify visitors.
+- **Serving the site.** To deliver pages and protect the site from abuse, Cloudflare processes each request, including your IP address, browser information and the address of the page. Cloudflare does this on our behalf, and it may also use this network data to protect its own services, as its privacy policy describes. Cloudflare shows us aggregated statistics, such as the number of requests by country or region. We don't use this information to identify visitors.
 - **Choosing a language.** When you open the home page, the site shows English or Chinese based on your browser's language setting. If that doesn't decide it, the site uses the country or region Cloudflare estimates from your IP address. This check runs on each visit and stores nothing.
 - **Cookies.** On your first visit, the site asks whether it may remember your language. It sets at most two cookies, and neither is used for tracking:
 
@@ -72,19 +71,19 @@ The Vesqen website (vesqen.sumirenokai.com) is hosted by Cloudflare. It has no a
 | `vesqen-consent` | Remembers whether you accepted or rejected cookies, so the site doesn't ask again. | 12 months |
 | `vesqen-lang` | Remembers your language. Set only after you accept. | 12 months |
 
-You can change your answer at any time with "Cookie settings" at the bottom of each page. If you reject, the site deletes `vesqen-lang`. If Cloudflare needs to check that a visit isn't automated, it may set its own security cookie, such as `cf_clearance`. Cloudflare needs this cookie to run the service, and it isn't used to track you.
+You can change your answer at any time with "Cookie settings" at the bottom of each page. If you reject, the site deletes `vesqen-lang`. If Cloudflare needs to check that a visit isn't automated, it may set its own security cookies, such as `__cf_bm` or `cf_clearance`. Cloudflare needs these cookies to run the service, and they aren't used to track you.
 
 ## Retention and deletion
 
 - **On your device.** Data stays until you remove it. Removing a music folder deletes its library records. You can also delete playlists and remove favorites in the app. To delete all app data, open Android Settings → Apps → Vesqen → Storage and clear storage, or uninstall Vesqen.
 - **Emails.** We delete support conversations within 12 months after they end, or sooner if you ask.
-- **Order records.** Google keeps order records. We do not copy them elsewhere except when handling a specific order question or refund.
+- **Tester list.** We remove your address from a test's tester list within 3 months after the test ends, or sooner if you ask.
 
 ## Security
 
 - Data on your device is kept in Vesqen's private storage, protected by Android's app sandbox, and is never transmitted by the app.
 - Vesqen's access to your music folders is read-only.
-- Our support mailbox is protected with two-step verification. [TBD: confirm]
+- Our support mailbox is protected with two-step verification.
 
 ## Children
 
@@ -92,7 +91,11 @@ Vesqen is not directed at children, and we do not knowingly collect personal inf
 
 ## Your choices and rights
 
-You control everything Vesqen stores on your device, as described above. To ask what information we hold about you, or to correct or delete it, contact us at vesqen@sumirenokai.com. Depending on where you live, you may have additional rights under local law.
+You control everything Vesqen stores on your device, as described above.
+
+You can ask us to access, copy, correct or delete the information we hold about you, to explain how we use it, to restrict or object to that use, or to withdraw consent. Email vesqen@sumirenokai.com and we will reply within one month. You can also complain to us at the same address, or to the data protection authority where you live (in the UK, the Information Commissioner's Office).
+
+Where EU or UK data protection law applies, we rely on your consent for the language cookie, and on our legitimate interests in answering you, running tests, and keeping the website available and secure for everything else in this policy.
 
 ## Changes to this policy
 
