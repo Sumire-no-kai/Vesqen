@@ -137,7 +137,7 @@
     <!-- Packaged from docs/PRIVACY_POLICY.md at build time; the path follows the app language. -->
     <string name="privacy_policy_asset">privacy/en.md</string>
     <!-- Every published URL must stay reachable or redirect; checkPrivacyPolicyFinal rejects a blank one. -->
-    <string name="privacy_policy_url"></string>
+    <string name="privacy_policy_url">https://vesqen.sumirenokai.com/privacy/</string>
     <string name="back">Back</string>
     <string name="search_local_music">Search local music</string>
     <string name="clear_search">Clear search</string>

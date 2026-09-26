@@ -1107,3 +1107,9 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
   - 新增“访问统计”一条，说明收集什么、不用 cookie、保留期限，以及不统计欧盟、欧洲经济区和英国。
   - 处理依据加上“了解官网的使用情况”。
 - 官网的内容安全策略放行 `https://static.cloudflareinsights.com`。数据发回本站的 `/cdn-cgi/rum`，现有的 `'self'` 已允许。所有者需要在 Cloudflare 把 Web Analytics 设为排除欧盟访客的选项。强制重跑的 `PrivacyPolicyDocumentTest` 4 项通过（JDK 25）。
+
+## 2026-09-26 · App 填入隐私政策网址
+
+- 所有者同意后，中英文 `strings.xml` 的 `privacy_policy_url` 分别填为 `https://vesqen.sumirenokai.com/privacy/` 和 `https://vesqen.sumirenokai.com/zh/privacy/`。App 的隐私政策页因此会显示“打开网页版”按钮。
+- `checkPrivacyPolicyFinal --rerun`、`:app:testDebugUnitTest` 和 `:app:lintDebug` 全部通过（JDK 25）。发布守卫不再拦截 Release 包。仍需在 Play Console 填写同一网址（#43），并按 beta.1 填写数据安全表单：不收集、不分享。
+- 在 Cloudflare 控制台核对：sumirenokai.com 的 Web Analytics 已经是 “Enable, excluding visitor data in the EU”，与隐私政策一致。没有做任何修改。
