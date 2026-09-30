@@ -814,22 +814,24 @@ internal class LibraryCatalogStore(
         }
     }
 
+    // Tags are normalized here rather than at scan time, so rows stored by earlier versions with
+    // MediaStore's placeholder read the same as new ones without a migration or a full rescan.
     private fun Cursor.toAudioTrack(): AudioTrack = AudioTrack(
         id = getLong(getColumnIndexOrThrow(TRACK_ID)),
         contentUri = getString(getColumnIndexOrThrow(TRACK_CONTENT_URI)),
         title = getString(getColumnIndexOrThrow(TRACK_TITLE)),
-        artist = getString(getColumnIndexOrThrow(TRACK_ARTIST)),
-        album = getString(getColumnIndexOrThrow(TRACK_ALBUM)),
+        artist = normalizedTag(getString(getColumnIndexOrThrow(TRACK_ARTIST))),
+        album = normalizedTag(getString(getColumnIndexOrThrow(TRACK_ALBUM))),
         durationMs = getLong(getColumnIndexOrThrow(TRACK_DURATION_MS)),
         albumId = getLongOrNull(TRACK_ALBUM_ID),
         albumArtworkUri = getStringOrNull(TRACK_ALBUM_ARTWORK_URI),
         dateModifiedSeconds = getLong(getColumnIndexOrThrow(TRACK_DATE_MODIFIED_SECONDS)),
         artworkRevision = getLong(getColumnIndexOrThrow(TRACK_ARTWORK_REVISION)),
-        albumArtist = getString(getColumnIndexOrThrow(TRACK_ALBUM_ARTIST)),
+        albumArtist = normalizedTag(getString(getColumnIndexOrThrow(TRACK_ALBUM_ARTIST))),
         trackNumber = getIntOrNull(TRACK_NUMBER),
         discNumber = getIntOrNull(TRACK_DISC_NUMBER),
         year = getIntOrNull(TRACK_YEAR),
-        genre = getString(getColumnIndexOrThrow(TRACK_GENRE)),
+        genre = normalizedTag(getString(getColumnIndexOrThrow(TRACK_GENRE))),
         fileName = getString(getColumnIndexOrThrow(TRACK_FILE_NAME)),
         folderName = getString(getColumnIndexOrThrow(TRACK_FOLDER_NAME)),
         fileSizeBytes = getLong(getColumnIndexOrThrow(TRACK_SIZE_BYTES)),

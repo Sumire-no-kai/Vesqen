@@ -624,6 +624,38 @@ class LibraryCatalogStoreTest {
         assertEquals(mapOf("A" to 0, "B" to 1, "Z" to 2, "#" to 3), index.sections)
     }
 
+    @Test
+    fun mediaStoreUnknownPlaceholderReadsAsMissingTag() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val databaseName = "library-unknown-tag-${System.nanoTime()}.db"
+        try {
+            LibraryCatalogStore(context, databaseName).use { store ->
+                val source = store.ensureDeviceSource()
+                val session = store.beginSourceScan(source.id)
+                // Rows written before the fix still hold the placeholder, so it must be handled on read.
+                store.upsertTrack(
+                    session,
+                    candidate("fixture-unknown", "Untitled").copy(
+                        artist = "<unknown>",
+                        album = "<unknown>",
+                        albumArtist = "<unknown>",
+                        genre = "<unknown>",
+                    ),
+                )
+                store.finishSourceScan(source.id)
+
+                val track = store.readTracks(listOf(source.id)).single()
+                assertEquals("", track.artist)
+                assertEquals("", track.album)
+                assertEquals("", track.albumArtist)
+                assertEquals("", track.genre)
+                assertEquals("", track.displaySubtitle())
+            }
+        } finally {
+            context.deleteDatabase(databaseName)
+        }
+    }
+
     private fun candidate(
         remoteId: String,
         title: String,

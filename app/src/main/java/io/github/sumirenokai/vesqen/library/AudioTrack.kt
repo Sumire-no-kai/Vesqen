@@ -45,7 +45,8 @@ data class AudioTrack(
 ) {
     fun displaySubtitle(): String =
         listOf(artist, album)
-            .filter { it.isNotBlank() && it != UNKNOWN_VALUE }
+            .map(::normalizedTag)
+            .filter(String::isNotBlank)
             .joinToString(SEPARATOR)
 
     fun technicalSummary(): String = buildList {
@@ -56,7 +57,16 @@ data class AudioTrack(
     }.joinToString(SEPARATOR)
 
     companion object {
-        private const val UNKNOWN_VALUE = "<unknown>"
         private const val SEPARATOR = " · "
     }
 }
+
+/**
+ * MediaStore reports a missing artist or album as the placeholder `<unknown>`
+ * (`MediaStore.UNKNOWN_STRING`) rather than an empty value. Inside the app a missing tag is always
+ * an empty string, so every screen and the media session can fall back the same way.
+ */
+internal fun normalizedTag(value: String?): String =
+    if (value == null || value == MEDIA_STORE_UNKNOWN_TAG) "" else value
+
+private const val MEDIA_STORE_UNKNOWN_TAG = "<unknown>"

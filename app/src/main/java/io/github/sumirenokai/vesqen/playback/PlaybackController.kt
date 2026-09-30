@@ -501,8 +501,10 @@ class PlaybackController(
         }
         val metadata = MediaMetadata.Builder()
             .setTitle(title)
-            .setArtist(artist)
-            .setAlbumTitle(album)
+            // A missing tag stays unset, so notifications, the lock screen and connected devices show
+            // nothing rather than an empty or placeholder line.
+            .setArtist(artist.takeIf(String::isNotBlank))
+            .setAlbumTitle(album.takeIf(String::isNotBlank))
             .setAlbumArtist(albumArtist.takeIf(String::isNotBlank))
             .setTrackNumber(trackNumber)
             .setDiscNumber(discNumber)
