@@ -11,7 +11,7 @@ Vesqen is an offline music player for Android. It plays the music stored on your
 
 [Website](https://vesqen.sumirenokai.com) · [Privacy policy](https://vesqen.sumirenokai.com/privacy/) · [Support](https://vesqen.sumirenokai.com/support/)
 
-> **Status:** `1.0.0-beta.1` is the first public beta. It is published on GitHub Releases, and it is in closed testing on Google Play for invited testers. Read the [known limitations](#known-limitations) before relying on strict USB output.
+> **Status:** `1.0.0-beta.1`, the first public beta, is being prepared. It will be published on GitHub Releases, and invited testers will get it through closed testing on Google Play. Read the [known limitations](#known-limitations) before relying on strict USB output.
 
 ## What Vesqen does
 
@@ -40,7 +40,7 @@ A state is never promoted to a stronger one. An active path is not called verifi
 - **GitHub Releases:** each [release](https://github.com/Sumire-no-kai/Vesqen/releases) has a signed APK and its SHA-256. The application signing certificate SHA-256 is
   `74:3E:96:FC:B7:1D:C5:81:88:49:68:19:A0:01:A2:7C:D8:8D:90:91:62:C5:AE:92:9C:87:BF:A2:9A:B8:62:93`.
   You can check it with `apksigner verify --print-certs`. GitHub and Google Play builds use the same signing key, so an update from either source keeps your library.
-- **Google Play:** closed testing for now. The public listing follows after the test.
+- **Google Play:** closed testing first. The public listing follows after the test.
 - **Requirements:** Android 8.0 or later. Strict USB output needs Android 14 or later and a compatible USB DAC.
 
 ## Privacy

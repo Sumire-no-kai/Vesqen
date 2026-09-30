@@ -1147,3 +1147,9 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - 新增 GitHub 发布说明草稿 [releases/1.0.0-beta.1.md](releases/1.0.0-beta.1.md)，包含中英文正文和维护者的发布步骤。APK 哈希在正式签名后填写，已知限制按 #42 的结果更新。
 - 发现仓库的私密漏洞报告没有开启，而 SECURITY.md 指向这个渠道。仓库简介写的是 “without compromise”，与对外声明基线不符。主页和话题标签都是空的。这些是仓库设置，需要所有者同意后再改。
 - 所有者同意后修改了仓库设置：开启私密漏洞报告；简介改为 “Offline music player for Android that shows how each track reaches your headphones.”；主页设为 https://vesqen.sumirenokai.com；添加话题标签 android、music-player、audio-player、offline-first、lossless-audio、usb-dac、kotlin、jetpack-compose、media3。
+
+## 2026-09-30 · 提前同步 master
+
+- #32、#33 的修复已在各自分支完成，要通过 PR 合进 `master`，留给 beta.2。`master` 比发布分支落后 32 个提交，没有分叉；所有者同意在 beta.1 发布前先快进同步。
+- README 中英文的“当前状态”先改为“正在准备”，免得仓库首页在发布前就说已经发布；Google Play 那一行改成不随测试阶段变化的写法。发布说明第 5 步相应改为：发布后先把状态改回已发布，再把发布分支合并回 `master`。
+- 同步后，issue 模板、PR 模板、CONTRIBUTING 和 SECURITY 在 GitHub 上生效。
