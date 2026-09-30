@@ -840,6 +840,7 @@ private fun ChainObservationNotice(
                 unavailableCount,
             ),
             tag = "vesqen.chain.partial",
+            unavailableCount = unavailableCount,
         )
         else -> ChainNoticeContent(
             icon = Icons.Filled.Sensors,
@@ -853,7 +854,7 @@ private fun ChainObservationNotice(
             .semantics { contentDescription = content.body }, verticalAlignment = Alignment.CenterVertically) {
             Icon(content.icon, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.width(6.dp))
-            Text(content.title + if (unavailableCount > 0) " ($unavailableCount)" else "",
+            Text(content.title + if (content.unavailableCount > 0) " (${content.unavailableCount})" else "",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         return
@@ -912,6 +913,8 @@ private data class ChainNoticeContent(
     val tag: String,
     val showRetry: Boolean = false,
     val showProgress: Boolean = false,
+    /** Shown after the title in the compact notice; only the partial notice is about missing metrics. */
+    val unavailableCount: Int = 0,
 )
 
 @Composable

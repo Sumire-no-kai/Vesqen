@@ -779,6 +779,8 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
         chainSummaryText(R.string.chain_last_path).assertIsDisplayed()
         chainNode("vesqen.chain.idle", "vesqen.chain.summary-list").assertIsDisplayed()
+        // Metrics are missing here, but the unavailable count belongs to the partial notice only.
+        composeRule.onNodeWithText(context.getString(R.string.chain_idle_title)).assertIsDisplayed()
         chainSummaryText(R.string.chain_core_title_last).assertIsDisplayed()
 
         // No scrolling until the absence checks, so the notice slot and the core title stay composed.
