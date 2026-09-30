@@ -5,6 +5,7 @@ import android.text.format.Formatter
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.telemetry.TelemetryConfidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetric
@@ -224,12 +225,15 @@ internal fun evidenceAge(elapsedMs: Long): EvidenceAge {
 }
 
 /**
- * A snapshot without a playback session describes the last playback, not the current one: the
- * values it still carries were kept from that session, so the Chain screen must not present them
- * as the live path.
+ * With nothing playing, the values a snapshot still carries were observed during the last playback,
+ * so the Chain screen must not present them as the live path. A telemetry session follows the current
+ * media item and stays open while playback is paused, stopped by strict output or restored from the
+ * queue, so the controller decides whether playback is requested. Without a connected controller,
+ * only a missing session is known to mean that nothing is playing.
  */
-internal fun describesLastPlayback(snapshot: TelemetrySnapshot?): Boolean =
-    snapshot != null && snapshot.playbackSessionId == null
+internal fun describesLastPlayback(snapshot: TelemetrySnapshot?, playback: PlaybackSnapshot): Boolean =
+    snapshot != null &&
+        (snapshot.playbackSessionId == null || (playback.isControllerReady && !playback.showsPauseAction))
 
 internal fun telemetryEvidenceMethod(context: Context, evidence: TelemetryEvidence): String? = when (evidence) {
     is TelemetryEvidence.Derived -> context.getString(

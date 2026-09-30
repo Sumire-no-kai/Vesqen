@@ -761,12 +761,17 @@ class VesqenAppTest {
     }
 
     @Test
-    fun chain_labels_kept_values_as_the_last_playback_until_a_session_starts() {
-        // A restored queue before playback starts: the telemetry still carries the last session's values.
-        val telemetry = FakePlaybackTelemetry(chainTelemetrySnapshot().copy(playbackSessionId = null))
-        val paused = activePlaybackState()
+    fun chain_labels_kept_values_as_the_last_playback_until_playback_starts() {
+        // Paused, stopped by strict output or restored from the queue: the telemetry session stays open
+        // for the current item while its values come from the last time it played.
+        val telemetry = FakePlaybackTelemetry(chainTelemetrySnapshot())
+        val playing = activePlaybackState()
+        val currentState = mutableStateOf(
+            playing.copy(playback = playing.playback.copy(isPlaying = false, showsPauseAction = false)),
+        )
         render(
-            state = paused.copy(playback = paused.playback.copy(isPlaying = false)),
+            state = currentState.value,
+            stateProvider = { currentState.value },
             playbackTelemetry = telemetry,
         )
 
@@ -777,7 +782,7 @@ class VesqenAppTest {
         chainSummaryText(R.string.chain_core_title_last).assertIsDisplayed()
 
         // No scrolling until the absence checks, so the notice slot and the core title stay composed.
-        telemetry.publish(chainTelemetrySnapshot())
+        composeRule.runOnIdle { currentState.value = playing }
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithText(context.getString(R.string.chain_core_title))
                 .fetchSemanticsNodes()

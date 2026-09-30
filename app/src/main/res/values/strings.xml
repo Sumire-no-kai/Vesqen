@@ -302,7 +302,7 @@
     <string name="chain_live_title">Observation is live</string>
     <string name="chain_live_body">Values update only while this Chain screen is visible.</string>
     <string name="chain_idle_title">Nothing is playing</string>
-    <string name="chain_idle_body">These values are from the last playback. Start a track to see the live path.</string>
+    <string name="chain_idle_body">Some values are from the last playback. Play a track to see the live path.</string>
     <string name="chain_dashboard_controls">Dashboard controls</string>
     <string name="chain_customize">Customize</string>
     <string name="chain_customize_title">Customize dashboard</string>

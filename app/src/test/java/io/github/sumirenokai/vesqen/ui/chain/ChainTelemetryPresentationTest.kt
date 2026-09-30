@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.ui.chain
 
+import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.telemetry.TelemetryPowerMode
 import io.github.sumirenokai.vesqen.telemetry.TelemetryRefreshInterval
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot
@@ -72,14 +73,23 @@ class ChainTelemetryPresentationTest {
     }
 
     @Test
-    fun `a snapshot without a playback session describes the last playback`() {
-        assertFalse(describesLastPlayback(null))
-        assertTrue(describesLastPlayback(TelemetrySnapshot.empty(capturedAtElapsedRealtimeMs = 1_000)))
-        assertFalse(
-            describesLastPlayback(
-                TelemetrySnapshot(capturedAtEpochMs = 1_000, playbackSessionId = "session-1"),
-            ),
-        )
+    fun `kept values describe the last playback unless playback is requested`() {
+        val withSession = TelemetrySnapshot(capturedAtEpochMs = 1_000, playbackSessionId = "session-1")
+        val withoutSession = TelemetrySnapshot.empty(capturedAtElapsedRealtimeMs = 1_000)
+        val playing = PlaybackSnapshot(isControllerReady = true, isPlaying = true)
+        val buffering = PlaybackSnapshot(isControllerReady = true, isPlaying = false, showsPauseAction = true)
+        val notPlaying = PlaybackSnapshot(isControllerReady = true, isPlaying = false)
+
+        assertFalse(describesLastPlayback(null, notPlaying))
+        assertFalse(describesLastPlayback(withSession, playing))
+        assertFalse(describesLastPlayback(withSession, buffering))
+        // The 2026-09-24 device review: strict output had stopped playback, but the session stayed
+        // open for the current item.
+        assertTrue(describesLastPlayback(withSession, notPlaying))
+        assertTrue(describesLastPlayback(withoutSession, playing))
+        // Without a connected controller, an open session may still be playing.
+        assertFalse(describesLastPlayback(withSession, PlaybackSnapshot()))
+        assertTrue(describesLastPlayback(withoutSession, PlaybackSnapshot()))
     }
 
     @Test
