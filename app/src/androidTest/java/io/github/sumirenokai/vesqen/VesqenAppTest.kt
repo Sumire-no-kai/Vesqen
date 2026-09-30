@@ -1389,12 +1389,14 @@ class VesqenAppTest {
             chainNode("vesqen.chain.diagnostics.stop").performClick()
             composeRule.waitUntil(5_000) { recorder.state.value is DiagnosticRecordingState.Stopped }
 
-            composeRule.onNodeWithTag("vesqen.chain.diagnostics.export").performClick()
+            // Stopping replaces the stop button with export and clear, which can fall below the fold
+            // (Chinese text on a 360 dp phone does). A click on a node scrolled out of view misses it.
+            chainNode("vesqen.chain.diagnostics.export").performClick()
             composeRule.runOnIdle {
                 assertEquals(1, exportRequests)
                 assertTrue(recorder.state.value is DiagnosticRecordingState.Stopped)
             }
-            composeRule.onNodeWithTag("vesqen.chain.diagnostics.clear").performClick()
+            chainNode("vesqen.chain.diagnostics.clear").performClick()
             composeRule.runOnIdle {
                 assertTrue(recorder.state.value is DiagnosticRecordingState.Stopped)
             }
