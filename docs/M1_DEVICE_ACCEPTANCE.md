@@ -17,6 +17,14 @@
 4. 只在 instrumentation 输出非空、退出码为 0、无 failure／crash 且报告与目标序列号对应时记为通过。
 5. 保存测试报告摘要；不得用 `compileDebugAndroidTestKotlin`、JVM 测试或手动检查替代。
 
+vivo（iQOO V2171A，Android 15）上的额外步骤，2026-09-30 实测：
+
+- 测试机可能同时被别的会话使用。安装或运行前，先确认前台没有别的应用在测试。
+- `adb install` 常停在“安全守护”风险检测页，要勾选“已了解应用的风险检测结果”再点“继续安装”；版本号相同时会先问“直接打开 / 重新安装”，选“重新安装”。这时 adb 可能报 `INSTALL_FAILED_ABORTED`，但安装其实已由系统安装器完成，所以要以设备上 APK 的 SHA-256 为准。“超级守护”等安全设置不要改。
+- 测试界面不在前台时，`fast_freezer` 会冻结测试进程，测试卡在启动。此时从主机启动同一个宿主：`adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n io.github.sumirenokai.vesqen/androidx.activity.ComponentActivity`。报告里写明辅助了几次。
+- 测试收尾时，androidx.test 会启动测试包里的 `EmptyActivity`，vivo 会弹出“Vesqen 想要打开 io.github.sumirenokai.vesqen.test”。选“仅打开一次”；“始终打开”会留下长期规则，由所有者决定。
+- 替换测试机上原有的构建前，先把原 APK 取回主机，测试后装回并核对哈希，再卸载测试包。
+
 ## 功能矩阵
 
 - MediaStore 与多个 SAF 文件夹可同时导入；新增、删除、移动与修改标签后增量结果正确。
