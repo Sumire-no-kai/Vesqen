@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Functions
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
@@ -138,6 +139,7 @@ import io.github.sumirenokai.vesqen.ui.chain.ChainObservationState
 import io.github.sumirenokai.vesqen.ui.chain.ChainUnitDisplayMode
 import io.github.sumirenokai.vesqen.ui.chain.DiagnosticExportFeedback
 import io.github.sumirenokai.vesqen.ui.chain.chartSummary
+import io.github.sumirenokai.vesqen.ui.chain.describesLastPlayback
 import io.github.sumirenokai.vesqen.ui.chain.effectiveTelemetryIntervalMs
 import io.github.sumirenokai.vesqen.ui.chain.elapsedChartFraction
 import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
@@ -655,8 +657,13 @@ private fun ChainCorePanel(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.AccountTree, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(10.dp))
-                Text(stringResource(R.string.chain_core_title), style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.semantics { heading() })
+                Text(
+                    stringResource(
+                        if (describesLastPlayback(snapshot)) R.string.chain_core_title_last else R.string.chain_core_title,
+                    ),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.semantics { heading() },
+                )
             }
             BoxWithConstraints {
                 val source: @Composable () -> Unit = {
@@ -806,6 +813,14 @@ private fun ChainObservationNotice(
             tag = "vesqen.chain.loading",
             showProgress = true,
         )
+        // Before the stale and partial notices: with nothing playing, missing values are expected
+        // and the rest belong to the last playback.
+        describesLastPlayback(snapshot) -> ChainNoticeContent(
+            icon = Icons.Filled.History,
+            title = stringResource(R.string.chain_idle_title),
+            body = stringResource(R.string.chain_idle_body),
+            tag = "vesqen.chain.idle",
+        )
         isStale -> ChainNoticeContent(
             icon = Icons.Filled.Schedule,
             title = stringResource(R.string.chain_snapshot_stale),
@@ -911,7 +926,9 @@ private fun ChainPathSummary(
     ) {
         Column(modifier = Modifier.padding(VesqenSpacing.md)) {
             Text(
-                text = stringResource(R.string.chain_current_path),
+                text = stringResource(
+                    if (describesLastPlayback(telemetrySnapshot)) R.string.chain_last_path else R.string.chain_current_path,
+                ),
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.semantics { heading() },
             )
