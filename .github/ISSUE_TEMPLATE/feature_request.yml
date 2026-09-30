@@ -1,0 +1,25 @@
+name: Feature idea / 功能建议
+description: Suggest an improvement. / 提出改进建议。
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Vesqen stays an offline player without accounts, analytics or network features in the core app. Ideas that fit that scope are most likely to be picked up.
+        Vesqen 的核心功能保持离线，不加账号、统计或联网功能。符合这个范围的建议更容易被采纳。
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would it solve? / 想解决什么问题？
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like to see? / 希望怎么做？
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything you use today instead? / 现在有什么替代做法？

@@ -41,6 +41,8 @@
 
 ## 候选发布说明模板
 
+面向用户的 GitHub 发布说明草稿（中英文）见 [releases/1.0.0-beta.1.md](releases/1.0.0-beta.1.md)。下面是按工程视角整理的原始模板。
+
 ### 新增
 
 - 可导入由独立、版本化 verification issuer 签署的离线输出验证记录；精确匹配时，播放器、Chain 和 Audio Proof 显示 `BIT-PERFECT VERIFIED`。

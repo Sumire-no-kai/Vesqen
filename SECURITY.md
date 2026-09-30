@@ -2,12 +2,15 @@
 
 ## Supported versions
 
-Vesqen is in early development. Security fixes are applied to the current default branch until versioned releases establish a longer support policy.
+Security fixes go into the latest published release and the default branch. A fix ships as a new version; a published version is never replaced ([versioning](docs/VERSIONING.md)).
 
 ## Reporting a vulnerability
 
-Please use GitHub's private vulnerability reporting feature for this repository. Do not open a public issue containing an exploit, private user data, filesystem paths, or device identifiers.
+Report privately, not in a public issue:
 
-Include the affected revision or version, Android version, reproduction steps, impact, and any suggested mitigation. If private reporting is unavailable, open a minimal public issue asking the maintainers for a private contact channel without disclosing the vulnerability.
+- through GitHub's [private vulnerability reporting](https://github.com/Sumire-no-kai/Vesqen/security/advisories/new) for this repository, or
+- by email to vesqen@sumirenokai.com, with "Security" in the subject.
 
-Ordinary bugs and feature requests can use the public issue tracker.
+Include the affected version or commit, the Android version, reproduction steps, the impact, and any suggested mitigation. Don't include private user data, filesystem paths or device identifiers beyond what the report needs.
+
+Ordinary bugs and feature requests can use the public [issue tracker](https://github.com/Sumire-no-kai/Vesqen/issues/new/choose).

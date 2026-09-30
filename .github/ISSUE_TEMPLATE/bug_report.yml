@@ -1,0 +1,65 @@
+name: Bug report / 问题报告
+description: Something doesn't work as expected. / 某个功能和预期不一样。
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. You can write in English or Chinese. Don't attach music files, and remove personal information from screenshots. Report security problems privately (see SECURITY.md).
+        感谢反馈，中英文都可以。请不要附上音乐文件，截图里的个人信息请先遮掉。安全问题请按 SECURITY.md 私下报告。
+  - type: input
+    id: version
+    attributes:
+      label: App version / App 版本
+      description: Settings → About. / 设置 → 关于。
+      placeholder: 1.0.0-beta.1
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Installed from / 安装来源
+      options:
+        - GitHub Releases
+        - Google Play
+        - Built from source / 自行构建
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Phone model and Android version / 手机型号和 Android 版本
+      placeholder: Pixel 8, Android 16
+    validations:
+      required: true
+  - type: input
+    id: output
+    attributes:
+      label: Output / 输出设备
+      description: Phone speaker, wired headphones, Bluetooth, or a USB DAC and its model. / 手机扬声器、有线耳机、蓝牙，或 USB DAC 及型号。
+    validations:
+      required: true
+  - type: input
+    id: format
+    attributes:
+      label: File format / 文件格式
+      placeholder: FLAC 24-bit / 96 kHz
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect? / 发生了什么，你原本预期是什么？
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / 复现步骤
+      placeholder: |
+        1.
+        2.
+        3.
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / 截图
+      description: For output problems, a screenshot of the Chain page helps. / 输出问题最好附一张链路页截图。
