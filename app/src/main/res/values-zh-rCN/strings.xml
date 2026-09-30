@@ -276,6 +276,7 @@
     <string name="chain_open_advanced">打开高级仪表盘</string>
     <string name="chain_advanced_explanation">这些指标描述观测到的播放路径。“实测”仅说明数值的采集方式，并不代表已通过 bit-perfect 验证。</string>
     <string name="chain_current_path">当前播放路径</string>
+    <string name="chain_last_path">上次播放的路径</string>
     <string name="chain_sampling_starting">正在开始观测</string>
     <string name="chain_sampling_starting_short">正在采集…</string>
     <string name="chain_sampling_starting_body">当前播放会话报告数值后，首批结果会显示在这里。</string>
@@ -290,6 +291,8 @@
     </plurals>
     <string name="chain_live_title">正在实时观测</string>
     <string name="chain_live_body">仅当此链路页面可见时，数值才会持续更新。</string>
+    <string name="chain_idle_title">现在没有在播放</string>
+    <string name="chain_idle_body">部分数值来自上一次播放。播放后，这里会显示实时的播放路径。</string>
     <string name="chain_dashboard_controls">仪表盘控制</string>
     <string name="chain_customize">自定义</string>
     <string name="chain_customize_title">自定义仪表盘</string>
@@ -424,6 +427,15 @@
     <string name="chain_updated_now">刚刚</string>
     <plurals name="chain_updated_seconds_ago">
         <item quantity="other">%1$d 秒前</item>
+    </plurals>
+    <plurals name="chain_updated_minutes_ago">
+        <item quantity="other">%1$d 分钟前</item>
+    </plurals>
+    <plurals name="chain_updated_hours_ago">
+        <item quantity="other">%1$d 小时前</item>
+    </plurals>
+    <plurals name="chain_updated_days_ago">
+        <item quantity="other">%1$d 天前</item>
     </plurals>
     <string name="chain_window_value">%1$s 窗口</string>
     <string name="chain_confidence_measured">实测 · 未验证</string>
@@ -654,6 +666,7 @@
     <string name="chain_evidence_details">展开或收起证据详情</string>
     <string name="library_favorites">我的喜欢</string>
     <string name="chain_core_title">当前播放链路</string>
+    <string name="chain_core_title_last">上次播放的链路</string>
     <string name="chain_core_boundary">源文件与 AudioTrack 数据不等于设备最终输出。轻触参数可查看证据。</string>
     <string name="library_actions">曲库选项</string>
     <plurals name="library_song_total">

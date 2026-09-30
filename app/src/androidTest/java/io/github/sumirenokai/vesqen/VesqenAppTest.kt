@@ -761,6 +761,41 @@ class VesqenAppTest {
     }
 
     @Test
+    fun chain_labels_kept_values_as_the_last_playback_until_playback_starts() {
+        // Paused, stopped by strict output or restored from the queue: the telemetry session stays open
+        // for the current item while its values come from the last time it played.
+        val telemetry = FakePlaybackTelemetry(chainTelemetrySnapshot())
+        val playing = activePlaybackState()
+        val currentState = mutableStateOf(
+            playing.copy(playback = playing.playback.copy(isPlaying = false, showsPauseAction = false)),
+        )
+        render(
+            state = currentState.value,
+            stateProvider = { currentState.value },
+            playbackTelemetry = telemetry,
+        )
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        chainSummaryText(R.string.chain_last_path).assertIsDisplayed()
+        chainNode("vesqen.chain.idle", "vesqen.chain.summary-list").assertIsDisplayed()
+        // Metrics are missing here, but the unavailable count belongs to the partial notice only.
+        composeRule.onNodeWithText(context.getString(R.string.chain_idle_title)).assertIsDisplayed()
+        chainSummaryText(R.string.chain_core_title_last).assertIsDisplayed()
+
+        // No scrolling until the absence checks, so the notice slot and the core title stay composed.
+        composeRule.runOnIdle { currentState.value = playing }
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText(context.getString(R.string.chain_core_title))
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        composeRule.onAllNodesWithTag("vesqen.chain.idle").assertCountEquals(0)
+        composeRule.onAllNodesWithText(context.getString(R.string.chain_core_title_last)).assertCountEquals(0)
+        chainSummaryText(R.string.chain_current_path).assertIsDisplayed()
+    }
+
+    @Test
     fun chain_advanced_observes_summary_defaults_and_refreshes_wide_path_for_a_repeated_track() {
         val telemetry = FakePlaybackTelemetry(chainTelemetrySnapshot(codecLabel = "FLAC"))
         val selectedMetricId = TelemetryMetricCatalog.PROCESS_DATA_SOURCE_READ_THROUGHPUT
@@ -2735,6 +2770,12 @@ class VesqenAppTest {
     ): SemanticsNodeInteraction {
         composeRule.onNodeWithTag(listTag, useUnmergedTree).performScrollToNode(hasTestTag(tag))
         return composeRule.onNodeWithTag(tag, useUnmergedTree)
+    }
+
+    private fun chainSummaryText(textResource: Int): SemanticsNodeInteraction {
+        val text = context.getString(textResource)
+        composeRule.onNodeWithTag("vesqen.chain.summary-list").performScrollToNode(hasText(text))
+        return composeRule.onNodeWithText(text)
     }
 
     private fun assertChainNumericReadoutsStayStable(

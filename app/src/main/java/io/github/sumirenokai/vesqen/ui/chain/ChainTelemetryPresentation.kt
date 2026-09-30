@@ -5,6 +5,7 @@ import android.text.format.Formatter
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.telemetry.TelemetryConfidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetric
@@ -196,17 +197,43 @@ internal fun telemetryEvidenceAge(
     evidence: TelemetryEvidence,
     nowElapsedRealtimeMs: Long,
 ): String {
-    val elapsedSeconds = ((nowElapsedRealtimeMs - evidence.observedAtElapsedRealtimeMs).coerceAtLeast(0) / 1_000).toInt()
-    return if (elapsedSeconds == 0) {
-        context.getString(R.string.chain_updated_now)
-    } else {
-        context.resources.getQuantityString(
-            R.plurals.chain_updated_seconds_ago,
-            elapsedSeconds,
-            elapsedSeconds,
-        )
+    val age = evidenceAge(nowElapsedRealtimeMs - evidence.observedAtElapsedRealtimeMs)
+    val plural = when (age.unit) {
+        EvidenceAgeUnit.NOW -> return context.getString(R.string.chain_updated_now)
+        EvidenceAgeUnit.SECONDS -> R.plurals.chain_updated_seconds_ago
+        EvidenceAgeUnit.MINUTES -> R.plurals.chain_updated_minutes_ago
+        EvidenceAgeUnit.HOURS -> R.plurals.chain_updated_hours_ago
+        EvidenceAgeUnit.DAYS -> R.plurals.chain_updated_days_ago
+    }
+    return context.resources.getQuantityString(plural, age.count, age.count)
+}
+
+internal enum class EvidenceAgeUnit { NOW, SECONDS, MINUTES, HOURS, DAYS }
+
+internal data class EvidenceAge(val unit: EvidenceAgeUnit, val count: Int)
+
+/** The largest whole unit of an observation's age, so values kept for days read "3 days ago". */
+internal fun evidenceAge(elapsedMs: Long): EvidenceAge {
+    val seconds = elapsedMs.coerceAtLeast(0) / 1_000
+    return when {
+        seconds < 1 -> EvidenceAge(EvidenceAgeUnit.NOW, 0)
+        seconds < 60 -> EvidenceAge(EvidenceAgeUnit.SECONDS, seconds.toInt())
+        seconds < 3_600 -> EvidenceAge(EvidenceAgeUnit.MINUTES, (seconds / 60).toInt())
+        seconds < 86_400 -> EvidenceAge(EvidenceAgeUnit.HOURS, (seconds / 3_600).toInt())
+        else -> EvidenceAge(EvidenceAgeUnit.DAYS, (seconds / 86_400).toInt())
     }
 }
+
+/**
+ * With nothing playing, the values a snapshot still carries were observed during the last playback,
+ * so the Chain screen must not present them as the live path. A telemetry session follows the current
+ * media item and stays open while playback is paused, stopped by strict output or restored from the
+ * queue, so the controller decides whether playback is requested. Without a connected controller,
+ * only a missing session is known to mean that nothing is playing.
+ */
+internal fun describesLastPlayback(snapshot: TelemetrySnapshot?, playback: PlaybackSnapshot): Boolean =
+    snapshot != null &&
+        (snapshot.playbackSessionId == null || (playback.isControllerReady && !playback.showsPauseAction))
 
 internal fun telemetryEvidenceMethod(context: Context, evidence: TelemetryEvidence): String? = when (evidence) {
     is TelemetryEvidence.Derived -> context.getString(

@@ -285,6 +285,7 @@
     <string name="chain_open_advanced">Open advanced dashboard</string>
     <string name="chain_advanced_explanation">Measurements describe the observed playback path. “Measured” identifies how a value was collected; it is not bit-perfect verification.</string>
     <string name="chain_current_path">Current playback path</string>
+    <string name="chain_last_path">Last playback path</string>
     <string name="chain_sampling_starting">Starting observation</string>
     <string name="chain_sampling_starting_short">Collecting…</string>
     <string name="chain_sampling_starting_body">The first values will appear after the current playback session reports them.</string>
@@ -300,6 +301,8 @@
     </plurals>
     <string name="chain_live_title">Observation is live</string>
     <string name="chain_live_body">Values update only while this Chain screen is visible.</string>
+    <string name="chain_idle_title">Nothing is playing</string>
+    <string name="chain_idle_body">Some values are from the last playback. Play a track to see the live path.</string>
     <string name="chain_dashboard_controls">Dashboard controls</string>
     <string name="chain_customize">Customize</string>
     <string name="chain_customize_title">Customize dashboard</string>
@@ -443,6 +446,18 @@
     <plurals name="chain_updated_seconds_ago">
         <item quantity="one">%1$d second ago</item>
         <item quantity="other">%1$d seconds ago</item>
+    </plurals>
+    <plurals name="chain_updated_minutes_ago">
+        <item quantity="one">%1$d minute ago</item>
+        <item quantity="other">%1$d minutes ago</item>
+    </plurals>
+    <plurals name="chain_updated_hours_ago">
+        <item quantity="one">%1$d hour ago</item>
+        <item quantity="other">%1$d hours ago</item>
+    </plurals>
+    <plurals name="chain_updated_days_ago">
+        <item quantity="one">%1$d day ago</item>
+        <item quantity="other">%1$d days ago</item>
     </plurals>
     <string name="chain_window_value">%1$s window</string>
     <string name="chain_confidence_measured">Measured · not verified</string>
@@ -675,6 +690,7 @@
     <string name="chain_evidence_details">Expand or collapse evidence details</string>
     <string name="library_favorites">Favorites</string>
     <string name="chain_core_title">Playback at a glance</string>
+    <string name="chain_core_title_last">Last playback at a glance</string>
     <string name="chain_core_boundary">Source and AudioTrack facts are not proof of the final device output. Tap a reading for its evidence.</string>
     <string name="library_actions">Library options</string>
     <plurals name="library_song_total">

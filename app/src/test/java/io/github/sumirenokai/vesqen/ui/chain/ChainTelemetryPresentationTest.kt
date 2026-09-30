@@ -1,9 +1,12 @@
 package io.github.sumirenokai.vesqen.ui.chain
 
+import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.telemetry.TelemetryPowerMode
 import io.github.sumirenokai.vesqen.telemetry.TelemetryRefreshInterval
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot
 import io.github.sumirenokai.vesqen.telemetry.TelemetryUnit
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -49,5 +52,61 @@ class ChainTelemetryPresentationTest {
                 powerMode = TelemetryPowerMode.LOW_POWER,
             ),
         )
+    }
+
+    @Test
+    fun `evidence age uses the largest whole unit`() {
+        fun age(seconds: Long, extraMs: Long = 0) = evidenceAge(seconds * 1_000 + extraMs)
+
+        assertEquals(EvidenceAge(EvidenceAgeUnit.NOW, 0), evidenceAge(0))
+        assertEquals(EvidenceAge(EvidenceAgeUnit.NOW, 0), evidenceAge(999))
+        assertEquals(EvidenceAge(EvidenceAgeUnit.NOW, 0), evidenceAge(-5_000))
+        assertEquals(EvidenceAge(EvidenceAgeUnit.SECONDS, 1), age(1))
+        assertEquals(EvidenceAge(EvidenceAgeUnit.SECONDS, 59), age(59, extraMs = 999))
+        assertEquals(EvidenceAge(EvidenceAgeUnit.MINUTES, 1), age(60))
+        assertEquals(EvidenceAge(EvidenceAgeUnit.MINUTES, 59), age(3_599))
+        assertEquals(EvidenceAge(EvidenceAgeUnit.HOURS, 1), age(3_600))
+        assertEquals(EvidenceAge(EvidenceAgeUnit.HOURS, 23), age(86_399))
+        assertEquals(EvidenceAge(EvidenceAgeUnit.DAYS, 1), age(86_400))
+        // The device review showed "399368 seconds ago" for values kept from a session 4.6 days earlier.
+        assertEquals(EvidenceAge(EvidenceAgeUnit.DAYS, 4), age(399_368))
+    }
+
+    @Test
+    fun `kept values describe the last playback unless playback is requested`() {
+        val withSession = TelemetrySnapshot(capturedAtEpochMs = 1_000, playbackSessionId = "session-1")
+        val withoutSession = TelemetrySnapshot.empty(capturedAtElapsedRealtimeMs = 1_000)
+        val playing = PlaybackSnapshot(isControllerReady = true, isPlaying = true)
+        val buffering = PlaybackSnapshot(isControllerReady = true, isPlaying = false, showsPauseAction = true)
+        val notPlaying = PlaybackSnapshot(isControllerReady = true, isPlaying = false)
+
+        assertFalse(describesLastPlayback(null, notPlaying))
+        assertFalse(describesLastPlayback(withSession, playing))
+        assertFalse(describesLastPlayback(withSession, buffering))
+        // The 2026-09-24 device review: strict output had stopped playback, but the session stayed
+        // open for the current item.
+        assertTrue(describesLastPlayback(withSession, notPlaying))
+        assertTrue(describesLastPlayback(withoutSession, playing))
+        // Without a connected controller, an open session may still be playing.
+        assertFalse(describesLastPlayback(withSession, PlaybackSnapshot()))
+        assertTrue(describesLastPlayback(withoutSession, PlaybackSnapshot()))
+    }
+
+    @Test
+    fun `every evidence age plural exists in English and Chinese`() {
+        val plurals = listOf("seconds", "minutes", "hours", "days").map { "chain_updated_${it}_ago" }
+        for (path in listOf("src/main/res/values/strings.xml", "src/main/res/values-zh-rCN/strings.xml")) {
+            val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(File(path))
+            val nodes = document.getElementsByTagName("plurals")
+            val defined = (0 until nodes.length).associate { index ->
+                val node = nodes.item(index)
+                node.attributes.getNamedItem("name").nodeValue to node.textContent
+            }
+            for (name in plurals) {
+                val text = defined[name]
+                assertTrue("$path is missing plural $name", text != null)
+                assertTrue("$path plural $name must show the count", text!!.contains("%1\$d"))
+            }
+        }
     }
 }
