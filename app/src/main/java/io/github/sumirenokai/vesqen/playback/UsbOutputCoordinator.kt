@@ -426,9 +426,8 @@ internal class UsbOutputCoordinator(
         val mixerPreference = MixerPreference(device, audioAttributes)
         val preferredSetResult = synchronized(mixerMutationLock) {
             if (!isPlanCurrent(strictPlan)) return@synchronized null
-            mixerPreferences.track(mixerPreference)
-            runCatching {
-                mixerAdapter.setPreferred(device, mixerFormat, audioAttributes).getOrThrow()
+            mixerPreferences.request(mixerPreference) {
+                mixerAdapter.setPreferred(device, mixerFormat, audioAttributes)
             }
         } ?: return pendingStrictOutput(outputConfig)
         val preferredSet = preferredSetResult.getOrElse {
@@ -1219,6 +1218,18 @@ internal class MixerPreferenceCleanupTracker<T>(
     @Synchronized
     fun track(preference: T) {
         tracked += preference
+    }
+
+    /**
+     * Applies [preference] and tracks it unless Android explicitly rejected it. A rejected request
+     * leaves nothing behind, and clearing it could hit a preference another app holds on the same
+     * device, which Android refuses. A request that threw may have applied, so it stays tracked.
+     */
+    @Synchronized
+    fun request(preference: T, apply: () -> Result<Boolean>): Result<Boolean> {
+        val result = runCatching { apply().getOrThrow() }
+        if (result.getOrNull() != false) tracked += preference
+        return result
     }
 
     @Synchronized
