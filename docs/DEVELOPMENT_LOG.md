@@ -1113,3 +1113,20 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - 所有者同意后，中英文 `strings.xml` 的 `privacy_policy_url` 分别填为 `https://vesqen.sumirenokai.com/privacy/` 和 `https://vesqen.sumirenokai.com/zh/privacy/`。App 的隐私政策页因此会显示“打开网页版”按钮。
 - `checkPrivacyPolicyFinal --rerun`、`:app:testDebugUnitTest` 和 `:app:lintDebug` 全部通过（JDK 25）。发布守卫不再拦截 Release 包。仍需在 Play Console 填写同一网址（#43），并按 beta.1 填写数据安全表单：不收集、不分享。
 - 在 Cloudflare 控制台核对：sumirenokai.com 的 Web Analytics 已经是 “Enable, excluding visitor data in the EU”，与隐私政策一致。没有做任何修改。
+
+## 2026-09-30 · Google Play 上架材料（#44）
+
+- 新增 [Google Play 上架材料](PLAY_LISTING.md)：
+  - 中英文商品名称、简短说明、完整说明和 `1.0.0-beta.1` 版本说明，字数都在 Play 的上限内；
+  - 类别和联系方式；
+  - 应用内容声明的填法：数据安全为不收集、不分享，内容分级、目标受众、广告 ID，以及前台服务 `mediaPlayback` 的申报说明；
+  - 截图、演示视频和封闭测试设置的计划。
+- 文案对照了对外声明基线和代码：
+  - 不宣传未经验证的 bit-perfect，只说明各状态标签的含义；
+  - 格式按 PRD 写为“以手机的解码器支持为准”；
+  - 版本说明写明目前没有任何手机和 DAC 组合通过 bit-perfect 验证；
+  - 按官网文案规则去掉了空泛说法。
+- 新增 `docs/store/`，放 512 图标和中英文 1024 × 500 置顶大图，以及它们的 HTML 源文件，用本机 Chrome 无头模式导出：
+  - 图标沿用启动图标的图案，标识约占画面三分之二，另存为 32 位 PNG；
+  - 置顶大图用 B 方案的版式和官网同款的虚构专辑，注记卡特意显示 SYSTEM MIXED。
+- 还需要真机才能完成：用版权干净的演示曲库拍中英文截图，以及录 #56 的演示视频。本机没有 ffmpeg 等生成带标签 FLAC 的工具，安装前先征得所有者同意。

@@ -13,7 +13,7 @@
 | [#42](https://github.com/Sumire-no-kai/Vesqen/issues/42) | 冻结候选的真机回归与证据重建，含 iQOO + JBL Flip 7 USB 短测 | 所有者连接设备，开发执行 |
 | [#38](https://github.com/Sumire-no-kai/Vesqen/issues/38) | 隐私政策定稿：填写占位信息并多方核查 | 开发 |
 | [#43](https://github.com/Sumire-no-kai/Vesqen/issues/43) | 官网发布隐私政策页面（Play Console 必填） | 开发 |
-| [#44](https://github.com/Sumire-no-kai/Vesqen/issues/44) | 商品详情与上架材料（基础部分） | 开发 |
+| [#44](https://github.com/Sumire-no-kai/Vesqen/issues/44) | 商品详情与上架材料（基础部分），见 [Google Play 上架材料](PLAY_LISTING.md) | 开发 |
 | [#45](https://github.com/Sumire-no-kai/Vesqen/issues/45) | 在 Play Console 创建应用并完成 12 人、14 天封闭测试 | 所有者 |
 | [#36](https://github.com/Sumire-no-kai/Vesqen/issues/36) | 应用内隐私政策（中英文全文 + 网页链接），作为冻结例外加入 beta.1。已由 #55 完成 | 开发 |
 | [#56](https://github.com/Sumire-no-kai/Vesqen/issues/56) | Play Console 前台服务申报（`mediaPlayback`，需要演示视频） | 开发准备视频，所有者提交 |

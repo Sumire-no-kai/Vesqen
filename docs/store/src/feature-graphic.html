@@ -1,0 +1,80 @@
+<!doctype html>
+<!-- Play Store feature graphic (1024 × 500), in design direction B (docs/redesign/B_PAPER_AND_SOUND.md).
+     Open with #en or #zh. The albums are the fictional samples from the website; never use real record covers.
+     The card shows SYSTEM MIXED on purpose: store art must not suggest an unverified bit-perfect claim. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Noto+Serif+SC:wght@400&display=block">
+<style>
+  html, body { margin: 0; }
+  body { width: 1024px; height: 500px; overflow: hidden; background: #F3EFE6; color: #1A1A16; font-family: "Instrument Sans", "PingFang SC", sans-serif; }
+  .frame { position: relative; width: 1024px; height: 500px; }
+  .brand { position: absolute; left: 64px; top: 52px; display: flex; align-items: center; gap: 12px; }
+  .brand span { font-family: "Instrument Serif", Georgia, serif; font-size: 34px; line-height: 1; }
+  .eyebrow { position: absolute; left: 66px; top: 132px; font-size: 15px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; color: #5E5A50; }
+  h1 { position: absolute; left: 62px; top: 160px; margin: 0; font-family: "Instrument Serif", Georgia, serif; font-weight: 400; font-size: 84px; line-height: 0.94; letter-spacing: -0.02em; }
+  h1 > span { display: block; }
+  .accent { color: #9A4A22; font-style: italic; }
+  .sleeve { position: absolute; left: 596px; top: 40px; width: 388px; height: 420px; border-radius: 24px; background: #EEDDCC; }
+  .cover { position: absolute; left: 44px; top: 58px; width: 216px; height: 216px; border-radius: 3px; overflow: hidden; }
+  .cover svg { display: block; width: 100%; height: 100%; }
+  .card { position: absolute; left: 150px; top: 186px; width: 214px; box-sizing: border-box; padding: 18px 18px 16px; border-radius: 6px; background: #FBF9F4; box-shadow: 0 20px 50px rgba(48, 38, 22, 0.18), 0 1px 0 rgba(48, 38, 22, 0.06); }
+  .card-title { font-family: "Instrument Serif", Georgia, serif; font-style: italic; font-size: 24px; line-height: 1; }
+  .card-track { margin-top: 10px; font-family: "Instrument Serif", Georgia, serif; font-size: 20px; line-height: 1.15; }
+  .card-row { margin-top: 10px; padding-top: 9px; border-top: 1px solid #E2DBCB; font-size: 14px; }
+  .card-row b { display: block; margin-bottom: 2px; font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: #5E5A50; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; margin-top: 12px; height: 28px; padding: 0 11px; border-radius: 14px; background: #ECE7DB; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; }
+  /* Chinese: no italics or uppercase; tracking instead (B spec §3). */
+  .zh .eyebrow { font-size: 16px; letter-spacing: 0.2em; text-transform: none; }
+  .zh h1 { font-family: "Noto Serif SC", serif; font-size: 70px; line-height: 1.16; letter-spacing: 0.02em; top: 162px; }
+  .zh .accent { font-style: normal; }
+  .zh .card-title { font-family: "Noto Serif SC", serif; font-style: normal; font-size: 21px; }
+  .zh .card-row b { font-size: 12px; letter-spacing: 0.08em; text-transform: none; }
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+  <div class="brand">
+    <svg width="44" height="44" viewBox="0 0 108 108" fill="none" aria-hidden="true">
+      <path d="M29 32L54 78L79 32" stroke="#1B1C18" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M39 32L54 60L69 32" stroke="#9FBF4B" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span>Vesqen</span>
+  </div>
+  <div class="eyebrow" data-en="An offline music player for Android" data-zh="Android 离线音乐播放器"></div>
+  <h1>
+    <span data-en="Every track" data-zh="每首歌，"></span>
+    <span data-en="comes with" data-zh="都有一份"></span>
+    <span><span class="accent" data-en="liner notes." data-zh="链路注记"></span><span data-en="" data-zh="。"></span></span>
+  </h1>
+  <div class="sleeve">
+    <div class="cover" style="transform: translate(-30px, -34px) rotate(-6deg) scale(0.82); box-shadow: 0 12px 30px rgba(40, 30, 16, 0.12);">
+      <svg viewBox="0 0 380 380"><rect width="380" height="380" fill="#D8DBD2"/><circle cx="262" cy="140" r="50" fill="#F5F3EC"/><rect y="232" width="380" height="148" fill="#C8CCC2"/><rect y="231" width="380" height="2" fill="#23241F"/><rect x="70" y="194" width="4" height="38" fill="#23241F"/><rect x="94" y="203" width="4" height="29" fill="#23241F"/><rect x="118" y="210" width="4" height="22" fill="#23241F"/></svg>
+    </div>
+    <div class="cover" style="transform: translate(52px, -24px) rotate(5deg) scale(0.9); box-shadow: 0 18px 40px rgba(40, 30, 16, 0.16);">
+      <svg viewBox="0 0 380 380"><rect width="380" height="380" fill="#1D4442"/><circle cx="190" cy="176" r="96" fill="#E8DFC8"/><rect y="206" width="380" height="174" fill="#1D4442"/><rect x="104" y="222" width="172" height="5" rx="2.5" fill="#E8DFC8" opacity="0.75"/><rect x="126" y="239" width="128" height="4" rx="2" fill="#E8DFC8" opacity="0.55"/><rect x="148" y="254" width="84" height="3" rx="1.5" fill="#E8DFC8" opacity="0.4"/></svg>
+    </div>
+    <div class="cover" style="box-shadow: 0 34px 70px rgba(40, 30, 16, 0.28);">
+      <svg viewBox="0 0 380 380"><rect width="380" height="380" fill="#B1613A"/><circle cx="0" cy="380" r="236" fill="none" stroke="#1B1512" stroke-width="64"/><rect x="270" y="46" width="64" height="64" fill="#F0E2CB"/><circle cx="300" cy="298" r="10" fill="#1B1512"/><text x="28" y="46" fill="#1B1512" font-family="Instrument Sans, sans-serif" font-size="13" letter-spacing="2.6">OTIS VALE QUARTET</text><text x="334" y="142" fill="#1B1512" font-family="Instrument Sans, sans-serif" font-size="13" letter-spacing="2.6" text-anchor="end">COPPER HOURS</text></svg>
+    </div>
+    <div class="card">
+      <div class="card-title" data-en="Liner notes" data-zh="链路注记"></div>
+      <div class="card-track">Brass Lantern</div>
+      <div class="card-row"><b data-en="File" data-zh="文件"></b>FLAC · 16-bit · 44.1 kHz</div>
+      <div class="card-row"><b data-en="Route" data-zh="路由"></b><span data-en="Wired headphones" data-zh="有线耳机"></span></div>
+      <div class="chip">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v5c0 3 2 4.5 6 6.5M18 4v5c0 3-2 4.5-6 6.5V20"/></svg>
+        SYSTEM MIXED
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  const language = location.hash === "#zh" ? "zh" : "en";
+  document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+  document.getElementById("frame").classList.toggle("zh", language === "zh");
+  for (const element of document.querySelectorAll("[data-en]")) element.textContent = element.dataset[language];
+</script>
+</body>
+</html>
