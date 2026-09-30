@@ -761,6 +761,34 @@ class VesqenAppTest {
     }
 
     @Test
+    fun chain_labels_kept_values_as_the_last_playback_until_a_session_starts() {
+        // A restored queue before playback starts: the telemetry still carries the last session's values.
+        val telemetry = FakePlaybackTelemetry(chainTelemetrySnapshot().copy(playbackSessionId = null))
+        val paused = activePlaybackState()
+        render(
+            state = paused.copy(playback = paused.playback.copy(isPlaying = false)),
+            playbackTelemetry = telemetry,
+        )
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        chainSummaryText(R.string.chain_last_path).assertIsDisplayed()
+        chainNode("vesqen.chain.idle", "vesqen.chain.summary-list").assertIsDisplayed()
+        chainSummaryText(R.string.chain_core_title_last).assertIsDisplayed()
+
+        // No scrolling until the absence checks, so the notice slot and the core title stay composed.
+        telemetry.publish(chainTelemetrySnapshot())
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText(context.getString(R.string.chain_core_title))
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        composeRule.onAllNodesWithTag("vesqen.chain.idle").assertCountEquals(0)
+        composeRule.onAllNodesWithText(context.getString(R.string.chain_core_title_last)).assertCountEquals(0)
+        chainSummaryText(R.string.chain_current_path).assertIsDisplayed()
+    }
+
+    @Test
     fun chain_advanced_observes_summary_defaults_and_refreshes_wide_path_for_a_repeated_track() {
         val telemetry = FakePlaybackTelemetry(chainTelemetrySnapshot(codecLabel = "FLAC"))
         val selectedMetricId = TelemetryMetricCatalog.PROCESS_DATA_SOURCE_READ_THROUGHPUT
@@ -2735,6 +2763,12 @@ class VesqenAppTest {
     ): SemanticsNodeInteraction {
         composeRule.onNodeWithTag(listTag, useUnmergedTree).performScrollToNode(hasTestTag(tag))
         return composeRule.onNodeWithTag(tag, useUnmergedTree)
+    }
+
+    private fun chainSummaryText(textResource: Int): SemanticsNodeInteraction {
+        val text = context.getString(textResource)
+        composeRule.onNodeWithTag("vesqen.chain.summary-list").performScrollToNode(hasText(text))
+        return composeRule.onNodeWithText(text)
     }
 
     private fun assertChainNumericReadoutsStayStable(
