@@ -17,4 +17,15 @@ class AudioTrackTest {
 
         assertEquals("Album", track.displaySubtitle())
     }
+
+    @Test
+    fun `media store placeholder and null tags read as missing`() {
+        assertEquals("", normalizedTag("<unknown>"))
+        assertEquals("", normalizedTag(null))
+        assertEquals("", normalizedTag(""))
+        // Only MediaStore's exact placeholder is missing; real names that merely look similar are kept.
+        assertEquals("Unknown", normalizedTag("Unknown"))
+        assertEquals("<Unknown>", normalizedTag("<Unknown>"))
+        assertEquals("Maren Holt", normalizedTag("Maren Holt"))
+    }
 }
