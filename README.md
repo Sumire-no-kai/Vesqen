@@ -55,7 +55,7 @@ Vesqen doesn't request Android's Internet permission, so the app itself can't se
 - If Android stops Vesqen in the background, the queue comes back when you open the app again. Resuming straight from headphone buttons isn't supported yet.
 - Long listening sessions, foldables, high refresh rates and complete TalkBack coverage are still being tested.
 
-Each release lists its own limitations in the release notes. Known bugs and the work planned before the stable release are in the [milestone](https://github.com/Sumire-no-kai/Vesqen/milestone/1).
+Each release lists its own limitations in the release notes. Known bugs and planned work are grouped by release in the [milestones](https://github.com/Sumire-no-kai/Vesqen/milestones).
 
 ## Feedback and support
 
@@ -86,7 +86,7 @@ Keep `app/build/outputs/mapping/<variant>/mapping.txt` with any optimized APK so
 - Product: [PRODUCT.md](PRODUCT.md), [requirements](docs/PRD.md), [roadmap](docs/ROADMAP.md)
 - Design: [DESIGN.md](DESIGN.md), [visual identity](docs/brand/VISUAL_IDENTITY.md), [redesign direction](docs/redesign/README.md)
 - Engineering: [architecture review](docs/ARCHITECTURE_REVIEW.md), [engineering casebook](docs/ENGINEERING_CASEBOOK.md), [development log](docs/DEVELOPMENT_LOG.md)
-- Releases: [beta checklist](docs/M4_BETA_RELEASE.md), [launch backlog](docs/LAUNCH_BACKLOG.md), [device acceptance](docs/M4_DEVICE_ACCEPTANCE.md)
+- Releases: [beta checklist](docs/M4_BETA_RELEASE.md), [release roadmap](docs/LAUNCH_BACKLOG.md), [device acceptance](docs/M4_DEVICE_ACCEPTANCE.md)
 
 ## Contributing and license
 

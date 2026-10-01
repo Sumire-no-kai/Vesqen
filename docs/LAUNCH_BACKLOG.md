@@ -1,62 +1,67 @@
-# 正式上架前待办
+# 发布路线与待办
 
-2026-09-24 决定：`1.0.0-beta.1` 封版，Play 封闭测试使用的版本不做任何修改。下列事项必须在 Google Play 正式版上架前关闭，或者在对应 issue 中写明处置结论（例如作为公开限制写进商品详情和发布页）。
+`1.0.0-beta.1` 于 2026-10-01 在 [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0-beta.1) 发布（预发布），官网首页提供下载。本文件按阶段索引剩下的事项，以 GitHub 里程碑为准：[beta.2](https://github.com/Sumire-no-kai/Vesqen/milestone/2)、[1.0 正式版](https://github.com/Sumire-no-kai/Vesqen/milestone/1)、[2.0](https://github.com/Sumire-no-kai/Vesqen/milestone/3)、[Google Play](https://github.com/Sumire-no-kai/Vesqen/milestone/4)。对外声明基线（[M4 Beta 发布清单](M4_BETA_RELEASE.md)）继续适用。
 
-以 GitHub 里程碑[正式上架前](https://github.com/Sumire-no-kai/Vesqen/milestone/1)为准，本文件只是按时间和依赖整理的索引。对外声明基线（[M4 Beta 发布清单](M4_BETA_RELEASE.md)）继续适用。
+2026-10-01 所有者决定（详见 [PRD](PRD.md) 末尾“2026-10-01 beta.1 发布后的路线决定”）：
 
-2026-09-30 更新：
-- **发布渠道：** `1.0.0-beta.1` 先通过官网和 GitHub Releases 发布，Google Play 暂缓。只和 Play 有关的事项（#44、#45、#56，以及 #43 中填写 Play Console 的部分）随之暂缓。#41 仍是签名构建的前提；#57 管的正是 Play 以外的安装，优先级反而更高。
-- **冻结例外：** 代码审查发现严格 USB 会把被拒绝的 mixer 申请记入待清理列表，在别的应用占用 DAC 时导致两种输出都无法播放。所有者同意作为 beta.1 的第二个冻结例外修复（#60，PR #61）。同一次审查的其余几项留到 beta.2（#62）。
+- 正式版 1.0 不要求 `BIT-PERFECT VERIFIED`，写成公开限制；最迟在 2.0 之前完成，M7 是 2.0 的必做项。
+- Google Play 封闭测试最早使用 beta.2，因为 beta.2 才有设备报告。
+- beta.2 起申请联网权限，用于默认开启、可以关闭的匿名统计、设备报告上传和检查更新；服务端用现有的 Cloudflare 账号。
+- 收费方案在正式版准备上架前再讨论。
 
-## 上传封闭测试之前
+## beta.1（已完成）
 
-| Issue | 内容 | 由谁完成 |
-| --- | --- | --- |
-| [#40](https://github.com/Sumire-no-kai/Vesqen/issues/40) | 确定开发者名称和公开邮箱；账号主体可以等到收费前 | 所有者决定 |
-| [#41](https://github.com/Sumire-no-kai/Vesqen/issues/41) | 第二份签名备份和离机密码保管 | 所有者 |
-| [#42](https://github.com/Sumire-no-kai/Vesqen/issues/42) | 冻结候选的真机回归与证据重建，含 iQOO + JBL Flip 7 USB 短测 | 所有者连接设备，开发执行 |
-| [#38](https://github.com/Sumire-no-kai/Vesqen/issues/38) | 隐私政策定稿：填写占位信息并多方核查 | 开发 |
-| [#43](https://github.com/Sumire-no-kai/Vesqen/issues/43) | 官网发布隐私政策页面（Play Console 必填） | 开发 |
-| [#44](https://github.com/Sumire-no-kai/Vesqen/issues/44) | 商品详情与上架材料（基础部分），见 [Google Play 上架材料](PLAY_LISTING.md) | 开发 |
-| [#45](https://github.com/Sumire-no-kai/Vesqen/issues/45) | 在 Play Console 创建应用并完成 12 人、14 天封闭测试 | 所有者 |
-| [#36](https://github.com/Sumire-no-kai/Vesqen/issues/36) | 应用内隐私政策（中英文全文 + 网页链接），作为冻结例外加入 beta.1。已由 #55 完成 | 开发 |
-| [#56](https://github.com/Sumire-no-kai/Vesqen/issues/56) | Play Console 前台服务申报（`mediaPlayback`，需要演示视频） | 开发准备视频，所有者提交 |
-| [#57](https://github.com/Sumire-no-kai/Vesqen/issues/57) | Android 开发者验证：为 GitHub 分发登记包名和签名（2026-09-30 起在部分地区生效，2027 年全球） | 所有者 |
+签名备份（#41）、真机回归（#42）、开发者验证（#57）、隐私政策定稿和官网页面（#38、#43）、应用内隐私政策（#36）、冻结例外（#60）、GitHub 签名发布流程（#63）都已关闭。#32、#33 的修复已合进 `master`，随 beta.2 发布。
 
-应用内隐私政策的文本在构建时从 `docs/PRIVACY_POLICY*.md` 打包。发布守卫 `checkPrivacyPolicyFinal` 会在文本仍有草稿标记或占位、或者网页地址为空时，拒绝生成上传 Play 的包。因此 #38 和 #43 必须在上传前完成。
-
-## 封闭测试期间（beta.2）
+## beta.2（GitHub）
 
 | Issue | 内容 | 类型 |
 | --- | --- | --- |
-| [#32](https://github.com/Sumire-no-kai/Vesqen/issues/32) | `<unknown>` 占位值被当作艺术家原样显示 | bug |
-| [#33](https://github.com/Sumire-no-kai/Vesqen/issues/33) | 链路页观测时间只按秒显示，旧数据被当作"当前播放链路" | bug |
+| [#35](https://github.com/Sumire-no-kai/Vesqen/issues/35) | 界面与文案全面重做（B · 纸与声），含 #42 发现的失败文案和无障碍选中状态 | 界面 |
 | [#34](https://github.com/Sumire-no-kai/Vesqen/issues/34) | 严格 USB 模式下，冷启动即弹出失败对话框 | bug |
-| [#35](https://github.com/Sumire-no-kai/Vesqen/issues/35) | 界面与文案全面重新审核（可读性、美观性、一致性），并修复已发现的界面问题 | 界面 |
 | [#37](https://github.com/Sumire-no-kai/Vesqen/issues/37) | 应用内第三方开源许可声明 | 合规 |
-| [#39](https://github.com/Sumire-no-kai/Vesqen/issues/39) | 备份与换机迁移规则仍是模板 | 数据 |
-| [#46](https://github.com/Sumire-no-kai/Vesqen/issues/46) | 14 天试用与一次性应用内解锁（Play 构建） | 收费 |
-| [#47](https://github.com/Sumire-no-kai/Vesqen/issues/47) | 不含 Billing 的 GitHub 构建变体 | 收费 |
-| [#48](https://github.com/Sumire-no-kai/Vesqen/issues/48) | 真机验证含 Billing 的构建能否移除 INTERNET | 收费、隐私 |
+| [#39](https://github.com/Sumire-no-kai/Vesqen/issues/39) | 备份与换机迁移规则 | 数据 |
+| [#62](https://github.com/Sumire-no-kai/Vesqen/issues/62) | 2026-09-30 代码审查的遗留项 | 质量 |
+| [#66](https://github.com/Sumire-no-kai/Vesqen/issues/66) | 设备测试会改掉测试机上真实的输出模式和队列 | 测试 |
+| [#68](https://github.com/Sumire-no-kai/Vesqen/issues/68) | GitHub 版应用内检查、下载并安装更新 | 新功能 |
+| [#69](https://github.com/Sumire-no-kai/Vesqen/issues/69) | 导出设备报告（用户选择内容，可上传或分享） | 新功能 |
+| [#70](https://github.com/Sumire-no-kai/Vesqen/issues/70) | 匿名使用统计与 Cloudflare 服务端 | 新功能、隐私 |
 
-#35 的视觉方向已在 2026-09-25 选定 B（纸与声），C（动态版式）完整保留为备用，见[官网与界面重设计方向](redesign/README.md)。
+发布 beta.2 时，隐私政策（应用内和官网）、README、官网和发布说明里“应用不申请联网权限”的说法要一起改写。#35 的视觉方向见[官网与界面重设计方向](redesign/README.md)。
 
-## 正式上架之前
+## 1.0 正式版之前
+
+| Issue | 内容 |
+| --- | --- |
+| [#50](https://github.com/Sumire-no-kai/Vesqen/issues/50) | 曲库首页快速滑动性能的双机前后对比（M3-R1） |
+| [#51](https://github.com/Sumire-no-kai/Vesqen/issues/51) | 长时播放与中断测试 |
+| [#52](https://github.com/Sumire-no-kai/Vesqen/issues/52) | 进程被杀后通过耳机键或系统媒体控制恢复播放队列 |
+| [#53](https://github.com/Sumire-no-kai/Vesqen/issues/53) | 决定 1.0 的版本号与对外定位 |
+| [#54](https://github.com/Sumire-no-kai/Vesqen/issues/54) | 仓库与文档整理：发版复审记录、远程分支、签名文档中的本机路径 |
+
+## 2.0 之前
 
 | Issue | 内容 |
 | --- | --- |
 | [#49](https://github.com/Sumire-no-kai/Vesqen/issues/49) | 真实 DAC 矩阵与外部数字逐样本验证（BIT-PERFECT VERIFIED） |
-| [#50](https://github.com/Sumire-no-kai/Vesqen/issues/50) | 曲库首页快速滑动性能的双机前后对比（M3-R1） |
-| [#51](https://github.com/Sumire-no-kai/Vesqen/issues/51) | 长时播放与中断测试 |
-| [#52](https://github.com/Sumire-no-kai/Vesqen/issues/52) | 进程被杀后通过耳机键或系统媒体控制恢复播放队列 |
-| [#53](https://github.com/Sumire-no-kai/Vesqen/issues/53) | 决定正式上架的版本号与定位（PRD 稳定版门槛） |
-| [#54](https://github.com/Sumire-no-kai/Vesqen/issues/54) | 仓库与文档整理：发版复审记录、`codex/*` 远程分支、签名文档中的本机路径 |
+| [#71](https://github.com/Sumire-no-kai/Vesqen/issues/71) | M7 高级 USB 引擎：没有官方 bit-perfect 通道的手机也能严格直出 |
+| [#65](https://github.com/Sumire-no-kai/Vesqen/issues/65) | 严格 USB：16 位音源补零后送入 24 位 bit-perfect 通道 |
+
+## Google Play（暂缓，最早在 beta.2 之后）
+
+| Issue | 内容 |
+| --- | --- |
+| [#45](https://github.com/Sumire-no-kai/Vesqen/issues/45) | 在 Play Console 创建应用并完成 12 人、14 天封闭测试（含填写隐私政策网址） |
+| [#44](https://github.com/Sumire-no-kai/Vesqen/issues/44) | 商品详情与上架材料，见 [Google Play 上架材料](PLAY_LISTING.md) |
+| [#56](https://github.com/Sumire-no-kai/Vesqen/issues/56) | 前台服务申报（`mediaPlayback`，需要演示视频） |
+| [#46](https://github.com/Sumire-no-kai/Vesqen/issues/46) | 14 天试用与一次性应用内解锁（Play 构建） |
+| [#47](https://github.com/Sumire-no-kai/Vesqen/issues/47) | GitHub / Play 构建拆分（Billing 只进 Play 构建，自行更新只进 GitHub 构建） |
+| [#48](https://github.com/Sumire-no-kai/Vesqen/issues/48) | 确认 Billing 带入的 Google 日志组件，写进隐私政策和数据安全表单 |
 
 ## 依赖关系
 
-- #36 的发布守卫要求 #38（定稿文本）和 #43（网页地址）在上传前完成。
-- #45 依赖 #40、#41、#42、#43、#44、#56。
-- 首次在 GitHub 发布 APK 之前完成 #57。
-- #46 依赖 #47（Billing 只进 Play 构建）和 #48（联网权限的结论）。
-- #44 的截图要等 #32 和 #33 修好之后再拍，否则会露出 `<unknown>` 等问题。
-- #53 取决于 #49 能否在上架前完成。
+- #45 依赖 beta.2（#69 设备报告）、#44、#56，以及 #47 的构建拆分。Play 构建不能包含 #68 的自行更新和“安装未知应用”权限。
+- #44 的截图要等 #35 重做完成后再拍。
+- #70 上线前，隐私政策要先改好并完成核查；#69 的上传接口也依赖 #70 的服务端。
+- #46 依赖 #47 和 #48；收费方案在正式版准备上架前讨论。
+- #49 需要一台开放了官方 bit-perfect 通道的手机，或者走 #71 的路径。

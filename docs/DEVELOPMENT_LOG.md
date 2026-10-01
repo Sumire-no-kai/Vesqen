@@ -1191,3 +1191,10 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - [公开发布工作流](https://github.com/Sumire-no-kai/Vesqen/actions/runs/36812965734)核对附件和验收记录后，在 `57daf83` 上创建附注 tag `v1.0.0-beta.1`，于 2026-10-01 03:59 UTC 公开为预发布版本：<https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0-beta.1>。
 - 发布记录：1.0.0-beta.1 / 10；APK SHA-256 `5670977b4f68c648dbf46396cf06d3f188ef3993dc438e4da64b25ba79f9b396`；应用签名证书 SHA-256 `743e96fcb71dc58188496819a001a27cd88d909162c5ae929c87bfa29ab86293`；没有 AAB，没有上传 Play。这是第一个公开版本，没有更早的版本可以回退；之后的修正按版本规则用更高的 versionCode 发布。
 - 发布后：release 分支的 README 改为已发布，发布说明文件与公开正文一致（`f028b96`），再合并回 master；官网首页加上 GitHub 下载链接。
+
+## 2026-10-01 · beta.1 之后的路线
+
+- 所有者决定：正式版 1.0 不要求 `BIT-PERFECT VERIFIED`，最迟 2.0 之前完成；M7 改为 2.0 必做（#71）。Google Play 封闭测试最早使用 beta.2。收费方案在正式版准备上架前讨论。
+- beta.2 新增三项：GitHub 版应用内检查、下载并安装更新（#68，不用 Obtainium）；由用户选择内容的设备报告（#69）；默认开启、可以关闭的匿名使用统计（#70）。欧盟、欧洲经济区和英国改为先询问。为此从 beta.2 起申请联网权限，服务端用 Cloudflare Worker 和 D1，代码随本仓库开源。要求写进 PRD 末尾“联网、统计与设备报告”，`CONTEXT.md` 增加 Device Report 和 Usage Ping。
+- 里程碑重新划分：beta.2、1.0 正式版（原“正式上架前”）、2.0、Google Play。#43 的官网部分已完成，已关闭；#49 和 #65 移到 2.0。`LAUNCH_BACKLOG.md` 改写为按阶段的路线索引，README 的里程碑链接改为里程碑列表。
+- #35 补充了 #42 真机回归中发现的两处问题：严格输出失败文案把原因归到了 DAC 上，以及输出选项的选中状态读屏读不出来。

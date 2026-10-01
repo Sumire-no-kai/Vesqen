@@ -55,7 +55,7 @@ Vesqen 没有申请 Android 的网络访问权限，应用本身无法发送或�
 - Vesqen 在后台被系统停止后，重新打开应用时会恢复播放队列；暂不支持直接用耳机按键恢复播放。
 - 长时间播放、折叠屏、高刷新率和完整的 TalkBack 读屏体验还在测试中。
 
-每个版本的发布说明都会列出当时的限制。已知问题和正式版之前要完成的工作，见[里程碑](https://github.com/Sumire-no-kai/Vesqen/milestone/1)。
+每个版本的发布说明都会列出当时的限制。已知问题和计划中的工作按版本分在各个[里程碑](https://github.com/Sumire-no-kai/Vesqen/milestones)里。
 
 ## 反馈与支持
 
@@ -86,7 +86,7 @@ Windows 上改用 `.\gradlew.bat`。Debug 安装包在 `app/build/outputs/apk/de
 - 产品：[PRODUCT.md](PRODUCT.md)、[需求文档](docs/PRD.md)、[路线图](docs/ROADMAP.md)
 - 设计：[DESIGN.md](DESIGN.md)、[视觉识别](docs/brand/VISUAL_IDENTITY.md)、[重设计方向](docs/redesign/README.md)
 - 工程：[架构审查](docs/ARCHITECTURE_REVIEW.md)、[工程案例](docs/ENGINEERING_CASEBOOK.md)、[开发日志](docs/DEVELOPMENT_LOG.md)
-- 发布：[测试版检查表](docs/M4_BETA_RELEASE.md)、[正式上架前待办](docs/LAUNCH_BACKLOG.md)、[设备验收](docs/M4_DEVICE_ACCEPTANCE.md)
+- 发布：[测试版检查表](docs/M4_BETA_RELEASE.md)、[发布路线与待办](docs/LAUNCH_BACKLOG.md)、[设备验收](docs/M4_DEVICE_ACCEPTANCE.md)
 
 ## 参与贡献与许可证
 
