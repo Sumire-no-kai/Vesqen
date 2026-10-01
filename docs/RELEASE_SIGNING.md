@@ -161,9 +161,11 @@ As of 2026-10-01:
   end-to-end encrypted password manager, separate from the backup media. Each
   stored value was compared byte for byte with its Keychain entry without
   being displayed;
-- output verification issuer keystore: **not yet in the encrypted backup image**.
-  It does not affect app signing; losing it means rotating to a new issuer key
-  through an app update before new verification records can be signed;
+- output verification issuer keystore: **in backup image v2 on the removable
+  medium since 2026-10-01**; copies 2 and 3 still hold copy 1 until the owner
+  copies v2 to them (see below). The issuer key does not affect app signing;
+  losing it means rotating to a new issuer key through an app update before new
+  verification records can be signed;
 - Play App Signing import and certificate reconciliation: **not yet executed**
   (Google Play is deferred; the first release goes through the website and
   GitHub Releases);
@@ -180,6 +182,28 @@ SHA-256
 It contains the two password-protected PKCS12 files and a non-secret manifest;
 it does not contain any password. The removable volume name, device identifier,
 and physical storage location are intentionally excluded from the repository.
+
+Backup image v2 was created on 2026-10-01 on the same removable medium, next to
+copy 1, with the same format and image password. It holds all three
+password-protected PKCS12 files (application signing, Play upload and output
+verification issuer) and a non-secret manifest. The image is 152,064 bytes with
+SHA-256
+`25f774c9f17d47c528b150b2a5ee0322d0d5d10d3572e3c7ef8e3bbacd700580`.
+Verification ran twice on the copy written to the medium, the second time
+after unmounting and remounting the whole volume. Each run confirmed the
+following:
+
+- an empty password is rejected;
+- the three files match the local originals byte for byte;
+- each keystore opens with its Keychain password;
+- both certificate SHA-256 values and the issuer SPKI SHA-256 match the
+  recorded values;
+- each private key produces a CSR that verifies;
+- the image hash is stable.
+
+The medium's Windows README now points to v2. Copy 1 remains valid for the
+first two keys. Copies 2 and 3 move to v2 when the owner copies it and checks
+the hash with `Get-FileHash`.
 
 Recovery verification detached the newly written image, unmounted and
 remounted the entire removable volume, mounted the image again read-only using
