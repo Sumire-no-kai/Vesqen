@@ -21,9 +21,9 @@ vivo（iQOO V2171A，Android 15）上的额外步骤，2026-09-30 实测：
 
 - 测试机可能同时被别的会话使用。安装或运行前，先确认前台没有别的应用在测试。
 - `adb install` 常停在“安全守护”风险检测页，要勾选“已了解应用的风险检测结果”再点“继续安装”；版本号相同时会先问“直接打开 / 重新安装”，选“重新安装”。这时 adb 可能报 `INSTALL_FAILED_ABORTED`，但安装其实已由系统安装器完成，所以要以设备上 APK 的 SHA-256 为准。“超级守护”等安全设置不要改。
-- 测试界面不在前台时，`fast_freezer` 会冻结测试进程，测试卡在启动。此时从主机启动同一个宿主：`adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n io.github.sumirenokai.vesqen/androidx.activity.ComponentActivity`。报告里写明辅助了几次。
+- 测试界面不在前台时，`fast_freezer` 会冻结测试进程，测试卡在启动。此时从主机启动同一个宿主：`adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n io.github.sumirenokai.vesqen/androidx.activity.ComponentActivity`。报告里写明辅助了几次。只跑服务、不开界面的测试（例如 `StrictUsbSpeakerDeviceTest`）在被冻结期间超时也会照算，所以要在 instrumentation 启动后约 2 秒先启动这个宿主，让进程一直在前台；用 ActivityScenario 的界面测试不要这样预先启动，以免和测试自己的界面冲突。
 - 测试收尾时，androidx.test 会启动测试包里的 `EmptyActivity`，vivo 会弹出“Vesqen 想要打开 io.github.sumirenokai.vesqen.test”。选“仅打开一次”；“始终打开”会留下长期规则，由所有者决定。
-- 替换测试机上原有的构建前，先把原 APK 取回主机，测试后装回并核对哈希，再卸载测试包。
+- 替换测试机上原有的构建前，先把原 APK 取回主机，测试后装回并核对哈希，再卸载测试包。备份放在 `build/qa/device-backups/`：它被 git 忽略，也不会像系统临时目录那样在重启后被清空。2026-10-01 曾因备份放在临时目录、重启后丢失，只能用同一提交重新构建来恢复，结果大小相同但哈希不同。
 
 ## 功能矩阵
 
