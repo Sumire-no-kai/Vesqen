@@ -93,8 +93,15 @@ universal recovery mechanism for all existing installations, especially API 26/2
 Treat this as a long-lived credential, not a routinely replaceable upload key.
 
 Controlled local signing remains available for recovery, with its use and final
-artifact recorded in the release ledger. The Play upload key and verification
-issuer remain outside GitHub CI. The upload key must never sign GitHub APKs.
+artifact recorded in the release ledger. It follows the same GitHub attachment
+contract: every public recovery release must include `release-manifest.json`
+and `SHA256SUMS` alongside the APK. Use the existing `prepare` and `sign` helper
+commands as described in [local recovery](GITHUB_RELEASE_CI.md#local-recovery-release)
+to generate them from the actual artifact. Local signing does not exempt a
+release from the version ledger; CI deliberately rejects a published release
+without it rather than guessing a versionCode or skipping rollback protection.
+The Play upload key and verification issuer remain outside GitHub CI. The upload
+key must never sign GitHub APKs.
 
 ### CI provisioning record — 2026-10-01
 

@@ -162,9 +162,9 @@ def sign(candidate, output, commit, tools, *, expected_certificate=CERT_SHA256):
         notes = (candidate / "release-notes.md").read_text(encoding="utf-8").replace("(发布时填写)", digest)
         provenance = (f"\n\n## Build record\n\nSource commit: `{commit}`\n\n"
                       f"versionCode: `{metadata['versionCode']}`\n\n"
-                      f"Signing certificate SHA-256: `{expected_certificate}`\n\n"
-                      f"Build and signing run: {metadata['workflowRun']}\n\n"
-                      "Device QA and upgrade acceptance must be recorded before publishing.\n")
+                      f"Signing certificate SHA-256: `{expected_certificate}`\n")
+        if metadata["workflowRun"]:
+            provenance += f"\nBuild and signing run: {metadata['workflowRun']}\n"
         (output / "release-notes.md").write_text(notes + provenance, encoding="utf-8")
     return metadata
 
@@ -241,7 +241,9 @@ def publish_release(candidate, repository, commit, acceptance, tools):
                            "--json", "isDraft,targetCommitish,body"]))
     if not info["isDraft"] or info["targetCommitish"] != commit:
         raise ReleaseError("Only the matching draft can be published")
-    if not info["body"].strip() or any(marker in info["body"] for marker in ("(发布时填写)", "(按 #42 的结果更新)")):
+    if not info["body"].strip() or any(marker in info["body"] for marker in (
+            "(发布时填写)", "(按 #42 的结果更新)",
+            "Device QA and upgrade acceptance must be recorded before publishing.")):
         raise ReleaseError("Finalize draft release notes before publication")
     # Other drafts may have been published since this candidate was created.
     releases = json.loads(run(["gh", "api", "--paginate", "--slurp", f"repos/{repository}/releases?per_page=100"]))

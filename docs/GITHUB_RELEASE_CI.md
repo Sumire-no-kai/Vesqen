@@ -42,6 +42,8 @@ existing annotated tag must already point to the exact source commit.
 
 ## Environment setup
 
+See [local recovery](#local-recovery-release) when a hosted run is unavailable.
+
 Before storing secrets, configure `github-apk-signing` in this repository:
 
 - deployment branch: exactly `master`, with no tag pattern;
@@ -62,6 +64,36 @@ secrets nor the Play upload/verification issuer keys are needed.
 Approval is a check on use, not a guarantee against a compromised administrator
 who can edit environment rules. Restrict repository write/admin access and review
 workflow changes. Ordinary app builds must never run in the secret-bearing job.
+
+## Local recovery release
+
+Local recovery signing uses the same artifact contract as CI. Build the reviewed
+source commit with the same checks. Use `tools/github_release.py` from a reviewed
+tooling checkout of `master`, which may differ from the frozen source checkout;
+run `prepare` with `--source` pointing to that source checkout, then run `sign`.
+Provide the source commit, matching branch, Android build-tools path, and fresh
+output directories outside the repository. Supply the existing
+application PKCS12 as `VESQEN_KEYSTORE_BASE64` and its Keychain password as
+`VESQEN_KEYSTORE_PASSWORD` only to the signing process, without displaying them
+or putting values into command arguments or files. No GitHub workflow variables
+are required; leave them unset for a local run rather than inventing a CI URL.
+
+The helper produces the signed APK, `SHA256SUMS`, `release-manifest.json`, and
+public release notes. Keep the manifest generated from those exact bytes.
+Complete the same device acceptance, versionCode and annotated-tag checks before
+manual publication, and attach **all three** public files (APK, checksums,
+manifest) even when using GitHub's web UI. Record why recovery signing was used
+and the tooling commit in the development log. These attachment requirements
+also apply if another signing tool is used: produce and verify an equivalent
+manifest before release.
+The manifest records applicationId, versionName/versionCode, sourceCommit,
+sourceBranch, unsignedApkSha256, apkSha256 and certificateSha256; workflowCommit
+and workflowRun are empty for a local run.
+
+A local release with this manifest participates in subsequent CI versionCode
+checks normally. Missing or duplicate published manifests stop CI intentionally;
+do not bypass that check or guess values. Resolve the release ledger explicitly
+before continuing, without replacing an already-published APK or tag.
 
 ## Acceptance receipt
 

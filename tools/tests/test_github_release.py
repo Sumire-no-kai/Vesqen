@@ -134,8 +134,13 @@ class GithubReleaseTest(unittest.TestCase):
             self.assertFalse((root / "signed").exists())
 
     def test_publish_requires_matching_tag_and_never_rebuilds_or_uploads(self):
-        for tag_type, target, succeeds in (("missing", COMMIT, True), ("tag", COMMIT, True), ("tag", "d" * 40, False),
-                                            ("commit", COMMIT, False)):
+        reminder = "Device QA and upgrade acceptance must be recorded before publishing."
+        for tag_type, target, body, succeeds in (
+                ("missing", COMMIT, "Accepted release notes", True),
+                ("tag", COMMIT, "Accepted release notes", True),
+                ("tag", "d" * 40, "Accepted release notes", False),
+                ("commit", COMMIT, "Accepted release notes", False),
+                ("tag", COMMIT, "Release notes\n" + reminder, False)):
             with self.subTest(tag_type=tag_type, target=target), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 receipt = root / "docs/releases/1.0.0-beta.1.acceptance.json"
@@ -157,7 +162,7 @@ class GithubReleaseTest(unittest.TestCase):
                     if "verify" in args:
                         return verification
                     if "view" in args:
-                        return json.dumps({"isDraft": True, "targetCommitish": COMMIT, "body": "Accepted release notes"})
+                        return json.dumps({"isDraft": True, "targetCommitish": COMMIT, "body": body})
                     if "api" in args:
                         if "--paginate" in args:
                             return "[]"
@@ -175,12 +180,14 @@ class GithubReleaseTest(unittest.TestCase):
                 if tag_type == "missing":
                     ref = subprocess.CompletedProcess([], 1, "", "gh: Not Found (HTTP 404)")
                 with patch.object(release, "inspect_apk"), patch.object(release, "run", side_effect=command), \
-                        patch.object(subprocess, "run", return_value=ref):
+                        patch.object(subprocess, "run", return_value=ref) as tag_query:
                     if succeeds:
                         release.publish_release(root, "owner/repo", COMMIT, receipt, Path("tools"))
                     else:
                         with self.assertRaises(release.ReleaseError):
                             release.publish_release(root, "owner/repo", COMMIT, receipt, Path("tools"))
+                    if reminder in body:
+                        tag_query.assert_not_called()
                 self.assertEqual(succeeds, any("--draft=false" in args for args in commands))
                 self.assertFalse(any("upload" in args or "sign" in args or "gradlew" in args for args in commands))
 
@@ -191,6 +198,52 @@ class GithubReleaseTest(unittest.TestCase):
             with self.assertRaises(release.ReleaseError):
                 release.check_published_version_codes("owner/repo", metadata(), releases)
             release.check_published_version_codes("owner/repo", {**metadata(), "versionCode": 12}, releases)
+
+    def test_local_signing_exports_ledger_and_public_notes_without_ci_environment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate = root / "candidate"
+            candidate.mkdir()
+            apk = candidate / "candidate.apk"
+            apk.write_bytes(b"unsigned-test-apk")
+            data = {**metadata(), "unsignedApkSha256": release.sha256(apk)}
+            (candidate / "candidate.json").write_text(json.dumps(data))
+            (candidate / "release-notes.md").write_text("APK SHA-256: (发布时填写)", encoding="utf-8")
+
+            def command(args, **kwargs):
+                if "--out" in args:
+                    Path(args[args.index("--out") + 1]).write_bytes(b"signed-test-apk")
+                if "verify" in args:
+                    return (f"Signer #1 certificate SHA-256 digest: {release.CERT_SHA256}\n"
+                            "Verified using v2 scheme (APK Signature Scheme v2): true\n"
+                            "Verified using v3 scheme (APK Signature Scheme v3): true\n")
+                return ""
+
+            with patch.dict(os.environ, {"VESQEN_KEYSTORE_BASE64": base64.b64encode(b"test-key").decode(),
+                                         "VESQEN_KEYSTORE_PASSWORD": "test-password", "RUNNER_TEMP": directory}, clear=True):
+                with patch.object(release, "inspect_apk"), patch.object(release, "run", side_effect=command):
+                    release.sign(candidate, root / "signed", COMMIT, Path("tools"))
+            result = release.signed_metadata(root / "signed", COMMIT)
+            self.assertEqual("", result["workflowCommit"])
+            self.assertEqual("", result["workflowRun"])
+            self.assertEqual(f"{result['apkSha256']}  Vesqen-1.0.0-beta.1.apk\n",
+                             (root / "signed/SHA256SUMS").read_text())
+            notes = (root / "signed/release-notes.md").read_text()
+            self.assertIn(result["apkSha256"], notes)
+            self.assertIn(COMMIT, notes)
+            self.assertNotIn("must be recorded before publishing", notes)
+            self.assertNotIn("Build and signing run:", notes)
+            published = [[{"draft": False, "assets": [{"name": "release-manifest.json", "id": 123}]}]]
+            with patch.object(release, "run", return_value=json.dumps(result)):
+                release.check_published_version_codes("owner/repo", {**data, "versionCode": 11}, published)
+
+    def test_missing_or_duplicate_published_ledger_remains_blocking(self):
+        asset = {"name": "release-manifest.json", "id": 123}
+        for assets in ([], [asset, asset]):
+            with self.subTest(assets=assets), patch.object(release, "run") as command:
+                with self.assertRaises(release.ReleaseError):
+                    release.check_published_version_codes("owner/repo", metadata(), [[{"draft": False, "assets": assets}]])
+                command.assert_not_called()
 
 
 if __name__ == "__main__":
