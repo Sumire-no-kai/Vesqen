@@ -1153,3 +1153,12 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - #32、#33 的修复已在各自分支完成，要通过 PR 合进 `master`，留给 beta.2。`master` 比发布分支落后 32 个提交，没有分叉；所有者同意在 beta.1 发布前先快进同步。
 - README 中英文的“当前状态”先改为“正在准备”，免得仓库首页在发布前就说已经发布；Google Play 那一行改成不随测试阶段变化的写法。发布说明第 5 步相应改为：发布后先把状态改回已发布，再把发布分支合并回 `master`。
 - 同步后，issue 模板、PR 模板、CONTRIBUTING 和 SECURITY 在 GitHub 上生效。
+
+## 2026-10-01 · 封板前的代码审查与第二个冻结例外
+
+- 对 2026-09-16 复审之后的改动（`c6dd340..7cf506a`，PR #29、#55 及隐私政策网址）做了代码审查，报告 6 项。
+- 最严重的一项作为 beta.1 冻结例外修复（#60，PR #61，`6205f98`）。严格 USB 会在 mixer 申请之前就把它记入待清理列表。别的应用占用同一台 DAC 的偏好时，我们的申请被拒，清理又碰到对方的偏好，Android 会拒绝。于是列表永远清不空，切回系统输出和重试严格输出都会失败，直到进程重启。审查初稿把范围说大了：适配器在没有偏好时本来就算作已清除，只有“别的应用占用”这一种情况会卡住。该场景是按 AOSP 的规则推断的，没有在真机上复现。
+- 修复：申请改由 `MixerPreferenceCleanupTracker.request` 发起，只记录已生效或结果不确定（抛异常）的申请；明确被拒的申请不记录。新增 3 个 JVM 测试。
+- 验证：248 个 JVM 测试通过，lint 0 错误、26 个原有警告，Debug、Release、仪器测试 APK 构建通过，`checkPrivacyPolicyFinal` 通过，工具测试 OK，CI 通过。在 iQOO 上，`UsbOutputSessionContractDeviceTest` 和 `StrictUsbSpeakerDeviceTest` 连续两次通过。第一次运行因只跑服务的测试进程被 `fast_freezer` 冻结而超时，先启动测试宿主后正常。没有 DAC，这些测试只证明周边流程没有回归，碰不到改动的那几行。
+- 其余 5 项（清理失败盖掉原因、吞掉清理异常、GitHub APK 的隐私政策检查靠手动、平台不支持时播放页关不掉严格开关，以及缺少测试；最后一项已随修复补上）记在 #62，留到 beta.2。
+- 发布渠道改为先走官网和 GitHub Releases，Google Play 暂缓，见 [LAUNCH_BACKLOG.md](LAUNCH_BACKLOG.md)。
