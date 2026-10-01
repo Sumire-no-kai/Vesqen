@@ -1,0 +1,80 @@
+name: Publish accepted GitHub APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version of the existing draft (for example 1.0.0-beta.1)
+        required: true
+        type: string
+      apk_sha256:
+        description: SHA-256 of the exact APK that passed device and upgrade QA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-apk-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'Sumire-no-kai/Vesqen' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Check out trusted publication tooling and acceptance records
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            tools/github_release.py
+            docs
+          sparse-checkout-cone-mode: false
+      - name: Set up JDK 25
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Install fixed Android verification tools
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;36.0.0"'
+      - name: Download and publish the accepted draft without rebuilding
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+          EXPECTED_APK_SHA256: ${{ inputs.apk_sha256 }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, 'tools')
+          import github_release as release
+
+          version = os.environ['VERSION']
+          digest = os.environ['EXPECTED_APK_SHA256']
+          if not release.VERSION.fullmatch(version) or not re.fullmatch(r'[0-9a-f]{64}', digest):
+              raise SystemExit('Invalid version or APK hash')
+          repository = os.environ['REPOSITORY']
+          candidate = Path(os.environ['RUNNER_TEMP']) / 'accepted-candidate'
+          candidate.mkdir()
+          filename = f'Vesqen-{version}.apk'
+          release.run(['gh', 'release', 'download', f'v{version}', '--repo', repository,
+                       '--pattern', filename, '--pattern', 'release-manifest.json', '--dir', str(candidate)])
+          if release.sha256(candidate / filename) != digest:
+              raise SystemExit('Downloaded APK does not match the accepted hash')
+          metadata = json.loads((candidate / 'release-manifest.json').read_text())
+          if metadata.get('versionName') != version:
+              raise SystemExit('Draft version does not match')
+          release.publish_release(candidate, repository, metadata['sourceCommit'],
+                                  Path(f'docs/releases/{version}.acceptance.json'),
+                                  Path(os.environ['ANDROID_HOME']) / 'build-tools/36.0.0')
+          PY

@@ -17,7 +17,7 @@ Vesqen uses three independent signing identities:
 The Play upload certificate is not an application update identity. Google Play
 accepts an AAB signed by the registered upload key, then signs installable APKs
 with its managed copy of the application-signing key. GitHub APKs are signed
-locally with that same application-signing identity so both channels can remain
+by the approved release workflow with that same application-signing identity so both channels can remain
 update-compatible.
 
 ## Current public identities
@@ -67,12 +67,56 @@ Passwords are stored as macOS Keychain generic-password entries:
 
 Routine commands must retrieve these values without printing them. Passwords
 must not be passed as literal command arguments, pasted into documentation,
-stored in Gradle properties, or exported into captured CI environments.
+stored in Gradle properties, or included in CI logs, caches, or artifacts.
 
-The application key must remain offline except for local GitHub APK signing,
-controlled recovery verification, and the one-time protected Play App Signing
-import. The upload key may be used for normal Play AAB submissions but is not
-permitted to sign GitHub release APKs.
+On 2026-10-01 the owner authorized protected GitHub Actions signing. This
+replaces the previous local-only application-key rule: the original and offline
+backups remain under local custody, and an encrypted GitHub Environment Secret
+copy may be used by the `github-apk-signing` environment. Its password is a
+separate Environment Secret. Required owner approval and a `master` deployment
+branch restriction must be configured before either secret is uploaded.
+
+Only the isolated signing step receives the application keystore and password.
+Builds and pull requests receive neither; signing runs on a fresh GitHub-hosted
+runner without executing Gradle or application source. The temporary PKCS12 is
+restricted to mode `0600`, cleaned on normal success/failure, and otherwise
+discarded with the ephemeral runner. Actions are pinned to full commit hashes;
+artifact uploads name only the public APK, hashes, manifest, and release notes.
+See [GitHub release CI](GITHUB_RELEASE_CI.md) for the exact workflow and approval.
+
+This expands custody to GitHub and its runners. Approval limits unintended use;
+it does not make an administrator-account or signing-runner compromise harmless.
+A stolen application key can sign impersonated updates accepted as this app's
+identity; it does not itself deliver or silently install those updates. Android
+supports signing-key rotation on some supported versions, but rotation is not a
+universal recovery mechanism for all existing installations, especially API 26/27.
+Treat this as a long-lived credential, not a routinely replaceable upload key.
+
+Controlled local signing remains available for recovery, with its use and final
+artifact recorded in the release ledger. It follows the same GitHub attachment
+contract: every public recovery release must include `release-manifest.json`
+and `SHA256SUMS` alongside the APK. Use the existing `prepare` and `sign` helper
+commands as described in [local recovery](GITHUB_RELEASE_CI.md#local-recovery-release)
+to generate them from the actual artifact. Local signing does not exempt a
+release from the version ledger; CI deliberately rejects a published release
+without it rather than guessing a versionCode or skipping rollback protection.
+The Play upload key and verification issuer remain outside GitHub CI. The upload
+key must never sign GitHub APKs.
+
+### CI provisioning record — 2026-10-01
+
+`github-apk-signing` was configured with the repository owner as required
+reviewer and `master` as its only allowed deployment branch. The original
+application PKCS12 was opened using its Keychain password and its exported
+certificate SHA-256 matched the public identity above. The keystore and password
+were then sent privately through stdin to the two environment secrets named in
+the CI guide. GitHub confirmed both writes; names/timestamps and environment
+rules were read back without reading or displaying secret values. No private
+material was written to the repository or a plaintext staging file.
+
+This verifies provisioning, not a hosted signing run. The first real candidate
+still requires the merged workflow and the owner's signing approval. Local
+originals, Keychain entries and offline backups were unchanged.
 
 ## Creation and validation record
 

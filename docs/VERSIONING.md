@@ -16,8 +16,16 @@ For every build distributed through GitHub Releases, Google Play, or another pub
 - record the artifact hash and signing identity against that tag.
 
 The long-lived application certificate, replaceable Play upload certificate,
-local custody boundary, and per-release signing ledger are defined in
+local and approved CI custody boundaries, and per-release signing ledger are defined in
 [`RELEASE_SIGNING.md`](RELEASE_SIGNING.md). Signing passwords and private keys
 must never be added to version properties or repository files.
+
+A push to `master` that changes `version.properties` starts the
+[GitHub release workflow](GITHUB_RELEASE_CI.md). It checks that `versionName`
+changes and `versionCode` increases together before building a candidate.
+Signing waits for owner approval; public publication requires the exact APK's
+device acceptance record and a separate manual publish action. A version bump
+alone does not publish a release. Frozen `release/<versionName>` commits can be
+selected explicitly from the workflow on `master`.
 
 A published version, tag, APK, or AAB is immutable. A blocker discovered after publication is released under a new version and a larger `versionCode`; for example, `1.0.0-beta.1` / `10` is followed by `1.0.0-beta.2` / `11`, never by a replacement `beta.1` binary. Local builds that are not distributed do not consume a `versionCode`, but they must not be presented as a published release.
