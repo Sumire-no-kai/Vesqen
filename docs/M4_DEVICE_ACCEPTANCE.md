@@ -122,3 +122,14 @@
 - 本地完整软件门禁为 230 项 JVM tests 全部通过、Lint 0 errors / 26 warnings，Debug、Profile、未签名 Release 与 instrumentation APK 构建完成；Python 工具测试 13/13。本机构建使用 Oracle JDK 25.0.4.1；推送 `c6dd340` 后，GitHub Actions [Android CI #35057717601](https://github.com/Sumire-no-kai/Vesqen/actions/runs/35057717601) 在 Temurin JDK 21 下通过证据工具、unit/lint/Debug/test APK、Profile 和 Release，JDK 21 门禁独立关闭。
 - iQOO V2171A / Android 15 上，曲库存储与迁移 11/11 通过，三个输出／断连 UI 用例通过，严格失败提示在 vivo 销毁 Activity 的合批失败后独立 1/1 通过。测试 APK 签名不一致时只替换 test 包，主应用未卸载或清数据；最终移除 test 包并恢复不可调试 Profile，设备与本地 Profile SHA-256 均为 `ac6a3ad2678279ac838e88e734b62ad09d9b20ab24bcab8eeb8de9279eb12177`。
 - 这形成已推送且远端 CI 通过的软件冻结候选，但没有连接真实 DAC，不关闭严格路由／拔插、外部逐样本 VERIFIED、发布签名与同签名升级、完整 TalkBack／适配、长时矩阵或 M3-R1 双机性能门禁；没有创建 tag、Release 或商店产物。
+
+### 2026-10-01 · beta.1 CI 签名 APK 的安装与同签名更新
+
+对应 #42 的最后两项。
+
+- 候选：[GitHub APK release #36811359590](https://github.com/Sumire-no-kai/Vesqen/actions/runs/36811359590)，工作流提交 `d9e20b6`，源码为 `release/1.0.0-beta.1` 的 `57daf836ed003e0e0c7c8794d4a4d0c9f083f164`。所有者批准签名后生成草稿 `v1.0.0-beta.1`。草稿里的 `Vesqen-1.0.0-beta.1.apk` 的 SHA-256 为 `5670977b4f68c648dbf46396cf06d3f188ef3993dc438e4da64b25ba79f9b396`，与当天在本机封板签名的 APK 逐字节相同（未签名包 SHA-256 `fd963c0cdf5d18874c97aa9400ff35525fc23414b0cef57d693bdac0ea3a8489`），所以 #42 里记录的 Honor 走查也是在这个文件上做的。
+- 本机复核草稿附件：`SHA256SUMS` 一致；apksigner 只有一个签名者，证书 SHA-256 为 `743e96fcb71dc58188496819a001a27cd88d909162c5ae929c87bfa29ab86293`，v2、v3 验证通过；aapt 显示 1.0.0-beta.1 / 10、minSdk 26、9 项权限，没有 INTERNET，不可调试；16 KB 页对齐检查通过。
+- iQOO Neo9 V2338A / Android 16（OriginOS 16，PD2338B_A_16.2.13.2）：13:21 先用 adb 全新安装同一字节的本机封板 APK，走查了授权、曲库扫描（108 首，与 MediaStore 中 `is_music=1` 的数量一致）、24 位 / 192 kHz FLAC 播放、正在播放页和曲目详情、链路页（源文件、AudioTrack pcm-float、路由、欠载 0 次），以及严格 USB 在没有 USB 输出设备时停止播放并提示、没有降级，再切回系统输出继续播放。通知栏的暂停、播放、下一首，后台播放 20 秒和媒体键都正常，没有崩溃或 ANR。当时记下的数据：收藏 1 首，该曲播放 2 次，队列 108 首停在第 2 首，输出模式为系统输出。
+- 同一台 Neo9 上用 `adb install -r` 安装 CI 草稿 APK。vivo 安全守护只提示“外部来源应用”，确认后继续。更新成功：firstInstallTime 仍是 13:21:04，lastUpdateTime 为 13:51:11，设备上 base.apk 的哈希为 `5670977b…b396`。两项运行时权限保留；收藏、播放次数、队列位置和输出模式全部保留，曲库不需要重新扫描，没有崩溃。
+- iQOO V2171A / Android 15：所有者同意后，卸载此前用 debug 密钥签名的 Profile 构建（会清掉它的测试数据），再全新安装 CI 草稿 APK，安全守护同样只提示外部来源。授权、扫描、播放、后台 15 秒、媒体键暂停、继续和下一首、前台通知、链路页（源文件 48 kHz / 16 位，AudioTrack pcm-float）都正常，没有崩溃或 ANR。
+- 结论：安装、同签名覆盖更新和数据保留通过，Android 9（Honor）、15、16 都覆盖到了。这是第一个公开版本，所以这次覆盖更新是同一 versionCode（10 → 10）、同一签名的更新，验证的是证书一致时系统允许覆盖、应用数据保留；versionCode 增大的真实升级路径要到 beta.2 才能执行。真实 bit-perfect DAC、外部逐样本 VERIFIED、完整 TalkBack 和长时测试仍未覆盖，作为公开限制。
