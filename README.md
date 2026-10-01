@@ -11,7 +11,7 @@ Vesqen is an offline music player for Android. It plays the music stored on your
 
 [Website](https://vesqen.sumirenokai.com) · [Privacy policy](https://vesqen.sumirenokai.com/privacy/) · [Support](https://vesqen.sumirenokai.com/support/)
 
-> **Status:** `1.0.0-beta.1`, the first public beta, is being prepared. It will be published on GitHub Releases, and invited testers will get it through closed testing on Google Play. Read the [known limitations](#known-limitations) before relying on strict USB output.
+> **Status:** `1.0.0-beta.1`, the first public beta, is out on [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0-beta.1). Vesqen isn't on Google Play yet. Read the [known limitations](#known-limitations) before relying on strict USB output.
 
 ## What Vesqen does
 
@@ -50,7 +50,7 @@ Vesqen doesn't request Android's Internet permission, so the app itself can't se
 ## Known limitations
 
 - No phone and DAC combination has been verified bit-perfect yet, so no `BIT-PERFECT VERIFIED` record exists.
-- Strict USB output hasn't been confirmed with a real DAC yet. So far it has only been checked to stop safely when no compatible DAC is connected. Treat every combination as unverified.
+- Strict USB output hasn't been confirmed with a real DAC yet. Many phones don't offer Android's bit-perfect path, even on Android 14 and later; none of the Android 14+ phones tested so far (vivo and iQOO, on Android 15 and 16) do. On those phones strict mode stops and tells you why. Treat every combination as unverified.
 - Android 13 and earlier don't provide the official bit-perfect mixer API, so strict USB output isn't available there.
 - If Android stops Vesqen in the background, the queue comes back when you open the app again. Resuming straight from headphone buttons isn't supported yet.
 - Long listening sessions, foldables, high refresh rates and complete TalkBack coverage are still being tested.

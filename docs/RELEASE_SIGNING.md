@@ -144,18 +144,33 @@ documented above were generated.
 
 ## Backup, migration, and Play status
 
-As of 2026-09-21:
+As of 2026-10-01:
 
 - local keystores and Keychain passwords: **created and verified**;
 - public certificates and fingerprints: **recorded in Git**;
-- encrypted offline application-key backups: **copy 1 created and
-  recovery-verified; second independent copy pending**;
-- encrypted offline upload-key backups: **copy 1 created and recovery-verified;
-  second independent copy pending**;
+- encrypted offline application-key and upload-key backups: **three copies on
+  three separate media**. Copy 1 was created and recovery-verified on
+  2026-09-21; its SHA-256 was re-checked unchanged on 2026-10-01. Copies 2 and 3
+  are byte-identical copies of the same encrypted image on a separate NTFS drive
+  and on a Windows computer, made and SHA-256-verified by the owner with
+  `Get-FileHash` against the recorded image hash. Identical bytes restore to
+  the same PKCS12 files, so they reproduce the fingerprints verified for copy 1;
 - off-device custody of the passwords needed after loss of the release Mac:
-  **pending**;
-- Play App Signing import and certificate reconciliation: **not yet executed**;
-- signed APK/AAB candidate and same-signer upgrade acceptance: **not yet executed**.
+  **done on 2026-10-01**. The image password and the three PKCS12 passwords
+  (application signing, Play upload, output verification issuer) are kept in an
+  end-to-end encrypted password manager, separate from the backup media. Each
+  stored value was compared byte for byte with its Keychain entry without
+  being displayed;
+- output verification issuer keystore: **not yet in the encrypted backup image**.
+  It does not affect app signing; losing it means rotating to a new issuer key
+  through an app update before new verification records can be signed;
+- Play App Signing import and certificate reconciliation: **not yet executed**
+  (Google Play is deferred; the first release goes through the website and
+  GitHub Releases);
+- signed APK candidate and same-signer update acceptance: **done for
+  `1.0.0-beta.1`** (CI-signed APK, published 2026-10-01; see
+  [M4 device acceptance](M4_DEVICE_ACCEPTANCE.md) and the release receipt).
+  No AAB has been produced while Google Play is deferred.
 
 Backup copy 1 was created on 2026-09-21 on controlled removable media as an
 AES-256 encrypted, compressed, read-only UDZO disk image without reformatting
