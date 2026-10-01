@@ -175,7 +175,7 @@ App 只打包 Instrument Serif（Regular、Italic）和 Instrument Sans，都使
 
 ### 4.1 官网（画板宽 1440）
 
-- 左右边距 80 px。页眉内边距 26 px 80 px：左侧标识和字标，中间导航（Liner notes、Privacy、Support、中文，间距 36 px），最右边是状态标签或主按钮：封闭测试期间显示不可点的"In closed testing / 封闭测试中"，正式上架后换成"Get it on Google Play / 在 Google Play 获取"。
+- 左右边距 80 px。页眉内边距 26 px 80 px：左侧标识和字标，中间导航（Liner notes、Privacy、Support，间距 36 px），右侧是状态标签或主按钮，再右边是语言菜单：封闭测试期间状态标签显示不可点的"In closed testing / 封闭测试中"，公开测试期间是"Public beta / 公开测试版"，正式上架后换成"Get it on Google Play / 在 Google Play 获取"。语言菜单是 44 px 高的全圆角描边按钮（地球图标加当前语言，窄屏只留图标），展开后是 `paper-raised` 小面板，列出 English 和中文，当前语言用 Moss 对勾标出；面板淡入并下移 4 px，250 ms。
 - 首屏两栏：`minmax(0, 1fr)` 加 640 px，栏间距 56 px。左栏上边距 40 px，元素间距 26 px，依次是眉题、主标题、段落（最宽 520 px）、按钮行、脚注。
 - 右栏是"唱片套"：640 × 700，圆角 28 px，底色是当前专辑的染色。
   - 封面叠层 340 × 340，位于 (64, 64)，圆角 4 px。
