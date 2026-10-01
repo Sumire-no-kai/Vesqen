@@ -159,6 +159,8 @@ class GithubReleaseTest(unittest.TestCase):
                     if "view" in args:
                         return json.dumps({"isDraft": True, "targetCommitish": COMMIT, "body": "Accepted release notes"})
                     if "api" in args:
+                        if "--paginate" in args:
+                            return "[]"
                         if "POST" in args:
                             payload = json.loads(kwargs["input_text"])
                             if args[args.index("POST") + 1].endswith("/git/tags"):
@@ -181,6 +183,14 @@ class GithubReleaseTest(unittest.TestCase):
                             release.publish_release(root, "owner/repo", COMMIT, receipt, Path("tools"))
                 self.assertEqual(succeeds, any("--draft=false" in args for args in commands))
                 self.assertFalse(any("upload" in args or "sign" in args or "gradlew" in args for args in commands))
+
+    def test_published_version_guard_rejects_an_old_pending_draft(self):
+        releases = [[{"draft": True, "assets": []},
+                     {"draft": False, "assets": [{"name": "release-manifest.json", "id": 123}]}]]
+        with patch.object(release, "run", return_value=json.dumps({"versionCode": 11})):
+            with self.assertRaises(release.ReleaseError):
+                release.check_published_version_codes("owner/repo", metadata(), releases)
+            release.check_published_version_codes("owner/repo", {**metadata(), "versionCode": 12}, releases)
 
 
 if __name__ == "__main__":

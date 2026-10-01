@@ -177,13 +177,7 @@ def signed_metadata(candidate, commit):
     return metadata
 
 
-def draft_release(candidate, repository, commit):
-    metadata = signed_metadata(candidate, commit)
-    filename = f"Vesqen-{metadata['versionName']}.apk"
-    tag = f"v{metadata['versionName']}"
-    releases = json.loads(run(["gh", "api", "--paginate", "--slurp", f"repos/{repository}/releases?per_page=100"]))
-    if any(release["tag_name"] == tag for page in releases for release in page):
-        raise ReleaseError("A release already exists; refusing to replace any assets")
+def check_published_version_codes(repository, metadata, releases):
     for page in releases:
         for previous in page:
             if previous["draft"]:
@@ -195,6 +189,16 @@ def draft_release(candidate, repository, commit):
                                      "--header", "Accept: application/octet-stream"]))
             if type(ledger.get("versionCode")) is not int or metadata["versionCode"] <= ledger["versionCode"]:
                 raise ReleaseError("versionCode must exceed every published release")
+
+
+def draft_release(candidate, repository, commit):
+    metadata = signed_metadata(candidate, commit)
+    filename = f"Vesqen-{metadata['versionName']}.apk"
+    tag = f"v{metadata['versionName']}"
+    releases = json.loads(run(["gh", "api", "--paginate", "--slurp", f"repos/{repository}/releases?per_page=100"]))
+    if any(release["tag_name"] == tag for page in releases for release in page):
+        raise ReleaseError("A release already exists; refusing to replace any assets")
+    check_published_version_codes(repository, metadata, releases)
     command = ["gh", "release", "create", tag, "--repo", repository, "--target", commit, "--draft",
                "--title", f"Vesqen {metadata['versionName']}", "--notes-file", str(candidate / "release-notes.md")]
     if "-" in metadata["versionName"]:
@@ -239,6 +243,9 @@ def publish_release(candidate, repository, commit, acceptance, tools):
         raise ReleaseError("Only the matching draft can be published")
     if not info["body"].strip() or any(marker in info["body"] for marker in ("(发布时填写)", "(按 #42 的结果更新)")):
         raise ReleaseError("Finalize draft release notes before publication")
+    # Other drafts may have been published since this candidate was created.
+    releases = json.loads(run(["gh", "api", "--paginate", "--slurp", f"repos/{repository}/releases?per_page=100"]))
+    check_published_version_codes(repository, metadata, releases)
     ref_command = ["gh", "api", f"repos/{repository}/git/ref/tags/{tag}"]
     ref_result = subprocess.run(ref_command, capture_output=True, text=True, check=False)
     if ref_result.returncode == 0:

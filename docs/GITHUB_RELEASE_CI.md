@@ -24,6 +24,8 @@ Google Play upload and the output-verification issuer are outside this workflow.
    downloads and verifies the existing APK, requires its matching receipt,
    creates/verifies the annotated version tag, and publishes the existing draft.
    It does not rebuild, re-sign or replace attachments.
+   Both draft creation and publication require a versionCode higher than every
+   already-published release, so an older pending draft cannot become a downgrade.
 
 For the frozen first beta, run **GitHub APK release** manually from `master`,
 selecting `release/1.0.0-beta.1` and its reviewed full 40-character commit SHA.

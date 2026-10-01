@@ -96,6 +96,21 @@ Controlled local signing remains available for recovery, with its use and final
 artifact recorded in the release ledger. The Play upload key and verification
 issuer remain outside GitHub CI. The upload key must never sign GitHub APKs.
 
+### CI provisioning record — 2026-10-01
+
+`github-apk-signing` was configured with the repository owner as required
+reviewer and `master` as its only allowed deployment branch. The original
+application PKCS12 was opened using its Keychain password and its exported
+certificate SHA-256 matched the public identity above. The keystore and password
+were then sent privately through stdin to the two environment secrets named in
+the CI guide. GitHub confirmed both writes; names/timestamps and environment
+rules were read back without reading or displaying secret values. No private
+material was written to the repository or a plaintext staging file.
+
+This verifies provisioning, not a hosted signing run. The first real candidate
+still requires the merged workflow and the owner's signing approval. Local
+originals, Keychain entries and offline backups were unchanged.
+
 ## Creation and validation record
 
 The current key pair was generated locally with Oracle JDK 25 `keytool` on
