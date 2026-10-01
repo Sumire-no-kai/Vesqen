@@ -212,8 +212,10 @@ Vesqen 的长期差异化来自“可验证的播放链路”，而不只是格�
 | 运行环境 | 启动时选择的候选策略 | 实际启用条件 |
 | --- | --- | --- |
 | API 34+ | `OfficialMixerBitPerfectAdapter` | 已连接数字 USB DAC，ROM/HAL 暴露 bit-perfect mixer attribute，且源格式与 attribute 匹配 |
-| API 26–33，M7 未提供或未启用 | `SystemUsbRouteAdapter` | 只提供 Android 常规 USB 路由，状态保持 `SYSTEM MIXED` 或其他有证据支持的非 bit-perfect 状态 |
-| API 26–33，M7 已提供 | `DirectUsbHostAdapter` 候选 | 用户明确启用实验模式、授予 USB 权限，且 UAC 版本、endpoint、格式和设备组合经过支持矩阵确认 |
+| API 26–33，或 ROM/HAL 未暴露 bit-perfect mixer attribute 的 API 34+；M7 未提供或未启用 | `SystemUsbRouteAdapter` | 只提供 Android 常规 USB 路由，状态保持 `SYSTEM MIXED` 或其他有证据支持的非 bit-perfect 状态；严格模式失败关闭并说明原因 |
+| 同上，M7 已提供 | `DirectUsbHostAdapter` 候选 | 用户明确启用实验模式、授予 USB 权限，且 UAC 版本、endpoint、格式和设备组合经过支持矩阵确认；API 34+ 设备只有在官方路径确认不可用时才选择它 |
+
+API 34+ 并不等于有官方路径：厂商 ROM 可能不提供 bit-perfect mixer attribute。2026-10-01 实测的 iQOO V2171A（Android 15），系统音频策略里没有任何 bit-perfect 输出端口，接 JBL Flip 7 时只能走普通系统路由。
 
 系统版本只用于筛选候选 Implementation，不能单独证明直出可用。应用启动时可以显示“官方路径候选”“需要高级 USB 引擎”或“仅普通系统路由”，但只有完成设备与格式能力检查并成功配置输出后，才能显示 `BIT-PERFECT ACTIVE`。
 
@@ -410,7 +412,7 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 2. 应用识别其为数字 USB Audio Class 输出。
 3. 用户主动打开 USB bit-perfect 模式。
 4. `UsbOutputStrategyResolver` 根据 API level、可选模块、DAC、权限和源格式重新生成决策。
-5. API 34+ 优先检查并配置官方 mixer attribute；API 26–33 只有在 M7 引擎可用且设备在支持范围内时才进入自研直出路径。
+5. API 34+ 优先检查并配置官方 mixer attribute；API 26–33，以及 ROM/HAL 没有暴露 bit-perfect mixer attribute 的 API 34+ 设备，只有在 M7 引擎可用且设备在支持范围内时才进入自研直出路径。
 6. 检查成功后配置输出并开始播放，显示 `BIT-PERFECT ACTIVE`。
 7. 条件不满足时停止并解释原因；用户可以主动切换兼容模式，但应用不得静默改变策略。
 
@@ -468,8 +470,8 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 - Media3 1.9.0 及之后版本最低为 API 23，因此与 API 26 基线兼容。
 - 项目创建时使用 `compileSdk 36` 和 `targetSdk 36`；API 34 音频调用必须通过版本隔离实现，不能在低版本路径直接加载。
 - 核心测试覆盖至少 Android 8/9、Android 13、Android 14 和当前稳定 Android 版本。
-- USB bit-perfect 官方路径只在 API 34+ 暴露。
-- API 26–33 默认提供普通系统播放；严格 USB 直出只有在未来高级 USB 引擎完成后才可能增加。
+- USB bit-perfect 官方路径只在 API 34+ 暴露，而且还要 ROM/HAL 实际提供 bit-perfect mixer attribute，部分厂商系统没有提供。
+- API 26–33，以及没有官方路径的 API 34+ 设备，默认提供普通系统播放；严格 USB 直出只有在未来高级 USB 引擎完成后才可能增加。
 - 启动时的 API level 检测只选择候选策略；最终决策还必须绑定 USB DAC、ROM/HAL 能力、权限、源格式和可选模块状态。
 - USB 策略必须在进程启动、设备插拔、权限变化、源格式变化和路由变化时重新计算。
 - Manifest 声明 `android.hardware.usb.host`，但核心播放器不依赖 USB，因此将该 feature 设为非必需并在运行时检测。
@@ -652,9 +654,9 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 
 该阶段是条件性工程演进，不是首个稳定版的阻断项；如果收益不足，应保留深接口并继续使用 Media3 Implementation。
 
-### M7：旧系统高级 USB 引擎（条件性里程碑）
+### M7：高级 USB 引擎（条件性里程碑）
 
-目标：评估 Android 8–13 严格 USB 直出的真实价值与成本。
+目标：在没有官方 bit-perfect 通道的设备上，评估严格 USB 直出的真实价值与成本。范围包括 Android 8–13，以及 ROM/HAL 没有暴露 bit-perfect mixer attribute 的 Android 14+ 设备（2026-10-01 扩大，起因见 F5.1 中 iQOO 的实测）。官方路径可用时，仍优先使用官方路径。
 
 启动前置条件：
 
@@ -708,7 +710,7 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 ### 可以完成（独立实验）
 
 - M6 渐进式自研播放内核。
-- M7 旧系统高级 USB 引擎。
+- M7 高级 USB 引擎（没有官方 bit-perfect 通道的设备）。
 - M8 端侧音频智能。
 - NAS、远程控制和 ABX 测试工具。
 
