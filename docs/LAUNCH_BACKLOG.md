@@ -30,6 +30,8 @@
 
 发布 beta.2 时，隐私政策（应用内和官网）、README、官网和发布说明里“应用不申请联网权限”的说法要一起改写。#35 的视觉方向见[官网与界面重设计方向](redesign/README.md)。
 
+2026-10-02 起 Vesqen 面向全球用户，从 beta.2 开始在少数目标社区传播，大范围宣传留到 1.0。传播口径、地区和渠道的暂定安排见 [PRD](PRD.md) 末尾“2026-10-02 全球用户与对外传播”。
+
 ## 1.0 正式版之前
 
 | Issue | 内容 |
@@ -40,6 +42,8 @@
 | [#53](https://github.com/Sumire-no-kai/Vesqen/issues/53) | 决定 1.0 的版本号与对外定位 |
 | [#54](https://github.com/Sumire-no-kai/Vesqen/issues/54) | 仓库与文档整理：发版复审记录、远程分支、签名文档中的本机路径 |
 | [#73](https://github.com/Sumire-no-kai/Vesqen/issues/73) | 链路页显示系统报告的蓝牙 codec（可选证据） |
+| [#74](https://github.com/Sumire-no-kai/Vesqen/issues/74) | 评估上架 F-Droid 和 IzzyOnDroid（可能需要无统计、无更新器的构建） |
+| [#75](https://github.com/Sumire-no-kai/Vesqen/issues/75) | 评估增加日语等界面语言 |
 
 ## 2.0 之前
 
@@ -67,4 +71,5 @@
 - #70 上线前，隐私政策要先改好并完成核查；#69 的上传接口也依赖 #70 的服务端。
 - #46 依赖 #47 和 #48；收费方案在正式版准备上架前讨论。
 - #49 需要一台开放了官方 bit-perfect 通道的手机，或者走 #71 的路径。
+- #74 和 #47 的构建拆分一起考虑。
 - #72 的文案和版式随 #35 的链路页一起做。#73 要靠 #69 的设备报告收集各 ROM 能否收到 codec 广播。
