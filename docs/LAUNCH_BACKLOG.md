@@ -26,6 +26,7 @@
 | [#68](https://github.com/Sumire-no-kai/Vesqen/issues/68) | GitHub 版应用内检查、下载并安装更新 | 新功能 |
 | [#69](https://github.com/Sumire-no-kai/Vesqen/issues/69) | 导出设备报告（用户选择内容，可上传或分享） | 新功能 |
 | [#70](https://github.com/Sumire-no-kai/Vesqen/issues/70) | 匿名使用统计与 Cloudflare 服务端 | 新功能、隐私 |
+| [#72](https://github.com/Sumire-no-kai/Vesqen/issues/72) | 链路页：蓝牙播放分两段显示，标出 Vesqen 这一段没有改动音频 | 新功能 |
 
 发布 beta.2 时，隐私政策（应用内和官网）、README、官网和发布说明里“应用不申请联网权限”的说法要一起改写。#35 的视觉方向见[官网与界面重设计方向](redesign/README.md)。
 
@@ -38,6 +39,7 @@
 | [#52](https://github.com/Sumire-no-kai/Vesqen/issues/52) | 进程被杀后通过耳机键或系统媒体控制恢复播放队列 |
 | [#53](https://github.com/Sumire-no-kai/Vesqen/issues/53) | 决定 1.0 的版本号与对外定位 |
 | [#54](https://github.com/Sumire-no-kai/Vesqen/issues/54) | 仓库与文档整理：发版复审记录、远程分支、签名文档中的本机路径 |
+| [#73](https://github.com/Sumire-no-kai/Vesqen/issues/73) | 链路页显示系统报告的蓝牙 codec（可选证据） |
 
 ## 2.0 之前
 
@@ -65,3 +67,4 @@
 - #70 上线前，隐私政策要先改好并完成核查；#69 的上传接口也依赖 #70 的服务端。
 - #46 依赖 #47 和 #48；收费方案在正式版准备上架前讨论。
 - #49 需要一台开放了官方 bit-perfect 通道的手机，或者走 #71 的路径。
+- #72 的文案和版式随 #35 的链路页一起做。#73 要靠 #69 的设备报告收集各 ROM 能否收到 codec 广播。

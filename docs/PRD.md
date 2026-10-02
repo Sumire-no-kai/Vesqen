@@ -191,7 +191,7 @@ Vesqen 的长期差异化来自“可验证的播放链路”，而不只是格�
 - 清楚显示当前系统输出设备与路由变化。
 - 显示系统可能混音或重采样，不能以源文件参数冒充最终输出参数。
 - EQ、响度均衡、ReplayGain、crossfade 等处理如后续实现，只能在普通/DSP 模式启用。
-- 蓝牙耳机、音箱及其他音频设备纳入现有系统路由与 Chain 观测；已连接设备与系统已选择路由分别标注，没有流级路由证据时不称为“实际播放端点”。详细数据边界见 F6.5，不新增蓝牙 bit-perfect 承诺。
+- 蓝牙耳机、音箱及其他音频设备纳入现有系统路由与 Chain 观测；已连接设备与系统已选择路由分别标注，没有流级路由证据时不称为“实际播放端点”。详细数据边界见 F6.5，不新增蓝牙 bit-perfect 承诺。Vesqen 这一段是否改动音频、系统报告的蓝牙 codec 分别见 F6.5.1 和 F6.5.2。
 
 ### F5：USB bit-perfect 模式
 
@@ -299,6 +299,31 @@ Telemetry Module 默认不常驻采样。只有相关页面可见或用户主动
 - Android 12+ 仅在确需 Bluetooth API 时按需申请 `BLUETOOTH_CONNECT`；较旧系统按接口要求最小声明权限。拒绝／撤销权限仍可播放，保留允许读取的系统路由信息；不为显示信息要求设备扫描、定位或额外配对。
 - 路由切换、断连、蓝牙关闭、权限撤销和播放会话改变时及时清除不再有效的数据。观察者与回调沿用既有采样生命周期；不会因蓝牙连接而在无人观察、无人录制时启动常驻采样。
 - 蓝牙设备名称、地址、别名和可识别设备标识只用于有授权的本地展示，不进入诊断导出；导出仅保留匿名端点、类型、证据及允许公开的参数。蓝牙能力、codec 名称或高码率均不能升级为 USB 或端到端 bit-perfect 声明。
+
+##### F6.5.1 Vesqen 这一段（2026-10-02 决定，#72）
+
+多数用户用蓝牙听歌。Chain 把蓝牙播放分成两段，分别给出结论。
+
+- **Vesqen 这一段**：从读取文件到把 PCM 交给系统。下列条件全部成立时，显示 Vesqen 没有改动音频：
+  - 播放速度和音调为 1.0，应用音量为 100%，没有跳过静音；
+  - 没有 ReplayGain、EQ、响度均衡、crossfade、淡入淡出或其他应用 DSP；
+  - 交给 AudioTrack 的采样率和声道数与解码输出一致；
+  - 格式转换不丢精度：16 位保持 16 位，24 位整数转 32 位浮点可以；32 位整数转浮点或降低位深不算。
+- 音源是无损格式（FLAC、ALAC、WAV 等）时，这一段可以写“无损”；有损音源（MP3、AAC、Opus 等）只写“未再改动”。
+- 任一条件取不到可靠数据，或者正在临时变化（音频焦点压低音量、切歌过渡），就不显示这条结论，并说明原因。数据来自 `PlaybackTelemetry` 已有的 processing 指标，不新增常驻采样。
+- **系统到蓝牙这一段**：Android 会把应用的音频和其他声音混在一起，可能重采样，再交给蓝牙 codec 编码。默认显示“有损或未知，取决于蓝牙 codec”；有 F6.5.2 的数据时显示系统报告的 codec。普通应用无法用 bit-perfect 混音绕过这一步：`AudioManager.setPreferredMixerAttributes()` 目前只接受 USB 设备（AOSP 2026-10-02 核查）。
+- 这条结论不是新的输出声明等级。整条链路仍是 `SYSTEM MIXED`，不能升级为 `DIRECT`、`BIT-PERFECT` 或“蓝牙无损”。
+- 扬声器、3.5 mm 和普通 USB 路由同样显示“Vesqen 这一段”，蓝牙额外显示第二段。
+- 对外可以说“Vesqen 不改动你的音频，蓝牙这一段取决于手机和耳机”，不能说“蓝牙无损播放”。
+
+##### F6.5.2 系统报告的蓝牙 codec（2026-10-02 决定，#73）
+
+- **来源**：A2DP codec 协商变化时，蓝牙服务发送广播 `android.bluetooth.a2dp.profile.action.CODEC_CONFIG_CHANGED`，附带当前 codec、采样率、位深和声道。2026-10-02 核查 AOSP main：`A2dpService` 发送时只要求接收方有 `BLUETOOTH_CONNECT`；`BluetoothCodecStatus`、`BluetoothCodecConfig`、`EXTRA_CODEC_STATUS` 和 `BluetoothCodecType.getCodecName()` 在公开 SDK 里，只有广播动作字符串本身标为 `@SystemApi`。主动查询的 `getCodecStatus()` 需要 `BLUETOOTH_PRIVILEGED`，仍然不能用。
+- 这条来源只作为可选证据：不用反射，不调用隐藏方法，收不到就显示 `UNAVAILABLE` 和原因。各 Android 版本和厂商 ROM 是否照样发送，要靠真机验证，并通过设备报告（#69）收集。
+- 广播不是粘性的，只在协商变化时发出。Vesqen 启动前就已连接的耳机，通常要等下一次重新协商才有数据。显示时带观察时间；断开、切换设备、关闭蓝牙或撤销权限时立即清除。权限沿用 F6.5 的按需申请规则。
+- aptX Adaptive、aptX Lossless 等厂商 codec 不在 AOSP 的 codec 编号里，只有拿到真机证据后才映射成具体名称，不按耳机或手机型号推断。
+- 系统报告的是标称无损的 codec 时，只写“系统报告 codec：aptX Lossless（标称支持无损，信号不好时会退回有损）”。高通资料中 aptX Lossless 为 16 位 44.1 kHz（部分平台到 48 kHz），并随连接质量在无损和有损之间切换；应用读不到当前处于哪种模式，所以不显示任何无损标识。
+- codec 的采样率和位深是协商值，不能填进 F6.5 的实时传输码率字段。
 
 ### F7：设备与 DAC 实验室
 
@@ -771,6 +796,10 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 - Bluetooth A2DP 公开 SDK 接口：<https://developer.android.com/reference/android/bluetooth/BluetoothA2dp>
 - AOSP `BluetoothA2dp` 中 codec status 的隐藏／System API 边界（2026-09-07 核查，实施时按目标版本复核）：<https://android.googlesource.com/platform/packages/modules/Bluetooth/+/refs/heads/main/framework/java/android/bluetooth/BluetoothA2dp.java>
 - Android 蓝牙运行时权限：<https://developer.android.com/develop/connectivity/bluetooth/bt-permissions>
+- AOSP `A2dpService` 发送 codec 变化广播时要求的权限（2026-10-02 核查）：<https://android.googlesource.com/platform/packages/modules/Bluetooth/+/refs/heads/main/android/app/src/com/android/bluetooth/a2dp/A2dpService.java>
+- AOSP 蓝牙模块公开 API 列表（`BluetoothCodecStatus`、`BluetoothCodecConfig`、`BluetoothCodecType`）：<https://android.googlesource.com/platform/packages/modules/Bluetooth/+/refs/heads/main/framework/api/current.txt>
+- AOSP `AudioManager.setPreferredMixerAttributes()` 只接受 USB 设备（2026-10-02 核查）：<https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/media/java/android/media/AudioManager.java>
+- 高通 aptX Lossless 白皮书：<https://www.qualcomm.com/content/dam/qcomm-martech/dm-assets/documents/white_paper_introducing_lossless_audio_streaming_for_bluetooth_and_what_it_means_for_consumers.pdf>
 
 ## 2026-09-07 review 修复与可发现性补充
 
@@ -849,3 +878,7 @@ GitHub 版没有应用商店的统计，开发迭代又需要真实的设备和�
 - 隐私政策定稿前，对照官方要求和可靠范例核查默认开启的处理方式。
 - 1.0.0-beta.1 及更早的版本仍然没有联网权限，原有说明对它们继续成立。
 
+
+## 2026-10-02 蓝牙链路说明
+
+所有者决定在 Chain 里说明蓝牙播放的两段：Vesqen 这一段有没有改动音频（F6.5.1，#72，beta.2），以及系统报告的蓝牙 codec（F6.5.2，#73，1.0）。两项都不新增输出声明等级，也不允许宣传“蓝牙无损”。
