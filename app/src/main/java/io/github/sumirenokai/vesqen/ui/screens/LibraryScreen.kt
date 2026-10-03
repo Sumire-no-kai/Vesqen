@@ -9,6 +9,21 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.unit.sp
+import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
+import io.github.sumirenokai.vesqen.ui.components.rememberAlbumBackground
+import io.github.sumirenokai.vesqen.ui.formatDuration
+import io.github.sumirenokai.vesqen.ui.theme.VesqenDataStyle
+import java.util.Locale
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
@@ -129,6 +144,10 @@ import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 
 private val LibraryHierarchyEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
+// B · Paper & Sound shelf: 124 dp covers; a dozen recent albums is enough to browse sideways.
+private val AlbumShelfCover = 124.dp
+private const val AlbumShelfSize = 12
+
 private sealed interface LibraryContentView {
     val depth: Int
 
@@ -195,6 +214,7 @@ fun LibraryScreen(
     onPauseLibraryScan: () -> Unit = {},
     onResumeLibraryScan: () -> Unit = {},
     motionPolicy: VesqenMotionPolicy? = null,
+    onPageBackgroundChange: (Color) -> Unit = {},
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     val listStateHolder = rememberSaveableStateHolder()
@@ -281,6 +301,21 @@ fun LibraryScreen(
     val selectedCollection = remember(collections, selectedCollectionKey) {
         collections.firstOrNull { it.key == selectedCollectionKey }
     }
+    val albumShelf = remember(collections, browseMode, query) {
+        if (browseMode == LibraryBrowseMode.ALBUMS && query.isBlank() && collections.size > 1) {
+            sortLibraryCollections(collections, LibrarySortOrder.RECENTLY_ADDED).take(AlbumShelfSize)
+        } else {
+            emptyList()
+        }
+    }
+    // An open album tints the whole page from its cover, as Now does; every other view stays paper.
+    val openAlbum = selectedCollection?.takeIf { browseMode == LibraryBrowseMode.ALBUMS && !favoritesOnly }
+    val pageBackground = rememberAlbumBackground(
+        track = openAlbum?.tracks?.firstOrNull(),
+        dark = MaterialTheme.colorScheme.background.luminance() < .5f,
+        motionPolicy = appliedMotionPolicy,
+    )
+    SideEffect { onPageBackgroundChange(pageBackground) }
     val isFavoriteList = favoritesOnly && browseMode == LibraryBrowseMode.SONGS && selectedCollection == null
     val isPlaylist = selectedCollection?.playlistId != null
     val contentView = selectedCollection?.let { LibraryContentView.Collection(it.key) }
@@ -497,6 +532,18 @@ fun LibraryScreen(
                         modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
                     )
 
+                    activeCollection != null && browseMode == LibraryBrowseMode.ALBUMS -> {
+                        listStateHolder.SaveableStateProvider(key = "collection:${activeCollection.key}") {
+                            AlbumPage(
+                                album = activeCollection,
+                                playback = playback,
+                                onBack = { selectedCollectionKey = null },
+                                onPlayQueue = onPlayQueue,
+                                onTrackMore = { detailsTrack = it },
+                            )
+                        }
+                    }
+
                     activeCollection != null -> listStateHolder.SaveableStateProvider(
                         key = "collection:${activeCollection.key}",
                     ) {
@@ -553,6 +600,7 @@ fun LibraryScreen(
                         CollectionList(
                             mode = browseMode,
                             collections = collections,
+                            shelf = albumShelf,
                             onCollectionSelected = { selectedCollectionKey = it.key },
                             onCreatePlaylist = if (browseMode == LibraryBrowseMode.PLAYLISTS) {
                                 { showCreatePlaylist = true }
@@ -787,27 +835,44 @@ private fun LibrarySortButton(
 }
 
 // B · Paper & Sound: list views share one row, a serif title over a muted meta line with a hairline
-// below and a chevron at the end, inside the 24 dp page margin.
+// below and a chevron at the end, inside the 24 dp page margin. Albums add the recently-added shelf
+// above the full list; the shelf scrolls sideways edge to edge, so rows carry the margin themselves.
 @Composable
 private fun CollectionList(
     mode: LibraryBrowseMode,
     collections: List<LibraryCollection>,
+    shelf: List<LibraryCollection>,
     onCollectionSelected: (LibraryCollection) -> Unit,
     onCreatePlaylist: (() -> Unit)?,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = VesqenSpacing.lg,
-            end = VesqenSpacing.lg,
-            top = VesqenSpacing.xs,
-            bottom = VesqenSpacing.md,
-        ),
+        contentPadding = PaddingValues(top = VesqenSpacing.xs, bottom = VesqenSpacing.md),
     ) {
+        if (shelf.isNotEmpty()) {
+            item(key = "shelf-label", contentType = "label") {
+                LibrarySectionLabel(stringResource(R.string.library_recently_added))
+            }
+            item(key = "shelf", contentType = "shelf") {
+                LazyRow(
+                    modifier = Modifier.testTag("vesqen.library.shelf"),
+                    contentPadding = PaddingValues(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.sm),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    items(shelf, key = { "shelf:${it.key}" }) { album ->
+                        AlbumShelfItem(album = album, onClick = { onCollectionSelected(album) })
+                    }
+                }
+            }
+            item(key = "all-label", contentType = "label") {
+                LibrarySectionLabel(stringResource(R.string.library_all_albums))
+            }
+        }
         onCreatePlaylist?.let { create ->
             item(key = "create-playlist") {
                 Row(
                     modifier = Modifier
+                        .padding(horizontal = VesqenSpacing.lg)
                         .fillMaxWidth()
                         .heightIn(min = 56.dp)
                         .hairlineBelow()
@@ -834,6 +899,51 @@ private fun CollectionList(
                 mode = mode,
                 collection = collection,
                 onClick = { onCollectionSelected(collection) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun LibrarySectionLabel(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier.padding(start = VesqenSpacing.lg, end = VesqenSpacing.lg, top = VesqenSpacing.md, bottom = VesqenSpacing.xxs),
+        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun AlbumShelfItem(album: LibraryCollection, onClick: () -> Unit) {
+    val shadow = LocalVesqenColors.current.shadow
+    Column(
+        modifier = Modifier
+            .width(AlbumShelfCover)
+            .clickable(onClick = onClick)
+            .testTag("vesqen.library.shelf.${album.key}"),
+        verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xs),
+    ) {
+        AlbumArtwork(
+            track = album.tracks.first(),
+            targetSize = AlbumShelfCover,
+            modifier = Modifier
+                .size(AlbumShelfCover)
+                .shadow(2.dp, RoundedCornerShape(VesqenRadii.album), ambientColor = shadow, spotColor = shadow),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(
+                text = album.title.ifBlank { stringResource(R.string.unknown_album) },
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = album.subtitle.ifBlank { stringResource(R.string.unknown_artist) },
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -874,6 +984,7 @@ private fun CollectionRow(
     }
     Row(
         modifier = Modifier
+            .padding(horizontal = VesqenSpacing.lg)
             .fillMaxWidth()
             .heightIn(min = 64.dp)
             .hairlineBelow()
@@ -882,6 +993,12 @@ private fun CollectionRow(
             .testTag("vesqen.library.collection.${collection.key}"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (mode == LibraryBrowseMode.ALBUMS) {
+            collection.tracks.firstOrNull()?.let { track ->
+                AlbumArtwork(track = track, targetSize = 48.dp, modifier = Modifier.size(48.dp))
+                Spacer(Modifier.width(VesqenSpacing.sm))
+            }
+        }
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 text = title,
@@ -903,6 +1020,149 @@ private fun CollectionRow(
             modifier = Modifier.size(20.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+// B · Paper & Sound album page: the cover above a paper-raised card (18 dp corners) with the serif
+// title, "artist · format" and the Moss play button, then numbered 48 dp rows with tabular numbers.
+// The page itself takes the cover tint (see onPageBackgroundChange).
+@Composable
+private fun AlbumPage(
+    album: LibraryCollection,
+    playback: PlaybackSnapshot,
+    onBack: () -> Unit,
+    onPlayQueue: (List<AudioTrack>, Int) -> Unit,
+    onTrackMore: (AudioTrack) -> Unit,
+) {
+    val card = MaterialTheme.colorScheme.surface
+    val shadow = LocalVesqenColors.current.shadow
+    val title = album.title.ifBlank { stringResource(R.string.unknown_album) }
+    val artist = album.subtitle.ifBlank { stringResource(R.string.unknown_artist) }
+    val meta = remember(artist, album.tracks) {
+        listOfNotNull(artist, nowFormatSummary(album.tracks.firstOrNull())).joinToString(" · ")
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().testTag("vesqen.library.album"),
+        contentPadding = PaddingValues(bottom = VesqenSpacing.md),
+    ) {
+        item(key = "back") {
+            Box(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = VesqenSpacing.xxs)) {
+                IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                }
+            }
+        }
+        album.tracks.firstOrNull()?.let { cover ->
+            item(key = "cover") {
+                AlbumArtwork(
+                    track = cover,
+                    targetSize = AlbumShelfCover,
+                    modifier = Modifier
+                        .padding(start = VesqenSpacing.lg, top = VesqenSpacing.xxs, bottom = VesqenSpacing.md)
+                        .size(AlbumShelfCover)
+                        .shadow(12.dp, RoundedCornerShape(VesqenRadii.album), ambientColor = shadow, spotColor = shadow),
+                )
+            }
+        }
+        item(key = "card-head") {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 14.dp)
+                    .fillMaxWidth()
+                    .background(card, RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+                    .padding(start = VesqenSpacing.md, end = VesqenSpacing.md, top = 18.dp, bottom = VesqenSpacing.sm),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs)) {
+                    Text(title, style = MaterialTheme.typography.displaySmall, modifier = Modifier.testTag("vesqen.library.album.title"))
+                    Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                FilledIconButton(
+                    onClick = { onPlayQueue(album.tracks, 0) },
+                    enabled = album.tracks.isNotEmpty(),
+                    modifier = Modifier.size(48.dp).testTag("vesqen.library.album.play"),
+                ) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.play_album, title))
+                }
+            }
+        }
+        itemsIndexed(album.tracks, key = { _, track -> track.id }, contentType = { _, _ -> "album-track" }) { index, track ->
+            AlbumTrackRow(
+                number = track.trackNumber ?: (index + 1),
+                track = track,
+                isCurrent = track.id == playback.trackId,
+                onPlay = { onPlayQueue(album.tracks, index) },
+                onMore = { onTrackMore(track) },
+                modifier = Modifier
+                    .padding(horizontal = 14.dp)
+                    .background(card)
+                    .padding(horizontal = VesqenSpacing.md),
+            )
+        }
+        item(key = "card-foot") {
+            Spacer(
+                Modifier
+                    .padding(horizontal = 14.dp)
+                    .fillMaxWidth()
+                    .height(VesqenSpacing.sm)
+                    .background(card, RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp)),
+            )
+        }
+    }
+}
+
+@Composable
+private fun AlbumTrackRow(
+    number: Int,
+    track: AudioTrack,
+    isCurrent: Boolean,
+    onPlay: () -> Unit,
+    onMore: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val title = track.title.ifBlank { stringResource(R.string.unknown_title) }
+    val subtitle = remember(track.artist, track.album) { track.displaySubtitle() }
+        .ifBlank { stringResource(R.string.unknown_artist) }
+    val accessibilityLabel = stringResource(R.string.track_row_description, title, subtitle)
+    val hairline = LocalVesqenColors.current.hairline
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .drawBehind { drawLine(hairline, Offset(0f, .5.dp.toPx()), Offset(size.width, .5.dp.toPx()), 1.dp.toPx()) }
+            .testTag("vesqen.library.track.${track.id}")
+            .semantics { contentDescription = accessibilityLabel }
+            .clickable(onClick = onPlay)
+            .padding(start = VesqenSpacing.xxs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text(
+            text = String.format(Locale.ROOT, "%02d", number),
+            modifier = Modifier.width(20.dp),
+            style = VesqenDataStyle,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = formatDuration(track.durationMs),
+            style = VesqenDataStyle,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        IconButton(
+            onClick = onMore,
+            modifier = Modifier.size(40.dp).testTag("vesqen.library.track.${track.id}.more"),
+        ) {
+            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.more_track_actions, title))
+        }
     }
 }
 

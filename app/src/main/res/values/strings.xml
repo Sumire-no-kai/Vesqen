@@ -220,6 +220,9 @@
     <string name="unknown_genre">Unknown genre</string>
     <string name="unknown_playlist">Untitled playlist</string>
     <string name="play_all">Play all</string>
+    <string name="play_album">Play %1$s</string>
+    <string name="library_recently_added">Recently added</string>
+    <string name="library_all_albums">All albums</string>
     <string name="create_playlist">Create playlist</string>
     <string name="no_playlists_body">Create a playlist to organise tracks from your local library.</string>
     <string name="empty_playlist_body">This playlist is empty. Add tracks from a song’s details.</string>
