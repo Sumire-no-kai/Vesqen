@@ -112,8 +112,6 @@ import io.github.sumirenokai.vesqen.ui.components.VesqenEmptyState
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
-import io.github.sumirenokai.vesqen.ui.theme.WarningAmberBright
-import io.github.sumirenokai.vesqen.ui.theme.WarningAmberDeep
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 
 private val LibraryHierarchyEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
@@ -1447,7 +1445,7 @@ private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
 
 @Composable
 private fun NotificationNotice(onOpenNotificationSettings: () -> Unit) {
-    val warning = if (androidx.compose.foundation.isSystemInDarkTheme()) WarningAmberBright else WarningAmberDeep
+    val warning = io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors.current.warning
     val title = stringResource(R.string.notifications_disabled_compact)
     val detail = stringResource(R.string.notifications_disabled)
     Box(

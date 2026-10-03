@@ -674,4 +674,9 @@
     </plurals>
     <string name="library_favorites_empty">在播放页轻触爱心，就能把喜欢的歌留在这里。</string>
     <string name="chain_current_source">当前播放音源：%1$s</string>
+    <string name="now_liner_notes">链路注记</string>
+    <string name="collapse_player">收起播放页</string>
+    <string name="now_notes_expanded">已展开</string>
+    <string name="now_notes_collapsed">已收起</string>
+    <string name="now_notes_route_underruns">%1$s · 欠载 %2$s 次</string>
 </resources>

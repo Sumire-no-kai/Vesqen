@@ -25,6 +25,10 @@ import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 
+/**
+ * Transport row (B spec §5): optional side slots, previous, a filled Moss play key and next.
+ * The playback-order control and favourite sit in the side slots on Now.
+ */
 @Composable
 fun PlaybackControls(
     snapshot: PlaybackSnapshot,
@@ -32,22 +36,26 @@ fun PlaybackControls(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     modifier: Modifier = Modifier,
+    leading: (@Composable () -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val controlsEnabled = snapshot.isControllerReady
     val transportColor = MaterialTheme.colorScheme.onSurface
 
     BoxWithConstraints(modifier = modifier) {
         val compactTransport = maxWidth < 300.dp
-        val secondaryControlSize = if (compactTransport) 48.dp else 56.dp
-        val primaryControlSize = if (compactTransport) 56.dp else 72.dp
+        val secondaryControlSize = if (compactTransport) 48.dp else 52.dp
+        val primaryControlSize = if (compactTransport) 56.dp else 68.dp
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(
-                if (compactTransport) VesqenSpacing.xs else VesqenSpacing.md,
-                alignment = Alignment.CenterHorizontally,
-            ),
+            horizontalArrangement = if (leading != null || trailing != null) {
+                Arrangement.SpaceBetween
+            } else {
+                Arrangement.spacedBy(VesqenSpacing.md, alignment = Alignment.CenterHorizontally)
+            },
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            leading?.invoke()
             IconButton(
                 modifier = Modifier
                     .size(secondaryControlSize)
@@ -62,6 +70,7 @@ fun PlaybackControls(
                 Icon(
                     imageVector = Icons.Filled.SkipPrevious,
                     contentDescription = stringResource(R.string.previous),
+                    modifier = Modifier.size(30.dp),
                 )
             }
             FilledIconButton(
@@ -73,7 +82,7 @@ fun PlaybackControls(
                 Icon(
                     imageVector = if (snapshot.showsPauseAction) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                     contentDescription = stringResource(if (snapshot.showsPauseAction) R.string.pause else R.string.play),
-                    modifier = Modifier.size(if (compactTransport) 26.dp else 30.dp),
+                    modifier = Modifier.size(if (compactTransport) 26.dp else 32.dp),
                 )
             }
             IconButton(
@@ -90,8 +99,10 @@ fun PlaybackControls(
                 Icon(
                     imageVector = Icons.Filled.SkipNext,
                     contentDescription = stringResource(R.string.next),
+                    modifier = Modifier.size(30.dp),
                 )
             }
+            trailing?.invoke()
         }
     }
 }

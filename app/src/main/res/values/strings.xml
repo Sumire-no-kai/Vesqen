@@ -699,4 +699,9 @@
     </plurals>
     <string name="library_favorites_empty">Tap the heart in the player to keep a song here.</string>
     <string name="chain_current_source">Current source: %1$s</string>
+    <string name="now_liner_notes">Liner notes</string>
+    <string name="collapse_player">Collapse player</string>
+    <string name="now_notes_expanded">Expanded</string>
+    <string name="now_notes_collapsed">Collapsed</string>
+    <string name="now_notes_route_underruns">%1$s · %2$s underruns</string>
 </resources>

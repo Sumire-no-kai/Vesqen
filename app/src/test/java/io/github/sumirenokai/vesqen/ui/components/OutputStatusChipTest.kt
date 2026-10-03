@@ -2,8 +2,6 @@ package io.github.sumirenokai.vesqen.ui.components
 
 import io.github.sumirenokai.vesqen.playback.OutputDeclaration
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OutputStatusChipTest {
@@ -24,32 +22,21 @@ class OutputStatusChipTest {
     }
 
     @Test
-    fun `semantic evidence states cannot accept a neutral surface override`() {
-        assertTrue(outputStatusVisualSpec(OutputDeclaration.SYSTEM_MIXED).acceptsNeutralColorOverride)
-        assertTrue(outputStatusVisualSpec(OutputDeclaration.BIT_PERFECT_REQUESTED).acceptsNeutralColorOverride)
-        assertFalse(outputStatusVisualSpec(OutputDeclaration.BIT_PERFECT_AVAILABLE).acceptsNeutralColorOverride)
-        assertFalse(outputStatusVisualSpec(OutputDeclaration.BIT_PERFECT_ACTIVE).acceptsNeutralColorOverride)
-        assertFalse(outputStatusVisualSpec(OutputDeclaration.BIT_PERFECT_VERIFIED).acceptsNeutralColorOverride)
-        assertFalse(outputStatusVisualSpec(OutputDeclaration.BIT_PERFECT_FAILED).acceptsNeutralColorOverride)
+    fun `treatments follow the Paper and Sound evidence states`() {
+        val treatments = OutputDeclaration.entries.associateWith { outputStatusVisualSpec(it).treatment }
+        assertEquals(OutputStatusTreatment.NEUTRAL, treatments[OutputDeclaration.SYSTEM_MIXED])
+        assertEquals(OutputStatusTreatment.SIGNAL_OUTLINE, treatments[OutputDeclaration.BIT_PERFECT_AVAILABLE])
+        assertEquals(OutputStatusTreatment.SIGNAL_OUTLINE, treatments[OutputDeclaration.BIT_PERFECT_REQUESTED])
+        assertEquals(OutputStatusTreatment.SIGNAL_FILL, treatments[OutputDeclaration.BIT_PERFECT_ACTIVE])
+        assertEquals(OutputStatusTreatment.SIGNAL_OUTLINE, treatments[OutputDeclaration.BIT_PERFECT_VERIFIED])
+        assertEquals(OutputStatusTreatment.WARNING, treatments[OutputDeclaration.BIT_PERFECT_FAILED])
     }
 
     @Test
-    fun `available active verified and failed use the required treatments`() {
-        assertEquals(
-            OutputStatusTreatment.SIGNAL_OUTLINE,
-            outputStatusVisualSpec(OutputDeclaration.BIT_PERFECT_AVAILABLE).treatment,
-        )
-        assertEquals(
-            OutputStatusTreatment.SIGNAL_FILL,
-            outputStatusVisualSpec(OutputDeclaration.BIT_PERFECT_ACTIVE).treatment,
-        )
-        assertEquals(
-            OutputStatusTreatment.SIGNAL_TONAL,
-            outputStatusVisualSpec(OutputDeclaration.BIT_PERFECT_VERIFIED).treatment,
-        )
-        assertEquals(
-            OutputStatusTreatment.ERROR,
-            outputStatusVisualSpec(OutputDeclaration.BIT_PERFECT_FAILED).treatment,
-        )
+    fun `only ACTIVE is filled so no other state can pass for it`() {
+        val filled = OutputDeclaration.entries.filter {
+            outputStatusVisualSpec(it).treatment == OutputStatusTreatment.SIGNAL_FILL
+        }
+        assertEquals(listOf(OutputDeclaration.BIT_PERFECT_ACTIVE), filled)
     }
 }

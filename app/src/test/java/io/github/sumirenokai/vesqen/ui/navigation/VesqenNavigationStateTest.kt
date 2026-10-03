@@ -89,4 +89,33 @@ class VesqenNavigationStateTest {
 
         assertThrows(IllegalArgumentException::class.java) { privacy.openChain() }
     }
+
+    @Test
+    fun `chain selected from its tab returns to library and has no contextual origin`() {
+        val chain = VesqenNavigationState()
+            .selectTopLevel(VesqenDestination.SETTINGS)
+            .selectTopLevel(VesqenDestination.CHAIN)
+
+        assertEquals(false, chain.chainOpenedInContext)
+        assertEquals(VesqenDestination.LIBRARY, chain.back().destination)
+    }
+
+    @Test
+    fun `chain opened in context reports its origin`() {
+        val chain = VesqenNavigationState()
+            .selectTopLevel(VesqenDestination.NOW)
+            .openChain()
+
+        assertEquals(true, chain.chainOpenedInContext)
+    }
+
+    @Test
+    fun `bottom bar order is library now chain settings`() {
+        assertEquals(
+            listOf(VesqenDestination.LIBRARY, VesqenDestination.NOW, VesqenDestination.CHAIN, VesqenDestination.SETTINGS),
+            TopLevelDestinations,
+        )
+        assertEquals(true, VesqenDestination.CHAIN.navigationOrder < VesqenDestination.SETTINGS.navigationOrder)
+        assertEquals(true, VesqenDestination.ABOUT.navigationOrder > VesqenDestination.SETTINGS.navigationOrder)
+    }
 }

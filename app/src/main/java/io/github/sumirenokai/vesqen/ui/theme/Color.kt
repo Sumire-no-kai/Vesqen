@@ -1,67 +1,63 @@
 package io.github.sumirenokai.vesqen.ui.theme
 
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-// Immutable Vesqen brand anchors.
-internal val SignalMoss = Color(0xFF9FBF4B)
-internal val SignalMossBright = Color(0xFFBFD66B)
-internal val SignalMossDeep = Color(0xFF536B1E)
-internal val CarbonBlack = Color(0xFF0F0F0F)
-internal val CarbonSurface = Color(0xFF171914)
-internal val CarbonElevated = Color(0xFF23261E)
-internal val PureWhite = Color(0xFFFFFFFF)
-internal val FrostSurface = Color(0xFFF6F7F2)
-internal val InkDark = Color(0xFF1B1C18)
-internal val InkLight = Color(0xFFE7E8E1)
-internal val MutedDark = Color(0xFFC8C9BE)
-internal val MutedLight = Color(0xFF5E6056)
-internal val WarningAmberBright = Color(0xFFF2C36B)
-internal val WarningAmberDeep = Color(0xFF7A4F00)
+// B · Paper & Sound tokens (docs/redesign/B_PAPER_AND_SOUND.md §2). Contrast pairs are checked
+// by PaperAndSoundColorTest; change a value there and here together.
+internal val Paper = Color(0xFFF3EFE6)
+internal val PaperRaised = Color(0xFFFBF9F4)
+internal val PaperNav = Color(0xFFF6F3EC)
+internal val Ink = Color(0xFF1A1A16)
+internal val InkMuted = Color(0xFF5E5A50)
+internal val Hairline = Color(0xFFD8D1C1)
+internal val RadioIdleLight = Color(0xFF7C776B)
+internal val MossDeep = Color(0xFF536B1E)
+internal val OnMoss = Color(0xFFFFFFFF)
+internal val AmberDeep = Color(0xFF7A4F00)
+
+internal val Night = Color(0xFF151411)
+internal val NightRaised = Color(0xFF1E1C18)
+internal val NightNav = Color(0xFF191814)
+internal val NightText = Color(0xFFEDE8DC)
+internal val NightMuted = Color(0xFFA8A294)
+internal val RadioIdleDark = Color(0xFF8A8578)
+internal val MossBright = Color(0xFFBFD66B)
+internal val AmberBright = Color(0xFFF2C36B)
+
 internal val VesqenError = Color(0xFFBA1A1A)
 
-/**
- * A separate material ladder for the protected full player. These are deliberately near-neutral:
- * the listener sees one midnight instrument, while Signal Moss remains the scarce action signal.
- */
-internal object FocusedPlayerMaterial {
-    val Canvas = Color(0xFF101415)
-    val Dock = Color(0xFF191F20)
-    val Raised = Color(0xFF202728)
-    val ArtworkFrame = Color(0xFF252C2D)
-    val AmbientLiftShadow = Color(0x38000000)
-    val SpotLiftShadow = Color(0x4D000000)
-    const val ArtworkReflectionAlpha = .22f
-    const val CanvasScrimAlpha = .82f
-    val VisibleArtworkReflection: Float
-        get() = ArtworkReflectionAlpha * (1f - CanvasScrimAlpha)
-}
+/** Paper & Sound roles that Material's color scheme has no slot for. */
+@Immutable
+data class VesqenExtendedColors(
+    val navigation: Color,
+    /** Dividers drawn as ink alpha, so they also hold on album-tinted backgrounds. */
+    val hairline: Color,
+    val chipNeutral: Color,
+    val radioIdle: Color,
+    /** Recoverable warnings such as stopped strict output. Never used to raise a claim. */
+    val warning: Color,
+    /** Warm shadow tint for light surfaces; dark surfaces separate by fill and border instead. */
+    val shadow: Color,
+)
 
-// Tonal steps used by Material surfaces. They stay neutral so Signal Moss remains scarce.
-internal val FrostLowest = Color(0xFFFFFFFF)
-internal val FrostLow = Color(0xFFFAFBF7)
-internal val FrostContainer = Color(0xFFEFF0EA)
-internal val FrostHigh = Color(0xFFE9EAE3)
-internal val FrostHighest = Color(0xFFE3E4DD)
-internal val FrostDim = Color(0xFFDADBD4)
-internal val CarbonLowest = Color(0xFF090A08)
-internal val CarbonLow = Color(0xFF131510)
-internal val CarbonHigh = Color(0xFF1D2018)
-internal val CarbonBright = Color(0xFF373A31)
+internal val LightExtendedColors = VesqenExtendedColors(
+    navigation = PaperNav,
+    hairline = Ink.copy(alpha = .13f),
+    chipNeutral = Ink.copy(alpha = .07f),
+    radioIdle = RadioIdleLight,
+    warning = AmberDeep,
+    shadow = Color(0xFF28201A),
+)
 
-internal val LightOutline = Color(0xFF76786E)
-internal val DarkOutline = Color(0xFF909286)
-internal val DarkOutlineVariant = Color(0xFF45483E)
-internal val DarkSecondaryContainer = Color(0xFF36382F)
-internal val InverseDarkSurface = Color(0xFF30312C)
+internal val DarkExtendedColors = VesqenExtendedColors(
+    navigation = NightNav,
+    hairline = NightText.copy(alpha = .13f),
+    chipNeutral = NightText.copy(alpha = .08f),
+    radioIdle = RadioIdleDark,
+    warning = AmberBright,
+    shadow = Color(0xFF000000),
+)
 
-internal val LightErrorContainer = Color(0xFFFFDAD6)
-internal val LightOnErrorContainer = Color(0xFF410002)
-internal val DarkError = Color(0xFFFFB4AB)
-internal val DarkOnError = Color(0xFF690005)
-internal val DarkErrorContainer = Color(0xFF93000A)
-internal val DarkOnErrorContainer = Color(0xFFFFDAD6)
-
-internal val SignalMossFixed = Color(0xFFDCEFA2)
-internal val SignalMossFixedDim = SignalMossBright
-internal val OnSignalMossFixed = Color(0xFF151F00)
-internal val OnSignalMossFixedVariant = Color(0xFF3D500D)
+val LocalVesqenColors = staticCompositionLocalOf { LightExtendedColors }
