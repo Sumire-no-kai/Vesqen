@@ -21,6 +21,13 @@ require(vesqenVersionName.matches(Regex("(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9
 }
 require(vesqenVersionCode > 0) { "versionCode must be positive" }
 
+// All current artifacts are GitHub artifacts; #47 will turn this directory into a flavor.
+val debugUpdateEndpoint = providers.gradleProperty("vesqen.updateManifestBaseUrl")
+    .orElse("https://vesqen.sumirenokai.com/updates/").get()
+require(debugUpdateEndpoint.matches(Regex("https://[A-Za-z0-9._~:/%-]+/"))) {
+    "The Debug update manifest base URL must be HTTPS and end with /"
+}
+
 android {
     namespace = "io.github.sumirenokai.vesqen"
     compileSdk {
@@ -28,6 +35,7 @@ android {
     }
 
     defaultConfig {
+        buildConfigField("String", "UPDATE_MANIFEST_BASE_URL", "\"https://vesqen.sumirenokai.com/updates/\"")
         applicationId = "io.github.sumirenokai.vesqen"
         minSdk = 26
         targetSdk = 36
@@ -35,11 +43,19 @@ android {
         versionName = vesqenVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["appLabel"] = "@string/app_name"
     }
 
     buildTypes {
         debug {
             buildConfigField("boolean", "DEVELOPER_DIAGNOSTICS_ENABLED", "true")
+            buildConfigField("String", "UPDATE_MANIFEST_BASE_URL", "\"$debugUpdateEndpoint\"")
+        }
+        create("deviceTest") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".devicetest"
+            manifestPlaceholders["appLabel"] = "Vesqen Test"
+            matchingFallbacks += listOf("debug")
         }
         release {
             buildConfigField("boolean", "DEVELOPER_DIAGNOSTICS_ENABLED", "false")
@@ -55,6 +71,10 @@ android {
             isDebuggable = false
         }
     }
+    // Instrumentation runs under a separate Android UID and private data directory.
+    testBuildType = "deviceTest"
+    sourceSets.getByName("deviceTest").kotlin.directories.add("src/debug/java")
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -63,12 +83,14 @@ android {
         buildConfig = true
         compose = true
     }
+    sourceSets.getByName("main").kotlin.directories.add("src/github/java")
+    buildTypes.forEach { sourceSets.getByName(it.name).manifest.srcFile("src/github/AndroidManifest.xml") }
 }
 
 val checkNoUncontrolledProductionLogs by tasks.registering {
     group = "verification"
     description = "Reject uncontrolled logcat and console writes from production sources."
-    val productionSources = fileTree("src/main") {
+    val productionSources = files(fileTree("src/main"), fileTree("src/github")).asFileTree.matching {
         include("**/*.kt", "**/*.java")
     }
     inputs.files(productionSources)
@@ -169,13 +191,15 @@ val checkPrivacyPolicyFinal by tasks.registering(CheckPrivacyPolicyFinalTask::cl
     )
 }
 
-// Only the Play bundle is gated: CI assembles unsigned APKs from the draft policy, and the GitHub
-// APK release step runs checkPrivacyPolicyFinal explicitly (docs/M4_BETA_RELEASE.md).
-tasks.matching { it.name == "bundleRelease" }.configureEach {
+// Every Release artifact requires the same finalized privacy policy.
+tasks.matching { it.name in setOf("bundleRelease", "assembleRelease", "packageRelease") }.configureEach {
     dependsOn(checkPrivacyPolicyFinal)
 }
 
 androidComponents {
+    beforeVariants(selector().withBuildType("debug")) {
+        it.hostTests[com.android.build.api.variant.HostTestBuilder.UNIT_TEST_TYPE]?.enable = true
+    }
     onVariants { variant ->
         val packagePrivacyPolicy = tasks.register<PackagePrivacyPolicyTask>(
             "package${variant.name.replaceFirstChar(Char::uppercaseChar)}PrivacyPolicy",
@@ -212,4 +236,6 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    "deviceTestImplementation"(libs.androidx.compose.ui.test.manifest)
+    "deviceTestImplementation"(libs.androidx.compose.ui.tooling)
 }

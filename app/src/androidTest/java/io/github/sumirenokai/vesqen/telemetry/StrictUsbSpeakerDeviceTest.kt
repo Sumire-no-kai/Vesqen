@@ -21,10 +21,10 @@ import kotlinx.coroutines.withTimeout
 import org.junit.Assert.*
 import org.junit.Test
 
-/** Run explicitly on API 34+ with no USB audio output. The lab preserves the user checkpoint. */
+/** Run explicitly on API 34+ with no USB audio output. Uses the isolated deviceTest application. */
 class StrictUsbSpeakerDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
-    private val app = instrumentation.targetContext.applicationContext as VesqenApplication
+    private val app = isolatedPlaybackTestApplication()
     private val playback = AtomicReference(PlaybackSnapshot())
     private lateinit var controller: PlaybackController
 

@@ -34,6 +34,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             tools/github_release.py
+            tools/github_update_manifest.py
             docs
           sparse-checkout-cone-mode: false
       - name: Set up JDK 25
@@ -58,6 +59,7 @@ jobs:
           import sys
           sys.path.insert(0, 'tools')
           import github_release as release
+          import github_update_manifest as updates
 
           version = os.environ['VERSION']
           digest = os.environ['EXPECTED_APK_SHA256']
@@ -74,7 +76,17 @@ jobs:
           metadata = json.loads((candidate / 'release-manifest.json').read_text())
           if metadata.get('versionName') != version:
               raise SystemExit('Draft version does not match')
+          updates.generate(candidate, repository,
+                           Path(os.environ['ANDROID_HOME']) / 'build-tools/36.0.0',
+                           Path(os.environ['RUNNER_TEMP']) / 'update-manifests')
           release.publish_release(candidate, repository, metadata['sourceCommit'],
                                   Path(f'docs/releases/{version}.acceptance.json'),
                                   Path(os.environ['ANDROID_HOME']) / 'build-tools/36.0.0')
           PY
+      - name: Save static channel files for website handoff
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: update-manifests-${{ inputs.version }}
+          path: ${{ runner.temp }}/update-manifests/*.json
+          if-no-files-found: error
+          retention-days: 90

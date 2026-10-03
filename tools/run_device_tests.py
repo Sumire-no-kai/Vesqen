@@ -30,7 +30,7 @@ def main():
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     adb = [args.adb, "-s", args.serial]
-    package = "io.github.sumirenokai.vesqen"
+    package = "io.github.sumirenokai.vesqen.devicetest"
     command = adb + ["shell", "am", "instrument", "-w", "-r", "-e", "class", args.classes]
     for argument in args.instrumentation_arg:
         key, value = argument.split("=", 1)

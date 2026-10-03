@@ -33,12 +33,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /** Physical speaker tests. Run explicitly by method; the soak takes 75 minutes.
- * The lab runner backs up user data before running and restores the playback checkpoint afterward.
+ * The deviceTest application has its own UID, preferences, queue, catalog and diagnostics.
  * Private generated fixtures never enter MediaStore or the user's catalog.
  */
 class SpeakerPlaybackDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
-    private val app = instrumentation.targetContext.applicationContext as VesqenApplication
+    private val app = isolatedPlaybackTestApplication()
     private val telemetry = app.telemetryRuntime
     private val playback = AtomicReference(PlaybackSnapshot())
     private lateinit var controller: PlaybackController
