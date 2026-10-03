@@ -9,7 +9,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -44,10 +46,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -58,7 +58,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -86,6 +85,7 @@ import io.github.sumirenokai.vesqen.library.libraryTitleKeys
 import io.github.sumirenokai.vesqen.library.projectLibraryTitleOrder
 import io.github.sumirenokai.vesqen.ui.components.LibraryAlphabetIndex
 import io.github.sumirenokai.vesqen.ui.components.LibraryTrackList
+import io.github.sumirenokai.vesqen.ui.components.hairlineBelow
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
@@ -786,6 +786,8 @@ private fun LibrarySortButton(
     }
 }
 
+// B · Paper & Sound: list views share one row, a serif title over a muted meta line with a hairline
+// below and a chevron at the end, inside the 24 dp page margin.
 @Composable
 private fun CollectionList(
     mode: LibraryBrowseMode,
@@ -796,32 +798,30 @@ private fun CollectionList(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
-            start = VesqenSpacing.md,
-            end = VesqenSpacing.md,
+            start = VesqenSpacing.lg,
+            end = VesqenSpacing.lg,
             top = VesqenSpacing.xs,
             bottom = VesqenSpacing.md,
         ),
-        verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xs),
     ) {
         onCreatePlaylist?.let { create ->
             item(key = "create-playlist") {
-                Surface(
-                    onClick = create,
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 56.dp)
+                        .hairlineBelow()
+                        .clickable(onClick = create)
                         .testTag("vesqen.library.playlist.create"),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = VesqenSpacing.md),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Filled.Add, contentDescription = null)
-                        Spacer(Modifier.width(VesqenSpacing.sm))
-                        Text(stringResource(R.string.create_playlist), style = MaterialTheme.typography.titleSmall)
-                    }
+                    Icon(Icons.Filled.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(VesqenSpacing.sm))
+                    Text(
+                        stringResource(R.string.create_playlist),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
                 }
             }
         }
@@ -872,49 +872,37 @@ private fun CollectionRow(
             collection.tracks.size,
         )
     }
-    Surface(
-        onClick = onClick,
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 64.dp)
+            .hairlineBelow()
+            .clickable(onClick = onClick)
+            .padding(vertical = VesqenSpacing.xs)
             .testTag("vesqen.library.collection.${collection.key}"),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.xs),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = when (mode) {
-                    LibraryBrowseMode.ALBUMS -> Icons.Filled.Album
-                    LibraryBrowseMode.ARTISTS -> Icons.Filled.Person
-                    LibraryBrowseMode.FOLDERS -> Icons.Filled.FolderOpen
-                    LibraryBrowseMode.GENRES -> Icons.Filled.MusicNote
-                    LibraryBrowseMode.PLAYLISTS -> Icons.AutoMirrored.Filled.QueueMusic
-                    LibraryBrowseMode.SONGS -> Icons.Filled.MusicNote
-                },
-                contentDescription = null,
-                modifier = Modifier.size(32.dp),
-                tint = MaterialTheme.colorScheme.primary,
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.width(VesqenSpacing.sm))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -944,7 +932,7 @@ private fun CollectionTrackList(
             }
             Text(
                 text = collection.title.ifBlank { stringResource(R.string.unknown_title) },
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
