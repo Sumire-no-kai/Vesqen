@@ -21,8 +21,10 @@ vivo（iQOO V2171A，Android 15）上的额外步骤，2026-09-30 实测：
 
 - 测试机可能同时被别的会话使用。安装或运行前，先确认前台没有别的应用在测试。
 - `adb install` 常停在“安全守护”风险检测页，要勾选“已了解应用的风险检测结果”再点“继续安装”；版本号相同时会先问“直接打开 / 重新安装”，选“重新安装”。这时 adb 可能报 `INSTALL_FAILED_ABORTED`，但安装其实已由系统安装器完成，所以要以设备上 APK 的 SHA-256 为准。“超级守护”等安全设置不要改。
-- 测试界面不在前台时，`fast_freezer` 会冻结测试进程，测试卡在启动。此时从主机启动同一个宿主：`adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n io.github.sumirenokai.vesqen.devicetest/androidx.activity.ComponentActivity`。报告里写明辅助了几次。只跑服务、不开界面的测试（例如 `StrictUsbSpeakerDeviceTest`）在被冻结期间超时也会照算，所以要在 instrumentation 启动后约 2 秒先启动这个宿主，让进程一直在前台；用 ActivityScenario 的界面测试不要这样预先启动，以免和测试自己的界面冲突。
-- 测试收尾时，androidx.test 会启动测试包里的 `EmptyActivity`，vivo 会弹出“Vesqen 想要打开 io.github.sumirenokai.vesqen.test”。选“仅打开一次”；“始终打开”会留下长期规则，由所有者决定。
+- 后台启动界面会被静默丢弃（2026-10-03 定位）：vivo 只允许已在前台的应用打开界面。测试进程还在后台时，`Instrumentation.startActivitySync` 发出的启动请求不会产生任何 `wm_create_activity` 记录，测试一直等待；约 10 秒后 `fast_freezer` 冻结该进程（events 缓冲区有 `am_app_frozen ... from fast_freezer`）。系统不会因为进程正在跑 instrumentation 而豁免。授予 `SYSTEM_ALERT_WINDOW` 不起作用，不要修改手机权限或安全设置。
+- 解决办法是从 adb 启动一次测试宿主（adb 发起的启动不受限），之后宿主一直在前台：`tools/run_device_tests.py --foreground-host` 会执行 `am start -n io.github.sumirenokai.vesqen.devicetest/androidx.activity.ComponentActivity`。用 ActivityScenario 的界面测试（例如 `VesqenAppTest`）加 `--host-launch first-case`：第一个用例开始后先等 `--host-grace`（默认 3 秒），用例自己的界面已经出现就不启动宿主，否则启动一次。这样允许后台启动的手机上不会多出一个宿主实例和测试界面竞争（2026-10-03 曾在 iQOO 上因此偶发首个用例失败）；只跑服务、不开界面的测试（例如 `StrictUsbSpeakerDeviceTest`）用默认的 `each-case`，每个用例开始时都启动。报告里写明使用的方式。
+- androidx.test 的 `BootstrapActivity`、`EmptyActivity` 和 `EmptyFloatingActivity` 已合并进 deviceTest 宿主（`deviceTestImplementation` 引入 `androidx.test:core`）。androidx.test 优先在被测应用里找这几个界面，所以用例之间的切换都留在宿主进程里，不再弹出“Vesqen 想要打开 …test”，宿主也不会掉到后台被冻结。如果仍看到这个提示，先检查宿主 APK 的 manifest 是否包含这三个界面。
+- 2026-10-03 验收（`master` 的 `VesqenAppTest`，75 项，全程无人工操作）：iQOO V2171A（Android 15）启动宿主一次，74 项通过，没有跨应用提示，也没有冻结记录；Honor STF-AL00（Android 9）的宿主记录为“不需要启动”，67 项通过。两台手机上的失败都与同一台手机上的 `master` 基线一致：track-details 底部留白（两台都有），以及 Honor 640 dp 屏上 7 项链路页滚动与触摸用例，与这次修复无关。
 - 替换测试机上原有的构建前，先把原 APK 取回主机，测试后装回并核对哈希，再卸载测试包。备份放在 `build/qa/device-backups/`：它被 git 忽略，也不会像系统临时目录那样在重启后被清空。2026-10-01 曾因备份放在临时目录、重启后丢失，只能用同一提交重新构建来恢复，结果大小相同但哈希不同。
 
 ### beta.2 存储隔离验收（#66，待执行）

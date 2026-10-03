@@ -2,8 +2,16 @@
 
 --foreground-host is an explicit device-lab launch aid: on the tested vivo ROM,
 startActivitySync can wait indefinitely while the test process has no foreground
-activity. Launch the same MAIN/LAUNCHER test host once per case from adb; never
+activity, because the ROM silently drops activity starts from a background app.
+Launch the same MAIN/LAUNCHER test host from adb, which the ROM allows; never
 retry assertions or change Android's security/background policy.
+
+--host-launch each-case (default) relaunches it for every case, for service tests
+that never show an activity. first-case launches it once when the first case starts,
+for ActivityScenario UI tests: it first waits --host-grace seconds and launches the
+host only if the case's own activity has not resumed, so ROMs that allow the launch
+never get a second host instance racing the test's. The deviceTest host carries
+androidx.test's helper activities, so later transitions stay inside the foreground app.
 """
 
 import argparse
@@ -25,6 +33,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--adb", default="adb")
     parser.add_argument("--foreground-host", nargs="?", const="androidx.activity.ComponentActivity")
+    parser.add_argument("--host-launch", choices=("each-case", "first-case"), default="each-case")
+    parser.add_argument("--host-grace", type=float, default=3.0)
     parser.add_argument("--case-timeout", type=float, default=120)
     parser.add_argument("--instrumentation-arg", action="append", default=[], metavar="KEY=VALUE")
     args = parser.parse_args()
@@ -36,6 +46,14 @@ def main():
         key, value = argument.split("=", 1)
         command += ["-e", key, value]
     command.append(package + ".test/androidx.test.runner.AndroidJUnitRunner")
+
+    def host_resumed():
+        activities = subprocess.run(adb + ["shell", "dumpsys", "activity", "activities"], capture_output=True,
+                                    text=True, encoding="utf-8", errors="replace", timeout=15).stdout
+        # Android 10+ reports topResumedActivity; Android 9 reports mResumedActivity.
+        resumed = [line for line in activities.splitlines()
+                   if "topResumedActivity=" in line or "mResumedActivity:" in line]
+        return any(" " + package + "/" in line for line in resumed[:1])
     lines = queue.Queue()
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                text=True, encoding="utf-8", errors="replace")
@@ -51,6 +69,7 @@ def main():
     deadline = started + args.case_timeout
     timed_out = False
     passed = False
+    host_launched = False
     try:
         with (args.output / "instrumentation.txt").open("w", encoding="utf-8") as log:
             while True:
@@ -69,7 +88,16 @@ def main():
                 print(line, end="", flush=True)
                 if line.strip() == "INSTRUMENTATION_STATUS_CODE: 1":
                     deadline = time.monotonic() + args.case_timeout
-                    if args.foreground_host:
+                    if args.foreground_host and (args.host_launch == "each-case" or not host_launched):
+                        host_launched = True
+                        if args.host_launch == "first-case":
+                            grace_end = time.monotonic() + args.host_grace
+                            while time.monotonic() < grace_end and not host_resumed():
+                                time.sleep(0.5)
+                            if host_resumed():
+                                with (args.output / "host-launches.txt").open("a", encoding="utf-8") as hosts:
+                                    hosts.write("Not needed: the first case resumed its own activity.\n")
+                                continue
                         launch = subprocess.run(adb + ["shell", "am", "start", "-W", "-a",
                             "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER",
                             "--activity-single-top", "-n", package + "/" + args.foreground_host],
@@ -91,7 +119,8 @@ def main():
         statuses = re.findall(r"^INSTRUMENTATION_STATUS_CODE:\s*(-?\d+)", "".join(transcript), re.MULTILINE)
         (args.output / "result.json").write_text(json.dumps({
             "serial": args.serial, "classes": args.classes,
-            "foreground_host": args.foreground_host, "passed": passed,
+            "foreground_host": args.foreground_host, "host_launch": args.host_launch,
+            "host_grace_seconds": args.host_grace, "passed": passed,
             "instrumentation_arguments": args.instrumentation_arg,
             "process_exit_code": process.poll(), "timed_out": timed_out,
             "elapsed_seconds": round(time.monotonic() - started, 3),
