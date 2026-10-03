@@ -236,6 +236,10 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    // androidx.test resolves its Bootstrap/Empty helper activities from the app under test first.
+    // Merging them into the isolated host keeps every test transition inside one foreground app;
+    // from the test APK they become cross-app launches that vivo prompts for and then freezes.
+    "deviceTestImplementation"(libs.androidx.test.core)
     "deviceTestImplementation"(libs.androidx.compose.ui.test.manifest)
     "deviceTestImplementation"(libs.androidx.compose.ui.tooling)
 }
