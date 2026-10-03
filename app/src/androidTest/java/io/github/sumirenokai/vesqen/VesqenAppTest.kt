@@ -2448,8 +2448,10 @@ class VesqenAppTest {
                     hasNext = true,
                 ),
             ),
+            // 640 dp keeps room for a cover at 2x text once phone system bars are subtracted;
+            // shorter windows deliberately drop it (see nowPortraitLayout).
             containerWidth = 320.dp,
-            containerHeight = 480.dp,
+            containerHeight = 640.dp,
             fontScale = 2f,
             darkTheme = false,
         )
