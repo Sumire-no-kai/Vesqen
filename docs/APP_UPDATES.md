@@ -62,7 +62,9 @@ substitutes an installed certificate for an archive certificate. See the
 Installation uses `PackageInstaller` with a persisted session/token and explicit non-exported
 callback activity. The activity only forwards the system confirmation and typed result; it has
 no app dialog or copy. Android 12+ is explicitly told to require user action. The package installer
-also independently enforces Android's signature and update rules. Session metadata allows a
+also independently enforces Android's signature and update rules. The explicit callback follows
+[Android's PendingIntent creator opt-in](https://developer.android.com/guide/components/activities/secure-bal)
+on API 35+, using the visibility-limited mode where API 36 provides it. Session metadata allows a
 fresh process to recover installation outcome; local staging files are not a trust decision.
 
 Notes are plain text. The UI must not interpret HTML or automatically activate links.

@@ -36,9 +36,10 @@ internal class GitHubAppUpdater(
 ) : AppUpdater {
     private val operation = Mutex()
     private val preferencesLock = Any()
+    private val automaticSettingRequest = java.util.concurrent.atomic.AtomicLong()
     private var initialized = false
     private val mutable = MutableStateFlow(preferences.read().let {
-        UpdateSnapshot(channel = channel, automaticChecksEnabled = it.automatic,
+        UpdateSnapshot(channel = channel, automaticChecksEnabled = it.automatic && source != UpdateInstallationSource.GOOGLE_PLAY,
             skippedVersionCode = it.skippedVersion, lastSuccessfulCheckEpochMs = it.lastSuccess,
             installationSource = source, installerPackageName = installerPackage,
             state = if (source == UpdateInstallationSource.DIRECT) UpdateState.Idle
@@ -79,7 +80,7 @@ internal class GitHubAppUpdater(
     }
 
     fun acceptUsageResponse(manifest: String) = runOperation {
-        if (!preferences.read().automatic || isInstalling() || snapshot.value.state is UpdateState.ReadyToInstall) return@runOperation
+        if (snapshot.value.installationSource == UpdateInstallationSource.GOOGLE_PLAY || !preferences.read().automatic || isInstalling() || snapshot.value.state is UpdateState.ReadyToInstall) return@runOperation
         accept(parse(manifest, snapshot.value.channel))
     }
 
@@ -111,10 +112,13 @@ internal class GitHubAppUpdater(
     }
 
     override fun setAutomaticChecksEnabled(enabled: Boolean) {
+        val request = automaticSettingRequest.incrementAndGet()
         scope.launch {
             try {
-                if (snapshot.value.installationSource != UpdateInstallationSource.GOOGLE_PLAY)
-                    updatePreferences { it.copy(automatic = enabled) }
+                synchronized(preferencesLock) {
+                    if (request == automaticSettingRequest.get() && snapshot.value.installationSource != UpdateInstallationSource.GOOGLE_PLAY)
+                        updatePreferences { it.copy(automatic = enabled) }
+                }
             } catch (failure: UpdateOperationException) { state(UpdateState.Failed(failure.reason, currentRelease())) }
         }
     }

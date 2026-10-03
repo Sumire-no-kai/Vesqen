@@ -66,8 +66,11 @@ internal class AndroidUpdateInstaller(private val context: Context) : UpdateInst
                 }
                 val flags = PendingIntent.FLAG_UPDATE_CURRENT or
                     if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
-                val options = if (Build.VERSION.SDK_INT >= 36) ActivityOptions.makeBasic().apply {
-                    setPendingIntentCreatorBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_IF_VISIBLE)
+                val options = if (Build.VERSION.SDK_INT >= 35) ActivityOptions.makeBasic().apply {
+                    // Delegate only to the system installer, for this explicit user command.
+                    val mode = if (Build.VERSION.SDK_INT >= 36) ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_IF_VISIBLE
+                        else ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                    setPendingIntentCreatorBackgroundActivityStartMode(mode)
                 }.toBundle() else null
                 val result = PendingIntent.getActivity(context, sessionId, callback, flags, options)
                 session.commit(result.intentSender)

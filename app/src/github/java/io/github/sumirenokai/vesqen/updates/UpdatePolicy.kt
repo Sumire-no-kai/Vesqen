@@ -3,7 +3,6 @@ package io.github.sumirenokai.vesqen.updates
 import java.net.URI
 
 internal const val UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
-internal const val UPDATE_SITE = "https://vesqen.sumirenokai.com/updates/"
 
 internal data class UpdatePreferences(
     val automatic: Boolean,

@@ -64,8 +64,6 @@ android {
             isDebuggable = false
         }
     }
-    sourceSets.getByName("main").kotlin.directories.add("src/github/java")
-    buildTypes.forEach { sourceSets.getByName(it.name).manifest.srcFile("src/github/AndroidManifest.xml") }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -74,6 +72,8 @@ android {
         buildConfig = true
         compose = true
     }
+    sourceSets.getByName("main").kotlin.directories.add("src/github/java")
+    buildTypes.forEach { sourceSets.getByName(it.name).manifest.srcFile("src/github/AndroidManifest.xml") }
 }
 
 val checkNoUncontrolledProductionLogs by tasks.registering {

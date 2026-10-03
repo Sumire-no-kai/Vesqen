@@ -108,6 +108,22 @@ class GitHubAppUpdaterTest {
         assertEquals(1, transport.checks)
     }
 
+    @Test fun latestAutomaticSettingWinsEvenIfIoDispatchOrderChanges() {
+        val queued = ArrayDeque<Runnable>()
+        val dispatcher = object : kotlinx.coroutines.CoroutineDispatcher() {
+            override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) { queued.addLast(block) }
+        }
+        val updater = GitHubAppUpdater(CoroutineScope(scope.coroutineContext + dispatcher), store, transport, installer,
+            ApkIdentity("app", 10, setOf("signer")), 35, directory, "https://example.org/beta.json", UpdateChannel.BETA,
+            UpdateInstallationSource.DIRECT, null, { time }, { _, _ -> release })
+        updater.setAutomaticChecksEnabled(false)
+        updater.setAutomaticChecksEnabled(true)
+        queued.removeLast().run()
+        queued.removeFirst().run()
+        assertTrue(store.value.automatic)
+        assertTrue(updater.snapshot.value.automaticChecksEnabled)
+    }
+
     @Test fun mirrorsAreTriedInOrderAndEveryMirrorIsVerified() {
         for (corrupt in listOf(false, true)) {
             transport.urls.clear()
@@ -167,8 +183,9 @@ class GitHubAppUpdaterTest {
         assertEquals(UpdateState.UpToDate, old.snapshot.value.state)
         val unsupported = updater(release.copy(minimumAndroidApi = 36)); unsupported.checkNow(); unsupported.downloadUpdate()
         assertTrue(unsupported.snapshot.value.state is UpdateState.Failed)
-        val play = updater(source = UpdateInstallationSource.GOOGLE_PLAY); play.checkNow(); play.downloadUpdate()
+        val play = updater(source = UpdateInstallationSource.GOOGLE_PLAY); play.checkNow(); play.downloadUpdate(); play.acceptUsageResponse("manifest")
         assertTrue(play.snapshot.value.state is UpdateState.ManagedExternally)
+        assertFalse(play.snapshot.value.automaticChecksEnabled)
         assertTrue(transport.urls.isEmpty())
     }
 
