@@ -169,6 +169,8 @@ components:
 
 # Design System: Vesqen
 
+> 2026-10-03：#35 正在实施 B · 纸与声。代码里的颜色、字体和封面取色已经换成 [docs/redesign/B_PAPER_AND_SOUND.md](docs/redesign/B_PAPER_AND_SOUND.md) 的取值，以那份规范为准。本文件在 #35 完成时整体改写，在那之前，下面的颜色和字体令牌只描述旧界面。
+
 ## Overview
 
 **Creative North Star: "The Quiet Signal"**
