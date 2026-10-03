@@ -33,7 +33,16 @@ class NowLayoutTest {
         // Large text still keeps a real cover when the compact layout leaves room for one.
         val largeText = nowPortraitLayout(480.dp, 2f)
         assertTrue(largeText.compact)
-        assertTrue(largeText.artwork >= 88.dp)
+        assertTrue(largeText.artwork >= 64.dp)
+    }
+
+    @Test
+    fun bottomBarYieldsOnlyWhenThatBringsTheCoverBack() {
+        assertFalse(nowPortraitYieldsNavigation(700.dp, 60.dp, 1f))
+        // Large text in a short window: the bar would cost the cover, which fits without it.
+        assertTrue(nowPortraitYieldsNavigation(480.dp, 60.dp, 2f))
+        // No cover fits either way, so the bar stays.
+        assertFalse(nowPortraitYieldsNavigation(300.dp, 60.dp, 2f))
     }
 
     @Test

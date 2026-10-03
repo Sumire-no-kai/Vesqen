@@ -203,7 +203,7 @@ internal fun nowTrackAnimationIdentity(
 /**
  * Portrait sizing for Now. The page never scrolls (PRD F3): the cover takes what is left after
  * identity, progress, transport and the liner-notes header, up to 280 dp, and shrinks to at most
- * 164 dp while the notes are open (B spec §4.2). A cover under 88 dp is dropped rather than
+ * 164 dp while the notes are open (B spec §4.2). A cover under 64 dp is dropped rather than
  * squeezed. Compact mode is for short windows and very large text.
  */
 internal data class NowPortraitLayout(
@@ -214,14 +214,26 @@ internal data class NowPortraitLayout(
 
 internal fun nowPortraitLayout(height: Dp, fontScale: Float): NowPortraitLayout {
     val roomy = 236f + 78f * fontScale + maxOf(56f, 46f * fontScale)
-    val compact = height.value < roomy + 88f
+    val compact = height.value < roomy + 64f
     val fixed = if (compact) 164f + 43f * fontScale + maxOf(48f, 40f * fontScale) else roomy
     val available = height.value - fixed
     // Budget the three evidence rows and the claim chip; the rest of the open notes scrolls.
     val notesContent = 3 * maxOf(42f, 38f * fontScale) + 60f * fontScale
-    val artwork = if (available >= 88f) available.coerceAtMost(280f) else 0f
+    val artwork = if (available >= 64f) available.coerceAtMost(280f) else 0f
     val notesArtwork = (available - notesContent).let { room -> if (room >= 96f) room.coerceAtMost(164f) else 0f }
     return NowPortraitLayout(artwork.dp, notesArtwork.dp, compact)
+}
+
+/**
+ * Portrait Now keeps the bottom bar unless the bar would cost the cover (split screen, very large
+ * text). The bar then yields, as it does in landscape. It only yields when that brings the cover
+ * back. [pageHeight] is the window less the status and navigation bars.
+ */
+internal fun nowPortraitYieldsNavigation(pageHeight: Dp, barHeight: Dp, fontScale: Float): Boolean {
+    // NowTopBar: a 48 dp touch row, or the title and queue position lines once text outgrows it.
+    val topBar = maxOf(48f, 38f * fontScale).dp
+    fun keepsCover(height: Dp) = nowPortraitLayout(height - topBar, fontScale).artwork > 0.dp
+    return !keepsCover(pageHeight - barHeight) && keepsCover(pageHeight)
 }
 
 /** "FLAC 24/96" style file summary from catalog metadata; null when the file reports nothing. */

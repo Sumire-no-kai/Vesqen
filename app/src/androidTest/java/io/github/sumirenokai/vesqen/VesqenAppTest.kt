@@ -108,6 +108,7 @@ import io.github.sumirenokai.vesqen.ui.chain.DiagnosticExportFeedback
 import io.github.sumirenokai.vesqen.ui.chain.formatSeconds
 import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
+import io.github.sumirenokai.vesqen.ui.navigation.NavigationRailWidth
 import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
@@ -225,7 +226,7 @@ class VesqenAppTest {
     }
 
     @Test
-    fun navigation_exposes_library_now_and_settings_with_chain_as_a_secondary_action() {
+    fun navigation_exposes_library_now_chain_and_settings_as_tabs() {
         render(grantedState())
 
         composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
@@ -238,11 +239,25 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.nav.library").performClick()
         composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
 
+        // Chain is a tab: no back arrow, and Back returns to Library like the other tabs.
+        composeRule.onNodeWithTag("vesqen.nav.chain").performClick()
+        composeRule.onNodeWithTag("vesqen.nav.chain").assertIsSelected()
+        composeRule.onNodeWithText(context.getString(R.string.chain_empty_title)).assertIsDisplayed()
+        composeRule.onAllNodesWithTag("vesqen.chain.back").assertCountEquals(0)
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
+
+        // Opened in context from Settings, Chain keeps a back arrow that returns there.
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
         composeRule.onNodeWithTag("vesqen.settings").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
         composeRule.onNodeWithText(context.getString(R.string.chain_empty_title)).assertIsDisplayed()
         composeRule.onAllNodesWithTag("vesqen.chain.diagnostics").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.chain.back").performClick()
+        composeRule.onNodeWithTag("vesqen.nav.settings").assertIsSelected()
+        composeRule.onNodeWithTag("vesqen.nav.chain").performClick()
         composeRule.onNodeWithText(context.getString(R.string.browse_library)).performClick()
         composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
     }
@@ -628,7 +643,11 @@ class VesqenAppTest {
             bitrate = 4_608_000,
             playCount = 5,
         )
-        render(grantedState(tracks = listOf(detailedTrack)), containerHeight = 640.dp)
+        // A connected controller: the disconnected notice below the queue actions has its own test.
+        render(
+            grantedState(tracks = listOf(detailedTrack), playback = PlaybackSnapshot(isControllerReady = true)),
+            containerHeight = 640.dp,
+        )
 
         composeRule.onNodeWithTag("vesqen.library.track.1.more").performClick()
         val headerBefore = composeRule.onNodeWithTag("vesqen.track-details.header")
@@ -751,6 +770,8 @@ class VesqenAppTest {
         )
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
         composeRule.waitUntil(5_000) { telemetry.activeObservationCount == 1 }
         assertEquals(summaryMetricIds, (telemetry.observationHistory.last().selection as TelemetryMetricSelection.Explicit).metricIds)
@@ -784,6 +805,8 @@ class VesqenAppTest {
         )
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
         chainSummaryText(R.string.chain_last_path).assertIsDisplayed()
         chainNode("vesqen.chain.idle", "vesqen.chain.summary-list").assertIsDisplayed()
@@ -814,11 +837,15 @@ class VesqenAppTest {
             state = activePlaybackState(),
             playbackTelemetry = telemetry,
             chainPreferencesRepository = preferences,
-            containerWidth = 840.dp,
+            // Chain is a tab, so the rail sits beside it. Chain keeps 840dp; the extra 1dp absorbs
+            // the rail's rounding to whole pixels at the fitted test density.
+            containerWidth = 840.dp + NavigationRailWidth + 1.dp,
             containerHeight = 720.dp,
         )
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
         openAdvancedChain()
         composeRule.waitUntil(5_000) {
@@ -878,6 +905,8 @@ class VesqenAppTest {
         )
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
         openAdvancedChain()
         chainNode("vesqen.chain.recent-events").assertIsDisplayed()
@@ -929,6 +958,8 @@ class VesqenAppTest {
         )
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
         openAdvancedChain()
         chainNode("vesqen.chain.control.settings").performScrollTo().performClick()
@@ -973,8 +1004,11 @@ class VesqenAppTest {
 
         composeRule.onNodeWithTag("vesqen.now.notes-toggle").performClick()
         composeRule.mainClock.advanceTimeBy(800)
+        // performScrollTo repeats until the chip is in view, and the semantic scroll is animated,
+        // so it needs a running clock. Short phones put the chip below the fold.
+        composeRule.mainClock.autoAdvance = true
         composeRule.onNodeWithTag("vesqen.now.open-chain").performScrollTo()
-        composeRule.mainClock.advanceTimeBy(100)
+        composeRule.mainClock.autoAdvance = false
         composeRule.onNodeWithTag("vesqen.now.open-chain").performClick()
         composeRule.mainClock.advanceTimeBy(96)
         val enteringChain = composeRule.onNodeWithTag("vesqen.chain").fetchSemanticsNode().positionInRoot
@@ -1228,6 +1262,8 @@ class VesqenAppTest {
         )
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
         openAdvancedChain()
 
@@ -1340,6 +1376,8 @@ class VesqenAppTest {
         )
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
         openAdvancedChain()
         chainNode(
@@ -1521,6 +1559,8 @@ class VesqenAppTest {
         render(active, playbackTelemetry = FakePlaybackTelemetry(chainTelemetrySnapshot()))
         val expected = context.getString(R.string.chain_current_source, active.playback.title)
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
         composeRule.onNodeWithTag("vesqen.chain.current-source").assertTextEquals(expected)
         openAdvancedChain()
@@ -1588,11 +1628,15 @@ class VesqenAppTest {
         render(
             state = activePlaybackState(),
             playbackTelemetry = FakePlaybackTelemetry(chainTelemetrySnapshot()),
-            containerWidth = 600.dp,
+            // Chain is a tab, so the rail sits beside it. Chain keeps 600dp; the extra 1dp absorbs
+            // the rail's rounding to whole pixels at the fitted test density.
+            containerWidth = 600.dp + NavigationRailWidth + 1.dp,
             containerHeight = 720.dp,
         )
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
         openAdvancedChain()
 
@@ -1629,11 +1673,15 @@ class VesqenAppTest {
         render(
             state = activePlaybackState(),
             playbackTelemetry = FakePlaybackTelemetry(chainTelemetrySnapshot()),
-            containerWidth = 840.dp,
+            // Chain is a tab, so the rail sits beside it. Chain keeps 840dp; the extra 1dp absorbs
+            // the rail's rounding to whole pixels at the fitted test density.
+            containerWidth = 840.dp + NavigationRailWidth + 1.dp,
             containerHeight = 720.dp,
         )
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
         openAdvancedChain()
 
@@ -2374,7 +2422,7 @@ class VesqenAppTest {
     }
 
     @Test
-    fun focused_player_hides_the_wide_navigation_rail_and_keeps_a_single_system_bar_surface() {
+    fun focused_player_keeps_the_navigation_in_portrait() {
         render(
             state = grantedState(
                 tracks = sampleTracks,
@@ -2395,7 +2443,9 @@ class VesqenAppTest {
 
         composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
         composeRule.onNodeWithTag("vesqen.now.focus-surface").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.nav.library").assertDoesNotExist()
+        // B artboard: Now keeps the bottom bar in portrait; only the landscape player is immersive.
+        composeRule.onNodeWithTag("vesqen.nav.library").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.nav.now").assertIsSelected()
         composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
     }

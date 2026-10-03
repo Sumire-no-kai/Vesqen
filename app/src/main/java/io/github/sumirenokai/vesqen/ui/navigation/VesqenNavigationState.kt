@@ -3,9 +3,11 @@ package io.github.sumirenokai.vesqen.ui.navigation
 /**
  * Small, pure navigation reducer shared by toolbar and Android Back behavior.
  *
- * Full-player expansion is a focused detour from Library. Playback Chain and About are secondary
- * detail routes and return to whichever top-level surface opened them. A detail opened from a
- * detail (the privacy policy from About) keeps its parent's origin so Back unwinds both levels.
+ * Full-player expansion is a focused detour from Library. Chain is a top-level tab: from the bar it
+ * returns to Library like the other tabs, but opened in context (Now's claim chip, the Settings row)
+ * it returns to that surface. About is a secondary detail that returns to whichever surface opened
+ * it, and a detail opened from a detail (the privacy policy from About) keeps its parent's origin
+ * so Back unwinds both levels.
  */
 data class VesqenNavigationState(
     val destination: VesqenDestination = VesqenDestination.LIBRARY,
@@ -42,7 +44,19 @@ data class VesqenNavigationState(
         )
     }
 
-    fun openChain(): VesqenNavigationState = openDetail(VesqenDestination.CHAIN)
+    fun openChain(): VesqenNavigationState {
+        require(!destination.isSecondaryDetail) { "Chain opens in context only from a top-level surface" }
+        if (destination == VesqenDestination.CHAIN) return this
+        return copy(
+            destination = VesqenDestination.CHAIN,
+            returnDestination = destination,
+            parentReturnDestination = VesqenDestination.LIBRARY,
+        )
+    }
+
+    /** True when Chain was opened from Now or Settings rather than from its tab. */
+    val chainOpenedInContext: Boolean
+        get() = destination == VesqenDestination.CHAIN && returnDestination != VesqenDestination.LIBRARY
 
     fun openAbout(): VesqenNavigationState = openDetail(VesqenDestination.ABOUT)
 
@@ -50,6 +64,11 @@ data class VesqenNavigationState(
 
     fun back(): VesqenNavigationState = when {
         destination == VesqenDestination.LIBRARY -> this
+        destination == VesqenDestination.CHAIN -> copy(
+            destination = returnDestination,
+            returnDestination = VesqenDestination.LIBRARY,
+            parentReturnDestination = VesqenDestination.LIBRARY,
+        )
         destination.isSecondaryDetail -> copy(
             destination = returnDestination,
             returnDestination = if (returnDestination.isSecondaryDetail) {

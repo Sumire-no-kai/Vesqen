@@ -30,10 +30,13 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
@@ -51,11 +54,14 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -80,17 +86,20 @@ import io.github.sumirenokai.vesqen.ui.chain.DiagnosticExportFeedback
 import io.github.sumirenokai.vesqen.ui.components.MiniPlayer
 import io.github.sumirenokai.vesqen.ui.components.MiniPlayerHeight
 import io.github.sumirenokai.vesqen.ui.navigation.CompactNavigationBarContentHeight
+import io.github.sumirenokai.vesqen.ui.navigation.NavigationRailWidth
 import io.github.sumirenokai.vesqen.ui.navigation.VesqenDestination
 import io.github.sumirenokai.vesqen.ui.navigation.VesqenNavigation
 import io.github.sumirenokai.vesqen.ui.navigation.VesqenNavigationState
 import io.github.sumirenokai.vesqen.ui.navigation.detailDepth
 import io.github.sumirenokai.vesqen.ui.navigation.isSecondaryDetail
+import io.github.sumirenokai.vesqen.ui.navigation.navigationOrder
 import io.github.sumirenokai.vesqen.ui.screens.AboutScreen
 import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
 import io.github.sumirenokai.vesqen.ui.screens.LibraryScreen
 import io.github.sumirenokai.vesqen.ui.screens.NowScreen
 import io.github.sumirenokai.vesqen.ui.screens.PrivacyPolicyScreen
 import io.github.sumirenokai.vesqen.ui.screens.SettingsScreen
+import io.github.sumirenokai.vesqen.ui.screens.nowPortraitYieldsNavigation
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
@@ -427,15 +436,14 @@ fun VesqenAppContent(
         playerOverride = playerOrientationOverride,
         enabled = managePhoneOrientation,
     )
-    // A protected Now surface owns the whole window. Keeping a light navigation rail beside it
-    // would split the transparent status bar between incompatible backgrounds and make one set of
-    // system icons unreadable. Back remains the deliberate route to the stable top-level shell.
+    // Now keeps the navigation in portrait (B artboard). Only the immersive landscape player owns
+    // the whole window, so neither the rail nor the compact bar competes with it there.
     val isSecondaryDetail = destination.isSecondaryDetail
     val windowWidth = with(LocalDensity.current) {
         LocalWindowInfo.current.containerSize.width.toDp()
     }
     val useNavigationRail = windowWidth >= 600.dp &&
-        !hasFocusedPlayer && !isSecondaryDetail
+        !(hasFocusedPlayer && isLandscape) && !isSecondaryDetail
 
     fun applyNavigation(updated: VesqenNavigationState) {
         destinationName = updated.destination.name
@@ -451,6 +459,8 @@ fun VesqenAppContent(
     fun openChain() {
         applyNavigation(navigationState.openChain())
     }
+
+    val chainOpenedInContext = navigationState.chainOpenedInContext
 
     fun openAbout() {
         applyNavigation(navigationState.openAbout())
@@ -484,13 +494,14 @@ fun VesqenAppContent(
                 useNavigationRail = true,
                 modifier = Modifier
                     .fillMaxHeight()
-                    .width(96.dp),
+                    .width(NavigationRailWidth),
             )
             VesqenDestinationFrame(
                 state = state,
                 destination = destination,
                 destinationStateHolder = destinationStateHolder,
                 showNavigation = false,
+                chainOpenedInContext = chainOpenedInContext,
                 motionPolicy = appliedMotionPolicy,
                 playbackTelemetry = playbackTelemetry,
                 chainPreferencesRepository = appliedChainPreferencesRepository,
@@ -552,6 +563,7 @@ fun VesqenAppContent(
             destination = destination,
             destinationStateHolder = destinationStateHolder,
             showNavigation = true,
+            chainOpenedInContext = chainOpenedInContext,
             motionPolicy = appliedMotionPolicy,
             playbackTelemetry = playbackTelemetry,
             chainPreferencesRepository = appliedChainPreferencesRepository,
@@ -615,6 +627,7 @@ private fun VesqenDestinationFrame(
     destination: VesqenDestination,
     destinationStateHolder: SaveableStateHolder,
     showNavigation: Boolean,
+    chainOpenedInContext: Boolean,
     motionPolicy: VesqenMotionPolicy,
     playbackTelemetry: PlaybackTelemetry?,
     chainPreferencesRepository: ChainDashboardPreferencesRepository,
@@ -672,8 +685,23 @@ private fun VesqenDestinationFrame(
     val usesFocusedPlayerInsets = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
     val showMiniPlayer = state.playback.hasActiveTrack &&
         destination != VesqenDestination.NOW && !destination.isSecondaryDetail
-    val showCompactNavigation = showNavigation &&
-        !usesFocusedPlayerInsets && !destination.isSecondaryDetail
+    // Measured a frame late rather than by subcomposing the whole shell. Now normally opens
+    // after the frame has its size, so the bar's place is settled before the player appears.
+    // The insets are read unconditionally: a composable read that only starts once Now opens
+    // shifts the groups after it and restarts the shell, which skips the player's entrance.
+    val density = LocalDensity.current
+    val systemBarsHeight = with(density) {
+        (WindowInsets.statusBars.getTop(this) + WindowInsets.navigationBars.getBottom(this)).toDp()
+    }
+    var frameHeight by remember { mutableStateOf(Dp.Unspecified) }
+    val nowYieldsNavigation = usesFocusedPlayerInsets && (
+        isLandscape || frameHeight.isSpecified && nowPortraitYieldsNavigation(
+            pageHeight = frameHeight - systemBarsHeight,
+            barHeight = CompactNavigationBarContentHeight,
+            fontScale = density.fontScale,
+        )
+    )
+    val showCompactNavigation = showNavigation && !nowYieldsNavigation && !destination.isSecondaryDetail
     val miniPlayerContentClearance = if (showMiniPlayer) {
         MiniPlayerHeight + VesqenSpacing.xxs
     } else {
@@ -700,7 +728,11 @@ private fun VesqenDestinationFrame(
     // MediaStore permission is therefore not a valid gate for the MediaSession fallback; the
     // loader itself safely handles a URI whose underlying grant has actually been revoked.
     val artworkTrack = currentTrack ?: state.playback.toArtworkTrackOrNull()
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .onSizeChanged { size -> frameHeight = with(density) { size.height.toDp() } },
+    ) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             contentWindowInsets = if (usesFocusedPlayerInsets) {
@@ -764,10 +796,12 @@ private fun VesqenDestinationFrame(
                 targetState = destination,
                 modifier = Modifier.fillMaxSize(),
                 transitionSpec = {
+                    // Now and Chain are neighbouring tabs; moving between them is a sideways step,
+                    // not the player rising from or settling into the mini-player.
                     val opensFocusedPlayer = targetState == VesqenDestination.NOW &&
-                        !initialState.isSecondaryDetail
+                        initialState != VesqenDestination.CHAIN && !initialState.isSecondaryDetail
                     val closesFocusedPlayer = initialState == VesqenDestination.NOW &&
-                        !targetState.isSecondaryDetail
+                        targetState != VesqenDestination.CHAIN && !targetState.isSecondaryDetail
                     when {
                         motionPolicy.reduceMotion -> {
                             fadeIn(animationSpec = tween(motionPolicy.stateChangeMillis)) togetherWith
@@ -860,8 +894,7 @@ private fun VesqenDestinationFrame(
                         }
 
                         else -> {
-                            val returning = targetState.detailDepth < initialState.detailDepth ||
-                                targetState == VesqenDestination.LIBRARY
+                            val returning = targetState.navigationOrder < initialState.navigationOrder
                             val direction = if (returning) -1 else 1
                             val duration = motionPolicy.playerExpandMillis
                             (fadeIn(animationSpec = tween(duration)) +
@@ -878,6 +911,7 @@ private fun VesqenDestinationFrame(
                         // page cannot cover the player's collapse or a detail's return animation.
                         targetContentZIndex = when {
                             targetState.isSecondaryDetail -> 2f + targetState.detailDepth
+                            targetState == VesqenDestination.CHAIN -> 3f
                             targetState == VesqenDestination.NOW -> 2f
                             targetState == VesqenDestination.SETTINGS -> 1f
                             else -> 0f
@@ -888,10 +922,21 @@ private fun VesqenDestinationFrame(
             ) { activeDestination ->
                 // During destination transitions keep the outgoing focused player edge-to-edge until
                 // it fades out. Applying the incoming Library padding here would flash a white inset.
+                // In portrait the player stops above the bar, which already includes the system
+                // navigation inset, so the player must not pad for that inset a second time. Now
+                // passes no content insets, so innerPadding holds only the bar. Read it through
+                // padding(), at layout time: Scaffold rewrites it while measuring, and reading it
+                // here in composition restarts this content and skips the player's entrance.
                 val destinationModifier = if (
                     activeDestination == VesqenDestination.NOW && state.playback.hasActiveTrack
                 ) {
-                    Modifier
+                    if (showCompactNavigation) {
+                        Modifier
+                            .padding(innerPadding)
+                            .consumeWindowInsets(WindowInsets.navigationBars)
+                    } else {
+                        Modifier
+                    }
                 } else {
                     Modifier
                         .padding(innerPadding)
@@ -980,7 +1025,7 @@ private fun VesqenDestinationFrame(
                         diagnosticExportFeedback = diagnosticExportFeedback,
                         onRequestDiagnosticExport = onRequestDiagnosticExport,
                         onClearDiagnosticExportFeedback = onClearDiagnosticExportFeedback,
-                        onBack = onNavigateBack,
+                        onBack = if (chainOpenedInContext) onNavigateBack else null,
                         onBrowseLibrary = { onDestinationSelected(VesqenDestination.LIBRARY) },
                         modifier = destinationModifier,
                     )

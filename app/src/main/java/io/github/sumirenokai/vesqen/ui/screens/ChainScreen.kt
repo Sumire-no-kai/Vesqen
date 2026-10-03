@@ -201,7 +201,8 @@ fun ChainScreen(
     diagnosticExportFeedback: DiagnosticExportFeedback,
     onRequestDiagnosticExport: () -> Unit,
     onClearDiagnosticExportFeedback: () -> Unit,
-    onBack: () -> Unit,
+    /** Null when Chain was opened from its tab: it is a top-level surface without a back arrow. */
+    onBack: (() -> Unit)?,
     onBrowseLibrary: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -380,7 +381,7 @@ fun ChainScreen(
 @Composable
 private fun ChainHeader(
     showAdvanced: Boolean,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     onShowSummary: () -> Unit,
 ) {
     Row(
@@ -390,14 +391,16 @@ private fun ChainHeader(
             .padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(
-            onClick = onBack,
-            modifier = Modifier.size(48.dp).testTag("vesqen.chain.back"),
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = stringResource(R.string.back),
-            )
+        if (onBack != null) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.size(48.dp).testTag("vesqen.chain.back"),
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.back),
+                )
+            }
         }
         Text(
             text = stringResource(if (showAdvanced) R.string.chain_advanced_title else R.string.destination_chain),
