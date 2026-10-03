@@ -27,8 +27,11 @@ Release APK 的 assemble/package 与 bundle 都依赖 `checkPrivacyPolicyFinal`�
 - 本地 JDK 25：254 项 JVM 测试，0 失败/错误/跳过；Debug lint、Debug、Release、deviceTest 与仪器 APK 构建通过。
 - Release 负向门禁：仅用临时 Gradle init 脚本替换任务输入为带 Draft 的文件，`assembleRelease` 在 `checkPrivacyPolicyFinal` 失败；仓库隐私政策未修改。
 - iQOO V2171A / Android 15 / PD2171_A_15.3.19.0.W10：新启动来源测试 1 项、会话字段测试 2 项、严格 USB 扬声器测试 1 项（8 轮模式切换）、普通播放短测 1 项通过。
+- iQOO 链路生命周期复测：`SpeakerChainLifecycleDeviceTest` 通过（118.651 秒），包含 100 次导航与录制生命周期。首轮后台启动超时；按现有 runner 使用完整 MainActivity 名作为前台宿主后通过。遇到 vivo 跨应用跳转提示时只选“仅打开一次”，未修改永久安全策略。记录：`build/qa/beta2/iqoo-chain-lifecycle-foreground/result.json`。
 - Honor STF-AL00 / Android 9 / STF-AL00 9.1.0.225(C00E125R1P9)：新启动来源测试 1 项、会话字段测试 2 项、普通播放短测 1 项通过。首轮后台测试被 PowerGenie 杀死，保留失败日志；使用已有前台宿主机制后通过。
 - 两机恢复来源均为 QUEUE_RESTORE，主动播放失败来源均为 USER_PLAYBACK；iQOO 失败为 NO_USB_AUDIO_DEVICE，Honor 为 UNSUPPORTED_ANDROID_VERSION。没有静默降级播放。
 - 测试版本仍为 1.0.0-beta.1 / 10（仅本地代码候选，非新发布）；宿主 APK SHA-256：`e617b5ff49ccfd8b5fcaedf106ff75f4a2838d281872114e3f94fdb5166cc4aa`；仪器 APK：`ea2905c04fa43eb88943917d6c6b371d80b1c25c138f7922dff16bea8241240e`。
 - 未执行 75 分钟 soak、未重新布置 RealLossless 外部音源、未验证真实 DAC。不能据此关闭 M1/M2/M3 整体设备门禁。原始路由、安装与测试日志留在忽略的 `build/qa/beta2/`，不提交含设备/曲目信息的原始转储。
 - 对话框行为留给界面接入；本地测试结果不等于远程 CI 或发布验收。
+
+- 远程 CI：PR #76 的 Android verify 已通过（run `37093499354`）；补充记录的提交不改变已验证代码。
