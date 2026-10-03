@@ -49,7 +49,7 @@ internal class GitHubAppUpdater(
     private val apk = File(directory, "update.apk")
     private val partial = File(directory, "update.part")
 
-    private fun runOperation(block: suspend () -> Unit) {
+    private fun runOperation(reportFailures: Boolean = true, block: suspend () -> Unit) {
         // Acquire before dispatch, so repeated taps cannot queue duplicate work.
         if (!operation.tryLock()) return
         scope.launch {
@@ -58,8 +58,12 @@ internal class GitHubAppUpdater(
                 block()
             }
             catch (failure: CancellationException) { throw failure }
-            catch (failure: UpdateOperationException) { state(UpdateState.Failed(failure.reason, currentRelease())) }
-            catch (failure: IOException) { state(UpdateState.Failed(UpdateFailure.STORAGE_UNAVAILABLE, currentRelease())) }
+            catch (failure: UpdateOperationException) {
+                if (reportFailures) state(UpdateState.Failed(failure.reason, currentRelease()))
+            }
+            catch (failure: IOException) {
+                if (reportFailures) state(UpdateState.Failed(UpdateFailure.STORAGE_UNAVAILABLE, currentRelease()))
+            }
             finally { operation.unlock() }
         }
     }
@@ -73,15 +77,16 @@ internal class GitHubAppUpdater(
     }
 
     /** #70 may claim the daily request and supply its response through acceptUsageResponse. */
-    fun onForeground(usageRequestExpected: Boolean = false) = runOperation {
+    fun onForeground(usageRequestExpected: Boolean = false) = runOperation(reportFailures = false) {
         val ready = snapshot.value.state as? UpdateState.ReadyToInstall
         if (ready != null) { state(ready.copy(requiresInstallPermission = !installer.canInstall())); return@runOperation }
         if (!usageRequestExpected && automaticCheckDue(clock(), preferences.read()) && !isInstalling()) check(automatic = true)
     }
 
-    fun acceptUsageResponse(manifest: String) = runOperation {
+    fun acceptUsageResponse(manifest: String) = runOperation(reportFailures = false) {
         if (snapshot.value.installationSource == UpdateInstallationSource.GOOGLE_PLAY || !preferences.read().automatic || isInstalling() || snapshot.value.state is UpdateState.ReadyToInstall) return@runOperation
-        accept(parse(manifest, snapshot.value.channel))
+        updatePreferences { it.copy(lastAutomaticAttempt = clock()) }
+        accept(parse(manifest, snapshot.value.channel), automatic = true)
     }
 
     override fun checkNow() = runOperation { if (!isInstalling()) check(automatic = false) }
@@ -89,17 +94,21 @@ internal class GitHubAppUpdater(
     private suspend fun check(automatic: Boolean) {
         if (snapshot.value.installationSource == UpdateInstallationSource.GOOGLE_PLAY) return
         if (automatic) updatePreferences { it.copy(lastAutomaticAttempt = clock()) }
-        state(UpdateState.Checking)
+        // Automatic checks only replace the visible state once a usable result is available.
+        if (!automatic) state(UpdateState.Checking)
         val text = try { transport.manifest(endpoint) }
             catch (failure: IOException) { throw UpdateOperationException(UpdateFailure.NETWORK_UNAVAILABLE, failure) }
-        accept(parse(text, snapshot.value.channel))
+        accept(parse(text, snapshot.value.channel), automatic)
     }
 
-    private fun accept(release: UpdateRelease?) {
+    private fun accept(release: UpdateRelease?, automatic: Boolean) {
+        if (release != null && release.versionCode > installed.versionCode && release.minimumAndroidApi > androidApi) {
+            if (!automatic) state(UpdateState.Failed(UpdateFailure.UNSUPPORTED_ANDROID_VERSION, release))
+            return
+        }
         updatePreferences { it.copy(lastSuccess = clock()) }
         state(when {
             release == null || release.versionCode <= installed.versionCode -> UpdateState.UpToDate
-            release.minimumAndroidApi > androidApi -> UpdateState.Failed(UpdateFailure.UNSUPPORTED_ANDROID_VERSION, release)
             else -> UpdateState.Available(release, release.versionCode == preferences.read().skippedVersion)
         })
     }

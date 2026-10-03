@@ -42,6 +42,7 @@ class GitHubAppUpdaterTest {
         var checks = 0
         var urls = mutableListOf<String>()
         var offline = false
+        var manifestFailure: UpdateFailure? = null
         var failedMirror: String? = null
         var gate: CompletableDeferred<Unit>? = null
         var corruptMirror: String? = null
@@ -49,6 +50,7 @@ class GitHubAppUpdaterTest {
             checks++
             gate?.await()
             if (offline) throw IOException("private endpoint must not reach state")
+            manifestFailure?.let { throw UpdateOperationException(it) }
             return "manifest"
         }
         override suspend fun download(url: String, target: File, progress: (Long, Long?) -> Unit) {
@@ -58,9 +60,12 @@ class GitHubAppUpdaterTest {
             progress(bytes.size.toLong(), bytes.size.toLong())
         }
     }
-    private fun updater(candidate: UpdateRelease? = release, source: UpdateInstallationSource = UpdateInstallationSource.DIRECT) =
+    private fun updater(candidate: UpdateRelease? = release, source: UpdateInstallationSource = UpdateInstallationSource.DIRECT,
+                        parseFailure: UpdateFailure? = null) =
         GitHubAppUpdater(scope, store, transport, installer, ApkIdentity("app", 10, setOf("signer")), 35,
-            directory, "https://example.org/beta.json", UpdateChannel.BETA, source, null, { time }, { _, _ -> candidate })
+            directory, "https://example.org/beta.json", UpdateChannel.BETA, source, null, { time }, { _, _ ->
+                parseFailure?.let { throw UpdateOperationException(it) }; candidate
+            })
 
     @After fun cleanup() { scope.cancel(); directory.deleteRecursively() }
 
@@ -85,7 +90,79 @@ class GitHubAppUpdaterTest {
         updater.onForeground(); updater.onForeground()
         assertEquals(1, transport.checks)
         assertNull(store.value.lastSuccess)
+        assertEquals(time, store.value.lastAutomaticAttempt)
+        assertEquals(UpdateState.Idle, updater.snapshot.value.state)
+        updater.checkNow()
+        assertEquals(2, transport.checks)
         assertEquals(UpdateState.Failed(UpdateFailure.NETWORK_UNAVAILABLE), updater.snapshot.value.state)
+    }
+
+    @Test fun automaticFailuresPreserveAvailableSkippedAndUpToDateStates() = runBlocking {
+        for (candidate in listOf(release, null)) {
+            for (reason in listOf(UpdateFailure.NETWORK_UNAVAILABLE, UpdateFailure.INVALID_MANIFEST)) {
+                store.value = UpdatePreferences(true)
+                transport.offline = false
+                transport.manifestFailure = null
+                transport.gate = null
+                val updater = updater(candidate)
+                updater.checkNow()
+                updater.skipVersion(11)
+                val previous = updater.snapshot.value
+                val success = time
+                time += UPDATE_CHECK_INTERVAL_MS + 1
+                transport.offline = reason == UpdateFailure.NETWORK_UNAVAILABLE
+                transport.manifestFailure = reason.takeUnless { transport.offline }
+                transport.gate = CompletableDeferred()
+                updater.onForeground()
+                assertEquals("Automatic checks must not replace prior state with Checking", previous, updater.snapshot.value)
+                transport.gate!!.complete(Unit)
+                assertEquals(previous, updater.snapshot.value)
+                assertEquals(success, store.value.lastSuccess)
+                assertEquals(time, store.value.lastAutomaticAttempt)
+                val checks = transport.checks
+                updater.onForeground()
+                assertEquals(checks, transport.checks)
+                updater.checkNow()
+                assertEquals(UpdateState.Failed(reason), updater.snapshot.value.state)
+            }
+        }
+    }
+
+    @Test fun automaticFailureDoesNotReplaceAnEarlierActionFailure() {
+        val updater = updater()
+        updater.initializationFailure(UpdateFailure.INSTALL_FAILED)
+        val previous = updater.snapshot.value.state
+        transport.offline = true
+        updater.onForeground()
+        assertEquals(previous, updater.snapshot.value.state)
+        assertEquals(time, store.value.lastAutomaticAttempt)
+        assertNull(store.value.lastSuccess)
+    }
+
+    @Test fun malformedManifestsAreSilentOnlyForAutomaticAndSharedUsageChecks() {
+        val updater = updater(parseFailure = UpdateFailure.INVALID_MANIFEST)
+        updater.onForeground()
+        assertEquals(UpdateState.Idle, updater.snapshot.value.state)
+        assertEquals(time, store.value.lastAutomaticAttempt)
+        assertNull(store.value.lastSuccess)
+        time++
+        updater.acceptUsageResponse("malformed")
+        assertEquals(UpdateState.Idle, updater.snapshot.value.state)
+        assertEquals(time, store.value.lastAutomaticAttempt)
+        assertNull(store.value.lastSuccess)
+        updater.checkNow()
+        assertEquals(UpdateState.Failed(UpdateFailure.INVALID_MANIFEST), updater.snapshot.value.state)
+    }
+
+    @Test fun unsupportedReleaseIsSilentForAutomaticChecksAndDoesNotClaimSuccess() {
+        val candidate = release.copy(minimumAndroidApi = 36)
+        val updater = updater(candidate)
+        updater.onForeground()
+        assertEquals(UpdateState.Idle, updater.snapshot.value.state)
+        assertEquals(time, store.value.lastAutomaticAttempt)
+        assertNull(store.value.lastSuccess)
+        updater.checkNow()
+        assertEquals(UpdateState.Failed(UpdateFailure.UNSUPPORTED_ANDROID_VERSION, candidate), updater.snapshot.value.state)
     }
 
     @Test fun usageResponseSharesTheManifestWithoutAnotherRequest() {
@@ -189,11 +266,27 @@ class GitHubAppUpdaterTest {
         assertTrue(transport.urls.isEmpty())
     }
 
-    @Test fun linksAndInstallersHaveExplicitBoundaries() {
+    @Test fun onlyKnownStoresAndUpdatersOwnUpdates() {
         assertEquals(UpdateInstallationSource.GOOGLE_PLAY, classifyInstaller("com.android.vending"))
-        assertEquals(UpdateInstallationSource.OTHER_UPDATER, classifyInstaller("dev.imranr.obtainium"))
-        assertEquals(UpdateInstallationSource.DIRECT, classifyInstaller(null))
+        for (installer in listOf("org.fdroid.fdroid", "org.fdroid.basic", "com.looker.droidify",
+            "com.machiav3lli.fdroid", "dev.imranr.obtainium", "dev.imranr.obtainium.fdroid", "com.aurora.store")) {
+            assertEquals(installer, UpdateInstallationSource.OTHER_UPDATER, classifyInstaller(installer))
+        }
+    }
+
+    @Test fun genericAndUnknownInstallersRemainDirectInstalls() {
+        for (installer in listOf(null, "", "com.android.shell", "com.android.packageinstaller",
+            "com.google.android.packageinstaller", "com.google.android.permissioncontroller",
+            "com.android.permissioncontroller", "com.miui.packageinstaller", "com.samsung.android.packageinstaller",
+            "com.vivo.packageinstaller", "com.huawei.appmarket.packageinstaller", "com.android.chrome",
+            "org.mozilla.firefox", "com.google.android.documentsui", "com.mi.android.globalFileexplorer",
+            "unknown.installer", "com.aurora.store.unrecognized")) {
+            assertEquals(installer, UpdateInstallationSource.DIRECT, classifyInstaller(installer))
+        }
         assertEquals(UpdateInstallationSource.DIRECT, classifyInstaller("app", "app"))
+    }
+
+    @Test fun notesLinksHaveExplicitBoundaries() {
         assertTrue(isAllowedUpdateNotesLink("https://vesqen.sumirenokai.com/privacy/"))
         assertTrue(isAllowedUpdateNotesLink("https://github.com/Sumire-no-kai/Vesqen"))
         for (url in listOf("http://github.com/", "https://github.com.evil.test/", "https://user@github.com/", "javascript:alert(1)"))

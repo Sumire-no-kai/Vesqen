@@ -19,9 +19,13 @@ permission. `AppUpdater` in `main` remains the shared contract. The runtime also
 and installation when Android reports Google Play as the installer.
 
 On API 30+, installation ownership uses `getInstallSourceInfo`; API 26–29 use the older
-installer-package API. Direct/shell/system-package-installer installs default to automatic
-checks on. Other stores/updaters and unknown ownership default off and expose
-`ManagedExternally` with the installer package, allowing the UI to explain ownership.
+installer-package API. Only an explicit list of known stores/updaters owns updates:
+Google Play, F-Droid (including Basic), Droid-ify, Neo Store, Obtainium (including its F-Droid
+variant) and Aurora Store.
+Those sources default to automatic checks off and expose `ManagedExternally` with the
+installer package. Every other source (including OEM system installers, browsers, file
+managers, missing/unknown packages and unavailable source metadata) is `DIRECT` and defaults
+to automatic checks on. A saved user preference still takes precedence for non-Play installs.
 Self-upgrades retain their source classification and saved preferences.
 
 ## Checks, transport and files
@@ -29,7 +33,10 @@ Self-upgrades retain their source classification and saved preferences.
 An application activity entering the foreground triggers a check when automatic checks are
 on and more than 24 hours have passed since both the last successful check and the last automatic
 attempt. Persisting failed automatic attempts also prevents repeated offline requests throughout
-the day. A clock that moves backwards does not trigger a burst. Manual checks bypass the timer.
+the day. Failed automatic checks retain the preceding visible state and do not advance the
+successful-check timestamp; this also applies to malformed shared statistics responses and
+releases requiring a newer Android version. Manual checks bypass the timer and expose `Failed`
+with a typed reason. A clock that moves backwards does not trigger a burst.
 There is no background worker or notification. Checks, downloads and installation preparation
 run on an IO scope independent of playback; concurrent commands cannot start duplicate operations.
 
@@ -46,10 +53,17 @@ separate GET. A failed statistics request must not silently enable an extra upda
 That statistics subsystem is outside this PR.
 
 Transport requires HTTPS, bounded redirects with no HTTP downgrade, a 128 KiB manifest limit,
-and a 512 MiB APK limit. APK URLs are tried in their listed order. Each successful transfer is
+and a 512 MiB APK limit. Non-200 manifest responses (including 404 and 5xx), invalid redirects
+and malformed content report `INVALID_MANIFEST`; connection/transport IO failures report
+`NETWORK_UNAVAILABLE`. APK HTTP errors report `DOWNLOAD_FAILED`, allowing the next mirror.
+APK URLs are tried in their listed order. Each successful transfer is
 checked for SHA-256, package name, exact advertised and strictly higher versionCode, and the
 same nonempty set of current signing certificates. Every mirror gets these checks. APKs are
-checked again immediately before installation. Storage failures stop retries, and incomplete
+checked again immediately before installation. Space checks use
+[`StorageManager.getAllocatableBytes`](https://developer.android.com/reference/android/os/storage/StorageManager#getAllocatableBytes(java.util.UUID))
+for the target volume on the IO scope. Storage-query failures are `STORAGE_UNAVAILABLE`, and
+write failures retain their original cause if a follow-up space query also fails.
+Storage failures stop retries, and incomplete
 or rejected files are removed. Interrupted downloads are discarded after process restart;
 retrying a download is an explicit command.
 
@@ -169,3 +183,19 @@ acceptance. Platform dialogs, including vendor risk checkboxes, must be handled 
 
 These results do not release beta.2 or complete its UI, privacy-policy, website-publication,
 long-duration audio or real-DAC acceptance. No release workflow was executed.
+
+## PR #78 review revision validation
+
+The review fixes use an explicit installer allowlist, separate HTTP response errors from
+connection failures, preserve state on failed automatic checks, and use Android allocatable
+storage queries. The public contract from #77 is unchanged.
+
+- Local JDK 25: updater regressions first, then all 278 JVM tests passed (0 failures/errors/skips).
+  Debug lint, Debug/Release APKs and Debug AndroidTest APK compilation passed. The generated
+  lint report contains zero `UsableSpace` findings and zero errors; unrelated existing warnings remain.
+- Instrumentation: no device tests executed for this revision. The upgrade fixture compiles
+  with the real StorageManager query. Earlier Android 9/15 installation evidence above belongs
+  to the preceding implementation revision, not this revision.
+- Manual device QA: deferred by the owner because both phones are occupied. No app was
+  installed and no device setting was changed during this revision.
+- Remote CI is reported on the PR separately from these local checks.

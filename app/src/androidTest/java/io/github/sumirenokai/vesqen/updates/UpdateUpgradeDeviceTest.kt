@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.updates
 
+import android.os.storage.StorageManager
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.VesqenApplication
 import java.io.File
@@ -86,7 +87,10 @@ class UpdateUpgradeDeviceTest {
             override fun write(value: UpdatePreferences) { this.value = value }
         }
         val updater = GitHubAppUpdater(scope, preferences,
-            HttpsUpdateTransport { url: URL -> (url.openConnection() as HttpsURLConnection).apply { sslSocketFactory = tls.socketFactory } },
+            HttpsUpdateTransport(allocatableBytes = { path ->
+                val storage = app.getSystemService(StorageManager::class.java)
+                storage.getAllocatableBytes(storage.getUuidForPath(path))
+            }) { url: URL -> (url.openConnection() as HttpsURLConnection).apply { sslSocketFactory = tls.socketFactory } },
             installer, identity, android.os.Build.VERSION.SDK_INT, File(directory, "download"), "$endpoint/beta.json",
             UpdateChannel.BETA, UpdateInstallationSource.DIRECT, null)
         installer.onResult = updater::installationResult

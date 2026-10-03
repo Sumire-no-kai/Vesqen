@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.storage.StorageManager
 import io.github.sumirenokai.vesqen.BuildConfig
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -18,7 +19,10 @@ class GitHubUpdateRuntime(application: Application, scope: CoroutineScope) {
     private val directory = File(application.noBackupFilesDir, "updates")
     private val engine = GitHubAppUpdater(scope = CoroutineScope(scope.coroutineContext + Dispatchers.IO),
         preferences = AndroidUpdatePreferences(application, source.first == UpdateInstallationSource.DIRECT),
-        transport = HttpsUpdateTransport(), installer = installer, installed = installer.installedIdentity(),
+        transport = HttpsUpdateTransport(allocatableBytes = { path ->
+            val storage = application.getSystemService(StorageManager::class.java)
+            storage.getAllocatableBytes(storage.getUuidForPath(path))
+        }), installer = installer, installed = installer.installedIdentity(),
         androidApi = Build.VERSION.SDK_INT, directory = directory,
         endpoint = BuildConfig.UPDATE_MANIFEST_BASE_URL + defaultUpdateChannel(BuildConfig.VERSION_NAME).name.lowercase() + ".json",
         channel = defaultUpdateChannel(BuildConfig.VERSION_NAME), source = source.first, installerPackage = source.second)
@@ -59,14 +63,16 @@ internal fun installationSource(context: Context): Pair<UpdateInstallationSource
     val installer = if (Build.VERSION.SDK_INT >= 30) context.packageManager.getInstallSourceInfo(context.packageName).installingPackageName
         else { @Suppress("DEPRECATION") context.packageManager.getInstallerPackageName(context.packageName) }
     classifyInstaller(installer, context.packageName) to installer
-} catch (_: PackageManager.NameNotFoundException) { UpdateInstallationSource.UNKNOWN to null }
-  catch (_: SecurityException) { UpdateInstallationSource.UNKNOWN to null }
+} catch (_: PackageManager.NameNotFoundException) { UpdateInstallationSource.DIRECT to null }
+  catch (_: SecurityException) { UpdateInstallationSource.DIRECT to null }
 
 internal fun classifyInstaller(installer: String?, ownPackage: String? = null): UpdateInstallationSource = when (installer) {
-    ownPackage, null, "com.android.shell", "com.android.packageinstaller", "com.google.android.packageinstaller",
-    "com.google.android.permissioncontroller", "com.android.permissioncontroller" -> UpdateInstallationSource.DIRECT
+    ownPackage, null -> UpdateInstallationSource.DIRECT
     "com.android.vending" -> UpdateInstallationSource.GOOGLE_PLAY
-    else -> UpdateInstallationSource.OTHER_UPDATER
+    "org.fdroid.fdroid", "org.fdroid.basic", "com.looker.droidify", "com.machiav3lli.fdroid",
+    "dev.imranr.obtainium", "dev.imranr.obtainium.fdroid", "com.aurora.store" -> UpdateInstallationSource.OTHER_UPDATER
+    // An installer can open an APK without taking responsibility for future updates.
+    else -> UpdateInstallationSource.DIRECT
 }
 
 private class AndroidUpdatePreferences(context: Context, private val defaultAutomatic: Boolean) : UpdatePreferencesStore {
