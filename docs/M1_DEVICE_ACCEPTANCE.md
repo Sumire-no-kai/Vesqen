@@ -12,18 +12,22 @@
 ## 自动化 runner
 
 1. 记录 `adb devices -l` 的目标序列号和系统版本。
-2. 构建 `assembleDebug` 与 `assembleDebugAndroidTest`，再对明确序列号使用 `adb install -r -t` 覆盖安装两个 APK；禁止使用会卸载主应用或清空现有曲库数据的便捷任务。
-3. 使用明确序列号直接执行 `adb shell am instrument -w -r io.github.sumirenokai.vesqen.test/androidx.test.runner.AndroidJUnitRunner`。测试用数据库与偏好必须采用隔离名称，不得覆盖真实用户数据。
+2. 构建 `assembleDeviceTest` 与 `assembleDeviceTestAndroidTest`，再对明确序列号使用 `adb install -r -t` 安装两个隔离测试 APK。宿主包为 `io.github.sumirenokai.vesqen.devicetest`，拥有独立 UID、偏好、队列、曲库和诊断存储，不覆盖真实应用。禁止安装 Debug APK 替换真实应用来跑这些测试。
+3. 使用明确序列号直接执行 `adb shell am instrument -w -r io.github.sumirenokai.vesqen.devicetest.test/androidx.test.runner.AndroidJUnitRunner`。所有测试都运行在隔离宿主中；数据库夹具仍使用独立名称。真实播放服务测试在运行前检查宿主包名，错用真实应用会立即失败。
 4. 只在 instrumentation 输出非空、退出码为 0、无 failure／crash 且报告与目标序列号对应时记为通过。
-5. 保存测试报告摘要；不得用 `compileDebugAndroidTestKotlin`、JVM 测试或手动检查替代。
+5. 保存测试报告摘要；不得用 `compileDeviceTestAndroidTestKotlin`、JVM 测试或手动检查替代。
 
 vivo（iQOO V2171A，Android 15）上的额外步骤，2026-09-30 实测：
 
 - 测试机可能同时被别的会话使用。安装或运行前，先确认前台没有别的应用在测试。
 - `adb install` 常停在“安全守护”风险检测页，要勾选“已了解应用的风险检测结果”再点“继续安装”；版本号相同时会先问“直接打开 / 重新安装”，选“重新安装”。这时 adb 可能报 `INSTALL_FAILED_ABORTED`，但安装其实已由系统安装器完成，所以要以设备上 APK 的 SHA-256 为准。“超级守护”等安全设置不要改。
-- 测试界面不在前台时，`fast_freezer` 会冻结测试进程，测试卡在启动。此时从主机启动同一个宿主：`adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n io.github.sumirenokai.vesqen/androidx.activity.ComponentActivity`。报告里写明辅助了几次。只跑服务、不开界面的测试（例如 `StrictUsbSpeakerDeviceTest`）在被冻结期间超时也会照算，所以要在 instrumentation 启动后约 2 秒先启动这个宿主，让进程一直在前台；用 ActivityScenario 的界面测试不要这样预先启动，以免和测试自己的界面冲突。
+- 测试界面不在前台时，`fast_freezer` 会冻结测试进程，测试卡在启动。此时从主机启动同一个宿主：`adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n io.github.sumirenokai.vesqen.devicetest/androidx.activity.ComponentActivity`。报告里写明辅助了几次。只跑服务、不开界面的测试（例如 `StrictUsbSpeakerDeviceTest`）在被冻结期间超时也会照算，所以要在 instrumentation 启动后约 2 秒先启动这个宿主，让进程一直在前台；用 ActivityScenario 的界面测试不要这样预先启动，以免和测试自己的界面冲突。
 - 测试收尾时，androidx.test 会启动测试包里的 `EmptyActivity`，vivo 会弹出“Vesqen 想要打开 io.github.sumirenokai.vesqen.test”。选“仅打开一次”；“始终打开”会留下长期规则，由所有者决定。
 - 替换测试机上原有的构建前，先把原 APK 取回主机，测试后装回并核对哈希，再卸载测试包。备份放在 `build/qa/device-backups/`：它被 git 忽略，也不会像系统临时目录那样在重启后被清空。2026-10-01 曾因备份放在临时目录、重启后丢失，只能用同一提交重新构建来恢复，结果大小相同但哈希不同。
+
+### beta.2 存储隔离验收（#66，待执行）
+
+在真实应用预先保存严格 USB 模式、含重复曲目的队列、当前队列位置、播放进度、随机与循环模式。停止真实应用播放后，经所有者同意，在隔离宿主运行 StrictUsbSpeakerDeviceTest、SpeakerPlaybackDeviceTest、SpeakerChainLifecycleDeviceTest、RealLosslessDeviceTest。重新打开真实应用，逐项核对原状态不变。测试崩溃或超时后也应不变；隔离包的数据可另行清理，但不清理真实应用。外部音源夹具及报告改用隔离包的私有路径。此方案不隔离音频路由、系统音量等设备全局状态，执行前仍需协调设备使用。
 
 ## 功能矩阵
 

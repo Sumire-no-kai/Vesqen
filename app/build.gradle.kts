@@ -41,6 +41,11 @@ android {
         debug {
             buildConfigField("boolean", "DEVELOPER_DIAGNOSTICS_ENABLED", "true")
         }
+        create("deviceTest") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".devicetest"
+            matchingFallbacks += listOf("debug")
+        }
         release {
             buildConfigField("boolean", "DEVELOPER_DIAGNOSTICS_ENABLED", "false")
             optimization {
@@ -55,6 +60,10 @@ android {
             isDebuggable = false
         }
     }
+    // Instrumentation runs under a separate Android UID and private data directory.
+    testBuildType = "deviceTest"
+    sourceSets.getByName("deviceTest").kotlin.directories.add("src/debug/java")
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -176,6 +185,9 @@ tasks.matching { it.name == "bundleRelease" }.configureEach {
 }
 
 androidComponents {
+    beforeVariants(selector().withBuildType("debug")) {
+        it.hostTests[com.android.build.api.variant.HostTestBuilder.UNIT_TEST_TYPE]?.enable = true
+    }
     onVariants { variant ->
         val packagePrivacyPolicy = tasks.register<PackagePrivacyPolicyTask>(
             "package${variant.name.replaceFirstChar(Char::uppercaseChar)}PrivacyPolicy",
@@ -212,4 +224,6 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    "deviceTestImplementation"(libs.androidx.compose.ui.test.manifest)
+    "deviceTestImplementation"(libs.androidx.compose.ui.tooling)
 }
