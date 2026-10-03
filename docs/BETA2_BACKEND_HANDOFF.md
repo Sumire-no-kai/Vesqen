@@ -35,3 +35,10 @@ Release APK 的 assemble/package 与 bundle 都依赖 `checkPrivacyPolicyFinal`�
 - 对话框行为留给界面接入；本地测试结果不等于远程 CI 或发布验收。
 
 - 远程 CI：PR #76 的 Android verify 已通过（run `37093499354`）；补充记录的提交不改变已验证代码。
+
+## PR #76 审查修订验证
+
+- 暂停恢复仍不 prepare；初次快照与位置刷新在播放器时长未知时使用当前曲目的曲库时长。已知的播放器时长优先，缺失或无效曲库时长保持 0。
+- 独立 deviceTest 宿主名称为 `Vesqen Test`；已检查生成 APK 的包名、标签及原有 versionCode 10。
+- 本地 JDK 25：256 项 JVM 测试全部通过，Debug lint、Debug/Release、deviceTest/AndroidTest APK 构建通过。
+- `StrictUsbStartupDeviceTest` 新增恢复时长、位置刷新后时长及暂停跳转断言；本轮只编译，尚未执行。两台手机正被其他会话使用，遵照所有者要求等待空闲。上文真机结果属于修订前版本，不能视为新增断言已通过。

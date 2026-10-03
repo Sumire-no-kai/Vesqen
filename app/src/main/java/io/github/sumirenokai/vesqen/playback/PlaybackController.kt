@@ -387,6 +387,7 @@ class PlaybackController(
                 latestSnapshot.withPlayerPosition(
                     isPlaying = player.isPlaying,
                     durationMs = player.duration,
+                    libraryDurationMs = player.currentMediaItem?.mediaId?.let(tracksById::get)?.durationMs,
                     positionMs = player.currentPosition,
                 ),
             )
@@ -437,7 +438,7 @@ class PlaybackController(
                 title = track?.title ?: metadata?.title?.toString().orEmpty(),
                 artist = track?.artist ?: metadata?.artist?.toString().orEmpty(),
                 album = track?.album ?: metadata?.albumTitle?.toString().orEmpty(),
-                durationMs = player.duration.coerceAtLeast(0),
+                durationMs = resolvePlaybackDurationMs(player.duration, track?.durationMs),
                 positionMs = player.currentPosition.coerceAtLeast(0),
                 hasPrevious = player.hasPreviousMediaItem(),
                 hasNext = player.hasNextMediaItem(),
@@ -792,13 +793,18 @@ private fun MediaItem.matches(fingerprint: PlaybackMediaFingerprint): Boolean {
         sourceFacts.fileSizeBytes == fingerprint.fileSizeBytes
 }
 
+// Paused queue recovery deliberately stays unprepared; the catalog still knows its duration.
+internal fun resolvePlaybackDurationMs(playerDurationMs: Long, libraryDurationMs: Long?): Long =
+    playerDurationMs.takeIf { it > 0 } ?: (libraryDurationMs ?: 0).coerceAtLeast(0)
+
 internal fun PlaybackSnapshot.withPlayerPosition(
     isPlaying: Boolean,
     durationMs: Long,
     positionMs: Long,
+    libraryDurationMs: Long? = null,
 ): PlaybackSnapshot = copy(
     isPlaying = isPlaying,
-    durationMs = durationMs.coerceAtLeast(0),
+    durationMs = resolvePlaybackDurationMs(durationMs, libraryDurationMs),
     positionMs = positionMs.coerceAtLeast(0),
 )
 

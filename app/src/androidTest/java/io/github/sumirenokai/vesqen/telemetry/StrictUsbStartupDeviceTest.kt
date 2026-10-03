@@ -53,6 +53,14 @@ class StrictUsbStartupDeviceTest {
             assertFalse(recovered.isPlaying)
             assertFalse(recovered.showsPauseAction)
             assertEquals(12_345L, recovered.positionMs)
+            assertTrue("The catalog fixture must have a known duration", fixture.durationMs > 0)
+            assertEquals(fixture.durationMs, recovered.durationMs)
+            main { controller!!.refreshPosition() }
+            assertEquals(fixture.durationMs, snapshots.get().durationMs)
+            main { controller!!.seekTo(15_000); controller!!.refreshPosition() }
+            await { it.positionMs == 15_000L }
+            assertFalse(snapshots.get().isPlaying)
+            assertEquals(fixture.durationMs, snapshots.get().durationMs)
             assertEquals(if (Build.VERSION.SDK_INT >= 34) UsbOutputFailure.NO_USB_AUDIO_DEVICE
                 else UsbOutputFailure.UNSUPPORTED_ANDROID_VERSION, recovered.usbOutputStatus.failure)
             main { controller!!.togglePlayback() }
@@ -65,6 +73,7 @@ class StrictUsbStartupDeviceTest {
             if (Build.VERSION.SDK_INT >= 34) assertEquals(AudioOutputType.PHONE_SPEAKER, route.activeRoute?.outputType)
             File(app.filesDir, "strict-startup-evidence.txt").writeText(
                 "recoveryOrigin=${recovered.usbOutputStatus.failureOrigin}\n" +
+                    "recoveryDurationMs=${recovered.durationMs}\n" +
                     "playOrigin=${snapshots.get().usbOutputStatus.failureOrigin}\n" +
                     "failure=${snapshots.get().usbOutputStatus.failure}\n" +
                     "selectedRouteType=${route.activeRoute?.outputType}\n" +
