@@ -79,6 +79,17 @@ data class OfficialMixerApiSupport(
     }
 }
 
+/** Cleanup evidence is independent of the failure that stopped strict playback. */
+data class MixerCleanupStatus(
+    val pendingCount: Int = 0,
+    val exceptionTypes: Set<String> = emptySet(),
+) {
+    init {
+        require(pendingCount >= 0)
+        require(exceptionTypes.all { it.matches(Regex("[A-Za-z_$][A-Za-z0-9_.$]*")) })
+    }
+}
+
 data class UsbOutputStatus(
     val mode: UsbOutputMode = UsbOutputMode.SYSTEM,
     val phase: UsbOutputPhase = UsbOutputPhase.SYSTEM,
@@ -92,6 +103,7 @@ data class UsbOutputStatus(
     val observedAtElapsedRealtimeMs: Long = 0,
     val generation: Long = 0,
     val officialMixerApiSupport: OfficialMixerApiSupport? = null,
+    val mixerCleanup: MixerCleanupStatus = MixerCleanupStatus(),
 ) {
     init {
         require(observedAtEpochMs >= 0) { "Output state timestamp cannot be negative" }
@@ -152,6 +164,8 @@ internal object UsbOutputSessionContract {
     const val SET_MODE_ACTION = "io.github.sumirenokai.vesqen.playback.SET_USB_OUTPUT_MODE"
     const val MODE_ARGUMENT = "usb_output_mode"
 
+    private const val CLEANUP_PENDING = "usb_output_cleanup_pending"
+    private const val CLEANUP_EXCEPTION_TYPES = "usb_output_cleanup_exception_types"
     private const val PHASE = "usb_output_phase"
     private const val FAILURE = "usb_output_failure"
     private const val DEVICE_NAME = "usb_output_device_name"
@@ -182,6 +196,8 @@ internal object UsbOutputSessionContract {
     fun toBundle(status: UsbOutputStatus): Bundle = Bundle().apply {
         putString(MODE_ARGUMENT, status.mode.name)
         putString(PHASE, status.phase.name)
+        putInt(CLEANUP_PENDING, status.mixerCleanup.pendingCount)
+        putStringArrayList(CLEANUP_EXCEPTION_TYPES, ArrayList(status.mixerCleanup.exceptionTypes.sorted()))
         status.failure?.let { putString(FAILURE, it.name) }
         status.deviceName?.let { putString(DEVICE_NAME, it) }
         status.hardwareIdentity?.let { identity ->
@@ -227,6 +243,10 @@ internal object UsbOutputSessionContract {
                 observedAtElapsedRealtimeMs = bundle.getLong(OBSERVED_AT_ELAPSED).coerceAtLeast(0),
                 generation = bundle.getLong(GENERATION).coerceAtLeast(0),
                 officialMixerApiSupport = bundle.readOfficialMixerApiSupport(),
+                mixerCleanup = MixerCleanupStatus(
+                    pendingCount = bundle.getInt(CLEANUP_PENDING).coerceAtLeast(0),
+                    exceptionTypes = bundle.getStringArrayList(CLEANUP_EXCEPTION_TYPES)?.toSet().orEmpty(),
+                ),
             )
         }.getOrNull()
     }

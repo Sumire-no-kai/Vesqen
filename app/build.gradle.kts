@@ -178,9 +178,8 @@ val checkPrivacyPolicyFinal by tasks.registering(CheckPrivacyPolicyFinalTask::cl
     )
 }
 
-// Only the Play bundle is gated: CI assembles unsigned APKs from the draft policy, and the GitHub
-// APK release step runs checkPrivacyPolicyFinal explicitly (docs/M4_BETA_RELEASE.md).
-tasks.matching { it.name == "bundleRelease" }.configureEach {
+// Every Release artifact requires the same finalized privacy policy.
+tasks.matching { it.name in setOf("bundleRelease", "assembleRelease", "packageRelease") }.configureEach {
     dependsOn(checkPrivacyPolicyFinal)
 }
 

@@ -897,18 +897,16 @@ internal class UsbOutputCoordinator(
             state
         } ?: return
         detachRoutingListener()
-        val cleanupSucceeded = !attemptMixerCleanup || synchronized(mixerMutationLock) {
+        if (attemptMixerCleanup) synchronized(mixerMutationLock) {
             mixerPreferences.clearAll()
         }
-        val reportedFailure = if (cleanupSucceeded) failure else UsbOutputFailure.MIXER_CLEAR_FAILED
-        val reportedCode = if (cleanupSucceeded) code else "strict_usb.mixer_clear_failed"
         publish(
             phase = UsbOutputPhase.FAILED,
-            failure = reportedFailure,
+            failure = failure,
             device = failedState.device,
             source = sourceFormat,
             sink = failedState.sink,
-            decisionCode = reportedCode,
+            decisionCode = code,
         )
         if (currentMode() == UsbOutputMode.STRICT_BIT_PERFECT) {
             player?.run {
@@ -995,6 +993,7 @@ internal class UsbOutputCoordinator(
         decisionCode: String,
         explicitMode: UsbOutputMode? = null,
     ) {
+        val cleanup = mixerPreferences.snapshot()
         val status = synchronized(lock) {
             statusGeneration += 1
             UsbOutputStatus(
@@ -1010,6 +1009,7 @@ internal class UsbOutputCoordinator(
                 observedAtElapsedRealtimeMs = SystemClock.elapsedRealtime(),
                 generation = statusGeneration,
                 officialMixerApiSupport = officialMixerApiSupport,
+                mixerCleanup = cleanup,
             )
         }
         stateRepository.publish(status)
@@ -1064,23 +1064,15 @@ internal class UsbOutputCoordinator(
         runCatching { audioManager.unregisterAudioDeviceCallback(deviceCallback) }
         player?.removeListener(this)
         detachRoutingListener()
-        val cleanupSucceeded = synchronized(mixerMutationLock) { mixerPreferences.clearAll() }
+        synchronized(mixerMutationLock) { mixerPreferences.clearAll() }
         if (closingState.mode == UsbOutputMode.STRICT_BIT_PERFECT) {
             publish(
                 phase = UsbOutputPhase.FAILED,
-                failure = if (cleanupSucceeded) {
-                    UsbOutputFailure.SERVICE_STOPPED
-                } else {
-                    UsbOutputFailure.MIXER_CLEAR_FAILED
-                },
+                failure = UsbOutputFailure.SERVICE_STOPPED,
                 device = closingState.device,
                 source = sourceFormat,
                 sink = closingState.sink,
-                decisionCode = if (cleanupSucceeded) {
-                    "strict_usb.service_stopped"
-                } else {
-                    "strict_usb.mixer_clear_failed"
-                },
+                decisionCode = "strict_usb.service_stopped",
             )
         }
         player = null
@@ -1214,6 +1206,7 @@ internal class MixerPreferenceCleanupTracker<T>(
     private val clearPreference: (T) -> Result<Boolean>,
 ) {
     private val tracked = linkedSetOf<T>()
+    private val cleanupExceptionTypes = mutableMapOf<T, String>()
 
     @Synchronized
     fun track(preference: T) {
@@ -1235,9 +1228,17 @@ internal class MixerPreferenceCleanupTracker<T>(
     @Synchronized
     fun clear(preference: T): Boolean {
         if (preference !in tracked) return true
-        val cleared = runCatching { clearPreference(preference).getOrThrow() }.getOrDefault(false)
-        if (cleared) tracked -= preference
-        return cleared
+        val result = try {
+            clearPreference(preference)
+        } catch (failure: Exception) {
+            Result.failure(failure)
+        }
+        // Keep only the type; exception messages and stack traces can contain device identifiers.
+        val exceptionType = result.exceptionOrNull()?.javaClass?.name
+        if (exceptionType == null) cleanupExceptionTypes.remove(preference)
+        else cleanupExceptionTypes[preference] = exceptionType
+        if (result.getOrNull() == true) tracked -= preference
+        return result.getOrNull() == true
     }
 
     @Synchronized
@@ -1248,6 +1249,12 @@ internal class MixerPreferenceCleanupTracker<T>(
 
     @Synchronized
     internal fun pendingCount(): Int = tracked.size
+
+    @Synchronized
+    fun snapshot(): MixerCleanupStatus = MixerCleanupStatus(
+        pendingCount = tracked.size,
+        exceptionTypes = cleanupExceptionTypes.values.toSet(),
+    )
 }
 
 /** Blocks PCM until strict-route verification and closes again on pause or non-neutral volume. */
