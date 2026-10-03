@@ -28,6 +28,7 @@ class UsbOutputSessionContractDeviceTest {
             mode = UsbOutputMode.STRICT_BIT_PERFECT,
             phase = UsbOutputPhase.FAILED,
             failure = UsbOutputFailure.DEVICE_DISCONNECTED,
+            failureOrigin = UsbOutputFailureOrigin.ROUTE_CHANGE,
             decisionCode = "strict_usb.device_disconnected",
             mixerCleanup = MixerCleanupStatus(1, setOf("java.lang.SecurityException")),
         )

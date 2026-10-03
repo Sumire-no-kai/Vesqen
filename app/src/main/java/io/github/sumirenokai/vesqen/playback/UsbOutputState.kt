@@ -38,6 +38,18 @@ enum class UsbOutputFailure {
     PLATFORM_ERROR,
 }
 
+/** Why this strict-output attempt exists; presentation decides how prominently to show a failure. */
+enum class UsbOutputFailureOrigin {
+    SERVICE_START,
+    QUEUE_RESTORE,
+    USER_PLAYBACK,
+    USER_MODE_CHANGE,
+    TRACK_TRANSITION,
+    ROUTE_CHANGE,
+    PROCESSING_CHANGE,
+    SERVICE_STOP,
+}
+
 data class AudioFormatSummary(
     val sampleRateHz: Int,
     val channelCount: Int,
@@ -104,6 +116,7 @@ data class UsbOutputStatus(
     val generation: Long = 0,
     val officialMixerApiSupport: OfficialMixerApiSupport? = null,
     val mixerCleanup: MixerCleanupStatus = MixerCleanupStatus(),
+    val failureOrigin: UsbOutputFailureOrigin? = null,
 ) {
     init {
         require(observedAtEpochMs >= 0) { "Output state timestamp cannot be negative" }
@@ -164,6 +177,7 @@ internal object UsbOutputSessionContract {
     const val SET_MODE_ACTION = "io.github.sumirenokai.vesqen.playback.SET_USB_OUTPUT_MODE"
     const val MODE_ARGUMENT = "usb_output_mode"
 
+    private const val FAILURE_ORIGIN = "usb_output_failure_origin"
     private const val CLEANUP_PENDING = "usb_output_cleanup_pending"
     private const val CLEANUP_EXCEPTION_TYPES = "usb_output_cleanup_exception_types"
     private const val PHASE = "usb_output_phase"
@@ -199,6 +213,7 @@ internal object UsbOutputSessionContract {
         putInt(CLEANUP_PENDING, status.mixerCleanup.pendingCount)
         putStringArrayList(CLEANUP_EXCEPTION_TYPES, ArrayList(status.mixerCleanup.exceptionTypes.sorted()))
         status.failure?.let { putString(FAILURE, it.name) }
+        status.failureOrigin?.let { putString(FAILURE_ORIGIN, it.name) }
         status.deviceName?.let { putString(DEVICE_NAME, it) }
         status.hardwareIdentity?.let { identity ->
             putInt(DEVICE_VENDOR_ID, identity.vendorId)
@@ -234,6 +249,9 @@ internal object UsbOutputSessionContract {
                 mode = mode,
                 phase = phase,
                 failure = failure,
+                failureOrigin = bundle.getString(FAILURE_ORIGIN)?.let { stored ->
+                    UsbOutputFailureOrigin.entries.firstOrNull { it.name == stored }
+                },
                 deviceName = bundle.getString(DEVICE_NAME),
                 hardwareIdentity = bundle.readHardwareIdentity(),
                 sourceFormat = bundle.readFormat(SOURCE_RATE, SOURCE_CHANNELS, SOURCE_ENCODING),

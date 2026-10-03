@@ -215,8 +215,13 @@ class PlaybackController(
         )
         activeController.shuffleModeEnabled = shuffleEnabled
         activeController.repeatMode = repeatMode.toMedia3RepeatMode()
-        activeController.prepare()
-        if (playWhenReady) activeController.play() else activeController.pause()
+        // Restoring a paused queue is metadata recovery, not a request to create an audio output.
+        if (playWhenReady) {
+            activeController.prepare()
+            activeController.play()
+        } else {
+            activeController.pause()
+        }
         publish(activeController, rebuildQueue = true)
     }
 
