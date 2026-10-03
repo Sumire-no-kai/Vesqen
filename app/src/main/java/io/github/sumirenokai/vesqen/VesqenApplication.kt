@@ -19,6 +19,11 @@ class VesqenApplication : Application() {
     private val applicationJob = SupervisorJob()
     private val applicationScope = CoroutineScope(applicationJob + Dispatchers.Default)
 
+    internal val updateRuntime by lazy {
+        io.github.sumirenokai.vesqen.updates.GitHubUpdateRuntime(this, applicationScope)
+    }
+    val appUpdater: io.github.sumirenokai.vesqen.updates.AppUpdater get() = updateRuntime.updater
+
     val usbOutputStateRepository = UsbOutputStateRepository()
 
     val outputVerificationRepository: OutputVerificationRepository by lazy {
@@ -63,6 +68,7 @@ class VesqenApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         developerDiagnosticRecorder
+        updateRuntime
         applicationScope.launch { outputVerificationRepository.load() }
     }
 
