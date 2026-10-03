@@ -35,6 +35,7 @@ android {
         versionName = vesqenVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["appLabel"] = "@string/app_name"
     }
 
     buildTypes {
@@ -44,6 +45,7 @@ android {
         create("deviceTest") {
             initWith(getByName("debug"))
             applicationIdSuffix = ".devicetest"
+            manifestPlaceholders["appLabel"] = "Vesqen Test"
             matchingFallbacks += listOf("debug")
         }
         release {
