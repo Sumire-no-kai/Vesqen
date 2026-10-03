@@ -28,6 +28,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
@@ -303,6 +304,7 @@ class VesqenAppTest {
             .assertHeightIsEqualTo(48.dp)
         composeRule.onNodeWithTag("vesqen.library.notifications-notice")
             .assertHeightIsEqualTo(48.dp)
+        composeRule.onNodeWithTag("vesqen.library.search-toggle").assertHeightIsEqualTo(48.dp).performClick()
         composeRule.onNodeWithTag("vesqen.library.search").assertHeightIsEqualTo(48.dp)
         composeRule.onNodeWithTag("vesqen.permission.request").assertHeightIsEqualTo(48.dp)
         composeRule.onNodeWithTag("vesqen.library.notifications.settings").assertHeightIsEqualTo(48.dp)
@@ -334,7 +336,25 @@ class VesqenAppTest {
     fun empty_library_does_not_reserve_search_space() {
         render(grantedState())
 
+        composeRule.onAllNodesWithTag("vesqen.library.search-toggle").assertCountEquals(0)
         composeRule.onAllNodesWithTag("vesqen.library.search").assertCountEquals(0)
+    }
+
+    @Test
+    fun library_search_opens_from_the_title_bar_and_back_closes_it() {
+        render(grantedState(tracks = sampleTracks))
+
+        composeRule.onAllNodesWithTag("vesqen.library.search").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.library.search-toggle").performClick()
+        composeRule.onNode(hasSetTextAction()).performTextInput("Dawn")
+        composeRule.onNodeWithTag("vesqen.library.track.1").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("vesqen.library.track.2").assertCountEquals(0)
+
+        // Back clears the query and folds the field away before it leaves the Library.
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onAllNodesWithTag("vesqen.library.search").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.library.track.2").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.library.title.root").assertIsDisplayed()
     }
 
     @Test
@@ -353,6 +373,7 @@ class VesqenAppTest {
             fontScale = 2f,
         )
 
+        composeRule.onNodeWithTag("vesqen.library.search-toggle").performClick()
         val musicAccessBounds = composeRule.onNodeWithTag("vesqen.library.music-access-notice")
             .fetchSemanticsNode()
             .boundsInRoot
