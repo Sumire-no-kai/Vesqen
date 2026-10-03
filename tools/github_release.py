@@ -15,6 +15,19 @@ import tempfile
 
 
 APP_ID = "io.github.sumirenokai.vesqen"
+GITHUB_PERMISSIONS = frozenset({
+    "android.permission.READ_MEDIA_AUDIO",
+    "android.permission.READ_EXTERNAL_STORAGE",
+    "android.permission.POST_NOTIFICATIONS",
+    "android.permission.FOREGROUND_SERVICE",
+    "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+    "android.permission.WAKE_LOCK",
+    "android.permission.MODIFY_AUDIO_SETTINGS",
+    "android.permission.ACCESS_NETWORK_STATE",
+    "android.permission.INTERNET",
+    "android.permission.REQUEST_INSTALL_PACKAGES",
+    f"{APP_ID}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+})
 KEY_ALIAS = "vesqen-app-signing-v1"
 CERT_SHA256 = "743e96fcb71dc58188496819a001a27cd88d909162c5ae929c87bfa29ab86293"
 VERSION = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?")
@@ -78,9 +91,9 @@ def inspect_apk(apk, tools, metadata):
         raise ReleaseError("APK package or version does not match the candidate")
     if "application-debuggable" in badging:
         raise ReleaseError("Refusing a debuggable APK")
-    for permission in ("android.permission.INTERNET", "com.android.vending.BILLING"):
-        if re.search(r"^uses-permission[^:]*: name='" + re.escape(permission) + "'", badging, re.M):
-            raise ReleaseError("GitHub APK contains a prohibited permission")
+    permissions = set(re.findall(r"^uses-permission[^:]*: name='([^']+)'", badging, re.M))
+    if permissions - GITHUB_PERMISSIONS:
+        raise ReleaseError("GitHub APK contains a permission outside the explicit allowlist")
 
 
 def prepare(source, output, commit, branch, tools):

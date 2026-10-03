@@ -314,3 +314,11 @@ Library 使用同一修复代码做实际 60 Hz 对照：带迷你播放器的 D
 - 复审将严格输出的 PCM 闸门、实际 AudioTrack 格式／路由／mixer readback、音量与 mute 失效条件，以及 Controller 断连撤销证明纳入同一 fail-closed 边界。`PlaybackSnapshot` 现在拒绝“Controller 未连接但仍可发送严格输出命令”的不可能状态。
 - 上述模型不变量先让一个旧 UI fixture 真实失败，修正 fixture 后保留原产品断言。iQOO V2171A / Android 15 的四项新增 UI 定向覆盖中，3 项在合批通过；严格失败提示那一项的合批被 vivo 前台宿主在断言前销毁 Activity，随后使用同一最终 app/test 候选独立 1/1 通过。两份原始结果分开保留，不表述为单次 4/4 runner。
 - 本轮没有连接 USB DAC，也没有形成 ACTIVE、外部数字逐样本或 VERIFIED 证据；因此这些结果只证明软件拒绝路径与连接能力边界，不证明 bit-perfect。测试后移除 test 包并恢复不可调试 Profile，设备与本地产物 SHA-256 均为 `ac6a3ad2678279ac838e88e734b62ad09d9b20ab24bcab8eeb8de9279eb12177`。
+
+### beta.2 backend follow-up (2026-10-03)
+
+Playback isolation, strict-output cleanup/origin fields and adb route observations are recorded
+in [the backend handoff](BETA2_BACKEND_HANDOFF.md) when PR #76 is applied. The separate GitHub
+updater's Android 9/15 system-install and data-retention evidence is in
+[APP_UPDATES.md](APP_UPDATES.md#recorded-acceptance--2026-10-03). These checks use an isolated
+`.devicetest` host and do not certify a DAC, bit-perfect output, or close the earlier audio gates.

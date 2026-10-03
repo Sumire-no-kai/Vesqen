@@ -48,16 +48,17 @@ class GithubReleaseTest(unittest.TestCase):
         with self.assertRaises(release.ReleaseError):
             release.validate_metadata(metadata(), "HEAD")
 
-    def test_rejects_debug_internet_billing_and_wrong_apk(self):
+    def test_rejects_debug_unknown_permissions_billing_and_wrong_apk(self):
         header = "package: name='io.github.sumirenokai.vesqen' versionCode='10' versionName='1.0.0-beta.1'\n"
         for badging in (header + "application-debuggable\n",
-                        header + "uses-permission: name='android.permission.INTERNET'\n",
+                        header + "uses-permission: name='android.permission.READ_CONTACTS'\n",
                         header + "uses-permission-sdk-23: name='com.android.vending.BILLING'\n",
                         header.replace("versionCode='10'", "versionCode='11'")):
             with patch.object(release, "run", return_value=badging):
                 with self.assertRaises(release.ReleaseError):
                     release.inspect_apk(Path("candidate.apk"), Path("tools"), metadata())
-        with patch.object(release, "run", return_value=header):
+        allowed = header + "".join(f"uses-permission: name='{permission}'\n" for permission in release.GITHUB_PERMISSIONS)
+        with patch.object(release, "run", return_value=allowed):
             release.inspect_apk(Path("candidate.apk"), Path("tools"), metadata())
 
     def test_tool_failure_does_not_expose_credentials(self):
