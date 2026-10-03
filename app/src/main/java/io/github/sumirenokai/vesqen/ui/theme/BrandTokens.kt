@@ -12,7 +12,8 @@ object VesqenSpacing {
 }
 
 object VesqenRadii {
-    val album = 10.dp
+    // Covers keep the hard edge of a record sleeve (B spec §4.3).
+    val album = 4.dp
     val control = 12.dp
     val surface = 16.dp
 }
@@ -29,4 +30,9 @@ object VesqenMotion {
     const val PlayerReturnRevealDelayMillis = 72
     const val TrackChangeMillis = 220
     const val ReducedMotionMillis = 80
+    // B · Paper & Sound §7.
+    const val AlbumTintMillis = 800
+    const val CoverChangeMillis = 700
+    const val NotesExpandMillis = 550
+    const val NotesContentMillis = 500
 }

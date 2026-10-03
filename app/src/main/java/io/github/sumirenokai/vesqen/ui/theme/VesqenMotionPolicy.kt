@@ -29,6 +29,19 @@ data class VesqenMotionPolicy(
 
     val trackChangeMillis: Int
         get() = if (reduceMotion) VesqenMotion.ReducedMotionMillis else VesqenMotion.TrackChangeMillis
+
+    /** Reduced motion switches the album colour directly (B §7). */
+    val albumTintMillis: Int
+        get() = if (reduceMotion) 0 else VesqenMotion.AlbumTintMillis
+
+    val coverChangeMillis: Int
+        get() = if (reduceMotion) VesqenMotion.ReducedMotionMillis else VesqenMotion.CoverChangeMillis
+
+    val notesExpandMillis: Int
+        get() = if (reduceMotion) VesqenMotion.ReducedMotionMillis else VesqenMotion.NotesExpandMillis
+
+    val notesContentMillis: Int
+        get() = if (reduceMotion) VesqenMotion.ReducedMotionMillis else VesqenMotion.NotesContentMillis
 }
 
 /**

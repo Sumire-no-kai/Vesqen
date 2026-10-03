@@ -930,6 +930,7 @@ private fun VesqenDestinationFrame(
                     }
 
                     VesqenDestination.NOW -> NowScreen(
+                        playbackTelemetry = playbackTelemetry,
                         onSetUsbOutputMode = onSetUsbOutputMode,
                         onExplainStrictUsbUnavailable = onExplainStrictUsbUnavailable,
                         onToggleFavorite = onToggleFavorite,

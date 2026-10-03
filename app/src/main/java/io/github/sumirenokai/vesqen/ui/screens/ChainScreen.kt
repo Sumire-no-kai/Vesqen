@@ -578,11 +578,12 @@ private fun ChainCurrentSource(playback: PlaybackSnapshot) {
     )
 }
 
+/** The listener-facing claim title shared by Chain and the Now liner notes. */
 @Composable
-private fun ChainSummaryPanel(playback: PlaybackSnapshot) {
+internal fun outputClaimTitle(playback: PlaybackSnapshot): String {
     val status = playback.usbOutputStatus
     val verification = playback.outputVerification
-    val title = if (verification != null) {
+    return if (verification != null) {
         stringResource(R.string.chain_verified_title)
     } else when (status.phase) {
         io.github.sumirenokai.vesqen.playback.UsbOutputPhase.SYSTEM ->
@@ -596,7 +597,14 @@ private fun ChainSummaryPanel(playback: PlaybackSnapshot) {
         io.github.sumirenokai.vesqen.playback.UsbOutputPhase.FAILED ->
             stringResource(R.string.chain_strict_failed_title)
     }
-    val body = if (verification != null) {
+}
+
+/** The claim explanation shared by Chain and the Now liner notes. */
+@Composable
+internal fun outputClaimBody(playback: PlaybackSnapshot): String {
+    val status = playback.usbOutputStatus
+    val verification = playback.outputVerification
+    return if (verification != null) {
         stringResource(
             R.string.chain_verified_body,
             verification.record.recordId,
@@ -621,6 +629,12 @@ private fun ChainSummaryPanel(playback: PlaybackSnapshot) {
         io.github.sumirenokai.vesqen.playback.UsbOutputPhase.FAILED ->
             stringResource(R.string.chain_strict_failed_body, strictUsbFailureLabel(requireNotNull(status.failure)))
     }
+}
+
+@Composable
+private fun ChainSummaryPanel(playback: PlaybackSnapshot) {
+    val title = outputClaimTitle(playback)
+    val body = outputClaimBody(playback)
     Surface(
         modifier = Modifier.fillMaxWidth().testTag("vesqen.chain.summary"),
         shape = RoundedCornerShape(VesqenRadii.surface),
