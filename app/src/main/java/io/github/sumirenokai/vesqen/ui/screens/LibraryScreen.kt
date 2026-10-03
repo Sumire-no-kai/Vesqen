@@ -9,6 +9,40 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.unit.sp
+import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
+import io.github.sumirenokai.vesqen.ui.components.rememberAlbumBackground
+import io.github.sumirenokai.vesqen.ui.formatDuration
+import io.github.sumirenokai.vesqen.ui.theme.VesqenDataStyle
+import java.util.Locale
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SwapVert
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.semantics.Role
+import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,23 +61,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -57,9 +86,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -73,6 +100,7 @@ import io.github.sumirenokai.vesqen.library.libraryTitleKeys
 import io.github.sumirenokai.vesqen.library.projectLibraryTitleOrder
 import io.github.sumirenokai.vesqen.ui.components.LibraryAlphabetIndex
 import io.github.sumirenokai.vesqen.ui.components.LibraryTrackList
+import io.github.sumirenokai.vesqen.ui.components.hairlineBelow
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
@@ -115,6 +143,10 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 
 private val LibraryHierarchyEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
+
+// B · Paper & Sound shelf: 124 dp covers; a dozen recent albums is enough to browse sideways.
+private val AlbumShelfCover = 124.dp
+private const val AlbumShelfSize = 12
 
 private sealed interface LibraryContentView {
     val depth: Int
@@ -182,10 +214,14 @@ fun LibraryScreen(
     onPauseLibraryScan: () -> Unit = {},
     onResumeLibraryScan: () -> Unit = {},
     motionPolicy: VesqenMotionPolicy? = null,
+    onPageBackgroundChange: (Color) -> Unit = {},
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     val listStateHolder = rememberSaveableStateHolder()
     var query by rememberSaveable { mutableStateOf("") }
+    // The search field opens from the title bar; a typed query keeps it open.
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    val showSearch = searchOpen || query.isNotEmpty()
     var detailsTrack by remember { mutableStateOf<AudioTrack?>(null) }
     var browseModeName by rememberSaveable { mutableStateOf(LibraryBrowseMode.SONGS.name) }
     var sortOrderName by rememberSaveable { mutableStateOf(LibrarySortOrder.TITLE.name) }
@@ -197,11 +233,15 @@ fun LibraryScreen(
     var orderSaving by remember { mutableStateOf(false) }
     var orderSaveFailed by remember { mutableStateOf(false) }
     val orderScope = rememberCoroutineScope()
-    BackHandler(enabled = orderTarget != null || selectedCollectionKey != null || favoritesOnly) {
+    BackHandler(enabled = orderTarget != null || selectedCollectionKey != null || showSearch || favoritesOnly) {
         if (!orderSaving) {
             when {
                 orderTarget != null -> orderTarget = null
                 selectedCollectionKey != null -> selectedCollectionKey = null
+                showSearch -> {
+                    query = ""
+                    searchOpen = false
+                }
                 else -> {
                     favoritesOnly = false
                     query = ""
@@ -261,6 +301,21 @@ fun LibraryScreen(
     val selectedCollection = remember(collections, selectedCollectionKey) {
         collections.firstOrNull { it.key == selectedCollectionKey }
     }
+    val albumShelf = remember(collections, browseMode, query) {
+        if (browseMode == LibraryBrowseMode.ALBUMS && query.isBlank() && collections.size > 1) {
+            sortLibraryCollections(collections, LibrarySortOrder.RECENTLY_ADDED).take(AlbumShelfSize)
+        } else {
+            emptyList()
+        }
+    }
+    // An open album tints the whole page from its cover, as Now does; every other view stays paper.
+    val openAlbum = selectedCollection?.takeIf { browseMode == LibraryBrowseMode.ALBUMS && !favoritesOnly }
+    val pageBackground = rememberAlbumBackground(
+        track = openAlbum?.tracks?.firstOrNull(),
+        dark = MaterialTheme.colorScheme.background.luminance() < .5f,
+        motionPolicy = appliedMotionPolicy,
+    )
+    SideEffect { onPageBackgroundChange(pageBackground) }
     val isFavoriteList = favoritesOnly && browseMode == LibraryBrowseMode.SONGS && selectedCollection == null
     val isPlaylist = selectedCollection?.playlistId != null
     val contentView = selectedCollection?.let { LibraryContentView.Collection(it.key) }
@@ -272,17 +327,57 @@ fun LibraryScreen(
             transitionSpec = { libraryHierarchyTransition(targetState, appliedMotionPolicy) },
             label = "vesqen.library-header-hierarchy",
         ) { showingFavorites ->
+            val browsing = state.tracks.isNotEmpty() && orderTarget == null
             LibraryHeader(
                 favoritesOnly = showingFavorites,
                 navigationEnabled = !orderSaving,
+                searchOpen = showSearch,
+                onToggleSearch = if (browsing) {
+                    {
+                        if (showSearch) query = ""
+                        searchOpen = !showSearch
+                    }
+                } else {
+                    null
+                },
+                sortButton = if (browsing) {
+                    {
+                        LibrarySortButton(
+                            sortOrder = sortOrder,
+                            onSortOrderChanged = {
+                                if (favoritesOnly) { favoriteSortName = it.name; favoriteCustomOrder = false }
+                                else sortOrderName = it.name
+                            },
+                            customOrderAvailable = isFavoriteList || isPlaylist,
+                            customOrderActive = (isFavoriteList && favoriteCustomOrder) || isPlaylist,
+                            manualOnly = isPlaylist,
+                            onCustomOrder = { favoriteCustomOrder = true },
+                            showAlphabetOption = !favoritesOnly && browseMode == LibraryBrowseMode.SONGS && selectedCollection == null,
+                            alphabetEnabled = alphabetEnabled,
+                            onToggleAlphabet = {
+                                alphabetEnabled = !alphabetEnabled
+                                preferences.edit().putBoolean("alphabet-index", alphabetEnabled).apply()
+                            },
+                        )
+                    }
+                } else {
+                    null
+                },
                 onOpenFavorites = {
                     favoritesOnly = true
                     browseModeName = LibraryBrowseMode.SONGS.name
                     selectedCollectionKey = null
                     query = ""
+                    searchOpen = false
                 },
                 onBack = {
-                    if (orderTarget != null) orderTarget = null else { favoritesOnly = false; query = "" }
+                    if (orderTarget != null) {
+                        orderTarget = null
+                    } else {
+                        favoritesOnly = false
+                        query = ""
+                        searchOpen = false
+                    }
                 },
                 onAddLibraryFolder = onAddLibraryFolder,
                 onRescan = onRescan,
@@ -316,30 +411,17 @@ fun LibraryScreen(
             LibraryMutationFailureNotice()
         }
         if (state.tracks.isNotEmpty() && orderTarget == null) {
-            LibrarySearchField(query = query, onQueryChange = { query = it })
-            LibraryBrowseBar(
+            if (showSearch) {
+                LibrarySearchField(query = query, onQueryChange = { query = it }, requestFocus = query.isEmpty())
+            }
+            LibraryBrowseTabs(
                 browseMode = browseMode,
-                sortOrder = sortOrder,
                 favoritesOnly = favoritesOnly,
                 trackCount = filteredTracks.size,
                 onBrowseModeChanged = { mode ->
                     favoritesOnly = false
                     browseModeName = mode.name
                     selectedCollectionKey = null
-                },
-                onSortOrderChanged = {
-                    if (favoritesOnly) { favoriteSortName = it.name; favoriteCustomOrder = false }
-                    else sortOrderName = it.name
-                },
-                customOrderAvailable = isFavoriteList || isPlaylist,
-                customOrderActive = (isFavoriteList && favoriteCustomOrder) || isPlaylist,
-                manualOnly = isPlaylist,
-                onCustomOrder = { favoriteCustomOrder = true },
-                showAlphabetOption = !favoritesOnly && browseMode == LibraryBrowseMode.SONGS && selectedCollection == null,
-                alphabetEnabled = alphabetEnabled,
-                onToggleAlphabet = {
-                    alphabetEnabled = !alphabetEnabled
-                    preferences.edit().putBoolean("alphabet-index", alphabetEnabled).apply()
                 },
             )
         }
@@ -450,6 +532,18 @@ fun LibraryScreen(
                         modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
                     )
 
+                    activeCollection != null && browseMode == LibraryBrowseMode.ALBUMS -> {
+                        listStateHolder.SaveableStateProvider(key = "collection:${activeCollection.key}") {
+                            AlbumPage(
+                                album = activeCollection,
+                                playback = playback,
+                                onBack = { selectedCollectionKey = null },
+                                onPlayQueue = onPlayQueue,
+                                onTrackMore = { detailsTrack = it },
+                            )
+                        }
+                    }
+
                     activeCollection != null -> listStateHolder.SaveableStateProvider(
                         key = "collection:${activeCollection.key}",
                     ) {
@@ -506,6 +600,7 @@ fun LibraryScreen(
                         CollectionList(
                             mode = browseMode,
                             collections = collections,
+                            shelf = albumShelf,
                             onCollectionSelected = { selectedCollectionKey = it.key },
                             onCreatePlaylist = if (browseMode == LibraryBrowseMode.PLAYLISTS) {
                                 { showCreatePlaylist = true }
@@ -607,13 +702,85 @@ fun LibraryScreen(
     }
 }
 
+// B · Paper & Sound §5: text tabs 20 dp apart, the selected one in ink over a 2 dp ink rule, the
+// rest muted; no pills or filled blocks. The row scrolls sideways and keeps the selection in view.
 @Composable
-private fun LibraryBrowseBar(
+private fun LibraryBrowseTabs(
     browseMode: LibraryBrowseMode,
-    sortOrder: LibrarySortOrder,
     favoritesOnly: Boolean,
     trackCount: Int,
     onBrowseModeChanged: (LibraryBrowseMode) -> Unit,
+) {
+    if (favoritesOnly) {
+        Text(
+            pluralStringResource(R.plurals.library_song_total, trackCount, trackCount),
+            modifier = Modifier.padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.xs),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+    val hairline = LocalVesqenColors.current.hairline
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .drawBehind {
+                val y = size.height - .5.dp.toPx()
+                drawLine(hairline, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
+            }
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = VesqenSpacing.lg)
+            .selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
+        LibraryBrowseMode.entries.forEach { mode ->
+            LibraryBrowseTab(
+                label = stringResource(mode.labelResource()),
+                selected = mode == browseMode,
+                onClick = { onBrowseModeChanged(mode) },
+                modifier = Modifier.testTag("vesqen.library.mode.${mode.name.lowercase()}"),
+            )
+        }
+    }
+}
+
+@Composable
+private fun LibraryBrowseTab(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val requester = remember { BringIntoViewRequester() }
+    LaunchedEffect(selected) {
+        if (selected) requester.bringIntoView()
+    }
+    val ink = MaterialTheme.colorScheme.onSurface
+    Box(
+        modifier = modifier
+            .bringIntoViewRequester(requester)
+            .heightIn(min = 48.dp)
+            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
+            .drawBehind {
+                if (selected) {
+                    val rule = 2.dp.toPx()
+                    drawRect(ink, topLeft = Offset(0f, size.height - rule), size = Size(size.width, rule))
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+            color = if (selected) ink else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun LibrarySortButton(
+    sortOrder: LibrarySortOrder,
     onSortOrderChanged: (LibrarySortOrder) -> Unit,
     customOrderAvailable: Boolean,
     customOrderActive: Boolean,
@@ -624,124 +791,102 @@ private fun LibraryBrowseBar(
     onToggleAlphabet: () -> Unit,
 ) {
     var showSortMenu by remember { mutableStateOf(false) }
-    val modes = LibraryBrowseMode.entries
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = VesqenSpacing.md),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (!favoritesOnly) PrimaryScrollableTabRow(
-            selectedTabIndex = modes.indexOf(browseMode),
-            modifier = Modifier.weight(1f),
-            edgePadding = 0.dp,
-            containerColor = androidx.compose.ui.graphics.Color.Transparent,
-            divider = {},
+    Box {
+        IconButton(
+            onClick = { showSortMenu = true },
+            modifier = Modifier.size(48.dp).testTag("vesqen.library.sort"),
         ) {
-            modes.forEach { mode ->
-                Tab(
-                    selected = mode == browseMode,
-                    selectedContentColor = MaterialTheme.colorScheme.onSurface,
-                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    onClick = { onBrowseModeChanged(mode) },
-                    text = {
-                        Text(
-                            text = stringResource(mode.labelResource()),
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = if (mode == browseMode) FontWeight.SemiBold else FontWeight.Normal,
-                            ),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
-                    modifier = Modifier.testTag("vesqen.library.mode.${mode.name.lowercase()}"),
-                )
-            }
+            Icon(
+                imageVector = Icons.Outlined.SwapVert,
+                contentDescription = stringResource(R.string.sort_library),
+            )
         }
-        if (favoritesOnly) Text(
-            pluralStringResource(R.plurals.library_song_total, trackCount, trackCount), Modifier.weight(1f),
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Box {
-            IconButton(
-                onClick = { showSortMenu = true },
-                modifier = Modifier.testTag("vesqen.library.sort"),
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Sort,
-                    contentDescription = stringResource(R.string.sort_library),
+        DropdownMenu(
+            expanded = showSortMenu,
+            onDismissRequest = { showSortMenu = false },
+        ) {
+            if (customOrderAvailable) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.custom_track_order)) },
+                    onClick = { onCustomOrder(); showSortMenu = false },
+                    leadingIcon = if (customOrderActive) { { Icon(Icons.Filled.MusicNote, null) } } else null,
                 )
             }
-            DropdownMenu(
-                expanded = showSortMenu,
-                onDismissRequest = { showSortMenu = false },
-            ) {
-                if (customOrderAvailable) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.custom_track_order)) },
-                        onClick = { onCustomOrder(); showSortMenu = false },
-                        leadingIcon = if (customOrderActive) { { Icon(Icons.Filled.MusicNote, null) } } else null,
-                    )
-                }
-                if (showAlphabetOption) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(if (alphabetEnabled) R.string.hide_alphabet_index else R.string.show_alphabet_index)) },
-                        onClick = { onToggleAlphabet(); showSortMenu = false },
-                    )
-                }
-                LibrarySortOrder.entries.filter { !manualOnly }.forEach { order ->
-                    DropdownMenuItem(
-                        text = { Text(stringResource(order.labelResource())) },
-                        onClick = {
-                            onSortOrderChanged(order)
-                            showSortMenu = false
-                        },
-                        leadingIcon = if (order == sortOrder && !customOrderActive) {
-                            { Icon(Icons.Filled.MusicNote, contentDescription = null) }
-                        } else null,
-                    )
-                }
+            if (showAlphabetOption) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(if (alphabetEnabled) R.string.hide_alphabet_index else R.string.show_alphabet_index)) },
+                    onClick = { onToggleAlphabet(); showSortMenu = false },
+                )
+            }
+            LibrarySortOrder.entries.filter { !manualOnly }.forEach { order ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(order.labelResource())) },
+                    onClick = {
+                        onSortOrderChanged(order)
+                        showSortMenu = false
+                    },
+                    leadingIcon = if (order == sortOrder && !customOrderActive) {
+                        { Icon(Icons.Filled.MusicNote, contentDescription = null) }
+                    } else null,
+                )
             }
         }
     }
 }
 
+// B · Paper & Sound: list views share one row, a serif title over a muted meta line with a hairline
+// below and a chevron at the end, inside the 24 dp page margin. Albums add the recently-added shelf
+// above the full list; the shelf scrolls sideways edge to edge, so rows carry the margin themselves.
 @Composable
 private fun CollectionList(
     mode: LibraryBrowseMode,
     collections: List<LibraryCollection>,
+    shelf: List<LibraryCollection>,
     onCollectionSelected: (LibraryCollection) -> Unit,
     onCreatePlaylist: (() -> Unit)?,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = VesqenSpacing.md,
-            end = VesqenSpacing.md,
-            top = VesqenSpacing.xs,
-            bottom = VesqenSpacing.md,
-        ),
-        verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xs),
+        contentPadding = PaddingValues(top = VesqenSpacing.xs, bottom = VesqenSpacing.md),
     ) {
+        if (shelf.isNotEmpty()) {
+            item(key = "shelf-label", contentType = "label") {
+                LibrarySectionLabel(stringResource(R.string.library_recently_added))
+            }
+            item(key = "shelf", contentType = "shelf") {
+                LazyRow(
+                    modifier = Modifier.testTag("vesqen.library.shelf"),
+                    contentPadding = PaddingValues(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.sm),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    items(shelf, key = { "shelf:${it.key}" }) { album ->
+                        AlbumShelfItem(album = album, onClick = { onCollectionSelected(album) })
+                    }
+                }
+            }
+            item(key = "all-label", contentType = "label") {
+                LibrarySectionLabel(stringResource(R.string.library_all_albums))
+            }
+        }
         onCreatePlaylist?.let { create ->
             item(key = "create-playlist") {
-                Surface(
-                    onClick = create,
+                Row(
                     modifier = Modifier
+                        .padding(horizontal = VesqenSpacing.lg)
                         .fillMaxWidth()
                         .heightIn(min = 56.dp)
+                        .hairlineBelow()
+                        .clickable(onClick = create)
                         .testTag("vesqen.library.playlist.create"),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = VesqenSpacing.md),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Filled.Add, contentDescription = null)
-                        Spacer(Modifier.width(VesqenSpacing.sm))
-                        Text(stringResource(R.string.create_playlist), style = MaterialTheme.typography.titleSmall)
-                    }
+                    Icon(Icons.Filled.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(VesqenSpacing.sm))
+                    Text(
+                        stringResource(R.string.create_playlist),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
                 }
             }
         }
@@ -754,6 +899,51 @@ private fun CollectionList(
                 mode = mode,
                 collection = collection,
                 onClick = { onCollectionSelected(collection) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun LibrarySectionLabel(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier.padding(start = VesqenSpacing.lg, end = VesqenSpacing.lg, top = VesqenSpacing.md, bottom = VesqenSpacing.xxs),
+        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun AlbumShelfItem(album: LibraryCollection, onClick: () -> Unit) {
+    val shadow = LocalVesqenColors.current.shadow
+    Column(
+        modifier = Modifier
+            .width(AlbumShelfCover)
+            .clickable(onClick = onClick)
+            .testTag("vesqen.library.shelf.${album.key}"),
+        verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xs),
+    ) {
+        AlbumArtwork(
+            track = album.tracks.first(),
+            targetSize = AlbumShelfCover,
+            modifier = Modifier
+                .size(AlbumShelfCover)
+                .shadow(2.dp, RoundedCornerShape(VesqenRadii.album), ambientColor = shadow, spotColor = shadow),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(
+                text = album.title.ifBlank { stringResource(R.string.unknown_album) },
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = album.subtitle.ifBlank { stringResource(R.string.unknown_artist) },
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -792,48 +982,186 @@ private fun CollectionRow(
             collection.tracks.size,
         )
     }
-    Surface(
-        onClick = onClick,
+    Row(
         modifier = Modifier
+            .padding(horizontal = VesqenSpacing.lg)
             .fillMaxWidth()
             .heightIn(min = 64.dp)
+            .hairlineBelow()
+            .clickable(onClick = onClick)
+            .padding(vertical = VesqenSpacing.xs)
             .testTag("vesqen.library.collection.${collection.key}"),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.xs),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = when (mode) {
-                    LibraryBrowseMode.ALBUMS -> Icons.Filled.Album
-                    LibraryBrowseMode.ARTISTS -> Icons.Filled.Person
-                    LibraryBrowseMode.FOLDERS -> Icons.Filled.FolderOpen
-                    LibraryBrowseMode.GENRES -> Icons.Filled.MusicNote
-                    LibraryBrowseMode.PLAYLISTS -> Icons.AutoMirrored.Filled.QueueMusic
-                    LibraryBrowseMode.SONGS -> Icons.Filled.MusicNote
-                },
-                contentDescription = null,
-                modifier = Modifier.size(32.dp),
-                tint = MaterialTheme.colorScheme.primary,
+        if (mode == LibraryBrowseMode.ALBUMS) {
+            collection.tracks.firstOrNull()?.let { track ->
+                AlbumArtwork(track = track, targetSize = 48.dp, modifier = Modifier.size(48.dp))
+                Spacer(Modifier.width(VesqenSpacing.sm))
+            }
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.width(VesqenSpacing.sm))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+// B · Paper & Sound album page: the cover above a paper-raised card (18 dp corners) with the serif
+// title, "artist · format" and the Moss play button, then numbered 48 dp rows with tabular numbers.
+// The page itself takes the cover tint (see onPageBackgroundChange).
+@Composable
+private fun AlbumPage(
+    album: LibraryCollection,
+    playback: PlaybackSnapshot,
+    onBack: () -> Unit,
+    onPlayQueue: (List<AudioTrack>, Int) -> Unit,
+    onTrackMore: (AudioTrack) -> Unit,
+) {
+    val card = MaterialTheme.colorScheme.surface
+    val shadow = LocalVesqenColors.current.shadow
+    val title = album.title.ifBlank { stringResource(R.string.unknown_album) }
+    val artist = album.subtitle.ifBlank { stringResource(R.string.unknown_artist) }
+    val meta = remember(artist, album.tracks) {
+        listOfNotNull(artist, nowFormatSummary(album.tracks.firstOrNull())).joinToString(" · ")
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().testTag("vesqen.library.album"),
+        contentPadding = PaddingValues(bottom = VesqenSpacing.md),
+    ) {
+        item(key = "back") {
+            Box(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = VesqenSpacing.xxs)) {
+                IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                }
+            }
+        }
+        album.tracks.firstOrNull()?.let { cover ->
+            item(key = "cover") {
+                AlbumArtwork(
+                    track = cover,
+                    targetSize = AlbumShelfCover,
+                    modifier = Modifier
+                        .padding(start = VesqenSpacing.lg, top = VesqenSpacing.xxs, bottom = VesqenSpacing.md)
+                        .size(AlbumShelfCover)
+                        .shadow(12.dp, RoundedCornerShape(VesqenRadii.album), ambientColor = shadow, spotColor = shadow),
                 )
             }
+        }
+        item(key = "card-head") {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 14.dp)
+                    .fillMaxWidth()
+                    .background(card, RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+                    .padding(start = VesqenSpacing.md, end = VesqenSpacing.md, top = 18.dp, bottom = VesqenSpacing.sm),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs)) {
+                    Text(title, style = MaterialTheme.typography.displaySmall, modifier = Modifier.testTag("vesqen.library.album.title"))
+                    Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                FilledIconButton(
+                    onClick = { onPlayQueue(album.tracks, 0) },
+                    enabled = album.tracks.isNotEmpty(),
+                    modifier = Modifier.size(48.dp).testTag("vesqen.library.album.play"),
+                ) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.play_album, title))
+                }
+            }
+        }
+        itemsIndexed(album.tracks, key = { _, track -> track.id }, contentType = { _, _ -> "album-track" }) { index, track ->
+            AlbumTrackRow(
+                number = track.trackNumber ?: (index + 1),
+                track = track,
+                isCurrent = track.id == playback.trackId,
+                onPlay = { onPlayQueue(album.tracks, index) },
+                onMore = { onTrackMore(track) },
+                modifier = Modifier
+                    .padding(horizontal = 14.dp)
+                    .background(card)
+                    .padding(horizontal = VesqenSpacing.md),
+            )
+        }
+        item(key = "card-foot") {
+            Spacer(
+                Modifier
+                    .padding(horizontal = 14.dp)
+                    .fillMaxWidth()
+                    .height(VesqenSpacing.sm)
+                    .background(card, RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp)),
+            )
+        }
+    }
+}
+
+@Composable
+private fun AlbumTrackRow(
+    number: Int,
+    track: AudioTrack,
+    isCurrent: Boolean,
+    onPlay: () -> Unit,
+    onMore: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val title = track.title.ifBlank { stringResource(R.string.unknown_title) }
+    val subtitle = remember(track.artist, track.album) { track.displaySubtitle() }
+        .ifBlank { stringResource(R.string.unknown_artist) }
+    val accessibilityLabel = stringResource(R.string.track_row_description, title, subtitle)
+    val hairline = LocalVesqenColors.current.hairline
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .drawBehind { drawLine(hairline, Offset(0f, .5.dp.toPx()), Offset(size.width, .5.dp.toPx()), 1.dp.toPx()) }
+            .testTag("vesqen.library.track.${track.id}")
+            .semantics { contentDescription = accessibilityLabel }
+            .clickable(onClick = onPlay)
+            .padding(start = VesqenSpacing.xxs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text(
+            text = String.format(Locale.ROOT, "%02d", number),
+            modifier = Modifier.width(20.dp),
+            style = VesqenDataStyle,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = formatDuration(track.durationMs),
+            style = VesqenDataStyle,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        IconButton(
+            onClick = onMore,
+            modifier = Modifier.size(40.dp).testTag("vesqen.library.track.${track.id}.more"),
+        ) {
+            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.more_track_actions, title))
         }
     }
 }
@@ -864,7 +1192,7 @@ private fun CollectionTrackList(
             }
             Text(
                 text = collection.title.ifBlank { stringResource(R.string.unknown_title) },
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
@@ -990,10 +1318,16 @@ private fun LibrarySortOrder.labelResource(): Int = when (this) {
     LibrarySortOrder.MOST_PLAYED -> R.string.sort_most_played
 }
 
+// B · Paper & Sound §5: a serif page title with line icons for search, sort, favorites and the
+// source menu. Narrow windows and large text step the title down so every action keeps its 48 dp
+// target beside it.
 @Composable
 private fun LibraryHeader(
     favoritesOnly: Boolean,
     navigationEnabled: Boolean,
+    searchOpen: Boolean,
+    onToggleSearch: (() -> Unit)?,
+    sortButton: (@Composable () -> Unit)?,
     onOpenFavorites: () -> Unit,
     onBack: () -> Unit,
     onAddLibraryFolder: () -> Unit,
@@ -1001,66 +1335,73 @@ private fun LibraryHeader(
     sourceActionsEnabled: Boolean,
 ) {
     var showLibraryMenu by remember { mutableStateOf(false) }
-    val favoritesLink: @Composable () -> Unit = {
-        TextButton(
-            onClick = onOpenFavorites,
-            enabled = navigationEnabled,
-            contentPadding = PaddingValues(horizontal = 12.dp),
-            modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.library.favorites"),
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val compactTitle = maxWidth < 360.dp || LocalDensity.current.fontScale > 1.3f
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .padding(
+                    start = if (favoritesOnly) VesqenSpacing.xxs else VesqenSpacing.lg,
+                    end = VesqenSpacing.xxs,
+                ),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.FavoriteBorder, null, Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.library_favorites), style = MaterialTheme.typography.labelLarge)
-        }
-    }
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        val stackNavigation = maxWidth < 280.dp || LocalDensity.current.fontScale > 1.3f
-        Column {
-            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (favoritesOnly) IconButton(
-                    onClick = onBack, enabled = navigationEnabled,
-                    modifier = Modifier.size(48.dp).testTag("vesqen.library.back"),
-                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.show_all_music)) }
-                Text(
-                    stringResource(if (favoritesOnly) R.string.library_favorites else R.string.destination_library),
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag(
-                            if (favoritesOnly) {
-                                "vesqen.library.title.favorites"
-                            } else {
-                                "vesqen.library.title.root"
-                            },
-                        ),
-                    style = MaterialTheme.typography.headlineSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (!favoritesOnly) {
-                    if (!stackNavigation) favoritesLink()
-                    Box {
-                        IconButton(onClick = { showLibraryMenu = true }, enabled = sourceActionsEnabled,
-                            modifier = Modifier.size(48.dp).testTag("vesqen.library.menu")) {
-                            Icon(Icons.Filled.MoreVert, stringResource(R.string.library_actions))
-                        }
-                        DropdownMenu(expanded = showLibraryMenu, onDismissRequest = { showLibraryMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.add_music_folder)) },
-                                leadingIcon = { Icon(Icons.Filled.CreateNewFolder, null) },
-                                onClick = { showLibraryMenu = false; onAddLibraryFolder() },
-                                modifier = Modifier.testTag("vesqen.library.add-folder"),
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.rescan_library)) },
-                                leadingIcon = { Icon(Icons.Filled.Refresh, null) },
-                                onClick = { showLibraryMenu = false; onRescan() },
-                                modifier = Modifier.testTag("vesqen.library.rescan"),
-                            )
-                        }
+            if (favoritesOnly) IconButton(
+                onClick = onBack,
+                enabled = navigationEnabled,
+                modifier = Modifier.size(48.dp).testTag("vesqen.library.back"),
+            ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.show_all_music)) }
+            Text(
+                stringResource(if (favoritesOnly) R.string.library_favorites else R.string.destination_library),
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag(if (favoritesOnly) "vesqen.library.title.favorites" else "vesqen.library.title.root"),
+                style = if (compactTitle) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.displayMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            onToggleSearch?.let { toggle ->
+                IconButton(
+                    onClick = toggle,
+                    enabled = navigationEnabled,
+                    modifier = Modifier.size(48.dp).testTag("vesqen.library.search-toggle"),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Search,
+                        contentDescription = stringResource(if (searchOpen) R.string.clear_search else R.string.search_local_music),
+                    )
+                }
+            }
+            sortButton?.invoke()
+            if (!favoritesOnly) {
+                IconButton(
+                    onClick = onOpenFavorites,
+                    enabled = navigationEnabled,
+                    modifier = Modifier.size(48.dp).testTag("vesqen.library.favorites"),
+                ) { Icon(Icons.Outlined.FavoriteBorder, stringResource(R.string.library_favorites)) }
+                Box {
+                    IconButton(
+                        onClick = { showLibraryMenu = true },
+                        enabled = sourceActionsEnabled,
+                        modifier = Modifier.size(48.dp).testTag("vesqen.library.menu"),
+                    ) { Icon(Icons.Filled.MoreVert, stringResource(R.string.library_actions)) }
+                    DropdownMenu(expanded = showLibraryMenu, onDismissRequest = { showLibraryMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.add_music_folder)) },
+                            leadingIcon = { Icon(Icons.Filled.CreateNewFolder, null) },
+                            onClick = { showLibraryMenu = false; onAddLibraryFolder() },
+                            modifier = Modifier.testTag("vesqen.library.add-folder"),
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.rescan_library)) },
+                            leadingIcon = { Icon(Icons.Filled.Refresh, null) },
+                            onClick = { showLibraryMenu = false; onRescan() },
+                            modifier = Modifier.testTag("vesqen.library.rescan"),
+                        )
                     }
                 }
             }
-            if (!favoritesOnly && stackNavigation) favoritesLink()
         }
     }
 }
@@ -1369,8 +1710,12 @@ private fun sourceStatusText(source: LibrarySource): String = when {
 }
 
 @Composable
-private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
+private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit, requestFocus: Boolean) {
     val searchLabel = stringResource(R.string.search_local_music)
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        if (requestFocus) focusRequester.requestFocus()
+    }
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1390,6 +1735,7 @@ private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
+                    .focusRequester(focusRequester)
                     .semantics { contentDescription = searchLabel },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(

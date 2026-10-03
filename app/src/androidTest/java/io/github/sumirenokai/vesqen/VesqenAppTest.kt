@@ -28,7 +28,9 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.text.TextLayoutResult
@@ -303,6 +305,7 @@ class VesqenAppTest {
             .assertHeightIsEqualTo(48.dp)
         composeRule.onNodeWithTag("vesqen.library.notifications-notice")
             .assertHeightIsEqualTo(48.dp)
+        composeRule.onNodeWithTag("vesqen.library.search-toggle").assertHeightIsEqualTo(48.dp).performClick()
         composeRule.onNodeWithTag("vesqen.library.search").assertHeightIsEqualTo(48.dp)
         composeRule.onNodeWithTag("vesqen.permission.request").assertHeightIsEqualTo(48.dp)
         composeRule.onNodeWithTag("vesqen.library.notifications.settings").assertHeightIsEqualTo(48.dp)
@@ -334,7 +337,25 @@ class VesqenAppTest {
     fun empty_library_does_not_reserve_search_space() {
         render(grantedState())
 
+        composeRule.onAllNodesWithTag("vesqen.library.search-toggle").assertCountEquals(0)
         composeRule.onAllNodesWithTag("vesqen.library.search").assertCountEquals(0)
+    }
+
+    @Test
+    fun library_search_opens_from_the_title_bar_and_back_closes_it() {
+        render(grantedState(tracks = sampleTracks))
+
+        composeRule.onAllNodesWithTag("vesqen.library.search").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.library.search-toggle").performClick()
+        composeRule.onNode(hasSetTextAction()).performTextInput("Dawn")
+        composeRule.onNodeWithTag("vesqen.library.track.1").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("vesqen.library.track.2").assertCountEquals(0)
+
+        // Back clears the query and folds the field away before it leaves the Library.
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onAllNodesWithTag("vesqen.library.search").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.library.track.2").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.library.title.root").assertIsDisplayed()
     }
 
     @Test
@@ -353,6 +374,7 @@ class VesqenAppTest {
             fontScale = 2f,
         )
 
+        composeRule.onNodeWithTag("vesqen.library.search-toggle").performClick()
         val musicAccessBounds = composeRule.onNodeWithTag("vesqen.library.music-access-notice")
             .fetchSemanticsNode()
             .boundsInRoot
@@ -2553,9 +2575,66 @@ class VesqenAppTest {
 
         composeRule.onNodeWithTag("vesqen.library.mode.albums").performClick()
         composeRule.onNodeWithText("Quiet Rooms").performClick()
-        composeRule.onNodeWithContentDescription(context.getString(R.string.play_all)).performClick()
+        composeRule.onNodeWithTag("vesqen.library.album.play")
+            .assertContentDescriptionEquals(context.getString(R.string.play_album, "Quiet Rooms"))
+            .performClick()
 
         assertEquals(listOf(1L, 2L), queuedTrackIds)
+    }
+
+    @Test
+    fun albums_show_the_recent_shelf_above_the_full_list_and_open_the_album_page() {
+        fun track(id: Long, title: String, album: String, artist: String, number: Int, added: Long) = AudioTrack(
+            id = id,
+            contentUri = "content://media/external/audio/media/$id",
+            title = title,
+            artist = artist,
+            album = album,
+            albumArtist = artist,
+            durationMs = 240_000,
+            trackNumber = number,
+            dateModifiedSeconds = added,
+        )
+        val older = track(11, "Glass Harbor", "Low Tide Archive", "Maren Holt", 1, added = 100)
+        val newer = track(21, "Brass Lantern", "Copper Hours", "Otis Vale", 1, added = 200)
+        val newerSecond = track(22, "Slow Furnace", "Copper Hours", "Otis Vale", 2, added = 200)
+        var queued = emptyList<Long>()
+        var startIndex = -1
+        render(
+            state = grantedState(tracks = listOf(older, newer, newerSecond)),
+            onPlayQueue = { tracks, index ->
+                queued = tracks.map(AudioTrack::id)
+                startIndex = index
+            },
+        )
+
+        composeRule.onNodeWithTag("vesqen.library.mode.albums").performClick()
+        fun onShelf(title: String) = composeRule.onNode(
+            hasText(title) and hasAnyAncestor(hasTestTag("vesqen.library.shelf")),
+        )
+        // The shelf leads with the newest album; the full list below still holds every album.
+        assertTrue(
+            "Recently added must lead the shelf",
+            onShelf("Copper Hours").fetchSemanticsNode().boundsInRoot.left <
+                onShelf("Low Tide Archive").fetchSemanticsNode().boundsInRoot.left,
+        )
+        composeRule.onNodeWithText(context.getString(R.string.library_all_albums)).assertIsDisplayed()
+        composeRule.onAllNodesWithText("Low Tide Archive").assertCountEquals(2)
+
+        onShelf("Copper Hours").performClick()
+        composeRule.onNodeWithTag("vesqen.library.album.title").assertTextEquals("Copper Hours")
+        composeRule.onNodeWithText("01").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.library.album.play").performClick()
+        composeRule.runOnIdle {
+            assertEquals(listOf(21L, 22L), queued)
+            assertEquals(0, startIndex)
+        }
+        composeRule.onNodeWithTag("vesqen.library.track.22").performClick()
+        composeRule.runOnIdle { assertEquals(1, startIndex) }
+
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onAllNodesWithTag("vesqen.library.album").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.library.shelf").assertIsDisplayed()
     }
 
     @Test

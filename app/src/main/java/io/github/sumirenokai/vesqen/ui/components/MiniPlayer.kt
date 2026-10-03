@@ -1,5 +1,10 @@
 package io.github.sumirenokai.vesqen.ui.components
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.unit.sp
+import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -32,7 +37,6 @@ import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
-import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 
 internal val MiniPlayerHeight = 72.dp
 
@@ -48,16 +52,22 @@ fun MiniPlayer(
 ) {
     val title = snapshot.title.ifBlank { stringResource(R.string.unknown_title) }
     val artist = snapshot.artist.ifBlank { stringResource(R.string.unknown_artist) }
+    // B · Paper & Sound: a paper-raised card with 14 dp corners, an ink hairline edge and a soft warm
+    // shadow. It keeps the PRD F3 content (artist line, previous / play / next); the output claim
+    // stays in Now's liner notes and Chain.
+    val colors = LocalVesqenColors.current
+    val shape = RoundedCornerShape(14.dp)
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .height(MiniPlayerHeight)
+            .shadow(6.dp, shape, ambientColor = colors.shadow, spotColor = colors.shadow)
             .testTag("vesqen.mini-player"),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.surface),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = shape,
+        color = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, colors.hairline),
         tonalElevation = 0.dp,
-        shadowElevation = 4.dp,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
@@ -71,21 +81,21 @@ fun MiniPlayer(
                     .clickable(onClick = onOpenNow),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AlbumArtwork(track = currentTrack, targetSize = 48.dp, modifier = Modifier.size(48.dp))
-                Spacer(Modifier.width(8.dp))
+                AlbumArtwork(track = currentTrack, targetSize = 44.dp, modifier = Modifier.size(44.dp))
+                Spacer(Modifier.width(12.dp))
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(1.dp),
                 ) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleSmall,
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, lineHeight = 21.sp),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = artist,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

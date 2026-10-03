@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.runtime.Composable
@@ -54,6 +55,8 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -694,6 +697,7 @@ private fun VesqenDestinationFrame(
         (WindowInsets.statusBars.getTop(this) + WindowInsets.navigationBars.getBottom(this)).toDp()
     }
     var frameHeight by remember { mutableStateOf(Dp.Unspecified) }
+    var libraryPageBackground by remember { mutableStateOf(Color.Unspecified) }
     val nowYieldsNavigation = usesFocusedPlayerInsets && (
         isLandscape || frameHeight.isSpecified && nowPortraitYieldsNavigation(
             pageHeight = frameHeight - systemBarsHeight,
@@ -735,6 +739,12 @@ private fun VesqenDestinationFrame(
     ) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
+            // An open album tints the Library edge to edge, behind the status bar too; the bar and
+            // the mini player keep their own paper surfaces.
+            containerColor = libraryPageBackground.takeIf {
+                destination == VesqenDestination.LIBRARY && it.isSpecified
+            } ?: MaterialTheme.colorScheme.background,
+            contentColor = MaterialTheme.colorScheme.onBackground,
             contentWindowInsets = if (usesFocusedPlayerInsets) {
                 WindowInsets(0, 0, 0, 0)
             } else {
@@ -947,6 +957,7 @@ private fun VesqenDestinationFrame(
                         key = VesqenDestination.LIBRARY.name,
                     ) {
                         LibraryScreen(
+                            onPageBackgroundChange = { libraryPageBackground = it },
                             state = state.library,
                             playback = state.playback,
                             onRequestMusicAccess = onRequestMusicAccess,

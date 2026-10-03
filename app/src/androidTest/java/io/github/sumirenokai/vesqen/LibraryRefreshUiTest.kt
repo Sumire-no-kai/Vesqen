@@ -12,6 +12,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasAnyAncestor
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.LibraryUiState
@@ -127,8 +130,9 @@ class LibraryRefreshUiTest {
         }
 
         compose.onNodeWithTag("vesqen.library.mode.albums").performClick()
-        compose.onNodeWithText("Album A").performClick()
-        compose.onNodeWithTag("vesqen.library.tracks").performScrollToIndex(80)
+        // The recently-added shelf repeats the album above the full list; open it from the list.
+        compose.onNode(hasText("Album A") and !hasAnyAncestor(hasTestTag("vesqen.library.shelf"))).performClick()
+        compose.onNodeWithTag("vesqen.library.album").performScrollToNode(hasText("A 080"))
         compose.onNodeWithText("A 080").assertIsDisplayed()
 
         compose.runOnIdle { tracks.value = listOf(albumBTrack) }

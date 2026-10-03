@@ -55,7 +55,12 @@ internal fun LibraryAlphabetIndex(sections: Map<String, Int>, listState: LazyLis
     val paint = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textAlign = android.graphics.Paint.Align.CENTER } }
     BoxWithConstraints(modifier.width(48.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
         if (maxHeight < 420.dp || density.fontScale > 1.2f || touchExploration) {
-            TextButton(onClick = { showPicker = true }, modifier = Modifier.size(48.dp).semantics { contentDescription = jumpLabel }) { Text("A-Z") }
+            // A 48 dp button leaves no room for the default 12 dp side padding around "A-Z".
+            TextButton(
+                onClick = { showPicker = true },
+                modifier = Modifier.size(48.dp).semantics { contentDescription = jumpLabel },
+                contentPadding = PaddingValues(0.dp),
+            ) { Text("A-Z", maxLines = 1, softWrap = false) }
         } else {
             Canvas(Modifier.fillMaxSize().testTag("vesqen.library.alphabet")
                 .pointerInput(sections) { detectTapGestures { position -> jump(labels[(position.y / size.height * labels.size).toInt().coerceIn(labels.indices)]) } }

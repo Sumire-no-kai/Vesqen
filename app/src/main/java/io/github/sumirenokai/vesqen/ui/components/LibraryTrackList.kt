@@ -5,7 +5,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -41,9 +40,12 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
+import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
 import kotlin.math.abs
 
 /** The browsing list stays mounted while its overflow buttons become reorder handles. */
@@ -144,13 +146,14 @@ internal fun LibraryTrackList(
                         } finally { draggedId = null }
                     }
                 },
+            // B list rhythm: the 24 dp page margin, rows ruled by hairlines rather than gaps. The
+            // trailing more button carries its own 12 dp inset, so the end margin is half.
             contentPadding = PaddingValues(
-                start = VesqenSpacing.md,
-                end = if (alphabetSections.isEmpty()) VesqenSpacing.md else 0.dp,
+                start = VesqenSpacing.lg,
+                end = if (alphabetSections.isEmpty()) VesqenSpacing.sm else 0.dp,
                 top = VesqenSpacing.xs,
                 bottom = VesqenSpacing.md,
             ),
-            verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs),
         ) {
             itemsIndexed(tracks, key = { _, track -> track.id }, contentType = { _, _ -> "track" }) { index, track ->
                 val dragging = draggedId == track.id
@@ -169,7 +172,7 @@ internal fun LibraryTrackList(
                             if (index < tracks.lastIndex) add(CustomAccessibilityAction(downLabel) { move(track.id, index + 1); true })
                         }
                     }
-                Box(rowModifier) {
+                Box(if (dragging) rowModifier else rowModifier.hairlineBelow()) {
                     TrackRow(
                         track = track,
                         isCurrent = track.id == currentTrackId,
@@ -190,5 +193,15 @@ internal fun LibraryTrackList(
             }
         }
         if (!editing && alphabetSections.isNotEmpty()) LibraryAlphabetIndex(alphabetSections, listState)
+    }
+}
+
+/** The B list rule: one ink hairline along the bottom edge of a row. */
+@Composable
+internal fun Modifier.hairlineBelow(): Modifier {
+    val hairline = LocalVesqenColors.current.hairline
+    return drawBehind {
+        val y = size.height - .5.dp.toPx()
+        drawLine(hairline, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
     }
 }
