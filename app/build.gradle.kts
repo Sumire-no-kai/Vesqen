@@ -43,12 +43,19 @@ android {
         versionName = vesqenVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["appLabel"] = "@string/app_name"
     }
 
     buildTypes {
         debug {
             buildConfigField("boolean", "DEVELOPER_DIAGNOSTICS_ENABLED", "true")
             buildConfigField("String", "UPDATE_MANIFEST_BASE_URL", "\"$debugUpdateEndpoint\"")
+        }
+        create("deviceTest") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".devicetest"
+            manifestPlaceholders["appLabel"] = "Vesqen Test"
+            matchingFallbacks += listOf("debug")
         }
         release {
             buildConfigField("boolean", "DEVELOPER_DIAGNOSTICS_ENABLED", "false")
@@ -64,6 +71,10 @@ android {
             isDebuggable = false
         }
     }
+    // Instrumentation runs under a separate Android UID and private data directory.
+    testBuildType = "deviceTest"
+    sourceSets.getByName("deviceTest").kotlin.directories.add("src/debug/java")
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -180,13 +191,15 @@ val checkPrivacyPolicyFinal by tasks.registering(CheckPrivacyPolicyFinalTask::cl
     )
 }
 
-// Only the Play bundle is gated: CI assembles unsigned APKs from the draft policy, and the GitHub
-// APK release step runs checkPrivacyPolicyFinal explicitly (docs/M4_BETA_RELEASE.md).
-tasks.matching { it.name == "bundleRelease" }.configureEach {
+// Every Release artifact requires the same finalized privacy policy.
+tasks.matching { it.name in setOf("bundleRelease", "assembleRelease", "packageRelease") }.configureEach {
     dependsOn(checkPrivacyPolicyFinal)
 }
 
 androidComponents {
+    beforeVariants(selector().withBuildType("debug")) {
+        it.hostTests[com.android.build.api.variant.HostTestBuilder.UNIT_TEST_TYPE]?.enable = true
+    }
     onVariants { variant ->
         val packagePrivacyPolicy = tasks.register<PackagePrivacyPolicyTask>(
             "package${variant.name.replaceFirstChar(Char::uppercaseChar)}PrivacyPolicy",
@@ -223,4 +236,6 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    "deviceTestImplementation"(libs.androidx.compose.ui.test.manifest)
+    "deviceTestImplementation"(libs.androidx.compose.ui.tooling)
 }

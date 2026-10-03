@@ -28,7 +28,7 @@ import org.junit.Test
 class SpeakerChainLifecycleDeviceTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
-    private val app = instrumentation.targetContext.applicationContext as VesqenApplication
+    private val app = isolatedPlaybackTestApplication()
     private val telemetry = app.telemetryRuntime
     private lateinit var controller: PlaybackController
 
@@ -84,7 +84,7 @@ class SpeakerChainLifecycleDeviceTest {
             android.os.ParcelFileDescriptor.AutoCloseInputStream(
                 instrumentation.uiAutomation.executeShellCommand(
                     "am start -W --activity-reorder-to-front --activity-single-top " +
-                        "-n ${app.packageName}/.MainActivity",
+                        "-n ${app.packageName}/${MainActivity::class.java.name}",
                 ),
             ).bufferedReader().use { reader ->
                 val result = reader.readText()

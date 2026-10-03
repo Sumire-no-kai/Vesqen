@@ -25,11 +25,11 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 /** Opt-in device acceptance: stage a header-verified manifest and its MediaStore audio files first.
- * The lab preserves the user's checkpoint; recordings and source names stay in private QA storage.
+ * The deviceTest application's separate UID preserves the user's playback and private storage.
  */
 class RealLosslessDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
-    private val app = instrumentation.targetContext.applicationContext as VesqenApplication
+    private val app = isolatedPlaybackTestApplication()
     private val telemetry = app.telemetryRuntime
     private val playback = AtomicReference(PlaybackSnapshot())
     private lateinit var controller: PlaybackController

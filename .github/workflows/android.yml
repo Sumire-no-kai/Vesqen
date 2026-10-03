@@ -35,7 +35,7 @@ jobs:
         run: python3 -m unittest discover -s tools/tests -v
 
       - name: Verify debug and tests
-        run: ./gradlew testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest --no-daemon
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug assembleDeviceTest assembleDeviceTestAndroidTest --no-daemon
 
       - name: Assemble Profile
         run: ./gradlew assembleProfile --no-daemon

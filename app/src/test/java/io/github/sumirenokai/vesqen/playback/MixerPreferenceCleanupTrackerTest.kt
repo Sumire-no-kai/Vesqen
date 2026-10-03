@@ -81,4 +81,31 @@ class MixerPreferenceCleanupTrackerTest {
         assertFalse(tracker.clearAll())
         assertEquals(1, tracker.pendingCount())
     }
+    @Test
+    fun cleanupRetainsExceptionTypesWithoutMessagesAndClearsThemAfterSuccess() {
+        var fail = true
+        val tracker = MixerPreferenceCleanupTracker<String> {
+            if (fail) throw SecurityException("private device path /storage/secret")
+            Result.success(true)
+        }
+        tracker.track("device")
+        assertFalse(tracker.clearAll())
+        assertEquals(MixerCleanupStatus(1, setOf("java.lang.SecurityException")), tracker.snapshot())
+        assertFalse(tracker.snapshot().toString().contains("secret"))
+        fail = false
+        assertTrue(tracker.clearAll())
+        assertEquals(MixerCleanupStatus(), tracker.snapshot())
+    }
+
+    @Test
+    fun returnedFailureRetainsTypeAndRejectionIsDistinct() {
+        val tracker = MixerPreferenceCleanupTracker<String> {
+            if (it == "exception") Result.failure(IllegalStateException("private")) else Result.success(false)
+        }
+        tracker.track("exception")
+        tracker.track("rejected")
+        assertFalse(tracker.clearAll())
+        assertEquals(MixerCleanupStatus(2, setOf("java.lang.IllegalStateException")), tracker.snapshot())
+    }
+
 }

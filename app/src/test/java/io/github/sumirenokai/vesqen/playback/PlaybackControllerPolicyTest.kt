@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.playback
 
+import androidx.media3.common.C
 import androidx.media3.common.Player
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import org.junit.Assert.assertEquals
@@ -60,6 +61,33 @@ class PlaybackControllerPolicyTest {
 
         assertEquals(0, updated.durationMs)
         assertEquals(0, updated.positionMs)
+    }
+
+    @Test
+    fun `unprepared player uses catalog duration and position refresh retains it`() {
+        for (unknown in listOf(C.TIME_UNSET, 0L)) {
+            val duration = resolvePlaybackDurationMs(unknown, 60_000)
+            assertEquals(60_000L, duration)
+            val restored = PlaybackSnapshot(trackId = 1, durationMs = duration, positionMs = 12_000)
+            val refreshed = restored.withPlayerPosition(
+                isPlaying = false, durationMs = unknown, positionMs = 15_000,
+                libraryDurationMs = 60_000,
+            )
+            assertEquals(60_000L, refreshed.durationMs)
+            assertEquals(0.25f, refreshed.progressFraction)
+        }
+    }
+
+    @Test
+    fun `measured player duration takes precedence and missing catalog duration stays unknown`() {
+        assertEquals(59_500L, resolvePlaybackDurationMs(59_500, 60_000))
+        assertEquals(0L, resolvePlaybackDurationMs(C.TIME_UNSET, null))
+        assertEquals(0L, resolvePlaybackDurationMs(C.TIME_UNSET, -10))
+        val changed = PlaybackSnapshot(trackId = 1, durationMs = 60_000).withPlayerPosition(
+            isPlaying = false, durationMs = C.TIME_UNSET, positionMs = 0,
+            libraryDurationMs = 90_000,
+        )
+        assertEquals(90_000L, changed.durationMs)
     }
 
     @Test
