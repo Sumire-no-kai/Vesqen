@@ -129,3 +129,43 @@ For successful self-upgrade the instrumentation process is expected to terminate
 new installed version and retained `files/update-qa/state.txt` from a fresh process, rather than
 counting process termination as a passing JUnit result. Delete the temporary TLS material after
 acceptance. Platform dialogs, including vendor risk checkboxes, must be handled normally.
+
+## Recorded acceptance — 2026-10-03
+
+- Local implementation branch: 267 JVM tests, zero failures/errors/skips; Debug lint, Debug
+  and Release APKs, instrumentation compilation; 32 Python tool tests pass. A custom Debug
+  manifest base was compared against generated Release/Profile BuildConfig: only Debug changed.
+- Integration of update code `0698e25` with playback fixes `482738f` and contract `518d10f`:
+  temporary Git tree `d18fce5a4571b0d80e9a68aae2703321d45a8414`, without merging any branch or PR.
+  All 269 JVM tests pass and both deviceTest APKs build together.
+- Android JSON schema tests: two pass on Honor STF-AL00 / Android 9 and two pass on iQOO
+  V2171A / Android 15. Honor initially needed the existing foreground-host lab aid because
+  PowerGenie stopped its background instrumentation; the initial failed run is retained.
+- Honor: real HTTPS manifest, first mirror 404, second mirror download, hash/package/version/
+  signer verification, then system cancellation returning INSTALL_CANCELLED: one instrumented
+  test passes. Android 9 initially returned no archive certificates with only the new flag;
+  the verified dual-flag correction resolved that failure without relaxing signature matching.
+- Both devices: real PackageInstaller self-upgrade from temporary test versionCode 1000 to
+  1001 succeeds. The test process terminates as expected when Android replaces its host; this
+  is recorded as an external upgrade acceptance, not a passing JUnit process. Fresh-process
+  checks confirm installed version 1001, the exact expected APK digest, a retained private
+  data marker, a successful app start, and cleared pending-install metadata.
+- Both devices' original `io.github.sumirenokai.vesqen` installation remains at versionCode
+  10. Only `.devicetest` was upgraded. Temporary unknown-source installation permission was
+  explicitly approved by the owner and then restored to `deny` on both devices. The temporary
+  TLS private key and device-side download fixture were removed after verification; no device
+  trust store or production signing configuration was changed.
+- Tested combined 1000 host SHA-256: `f31f38cc2d887160e9042629a413fb7b13525831cd852b01600426b83eb75d56`.
+  Instrumentation SHA-256: `2e281b4950d4442d04d7cdfe4591ca6054fecb76a51b62118e791fa081018217`.
+  Installed 1001 SHA-256 on both: `4880f13b427bfdfc1c08d4e6d6c76eb010cbc30a75c1f850527c883a8a37b7b1`.
+- Local ignored evidence: `build/qa/beta2/{honor,iqoo}-update-post-install.json`,
+  `honor-update-cancel-final/`, `{honor,iqoo}-update-install/` and the manifest-test folders.
+  Earlier failures are retained (including truncated adb stdin fixture transfer and an iQOO
+  installation confirmation session that was explicitly abandoned before a clean confirmed
+  installation). Transferred and installed APKs were checked by hash, not just adb exit status.
+- Remote Android CI for implementation commit `0698e25` passes:
+  [run 37097535596](https://github.com/Sumire-no-kai/Vesqen/actions/runs/37097535596).
+  The separate interface PR #77 and playback PR #76 also passed their code checks.
+
+These results do not release beta.2 or complete its UI, privacy-policy, website-publication,
+long-duration audio or real-DAC acceptance. No release workflow was executed.
