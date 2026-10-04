@@ -623,6 +623,7 @@ private val METRIC_LABEL_RESOURCES: Map<String, Int> = mapOf(
     "decoder.input_mime" to R.string.chain_metric_decoder_input_mime,
     "decoder.input_sample_rate" to R.string.chain_metric_decoder_input_sample_rate,
     "decoder.input_channel_count" to R.string.chain_metric_decoder_input_channel_count,
+    "decoder.input_pcm_encoding" to R.string.chain_metric_decoder_input_pcm_encoding,
     "decoder.initialization_duration" to R.string.chain_metric_decoder_initialization_duration,
     "decoder.software_only" to R.string.chain_metric_decoder_software_only,
     "decoder.hardware_accelerated" to R.string.chain_metric_decoder_hardware_accelerated,

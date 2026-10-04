@@ -1,29 +1,43 @@
 package io.github.sumirenokai.vesqen.ui.chain
 
 import io.github.sumirenokai.vesqen.telemetry.TelemetryDataSource
+import io.github.sumirenokai.vesqen.telemetry.TelemetryEvent
+import io.github.sumirenokai.vesqen.telemetry.TelemetryEventKind
+import io.github.sumirenokai.vesqen.telemetry.TelemetryEventSeverity
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
-import io.github.sumirenokai.vesqen.telemetry.TelemetryMetric
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricId
 import io.github.sumirenokai.vesqen.telemetry.TelemetryReading
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceId
-import io.github.sumirenokai.vesqen.telemetry.TelemetryUnit
-import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog as Metrics
 import io.github.sumirenokai.vesqen.telemetry.TelemetryUnavailableReason
-import io.github.sumirenokai.vesqen.telemetry.TelemetryWindow
+import io.github.sumirenokai.vesqen.telemetry.TelemetryUnit
+import io.github.sumirenokai.vesqen.ui.chain.FakeAppSegmentTelemetry.CapturedAtMs
+import io.github.sumirenokai.vesqen.ui.chain.FakeAppSegmentTelemetry.measured
+import io.github.sumirenokai.vesqen.ui.chain.FakeAppSegmentTelemetry.snapshot
+import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog as Metrics
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AppSegmentAssessmentTest {
     @Test
-    fun `each processing change is reported independently and all failures are retained`() {
+    fun `a steady neutral stream is unchanged even though its AudioTrack facts are old`() {
+        val result = assess(snapshot())
+        assertEquals(AppSegmentStatus.UNCHANGED, result.status)
+        assertEquals(SourceCompression.LOSSLESS, result.sourceCompression)
+        assertEquals(RouteKind.OTHER, result.route)
+        assertNull(result.bluetooth)
+        assertTrue(result.checks.all { it.status == AppSegmentStatus.UNCHANGED })
+    }
+
+    @Test
+    fun `each processing change is reported on its own`() {
         val changes = mapOf(
-            Metrics.PROCESSING_SPEED to decimal(125.0),
-            Metrics.PROCESSING_PITCH to decimal(90.0),
-            Metrics.PROCESSING_PLAYER_VOLUME to decimal(50.0),
+            Metrics.PROCESSING_SPEED to percent(125.0),
+            Metrics.PROCESSING_PITCH to percent(90.0),
+            Metrics.PROCESSING_PLAYER_VOLUME to percent(50.0),
             Metrics.PROCESSING_SKIP_SILENCE to TelemetryReading.Flag(true),
             Metrics.PROCESSING_REPLAY_GAIN_ACTIVE to TelemetryReading.Flag(true),
             Metrics.PROCESSING_EQUALIZER_ACTIVE to TelemetryReading.Flag(true),
@@ -37,159 +51,177 @@ class AppSegmentAssessmentTest {
         changes.forEach { (id, reading) ->
             val result = assess(snapshot(mapOf(id to measured(reading))))
             assertEquals(id.value, AppSegmentStatus.MODIFIED, result.status)
-            assertEquals(id.value, 1, result.checks.count { it.status == AppSegmentStatus.MODIFIED })
-            assertTrue(result.checks.single { it.status == AppSegmentStatus.MODIFIED }.evidence.containsKey(id))
+            val modified = result.checks.single { it.status == AppSegmentStatus.MODIFIED }
+            assertTrue(id.value, modified.evidence.containsKey(id))
         }
-        assertEquals(changes.size, assess(snapshot(changes.mapValues { measured(it.value) })).checks.count {
-            it.status == AppSegmentStatus.MODIFIED
-        })
+        val all = assess(snapshot(changes.mapValues { measured(it.value) }))
+        assertEquals(changes.size, all.checks.count { it.status == AppSegmentStatus.MODIFIED })
     }
 
     @Test
-    fun `lossless and lossy codecs stay distinct without claiming containers are lossless`() {
-        listOf("audio/flac", "audio/alac", "audio/raw").forEach { mime ->
-            assertEquals(SourceCompression.LOSSLESS, withMime(mime).sourceCompression)
-        }
-        listOf("audio/mpeg", "audio/mp4a-latm", "audio/opus", "audio/vorbis").forEach { mime ->
-            assertEquals(SourceCompression.LOSSY, withMime(mime).sourceCompression)
-        }
-        listOf("audio/wav", "audio/aiff", "unknown").forEach { mime ->
-            assertEquals(SourceCompression.UNKNOWN, withMime(mime).sourceCompression)
-        }
+    fun `a stale or future snapshot cannot support any verdict`() {
+        val stale = assessAppSegment(snapshot(), CapturedAtMs + 3_001, maxSnapshotAgeMs = 3_000)
+        assertEquals(AppSegmentStatus.UNKNOWN, stale.status)
+        assertTrue(stale.checks.all { it.status == AppSegmentStatus.UNKNOWN })
+        assertTrue(stale.checks.flatMap { it.issues }.any { it.reason == SegmentReason.EXPIRED })
+
+        val future = assessAppSegment(snapshot(), CapturedAtMs - 1, maxSnapshotAgeMs = 3_000)
+        assertEquals(AppSegmentStatus.UNKNOWN, future.status)
+        assertTrue(future.checks.flatMap { it.issues }.any { it.reason == SegmentReason.INVALID_TIME })
     }
 
     @Test
-    fun `precision rules cover every supported PCM pair`() {
-        val formats = listOf("pcm-8", "pcm-16", "pcm-24", "pcm-32", "pcm-float")
-        val expected = listOf(
-            listOf(true, true, true, true, true),
-            listOf(false, true, true, true, true),
-            listOf(false, false, true, true, true),
-            listOf(false, false, false, true, false),
-            listOf(false, false, false, false, true),
+    fun `estimated, unavailable or missing evidence leaves the check unknown with its reason`() {
+        val estimated = assess(snapshot(mapOf(Metrics.PROCESSING_SPEED to TelemetryEvidence.Estimated(
+            reading = percent(100.0), source = source, observedAtEpochMs = CapturedAtMs, methodId = "test.guess",
+        ))))
+        assertUnknown(estimated, AppSegmentCondition.SPEED, SegmentReason.INSUFFICIENT_CONFIDENCE)
+
+        val unavailable = assess(snapshot(mapOf(Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE to TelemetryEvidence.Unavailable(
+            TelemetryUnavailableReason.NO_ACTIVE_PLAYBACK, CapturedAtMs,
+        ))))
+        assertUnknown(unavailable, AppSegmentCondition.SAMPLE_RATE, SegmentReason.UNAVAILABLE)
+
+        val missing = assessAppSegment(
+            TelemetrySnapshot(CapturedAtMs, metrics = snapshot().metrics.filterNot { it.id == Metrics.PROCESSING_PITCH }),
+            CapturedAtMs,
+            maxSnapshotAgeMs = 3_000,
         )
-        formats.forEachIndexed { i, input -> formats.forEachIndexed { j, output ->
-            val result = assess(snapshot(mapOf(
-                Metrics.DECODER_OUTPUT_ENCODING to measured(TelemetryReading.Text(input)),
-                Metrics.PLAYBACK_AUDIO_TRACK_ENCODING to measured(TelemetryReading.Text(output)),
-            ))).checks.single { it.condition == AppSegmentCondition.PCM_PRECISION }
-            assertEquals("$input -> $output", if (expected[i][j]) AppSegmentStatus.UNCHANGED else AppSegmentStatus.MODIFIED, result.status)
-        } }
-        assertNull(preservesPcmPrecision("aac", "aac"))
+        assertUnknown(missing, AppSegmentCondition.PITCH, SegmentReason.MISSING)
     }
 
     @Test
-    fun `every missing stale or estimated operand prevents a neutral check`() {
-        snapshot().metrics.filter { it.id != Metrics.ROUTE_SELECTED_SYSTEM_TYPE }.forEach { metric ->
-            val missing = assess(snapshot().copy(metrics = snapshot().metrics.filter { it.id != metric.id }))
-            assertTrue(metric.id.value, missing.checks.flatMap { it.issues }.contains(SegmentEvidenceIssue(metric.id, SegmentReason.MISSING)))
-            val stale = assess(snapshot(mapOf(metric.id to measured(metric.evidence.reading!!, 899))))
-            assertTrue(metric.id.value, stale.checks.flatMap { it.issues }.contains(SegmentEvidenceIssue(metric.id, SegmentReason.EXPIRED)))
-            val estimated = TelemetryEvidence.Estimated(metric.evidence.reading!!, source, 1_000, "test.estimate")
-            val uncertain = assess(snapshot(mapOf(metric.id to estimated)))
-            assertTrue(metric.id.value, uncertain.checks.flatMap { it.issues }.contains(SegmentEvidenceIssue(metric.id, SegmentReason.INSUFFICIENT_CONFIDENCE)))
-            assertEquals(AppSegmentStatus.UNKNOWN, uncertain.status)
+    fun `a recent track change, seek or output re-open holds the verdict back until it settles`() {
+        listOf(
+            TelemetryEventKind.MEDIA_ITEM_CHANGED, TelemetryEventKind.FORMAT_CHANGED,
+            TelemetryEventKind.DECODER_INITIALIZED, TelemetryEventKind.OUTPUT_INITIALIZED,
+            TelemetryEventKind.SEEK_COMPLETED,
+        ).forEach { kind ->
+            val settling = assess(snapshot(recentEvents = listOf(event(kind, CapturedAtMs - 500))))
+            val transition = settling.checks.single { it.condition == AppSegmentCondition.TRACK_TRANSITION }
+            assertEquals(kind.name, SegmentReason.TRANSITION_IN_PROGRESS, transition.reason)
+            assertEquals(kind.name, AppSegmentStatus.UNKNOWN, settling.status)
         }
+        val settled = assess(snapshot(recentEvents = listOf(event(TelemetryEventKind.MEDIA_ITEM_CHANGED, CapturedAtMs - TransitionSettleMs))))
+        assertEquals(AppSegmentStatus.UNCHANGED, settled.status)
+        val unrelated = assess(snapshot(recentEvents = listOf(event(TelemetryEventKind.UNDERRUN, CapturedAtMs - 100))))
+        assertEquals(AppSegmentStatus.UNCHANGED, unrelated.status)
     }
 
     @Test
-    fun `age uses monotonic observation time and rejects future evaluation`() {
-        val boundary = measured(decimal(100.0), 900).copy(observedAtEpochMs = 1)
-        assertEquals(AppSegmentStatus.UNCHANGED, assess(snapshot(mapOf(Metrics.PROCESSING_SPEED to boundary))).checks.first().status)
-        assertTrue(assessAppSegment(snapshot(), 999, 100).checks.first().issues.any { it.reason == SegmentReason.INVALID_TIME })
-        assertTrue(assessAppSegment(snapshot(), 1_101, 100).checks.first().issues.any { it.reason == SegmentReason.EXPIRED })
+    fun `precision follows the measured input width into the AudioTrack`() {
+        fun precision(input: TelemetryEvidence, output: String) = assess(snapshot(mapOf(
+            Metrics.DECODER_INPUT_PCM_ENCODING to input,
+            Metrics.PLAYBACK_AUDIO_TRACK_ENCODING to measured(TelemetryReading.Text(output)),
+        ))).checks.single { it.condition == AppSegmentCondition.PCM_PRECISION }
+        fun text(value: String) = measured(TelemetryReading.Text(value))
+
+        assertEquals(AppSegmentStatus.UNCHANGED, precision(text("pcm-24"), "pcm-float").status)
+        assertEquals(AppSegmentStatus.UNCHANGED, precision(text("pcm-16"), "pcm-16").status)
+        assertEquals(AppSegmentStatus.MODIFIED, precision(text("pcm-32"), "pcm-float").status)
+        assertEquals(SegmentReason.PRECISION_LOSS, precision(text("pcm-24"), "pcm-16").reason)
+
+        // Compressed input has no PCM width: only a float AudioTrack is sure to hold the codec output.
+        val compressed = TelemetryEvidence.Unavailable(TelemetryUnavailableReason.NOT_APPLICABLE, CapturedAtMs)
+        assertEquals(AppSegmentStatus.UNCHANGED, precision(compressed, "pcm-float").status)
+        assertEquals(AppSegmentStatus.UNKNOWN, precision(compressed, "pcm-16").status)
+        // Any other unavailability is missing evidence, not compressed input.
+        val unreported = TelemetryEvidence.Unavailable(TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT, CapturedAtMs)
+        assertEquals(AppSegmentStatus.UNKNOWN, precision(unreported, "pcm-float").status)
     }
 
     @Test
-    fun `temporary unavailable reasons and original evidence survive without string parsing`() {
-        listOf(TelemetryUnavailableReason.WARMING_UP, TelemetryUnavailableReason.TEMPORARILY_UNAVAILABLE).forEach { reason ->
-            val evidence = TelemetryEvidence.Unavailable(reason, 1_000, source, "diagnostic detail")
-            val result = assess(snapshot(mapOf(Metrics.DECODER_OUTPUT_ENCODING to evidence)))
-            assertEquals(AppSegmentStatus.UNKNOWN, result.status)
-            assertSame(evidence, result.checks.single { it.condition == AppSegmentCondition.PCM_PRECISION }.evidence[Metrics.DECODER_OUTPUT_ENCODING])
+    fun `pcm precision table`() {
+        val widths = listOf("pcm-8", "pcm-16", "pcm-24", "pcm-32", "pcm-float")
+        val kept = setOf(
+            "pcm-8>pcm-8", "pcm-8>pcm-16", "pcm-8>pcm-24", "pcm-8>pcm-32", "pcm-8>pcm-float",
+            "pcm-16>pcm-16", "pcm-16>pcm-24", "pcm-16>pcm-32", "pcm-16>pcm-float",
+            "pcm-24>pcm-24", "pcm-24>pcm-32", "pcm-24>pcm-float",
+            "pcm-32>pcm-32", "pcm-float>pcm-float",
+        )
+        widths.forEach { input ->
+            widths.forEach { output -> assertEquals("$input>$output", "$input>$output" in kept, preservesPcmPrecision(input, output)) }
         }
+        assertNull(preservesPcmPrecision("e-ac3", "pcm-float"))
     }
 
     @Test
-    fun `neutral settings cannot attest focus gain or track transition and fades`() {
-        val result = assess(snapshot())
-        assertEquals(AppSegmentStatus.UNKNOWN, result.status)
-        assertEquals(listOf(SegmentReason.FOCUS_GAIN_NOT_OBSERVABLE, SegmentReason.TRACK_TRANSITION_NOT_OBSERVABLE),
-            result.checks.filter { it.status == AppSegmentStatus.UNKNOWN }.map { it.reason })
-        assertTrue(result.checks.filter { it.condition !in setOf(AppSegmentCondition.FOCUS_GAIN, AppSegmentCondition.TRACK_TRANSITION) }
-            .all { it.status == AppSegmentStatus.UNCHANGED })
+    fun `only AAC may change rate or layout inside the codec`() {
+        val rate = mapOf(Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE to measured(TelemetryReading.Integer(88_200, TelemetryUnit.HERTZ)))
+        assertEquals(AppSegmentStatus.MODIFIED, assess(snapshot(rate)).status)
+
+        val aac = rate + compressedInput("audio/mp4a-latm")
+        val aacRate = assess(snapshot(aac)).checks.single { it.condition == AppSegmentCondition.SAMPLE_RATE }
+        assertEquals(AppSegmentStatus.UNKNOWN, aacRate.status)
+        assertEquals(SegmentReason.DECODER_MAY_CHANGE_FORMAT, aacRate.reason)
+
+        val opus = rate + compressedInput("audio/opus")
+        assertEquals(AppSegmentStatus.MODIFIED, assess(snapshot(opus)).status)
     }
 
     @Test
-    fun `bluetooth second segment follows only reliable fresh selected route`() {
-        listOf("bluetooth", "bluetooth_a2dp", "bluetooth_sco", "ble_headset", "ble_speaker", "ble_broadcast", "hearing_aid").forEach { type ->
-            val result = assess(snapshot(mapOf(Metrics.ROUTE_SELECTED_SYSTEM_TYPE to measured(TelemetryReading.Text(type)))))
-            assertEquals(BluetoothSegmentStatus.LOSSY_OR_UNKNOWN_DEPENDING_ON_CODEC, result.bluetooth?.status)
-            assertNull(result.bluetooth?.reportedCodecEvidence)
+    fun `source compression comes from the decoder input and never gates the verdict`() {
+        listOf("audio/flac", "audio/alac", "audio/raw").forEach {
+            assertEquals(it, SourceCompression.LOSSLESS, assess(snapshot(mapOf(Metrics.DECODER_INPUT_MIME to measured(TelemetryReading.Text(it))))).sourceCompression)
         }
-        listOf("built_in_speaker", "wired_headphones", "usb_device", "unknown").forEach { type ->
-            assertNull(assess(snapshot(mapOf(Metrics.ROUTE_SELECTED_SYSTEM_TYPE to measured(TelemetryReading.Text(type))))).bluetooth)
+        listOf("audio/mpeg", "audio/opus", "audio/vorbis").forEach {
+            val lossy = assess(snapshot(compressedInput(it)))
+            assertEquals(it, SourceCompression.LOSSY, lossy.sourceCompression)
+            assertEquals(it, AppSegmentStatus.UNCHANGED, lossy.status)
         }
-        val stale = assess(snapshot(mapOf(Metrics.ROUTE_SELECTED_SYSTEM_TYPE to measured(TelemetryReading.Text("bluetooth_a2dp"), 899))))
-        assertNull(stale.bluetooth)
-        assertEquals(SegmentReason.EXPIRED, stale.routeIssues.single().reason)
-        val missing = assess(snapshot().copy(metrics = snapshot().metrics.filter { it.id != Metrics.ROUTE_SELECTED_SYSTEM_TYPE }))
-        assertNull(missing.bluetooth)
-        assertEquals(SegmentReason.MISSING, missing.routeIssues.single().reason)
+        val unknownCodec = assess(snapshot(mapOf(Metrics.DECODER_INPUT_MIME to measured(TelemetryReading.Text("audio/x-unknown")))))
+        assertEquals(SourceCompression.UNKNOWN, unknownCodec.sourceCompression)
+        assertEquals(AppSegmentStatus.UNCHANGED, unknownCodec.status)
     }
 
     @Test
-    fun `derived evidence keeps dependencies and cannot upgrade an estimated operand`() {
-        val id = Metrics.PROCESSING_SPEED
-        val operand = Metrics.PROCESSING_PITCH
-        val derived = TelemetryEvidence.Derived(decimal(100.0), source, 1_000,
-            TelemetryWindow(900, 1_000), "test.identity", setOf(operand), mapOf("input.value" to 100.0))
-        val good = assess(snapshot(mapOf(id to derived))).checks.first()
-        assertSame(derived, good.evidence[id])
-        assertEquals(AppSegmentStatus.UNCHANGED, good.status)
-        assertTrue(good.evidence.containsKey(operand))
-        val bad = assess(snapshot(mapOf(id to derived, operand to TelemetryEvidence.Estimated(decimal(100.0), source, 1_000, "test.estimate")))).checks.first()
-        assertEquals(AppSegmentStatus.UNKNOWN, bad.status)
-        val cycle = derived.copy(inputMetricIds = setOf(id))
-        assertTrue(assess(snapshot(mapOf(id to cycle))).checks.first().issues.any { it.reason == SegmentReason.DEPENDENCY_CYCLE })
+    fun `bluetooth adds the system segment, other routes do not, and an unknown route says so`() {
+        fun route(type: String) = assess(snapshot(mapOf(Metrics.ROUTE_SELECTED_SYSTEM_TYPE to measured(TelemetryReading.Text(type)))))
+        val bluetooth = route("bluetooth")
+        assertEquals(RouteKind.BLUETOOTH, bluetooth.route)
+        assertNotNull(bluetooth.bluetooth)
+        assertNull(bluetooth.bluetooth!!.reportedCodecEvidence)
+        assertEquals(BluetoothSegmentStatus.LOSSY_OR_UNKNOWN_DEPENDING_ON_CODEC, bluetooth.bluetooth!!.status)
+        listOf("phone_speaker", "wired_or_usb", "other").forEach {
+            assertEquals(it, RouteKind.OTHER, route(it).route)
+            assertNull(it, route(it).bluetooth)
+        }
+        val unknown = assess(snapshot(mapOf(Metrics.ROUTE_SELECTED_SYSTEM_TYPE to TelemetryEvidence.Unavailable(
+            TelemetryUnavailableReason.UNSUPPORTED_ANDROID_VERSION, CapturedAtMs,
+        ))))
+        assertEquals(RouteKind.UNKNOWN, unknown.route)
+        assertNull(unknown.bluetooth)
+        assertTrue(unknown.routeIssues.isNotEmpty())
+        // The route is the system's side; it never changes the Vesqen-segment verdict.
+        assertEquals(AppSegmentStatus.UNCHANGED, unknown.status)
     }
 
     @Test
-    fun `unrecognized PCM or channel strings never pass by equality`() {
-        val result = assess(snapshot(mapOf(
-            Metrics.DECODER_OUTPUT_ENCODING to measured(TelemetryReading.Text("unknown")),
-            Metrics.PLAYBACK_AUDIO_TRACK_ENCODING to measured(TelemetryReading.Text("unknown")),
-            Metrics.DECODER_OUTPUT_CHANNEL_CONFIG to measured(TelemetryReading.Text("stereo")),
-            Metrics.PLAYBACK_AUDIO_TRACK_CHANNEL_MASK to measured(TelemetryReading.Text("stereo")),
-        )))
-        assertEquals(2, result.checks.count { it.reason == SegmentReason.UNSUPPORTED_VALUE })
+    fun `the exported metric list covers everything the assessment reads`() {
+        val read = assess(snapshot()).let { result ->
+            result.checks.flatMap { it.evidence.keys } + result.routeEvidence.keys
+        }.toSet()
+        assertTrue((read - AppSegmentMetricIds.toSet()).toString(), AppSegmentMetricIds.containsAll(read))
     }
 
-    @Test
-    fun `source and output declarations cannot substitute decoder evidence or select bluetooth`() {
-        val original = snapshot()
-        val extra = mapOf(
-            Metrics.ROUTE_OUTPUT_DECLARATION to TelemetryReading.Text("SYSTEM MIXED"),
-            Metrics.ROUTE_CONNECTED_TYPES to TelemetryReading.Text("bluetooth_a2dp"),
-            Metrics.ROUTE_ANTICIPATED_TYPE to TelemetryReading.Text("bluetooth_a2dp"),
-            Metrics.SOURCE_SAMPLE_RATE to TelemetryReading.Integer(44_100, TelemetryUnit.HERTZ),
-        ).map { (id, value) -> TelemetryMetric(id, Metrics.descriptor(id).section, measured(value)) }
-        val input = original.copy(metrics = original.metrics.filter { it.id != Metrics.DECODER_OUTPUT_SAMPLE_RATE } + extra)
-        val result = assess(input)
-        assertNull(result.bluetooth)
-        assertEquals(AppSegmentStatus.UNKNOWN, result.checks.single { it.condition == AppSegmentCondition.SAMPLE_RATE }.status)
-        assertEquals(extra.first(), input.metric(Metrics.ROUTE_OUTPUT_DECLARATION))
-        val estimated = TelemetryEvidence.Estimated(TelemetryReading.Text("bluetooth_a2dp"), source, 1_000, "test.estimate")
-        val uncertain = assess(snapshot(mapOf(Metrics.ROUTE_SELECTED_SYSTEM_TYPE to estimated)))
-        assertNull(uncertain.bluetooth)
-        assertEquals(SegmentReason.INSUFFICIENT_CONFIDENCE, uncertain.routeIssues.single().reason)
-    }
-
-    private fun withMime(mime: String) = assess(snapshot(mapOf(Metrics.SOURCE_CODEC_MIME to measured(TelemetryReading.Text(mime)))))
-    private fun assess(snapshot: TelemetrySnapshot) = assessAppSegment(snapshot, 1_000, 100)
-    private fun decimal(value: Double) = TelemetryReading.Decimal(value, TelemetryUnit.PERCENT)
     private val source = TelemetryDataSource(TelemetrySourceId("test.app_segment"))
-    private fun measured(reading: TelemetryReading, time: Long = 1_000) = TelemetryEvidence.Measured(reading, source, time)
-    private fun snapshot(overrides: Map<TelemetryMetricId, TelemetryEvidence> = emptyMap()) =
-        FakeAppSegmentTelemetry.snapshot(overrides)
+
+    private fun assess(snapshot: TelemetrySnapshot) = assessAppSegment(snapshot, CapturedAtMs + 100, maxSnapshotAgeMs = 3_000)
+
+    private fun percent(value: Double) = TelemetryReading.Decimal(value, TelemetryUnit.PERCENT)
+
+    private fun compressedInput(mime: String): Map<TelemetryMetricId, TelemetryEvidence> = mapOf(
+        Metrics.DECODER_INPUT_MIME to measured(TelemetryReading.Text(mime)),
+        Metrics.DECODER_INPUT_PCM_ENCODING to TelemetryEvidence.Unavailable(TelemetryUnavailableReason.NOT_APPLICABLE, CapturedAtMs),
+    )
+
+    private fun event(kind: TelemetryEventKind, atMs: Long) =
+        TelemetryEvent(sequence = atMs, kind = kind, severity = TelemetryEventSeverity.INFO, occurredAtEpochMs = atMs, code = "test.event")
+
+    private fun assertUnknown(result: AppSegmentAssessment, condition: AppSegmentCondition, reason: SegmentReason) {
+        val check = result.checks.single { it.condition == condition }
+        assertEquals(AppSegmentStatus.UNKNOWN, check.status)
+        assertTrue(check.issues.toString(), check.issues.any { it.reason == reason })
+        assertEquals(AppSegmentStatus.UNKNOWN, result.status)
+    }
 }
