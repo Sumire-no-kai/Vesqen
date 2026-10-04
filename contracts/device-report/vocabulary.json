@@ -311,6 +311,12 @@
       "unit": null
     },
     {
+      "id": "decoder.input_pcm_encoding",
+      "section": "DECODER",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
       "id": "decoder.input_sample_rate",
       "section": "DECODER",
       "valueKind": "INTEGER",
