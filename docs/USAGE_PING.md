@@ -23,7 +23,8 @@ outstanding. State-level California detection cannot be derived from country cod
 A default-on user entering a consent region is returned to the consent gate;
 an explicit accepted choice survives restarts. Region inputs remain local.
 
-Scheduling reuses #78's foreground callback, with one durable attempt reservation
+Scheduling reuses #78's foreground callback, awaiting preferences off the UI thread
+before deciding whether statistics or the updater owns the request, with one durable attempt reservation
 per rolling 24 hours. No background wakeup or connectivity retry is scheduled.
 An unconfigured endpoint, disabled/pending consent, unavailable preferences or
 unvalidated network causes no usage request. Network failures are silent and not

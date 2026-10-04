@@ -41,6 +41,18 @@ class UsageStatisticsTest {
         assertNull(ping.fields()["bitPerfectMixer"])
     }
 
+    @Test fun coldStartForegroundWaitsForPreferencesWithoutLosingItsOneDailyOpportunity() = runBlocking {
+        val store = MemoryStore(ready)
+        var sends = 0
+        val engine = DefaultUsageStatistics(this, store, { UsageRegionPolicy.DEFAULT_ENABLED }, true,
+            { true }, { facts }, UsageTransport { sends++; null }, clock = { USAGE_DAY_MS * 10 })
+        assertEquals(UsageSettingsStatus.LOADING, engine.snapshot.value.status)
+        assertTrue(engine.onForeground())
+        yield()
+        assertEquals(1, sends)
+        assertFalse(engine.onForeground())
+    }
+
     @Test fun defaultOnStillWaitsForFirstIntroductionAndExplicitConsentDefaultsOff() = runBlocking {
         for (policy in UsageRegionPolicy.entries) {
             val store = MemoryStore()

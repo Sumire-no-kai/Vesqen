@@ -29,7 +29,7 @@ internal class AndroidUsageRuntime(application: Application, scope: CoroutineSco
         }, transport = HttpsUsageTransport(BuildConfig.USAGE_ENDPOINT), acceptUpdate = acceptUpdate,
     )
     val statistics: UsageStatistics get() = engine
-    fun onForeground(): Boolean = engine.onForeground()
+    suspend fun onForeground(): Boolean = engine.onForeground()
     private val callback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
             if (addedDevices.any { it.isSink && it.type in USB_TYPES }) engine.recordUsbAudioConnection()
@@ -44,15 +44,16 @@ private fun usageRegion(context: Context): UsageRegionPolicy {
     val locales = android.content.res.Resources.getSystem().configuration.locales
     val system = (0 until locales.size()).map { locales[it].country }
     val telephone = context.getSystemService(TelephonyManager::class.java)
+    var simReadComplete = true
     val sim = try { telephone?.simCountryIso.orEmpty() }
-        catch (_: SecurityException) { "" }
-        catch (_: UnsupportedOperationException) { "" }
+        catch (_: SecurityException) { simReadComplete = false; "" }
+        catch (_: UnsupportedOperationException) { simReadComplete = false; "" }
     // Public default-subscription country only; no phone-state permission, identifiers or hidden APIs.
     val allSimsObservable = try {
         @Suppress("DEPRECATION")
         (if (Build.VERSION.SDK_INT >= 30) telephone?.activeModemCount else telephone?.phoneCount) in listOf(null, 0, 1)
     } catch (_: SecurityException) { false } catch (_: UnsupportedOperationException) { false }
-    return UsageRegionRules.evaluate(system, listOf(sim), allSimsObservable)
+    return UsageRegionRules.evaluate(system, listOf(sim), allSimsObservable && simReadComplete)
 }
 
 private fun online(context: Context): Boolean = try {

@@ -56,7 +56,8 @@ internal class DefaultUsageStatistics(
     }
 
     /** Called through the updater's foreground hook. True suppresses its duplicate manifest GET. */
-    fun onForeground(): Boolean {
+    suspend fun onForeground(): Boolean {
+        initialization.join()
         val state = mutable.value
         if (state.status != UsageSettingsStatus.READY || !state.enabled || state.introductionRequired ||
             !endpointConfigured || !online()) return false
