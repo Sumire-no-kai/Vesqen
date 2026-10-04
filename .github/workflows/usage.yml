@@ -2,9 +2,9 @@ name: Usage service CI
 on:
   push:
     branches: [master]
-    paths: ["server/usage/**", ".github/workflows/usage.yml", "app/src/main/java/io/github/sumirenokai/vesqen/telemetry/TelemetryMetricCatalog.kt"]
+    paths: ["server/usage/**", ".github/workflows/usage.yml", "contracts/device-report/**"]
   pull_request:
-    paths: ["server/usage/**", ".github/workflows/usage.yml", "app/src/main/java/io/github/sumirenokai/vesqen/telemetry/TelemetryMetricCatalog.kt"]
+    paths: ["server/usage/**", ".github/workflows/usage.yml", "contracts/device-report/**"]
 permissions:
   contents: read
 jobs:
