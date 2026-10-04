@@ -8,10 +8,17 @@ CREATE TABLE daily_totals (
 ) STRICT;
 CREATE TABLE daily_dimensions (
     day TEXT NOT NULL REFERENCES daily_totals(day) ON DELETE CASCADE,
-    dimension TEXT NOT NULL CHECK(dimension IN ('version','model','bit_perfect','model_bit_perfect')),
+    dimension TEXT NOT NULL CHECK(dimension IN ('version','model','bit_perfect','model_bit_perfect','android','rom','recent_usb_audio')),
     value TEXT NOT NULL,
     count INTEGER NOT NULL,
     PRIMARY KEY(day, dimension, value)
+) STRICT;
+-- Distinct values per day and dimension, so forged pings cannot grow storage without bound.
+CREATE TABLE daily_dimension_sizes (
+    day TEXT NOT NULL REFERENCES daily_totals(day) ON DELETE CASCADE,
+    dimension TEXT NOT NULL,
+    distinct_values INTEGER NOT NULL,
+    PRIMARY KEY(day, dimension)
 ) STRICT;
 CREATE TABLE reports (
     id TEXT PRIMARY KEY NOT NULL,

@@ -10,7 +10,10 @@ export class Database {
   }
   prepare(sql) {
     const statement = this.db.prepare(sql);
-    return {bind:(...args) => ({run:() => statement.run(...args)})};
+    return {bind:(...args) => ({
+      run:() => statement.run(...args),
+      all:async () => ({results:statement.all(...args).map(row => ({...row})), success:true}),
+    })};
   }
   async batch(statements) {
     this.db.exec('BEGIN');

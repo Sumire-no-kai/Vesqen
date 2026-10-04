@@ -32,13 +32,9 @@ export function validatePing(value) {
 }
 
 /** Bounds streaming bodies too; Content-Length alone is not a size boundary. */
-export async function readJson(request, maximum, timeoutMs = 5000) {
-  if (request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') throw new InvalidRequest(415);
-  if (request.headers.has('content-encoding')) throw new InvalidRequest(415);
-  const length = request.headers.get('content-length');
-  if (length !== null && (!/^\d+$/.test(length) || Number(length) > maximum)) throw new InvalidRequest(413);
-  if (!request.body) throw new InvalidRequest();
-  const reader = request.body.getReader();
+export async function readBoundedText(body, maximum, timeoutMs = 5000, status = 413) {
+  if (!body) throw new InvalidRequest();
+  const reader = body.getReader();
   let timedOut = false;
   const deadline = setTimeout(() => {
     timedOut = true;
@@ -52,13 +48,28 @@ export async function readJson(request, maximum, timeoutMs = 5000) {
       if (timedOut) throw new InvalidRequest(408);
       if (done) break;
       size += value.byteLength;
-      if (size > maximum) { await reader.cancel(); throw new InvalidRequest(413); }
+      if (size > maximum) { await reader.cancel(); throw new InvalidRequest(status); }
       chunks.push(value);
     }
     const bytes = new Uint8Array(size);
     let offset = 0;
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
-    try { return JSON.parse(new TextDecoder('utf-8', {fatal: true}).decode(bytes)); }
+    try { return new TextDecoder('utf-8', {fatal: true}).decode(bytes); }
     catch { throw new InvalidRequest(); }
   } finally { clearTimeout(deadline); reader.releaseLock(); }
+}
+
+/** A client request: JSON only, never compressed. Returns the parsed value and the exact text. */
+export async function readJsonRequest(request, maximum, timeoutMs = 5000) {
+  if (request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') throw new InvalidRequest(415);
+  if (request.headers.has('content-encoding')) throw new InvalidRequest(415);
+  const length = request.headers.get('content-length');
+  if (length !== null && (!/^\d+$/.test(length) || Number(length) > maximum)) throw new InvalidRequest(413);
+  const text = await readBoundedText(request.body, maximum, timeoutMs);
+  try { return {value: JSON.parse(text), text}; }
+  catch { throw new InvalidRequest(); }
+}
+
+export async function readJson(request, maximum, timeoutMs = 5000) {
+  return (await readJsonRequest(request, maximum, timeoutMs)).value;
 }

@@ -11,16 +11,19 @@ database IDs, service hostnames, API tokens or other credentials.
   invalid types, encoded/compressed bodies and malformed JSON are rejected. No IP,
   device/install ID, cookie, user-agent or incoming authorization is inspected,
   hashed or stored. UTC day comes from the server, not the caller. D1 stores only
-  daily totals and separate version, model, mixer-capability and model/capability
-  counters. Android version, ROM and recent USB input are validated then discarded;
-  they are not retained as raw records or combined into a device fingerprint.
+  daily totals and one counter per field, each in its own dimension: version,
+  model, mixer capability, model × capability, Android version, ROM (per model) and
+  recent USB audio. No raw ping is stored and the fields are never combined into one
+  record. Each dimension accepts at most 500 distinct values per UTC day
+  (`src/limits.js`); later new values count as `other`, so forged pings cannot grow
+  storage without bound. Known values keep counting.
 - `POST /v1/reports`: JSON, at most 256 KiB. Validates the actual #69 schema (PR #83),
   including confidence, time, sources, dependency closure, reason codes and the
   field privacy allowlists. Optional filename is only a basename; no library,
   listening-history, path, Bluetooth-name, MAC or arbitrary exception-text fields.
   The response contains a random **report** receipt ID, not a device/client ID.
-  Only the validated JSON document plus server receipt/expiry times are stored,
-  not HTTP headers, IP or the raw HTTP request. Upload must be invoked only after
+  Only the exact JSON text the user previewed (after validation) plus server
+  receipt/expiry times are stored, not HTTP headers, IP or the raw HTTP request. Upload must be invoked only after
   #69's full preview/user confirmation. This PR does not silently enable its client
   uploader or add a public report-reading API.
 
@@ -34,6 +37,12 @@ report. Change these SQL ceilings via a reviewed migration if growth warrants it
 Attackers can consume shared quotas or forge valid pings; figures are approximate.
 No attempt is made to obtain a stable identity to prevent that.
 
+**Open owner decision (abuse):** because the limits are shared, one client can use
+up a day's report or ping quota for everyone. The usual remedy is a per-IP rate
+limiting rule at Cloudflare's edge (WAF), whose counters Cloudflare holds briefly;
+this Worker would still read and store no IP. It needs a sentence in the privacy
+policy, so it is decided together with the Cloudflare setup.
+
 `daily_active` sums `firstToday`. Sum `first_in_week` across an ISO Monday week and
 `first_in_month` across a UTC calendar month for the corresponding activity
 estimates. Client failures, reinstalls, clock changes and malicious requests can
@@ -44,9 +53,14 @@ undercount or overcount. They are not independently deduplicated unique-user cou
 There is **no new version-file endpoint**. #78 already consumes/generated stable
 and beta manifests at the owner's static website origin. Set
 `UPDATE_MANIFEST_BASE_URL` to that existing HTTPS directory when it is published.
-The Worker fetches only `stable.json` and `beta.json` with a 1-hour cache hint,
-without forwarding any user headers or payload. Valid files are included under
-`updateManifests` in the usage response for the client's existing updater seam.
+The Worker fetches only `stable.json` and `beta.json` with a 1-hour cache hint and
+a 2.5-second timeout, in parallel with the D1 write, without forwarding any user
+headers or payload. Redirects are not followed (`redirect: 'manual'`; Workers does
+not support `'error'`). Fields the static files gain later are ignored, as the
+app's parser does. Valid files are included under `updateManifests` in the usage
+response for the client's existing updater seam. When none is included, the app
+runs its own update check for that day (#84), so an unconfigured relay cannot stop
+automatic updates.
 A failed/unconfigured/oversized source simply yields no manifest and does not
 undo accepted statistics. Each file is capped at 60,000 bytes so the combined
 response stays below the Android 128 KiB bound. The client independently validates
@@ -106,8 +120,12 @@ not established by local tests.
    limit namespace IDs within your account; 1001/1002 are example placeholders.
 5. In that local config set `routes` to
    `[{ "pattern": "YOUR_USAGE_SUBDOMAIN", "custom_domain": true }]` on your zone.
-   Keep `workers_dev` and `preview_urls` false. Configure the existing static update
-   directory if ready. Verify all observability/logging remains off.
+   Keep `workers_dev` and `preview_urls` false. Turn on **Always Use HTTPS** for the
+   domain: the Worker does not reject plain HTTP itself (the app only uses HTTPS).
+   Configure the existing static update directory if ready. Verify all
+   observability/logging remains off. With the 500-value cap per dimension, a day's
+   aggregates stay within a few thousand rows, well inside D1's free tier; reports
+   are at most 100 a day of up to 256 KiB, kept 7 days.
 6. Apply remote migrations explicitly:
    `npx wrangler d1 migrations apply vesqen-usage --remote --config wrangler.local.jsonc`.
 7. Deploy explicitly: `npx wrangler deploy --config wrangler.local.jsonc`.
@@ -126,9 +144,18 @@ when intentionally querying the owner's live database.
 
 ```sh
 npm run query -- daily 2026-10-04
+npm run query -- weekly 2026-09-28        # an ISO week, given by its Monday
+npm run query -- monthly 2026-10
+npm run query -- report-counts
 npm run query -- reports
 npm run query -- report 12345678-1234-1234-1234-123456789abc
+npm run query -- delete-report 12345678-1234-1234-1234-123456789abc
 ```
+
+`weekly` and `monthly` add up `first_in_week` / `first_in_month`, the estimates of
+weekly and monthly active installs. `delete-report` removes one report before its
+expiry, for example on a user's request. Use `--database=NAME` when the D1 database
+is not named `vesqen-usage`.
 
 `reports` lists up to 50 unexpired receipts without documents; `report UUID` reads
 one unexpired document. Treat opted-in filenames/report text as private: do not

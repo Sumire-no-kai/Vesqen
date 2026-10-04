@@ -19,7 +19,7 @@ test('real local Worker and D1 apply migrations accept reports and roll back quo
   assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM reports').first()).n,1);
   await env.DB.prepare('UPDATE daily_totals SET requests=10000').run();
   assert.equal((await worker.fetch('/v1/usage',post(ping()))).status,429);
-  assert.equal((await env.DB.prepare('SELECT SUM(count) AS n FROM daily_dimensions').first()).n,4);
+  assert.equal((await env.DB.prepare('SELECT SUM(count) AS n FROM daily_dimensions').first()).n,7);
   await env.DB.prepare('UPDATE reports SET expires_at=0').run();
   await worker.scheduled({cron:'0 * * * *'});
   assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM reports').first()).n,0);

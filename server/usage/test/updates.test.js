@@ -12,7 +12,18 @@ test('existing static manifests are relayed without request metadata',async()=>{
   });
   assert.deepEqual(Object.keys(result),['stable','beta']);
   assert.deepEqual(calls.map(([url])=>url),['https://updates.example.invalid/updates/stable.json','https://updates.example.invalid/updates/beta.json']);
-  assert.ok(calls.every(([,options])=>options.redirect==='error'&&Object.keys(options.headers).length===1));
+  // Workers fetch rejects redirect:'error'; 'manual' leaves a redirect as a non-200 that is dropped.
+  assert.ok(calls.every(([,options])=>options.redirect==='manual'&&Object.keys(options.headers).length===1));
+});
+test('an upstream body Workers already decoded, later manifest fields and redirects are handled',async()=>{
+  const manifest=channel=>({schemaVersion:1,channel,release:null,generatedBy:'release.py'});
+  // workerd decodes gzip but keeps the Content-Encoding header on the response it hands back.
+  const gzipHeader=await updateManifests('https://example.invalid/updates/',async url=>
+    Response.json(manifest(url.endsWith('/beta.json')?'beta':'stable'),{headers:{'content-encoding':'gzip'}}));
+  assert.deepEqual(Object.keys(gzipHeader),['stable','beta']);
+  const redirected=await updateManifests('https://example.invalid/updates/',async()=>
+    new Response(null,{status:302,headers:{location:'https://elsewhere.invalid/stable.json'}}));
+  assert.deepEqual(redirected,{});
 });
 test('no configured origin or an invalid upstream never creates a new version source',async()=>{
   const fail=()=>{throw Error('must not fetch');};

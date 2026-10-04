@@ -42,6 +42,9 @@
     "kind": "integer",
     "unit": "COUNT"
   },
+  "decoder.input_pcm_encoding": {
+    "kind": "safeText"
+  },
   "decoder.initialization_duration": {
     "kind": "integer",
     "unit": "MILLISECONDS"
