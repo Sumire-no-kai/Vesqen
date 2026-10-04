@@ -46,6 +46,7 @@ object TelemetryMetricCatalog {
     val DECODER_INPUT_MIME = id("decoder.input_mime")
     val DECODER_INPUT_SAMPLE_RATE = id("decoder.input_sample_rate")
     val DECODER_INPUT_CHANNEL_COUNT = id("decoder.input_channel_count")
+    val DECODER_INPUT_PCM_ENCODING = id("decoder.input_pcm_encoding")
     val DECODER_INITIALIZATION_DURATION = id("decoder.initialization_duration")
     val DECODER_SOFTWARE_ONLY = id("decoder.software_only")
     val DECODER_HARDWARE_ACCELERATED = id("decoder.hardware_accelerated")
@@ -163,6 +164,7 @@ object TelemetryMetricCatalog {
         safeText(DECODER_INPUT_MIME, TelemetrySection.DECODER),
         integer(DECODER_INPUT_SAMPLE_RATE, TelemetrySection.DECODER, TelemetryUnit.HERTZ, 1.0),
         integer(DECODER_INPUT_CHANNEL_COUNT, TelemetrySection.DECODER, TelemetryUnit.COUNT, 1.0),
+        safeText(DECODER_INPUT_PCM_ENCODING, TelemetrySection.DECODER),
         integer(DECODER_INITIALIZATION_DURATION, TelemetrySection.DECODER, TelemetryUnit.MILLISECONDS, 0.0),
         flag(DECODER_SOFTWARE_ONLY, TelemetrySection.DECODER),
         flag(DECODER_HARDWARE_ACCELERATED, TelemetrySection.DECODER),
