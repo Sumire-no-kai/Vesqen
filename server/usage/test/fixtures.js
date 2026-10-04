@@ -1,0 +1,3 @@
+export const ping = () => ({schemaVersion:1,appVersion:'1.0.0-beta.2',channel:'github',androidVersion:'16',manufacturer:'Example',model:'Model',romBuild:'Build',bitPerfectMixer:null,recentUsbAudio:false,firstToday:true,firstThisWeek:true,firstThisMonth:true});
+export const report = () => ({schemaVersion:1,generatedAtEpochMs:100,basic:{appVersion:'1.0.0-beta.2',versionCode:10,buildType:'debug',manufacturer:'Example',model:'Model',androidVersion:'16',androidApi:36,romBuild:'Build',redactedValuesAreNull:true}});
+export const request = (body=ping(),path='/v1/usage',headers={}) => new Request(`https://example.invalid${path}`,{method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(body)});

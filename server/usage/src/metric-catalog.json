@@ -1,0 +1,389 @@
+{
+  "source.container": {
+    "kind": "safeText"
+  },
+  "source.codec_mime": {
+    "kind": "safeText"
+  },
+  "source.codec_label": {
+    "kind": "safeText"
+  },
+  "source.sample_rate": {
+    "kind": "integer",
+    "unit": "HERTZ"
+  },
+  "source.bit_depth": {
+    "kind": "integer",
+    "unit": "BITS"
+  },
+  "source.channel_count": {
+    "kind": "integer",
+    "unit": "COUNT"
+  },
+  "source.average_bitrate": {
+    "kind": "integer",
+    "unit": "BITS_PER_SECOND"
+  },
+  "source.file_size": {
+    "kind": "integer",
+    "unit": "BYTES"
+  },
+  "decoder.name": {
+    "kind": "safeText"
+  },
+  "decoder.input_mime": {
+    "kind": "safeText"
+  },
+  "decoder.input_sample_rate": {
+    "kind": "integer",
+    "unit": "HERTZ"
+  },
+  "decoder.input_channel_count": {
+    "kind": "integer",
+    "unit": "COUNT"
+  },
+  "decoder.initialization_duration": {
+    "kind": "integer",
+    "unit": "MILLISECONDS"
+  },
+  "decoder.software_only": {
+    "kind": "flag"
+  },
+  "decoder.hardware_accelerated": {
+    "kind": "flag"
+  },
+  "decoder.is_vendor": {
+    "kind": "flag"
+  },
+  "decoder.path": {
+    "kind": "safeText"
+  },
+  "decoder.output_sample_rate": {
+    "kind": "integer",
+    "unit": "HERTZ"
+  },
+  "decoder.output_encoding": {
+    "kind": "safeText"
+  },
+  "decoder.output_channel_config": {
+    "kind": "safeText"
+  },
+  "decoder.compressed_frame_size": {
+    "kind": "integer",
+    "unit": "BYTES"
+  },
+  "decoder.input_buffer_rate": {
+    "kind": "decimal",
+    "unit": "COUNT_PER_SECOND"
+  },
+  "decoder.output_buffer_rate": {
+    "kind": "decimal",
+    "unit": "COUNT_PER_SECOND"
+  },
+  "decoder.frame_decode_time": {
+    "kind": "decimal",
+    "unit": "MILLISECONDS"
+  },
+  "decoder.format_change_count": {
+    "kind": "integer",
+    "unit": "COUNT"
+  },
+  "decoder.renderer_queued_input_buffers_total": {
+    "kind": "integer",
+    "unit": "COUNT"
+  },
+  "decoder.renderer_rendered_output_buffers_total": {
+    "kind": "integer",
+    "unit": "COUNT"
+  },
+  "decoder.renderer_skipped_output_buffers_total": {
+    "kind": "integer",
+    "unit": "COUNT"
+  },
+  "processing.speed": {
+    "kind": "decimal",
+    "unit": "PERCENT"
+  },
+  "processing.pitch": {
+    "kind": "decimal",
+    "unit": "PERCENT"
+  },
+  "processing.player_volume": {
+    "kind": "decimal",
+    "unit": "PERCENT"
+  },
+  "processing.skip_silence": {
+    "kind": "flag"
+  },
+  "processing.replay_gain_active": {
+    "kind": "flag"
+  },
+  "processing.equalizer_active": {
+    "kind": "flag"
+  },
+  "processing.crossfade_active": {
+    "kind": "flag"
+  },
+  "processing.loudness_active": {
+    "kind": "flag"
+  },
+  "processing.sample_rate_conversion_detected": {
+    "kind": "flag"
+  },
+  "processing.app_dsp_active": {
+    "kind": "flag"
+  },
+  "playback.state": {
+    "kind": "safeText"
+  },
+  "playback.is_playing": {
+    "kind": "flag"
+  },
+  "playback.last_event_position": {
+    "kind": "integer",
+    "unit": "MILLISECONDS"
+  },
+  "playback.position": {
+    "kind": "integer",
+    "unit": "MILLISECONDS"
+  },
+  "playback.duration": {
+    "kind": "integer",
+    "unit": "MILLISECONDS"
+  },
+  "playback.estimated_total_buffered_duration": {
+    "kind": "integer",
+    "unit": "MILLISECONDS"
+  },
+  "playback.current_media_bytes_read": {
+    "kind": "integer",
+    "unit": "BYTES"
+  },
+  "playback.current_media_read_bitrate": {
+    "kind": "decimal",
+    "unit": "BITS_PER_SECOND"
+  },
+  "process.data_source_bytes_transferred_since_start": {
+    "kind": "integer",
+    "unit": "BYTES"
+  },
+  "process.data_source_read_throughput": {
+    "kind": "decimal",
+    "unit": "BITS_PER_SECOND"
+  },
+  "playback.underrun_count": {
+    "kind": "integer",
+    "unit": "COUNT"
+  },
+  "playback.last_underrun_feed_gap": {
+    "kind": "integer",
+    "unit": "MILLISECONDS"
+  },
+  "playback.audio_track_sample_rate": {
+    "kind": "integer",
+    "unit": "HERTZ"
+  },
+  "playback.audio_track_encoding": {
+    "kind": "safeText"
+  },
+  "playback.audio_track_channel_mask": {
+    "kind": "safeText"
+  },
+  "playback.audio_track_buffer_size": {
+    "kind": "integer",
+    "unit": "BYTES"
+  },
+  "playback.pcm_data_rate": {
+    "kind": "decimal",
+    "unit": "BITS_PER_SECOND"
+  },
+  "playback.offload": {
+    "kind": "flag"
+  },
+  "playback.tunneling": {
+    "kind": "flag"
+  },
+  "playback.target_buffer_duration": {
+    "kind": "integer",
+    "unit": "MILLISECONDS"
+  },
+  "playback.prebuffer_target_duration": {
+    "kind": "integer",
+    "unit": "MILLISECONDS"
+  },
+  "playback.last_seek_latency": {
+    "kind": "integer",
+    "unit": "MILLISECONDS"
+  },
+  "playback.last_gapless_transition_gap": {
+    "kind": "integer",
+    "unit": "MILLISECONDS"
+  },
+  "playback.audio_track_timestamp": {
+    "kind": "integer",
+    "unit": "NANOSECONDS"
+  },
+  "playback.clock_deviation": {
+    "kind": "decimal",
+    "unit": "MILLISECONDS"
+  },
+  "playback.last_error_code": {
+    "kind": "safeText"
+  },
+  "process.cpu_time": {
+    "kind": "integer",
+    "unit": "MILLISECONDS"
+  },
+  "process.cpu_percent": {
+    "kind": "decimal",
+    "unit": "PERCENT"
+  },
+  "process.java_heap": {
+    "kind": "integer",
+    "unit": "BYTES"
+  },
+  "process.native_heap": {
+    "kind": "integer",
+    "unit": "BYTES"
+  },
+  "process.pss": {
+    "kind": "integer",
+    "unit": "BYTES"
+  },
+  "process.processor_count": {
+    "kind": "integer",
+    "unit": "COUNT"
+  },
+  "process.playback_thread_cpu_time": {
+    "kind": "integer",
+    "unit": "MILLISECONDS"
+  },
+  "process.gc_count": {
+    "kind": "integer",
+    "unit": "COUNT"
+  },
+  "process.gc_time": {
+    "kind": "integer",
+    "unit": "MILLISECONDS"
+  },
+  "process.cpu_core_state": {
+    "kind": "text"
+  },
+  "process.thermal_status": {
+    "kind": "safeText"
+  },
+  "process.soc_model": {
+    "kind": "text"
+  },
+  "power.battery_current": {
+    "kind": "decimal",
+    "unit": "MILLIAMPERES"
+  },
+  "power.battery_voltage": {
+    "kind": "decimal",
+    "unit": "VOLTS"
+  },
+  "power.battery_temperature": {
+    "kind": "decimal",
+    "unit": "CELSIUS"
+  },
+  "power.device_estimate": {
+    "kind": "decimal",
+    "unit": "MILLIWATTS"
+  },
+  "route.selected_system_name": {
+    "kind": "text"
+  },
+  "route.selected_system_type": {
+    "kind": "safeText"
+  },
+  "route.anticipated_name": {
+    "kind": "text"
+  },
+  "route.anticipated_type": {
+    "kind": "safeText"
+  },
+  "route.connected_types": {
+    "kind": "safeText"
+  },
+  "route.request_format_direct_supported": {
+    "kind": "flag"
+  },
+  "route.request_format_direct_modes": {
+    "kind": "safeText"
+  },
+  "route.anticipated_mixer_profile_count": {
+    "kind": "integer",
+    "unit": "COUNT"
+  },
+  "route.anticipated_preferred_mixer_profile": {
+    "kind": "safeText"
+  },
+  "route.output_declaration": {
+    "kind": "safeText"
+  },
+  "route.external_verification_record": {
+    "kind": "safeText"
+  },
+  "route.external_verification_method": {
+    "kind": "safeText"
+  },
+  "route.external_verification_evidence": {
+    "kind": "text"
+  },
+  "route.external_verification_test_vector": {
+    "kind": "safeText"
+  },
+  "route.audio_track_request_format": {
+    "kind": "safeText"
+  },
+  "route.observed_output_format": {
+    "kind": "safeText"
+  },
+  "route.bluetooth_codec": {
+    "kind": "safeText"
+  },
+  "route.bluetooth_connected_names": {
+    "kind": "text"
+  },
+  "route.bluetooth_connected_types": {
+    "kind": "safeText"
+  },
+  "route.bluetooth_capabilities": {
+    "kind": "safeText"
+  },
+  "route.bluetooth_configuration": {
+    "kind": "safeText"
+  },
+  "route.bluetooth_configured_bitrate": {
+    "kind": "integer",
+    "unit": "BITS_PER_SECOND"
+  },
+  "route.bluetooth_transport_bitrate": {
+    "kind": "decimal",
+    "unit": "BITS_PER_SECOND"
+  },
+  "route.system_music_volume": {
+    "kind": "decimal",
+    "unit": "PERCENT"
+  },
+  "route.system_music_muted": {
+    "kind": "flag"
+  },
+  "route.system_dsp_state": {
+    "kind": "text"
+  },
+  "route.last_strategy_decision": {
+    "kind": "safeText"
+  },
+  "usb.host_supported": {
+    "kind": "flag"
+  },
+  "usb.audio_device_count": {
+    "kind": "integer",
+    "unit": "COUNT"
+  },
+  "usb.device_inventory": {
+    "kind": "usbInventory"
+  }
+}
