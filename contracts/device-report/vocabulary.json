@@ -1,0 +1,926 @@
+{
+  "schemaVersion": 1,
+  "limits": {
+    "maxEvents": 100,
+    "maxAgeMs": 604800000
+  },
+  "enums": {
+    "reportErrorKind": [
+      "PLAYBACK",
+      "STRICT_OUTPUT",
+      "PROCESS_EXIT"
+    ],
+    "errorFormatSource": [
+      "LIBRARY_METADATA",
+      "STRICT_OUTPUT_REQUEST"
+    ],
+    "errorHistoryAvailability": [
+      "AVAILABLE",
+      "STORAGE_UNAVAILABLE",
+      "QUEUE_OVERFLOW",
+      "JOURNAL_RESET"
+    ],
+    "exitHistoryAvailability": [
+      "AVAILABLE",
+      "UNSUPPORTED_ANDROID_VERSION",
+      "PLATFORM_UNAVAILABLE"
+    ],
+    "usbOutputFailure": [
+      "UNSUPPORTED_ANDROID_VERSION",
+      "USB_HOST_UNAVAILABLE",
+      "MODIFY_AUDIO_SETTINGS_DENIED",
+      "NO_USB_AUDIO_DEVICE",
+      "SOURCE_FORMAT_UNKNOWN",
+      "SOURCE_FORMAT_UNSUPPORTED",
+      "MIXER_QUERY_FAILED",
+      "NO_MATCHING_MIXER_ATTRIBUTE",
+      "MIXER_REQUEST_REJECTED",
+      "MIXER_READBACK_MISMATCH",
+      "MIXER_CLEAR_FAILED",
+      "AUDIO_TRACK_FORMAT_MISMATCH",
+      "PREFERRED_DEVICE_REJECTED",
+      "ROUTE_UNAVAILABLE",
+      "ROUTE_MISMATCH",
+      "DEVICE_DISCONNECTED",
+      "PROCESSING_NOT_NEUTRAL",
+      "SERVICE_STOPPED",
+      "PLATFORM_ERROR"
+    ],
+    "usbOutputFailureOrigin": [
+      "SERVICE_START",
+      "QUEUE_RESTORE",
+      "USER_PLAYBACK",
+      "USER_MODE_CHANGE",
+      "TRACK_TRANSITION",
+      "ROUTE_CHANGE",
+      "PROCESSING_CHANGE",
+      "SERVICE_STOP"
+    ],
+    "telemetryUnavailableReason": [
+      "NO_ACTIVE_PLAYBACK",
+      "NOT_SAMPLED",
+      "NOT_EXPOSED_BY_PLATFORM",
+      "UNSUPPORTED_ANDROID_VERSION",
+      "UNSUPPORTED_DEVICE",
+      "PERMISSION_NOT_GRANTED",
+      "WARMING_UP",
+      "SOURCE_DID_NOT_REPORT",
+      "NOT_APPLICABLE",
+      "TEMPORARILY_UNAVAILABLE",
+      "UNKNOWN"
+    ],
+    "telemetryConfidence": [
+      "MEASURED",
+      "DERIVED",
+      "ESTIMATED",
+      "UNAVAILABLE"
+    ],
+    "telemetryUnit": [
+      "BITS",
+      "BYTES",
+      "BYTES_PER_SECOND",
+      "BITS_PER_SECOND",
+      "HERTZ",
+      "MILLISECONDS",
+      "NANOSECONDS",
+      "PERCENT",
+      "COUNT",
+      "COUNT_PER_SECOND",
+      "CELSIUS",
+      "VOLTS",
+      "MILLIAMPERES",
+      "MILLIWATTS"
+    ]
+  },
+  "text": {
+    "containers": [
+      "adts",
+      "aiff",
+      "flac",
+      "mp4",
+      "mpeg_audio",
+      "ogg",
+      "wav",
+      "wave"
+    ],
+    "mimes": [
+      "audio/aac",
+      "audio/ac3",
+      "audio/ac4",
+      "audio/aiff",
+      "audio/alac",
+      "audio/eac3",
+      "audio/eac3-joc",
+      "audio/flac",
+      "audio/mp4",
+      "audio/mp4a-latm",
+      "audio/mpeg",
+      "audio/mpeg-L1",
+      "audio/mpeg-L2",
+      "audio/ogg",
+      "audio/opus",
+      "audio/raw",
+      "audio/true-hd",
+      "audio/vorbis",
+      "audio/wav",
+      "audio/x-aiff",
+      "audio/x-wav"
+    ],
+    "codecLabels": [
+      "AAC",
+      "AIFF",
+      "ALAC",
+      "FLAC",
+      "MP3",
+      "Ogg Vorbis",
+      "Opus",
+      "PCM",
+      "WAV"
+    ],
+    "encodings": [
+      "ac3",
+      "dts",
+      "dts-hd",
+      "e-ac3",
+      "pcm-16",
+      "pcm-24",
+      "pcm-32",
+      "pcm-8",
+      "pcm-float"
+    ],
+    "encodingPattern": "encoding-[0-9]{1,10}",
+    "platformEncodings": [
+      "ac3",
+      "dts",
+      "dts_hd",
+      "e_ac3",
+      "pcm_16",
+      "pcm_24",
+      "pcm_32",
+      "pcm_8",
+      "pcm_float"
+    ],
+    "platformEncodingPattern": "encoding_[0-9]{1,10}",
+    "routeTypes": [
+      "ble_broadcast",
+      "ble_headset",
+      "ble_speaker",
+      "bluetooth",
+      "bluetooth_a2dp",
+      "bluetooth_sco",
+      "built_in_earpiece",
+      "built_in_speaker",
+      "built_in_speaker_safe",
+      "bus",
+      "dock",
+      "fm",
+      "hdmi",
+      "hdmi_arc",
+      "hdmi_earc",
+      "hearing_aid",
+      "ip",
+      "line_analog",
+      "line_digital",
+      "other",
+      "phone_speaker",
+      "remote_submix",
+      "unknown",
+      "usb_accessory",
+      "usb_device",
+      "usb_headset",
+      "wired_headphones",
+      "wired_headset",
+      "wired_or_usb"
+    ],
+    "outputDeclarations": [
+      "BIT PERFECT ACTIVE",
+      "BIT PERFECT AVAILABLE",
+      "BIT PERFECT FAILED",
+      "BIT PERFECT REQUESTED",
+      "BIT PERFECT VERIFIED",
+      "SYSTEM MIXED"
+    ],
+    "directModes": [
+      "bitstream",
+      "none",
+      "offload",
+      "offload_gapless"
+    ],
+    "mixerProfileTokens": [
+      "bit_perfect_capability",
+      "default"
+    ],
+    "playbackStates": [
+      "buffering",
+      "ended",
+      "idle",
+      "ready"
+    ],
+    "sources": [
+      "android.audio_route",
+      "android.battery",
+      "android.build",
+      "android.direct_playback_support",
+      "android.media_codec",
+      "android.mixer_attributes",
+      "android.power",
+      "android.process",
+      "android.runtime",
+      "android.system_media_route",
+      "android.usb_public_api",
+      "library.metadata",
+      "media3.analytics",
+      "media3.audio_track",
+      "media3.current_media_data_source",
+      "media3.data_source",
+      "media3.decoder_counters",
+      "media3.player",
+      "vesqen.configuration",
+      "vesqen.external_output_verification",
+      "vesqen.output_coordinator"
+    ],
+    "calculations": [
+      "audio_track.request_format_pcm_data_rate",
+      "decoder.path_from_public_runtime_facts",
+      "library.cached_metadata",
+      "library.filename_extension",
+      "media3.position_from_last_event",
+      "power.whole_device_current_times_voltage",
+      "processing.compare_decoder_input_and_audio_track_rates",
+      "rate.current_media_bytes_per_window",
+      "rate.data_source_bytes_per_window",
+      "rate.decoder_input_buffers_per_window",
+      "rate.decoder_output_buffers_per_window",
+      "rate.process_cpu_one_core"
+    ],
+    "operandNames": [
+      "bytes.delta",
+      "counter.delta",
+      "cpu.delta_ms",
+      "window.elapsed_ms",
+      "window.seconds"
+    ]
+  },
+  "metrics": [
+    {
+      "id": "decoder.compressed_frame_size",
+      "section": "DECODER",
+      "valueKind": "INTEGER",
+      "unit": "BYTES"
+    },
+    {
+      "id": "decoder.format_change_count",
+      "section": "DECODER",
+      "valueKind": "INTEGER",
+      "unit": "COUNT"
+    },
+    {
+      "id": "decoder.frame_decode_time",
+      "section": "DECODER",
+      "valueKind": "DECIMAL",
+      "unit": "MILLISECONDS"
+    },
+    {
+      "id": "decoder.hardware_accelerated",
+      "section": "DECODER",
+      "valueKind": "FLAG",
+      "unit": null
+    },
+    {
+      "id": "decoder.initialization_duration",
+      "section": "DECODER",
+      "valueKind": "INTEGER",
+      "unit": "MILLISECONDS"
+    },
+    {
+      "id": "decoder.input_buffer_rate",
+      "section": "DECODER",
+      "valueKind": "DECIMAL",
+      "unit": "COUNT_PER_SECOND"
+    },
+    {
+      "id": "decoder.input_channel_count",
+      "section": "DECODER",
+      "valueKind": "INTEGER",
+      "unit": "COUNT"
+    },
+    {
+      "id": "decoder.input_mime",
+      "section": "DECODER",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "decoder.input_sample_rate",
+      "section": "DECODER",
+      "valueKind": "INTEGER",
+      "unit": "HERTZ"
+    },
+    {
+      "id": "decoder.is_vendor",
+      "section": "DECODER",
+      "valueKind": "FLAG",
+      "unit": null
+    },
+    {
+      "id": "decoder.name",
+      "section": "DECODER",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "decoder.output_buffer_rate",
+      "section": "DECODER",
+      "valueKind": "DECIMAL",
+      "unit": "COUNT_PER_SECOND"
+    },
+    {
+      "id": "decoder.output_channel_config",
+      "section": "DECODER",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "decoder.output_encoding",
+      "section": "DECODER",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "decoder.output_sample_rate",
+      "section": "DECODER",
+      "valueKind": "INTEGER",
+      "unit": "HERTZ"
+    },
+    {
+      "id": "decoder.path",
+      "section": "DECODER",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "decoder.renderer_queued_input_buffers_total",
+      "section": "DECODER",
+      "valueKind": "INTEGER",
+      "unit": "COUNT"
+    },
+    {
+      "id": "decoder.renderer_rendered_output_buffers_total",
+      "section": "DECODER",
+      "valueKind": "INTEGER",
+      "unit": "COUNT"
+    },
+    {
+      "id": "decoder.renderer_skipped_output_buffers_total",
+      "section": "DECODER",
+      "valueKind": "INTEGER",
+      "unit": "COUNT"
+    },
+    {
+      "id": "decoder.software_only",
+      "section": "DECODER",
+      "valueKind": "FLAG",
+      "unit": null
+    },
+    {
+      "id": "playback.audio_track_buffer_size",
+      "section": "PLAYBACK",
+      "valueKind": "INTEGER",
+      "unit": "BYTES"
+    },
+    {
+      "id": "playback.audio_track_channel_mask",
+      "section": "PLAYBACK",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "playback.audio_track_encoding",
+      "section": "PLAYBACK",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "playback.audio_track_sample_rate",
+      "section": "PLAYBACK",
+      "valueKind": "INTEGER",
+      "unit": "HERTZ"
+    },
+    {
+      "id": "playback.audio_track_timestamp",
+      "section": "PLAYBACK",
+      "valueKind": "INTEGER",
+      "unit": "NANOSECONDS"
+    },
+    {
+      "id": "playback.clock_deviation",
+      "section": "PLAYBACK",
+      "valueKind": "DECIMAL",
+      "unit": "MILLISECONDS"
+    },
+    {
+      "id": "playback.current_media_bytes_read",
+      "section": "PLAYBACK",
+      "valueKind": "INTEGER",
+      "unit": "BYTES"
+    },
+    {
+      "id": "playback.current_media_read_bitrate",
+      "section": "PLAYBACK",
+      "valueKind": "DECIMAL",
+      "unit": "BITS_PER_SECOND"
+    },
+    {
+      "id": "playback.duration",
+      "section": "PLAYBACK",
+      "valueKind": "INTEGER",
+      "unit": "MILLISECONDS"
+    },
+    {
+      "id": "playback.estimated_total_buffered_duration",
+      "section": "PLAYBACK",
+      "valueKind": "INTEGER",
+      "unit": "MILLISECONDS"
+    },
+    {
+      "id": "playback.is_playing",
+      "section": "PLAYBACK",
+      "valueKind": "FLAG",
+      "unit": null
+    },
+    {
+      "id": "playback.last_error_code",
+      "section": "PLAYBACK",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "playback.last_event_position",
+      "section": "PLAYBACK",
+      "valueKind": "INTEGER",
+      "unit": "MILLISECONDS"
+    },
+    {
+      "id": "playback.last_gapless_transition_gap",
+      "section": "PLAYBACK",
+      "valueKind": "INTEGER",
+      "unit": "MILLISECONDS"
+    },
+    {
+      "id": "playback.last_seek_latency",
+      "section": "PLAYBACK",
+      "valueKind": "INTEGER",
+      "unit": "MILLISECONDS"
+    },
+    {
+      "id": "playback.last_underrun_feed_gap",
+      "section": "PLAYBACK",
+      "valueKind": "INTEGER",
+      "unit": "MILLISECONDS"
+    },
+    {
+      "id": "playback.offload",
+      "section": "PLAYBACK",
+      "valueKind": "FLAG",
+      "unit": null
+    },
+    {
+      "id": "playback.pcm_data_rate",
+      "section": "PLAYBACK",
+      "valueKind": "DECIMAL",
+      "unit": "BITS_PER_SECOND"
+    },
+    {
+      "id": "playback.position",
+      "section": "PLAYBACK",
+      "valueKind": "INTEGER",
+      "unit": "MILLISECONDS"
+    },
+    {
+      "id": "playback.prebuffer_target_duration",
+      "section": "PLAYBACK",
+      "valueKind": "INTEGER",
+      "unit": "MILLISECONDS"
+    },
+    {
+      "id": "playback.state",
+      "section": "PLAYBACK",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "playback.target_buffer_duration",
+      "section": "PLAYBACK",
+      "valueKind": "INTEGER",
+      "unit": "MILLISECONDS"
+    },
+    {
+      "id": "playback.tunneling",
+      "section": "PLAYBACK",
+      "valueKind": "FLAG",
+      "unit": null
+    },
+    {
+      "id": "playback.underrun_count",
+      "section": "PLAYBACK",
+      "valueKind": "INTEGER",
+      "unit": "COUNT"
+    },
+    {
+      "id": "power.battery_current",
+      "section": "POWER",
+      "valueKind": "DECIMAL",
+      "unit": "MILLIAMPERES"
+    },
+    {
+      "id": "power.battery_temperature",
+      "section": "POWER",
+      "valueKind": "DECIMAL",
+      "unit": "CELSIUS"
+    },
+    {
+      "id": "power.battery_voltage",
+      "section": "POWER",
+      "valueKind": "DECIMAL",
+      "unit": "VOLTS"
+    },
+    {
+      "id": "power.device_estimate",
+      "section": "POWER",
+      "valueKind": "DECIMAL",
+      "unit": "MILLIWATTS"
+    },
+    {
+      "id": "process.cpu_core_state",
+      "section": "PROCESS",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "process.cpu_percent",
+      "section": "PROCESS",
+      "valueKind": "DECIMAL",
+      "unit": "PERCENT"
+    },
+    {
+      "id": "process.cpu_time",
+      "section": "PROCESS",
+      "valueKind": "INTEGER",
+      "unit": "MILLISECONDS"
+    },
+    {
+      "id": "process.data_source_bytes_transferred_since_start",
+      "section": "PROCESS",
+      "valueKind": "INTEGER",
+      "unit": "BYTES"
+    },
+    {
+      "id": "process.data_source_read_throughput",
+      "section": "PROCESS",
+      "valueKind": "DECIMAL",
+      "unit": "BITS_PER_SECOND"
+    },
+    {
+      "id": "process.gc_count",
+      "section": "PROCESS",
+      "valueKind": "INTEGER",
+      "unit": "COUNT"
+    },
+    {
+      "id": "process.gc_time",
+      "section": "PROCESS",
+      "valueKind": "INTEGER",
+      "unit": "MILLISECONDS"
+    },
+    {
+      "id": "process.java_heap",
+      "section": "PROCESS",
+      "valueKind": "INTEGER",
+      "unit": "BYTES"
+    },
+    {
+      "id": "process.native_heap",
+      "section": "PROCESS",
+      "valueKind": "INTEGER",
+      "unit": "BYTES"
+    },
+    {
+      "id": "process.playback_thread_cpu_time",
+      "section": "PROCESS",
+      "valueKind": "INTEGER",
+      "unit": "MILLISECONDS"
+    },
+    {
+      "id": "process.processor_count",
+      "section": "PROCESS",
+      "valueKind": "INTEGER",
+      "unit": "COUNT"
+    },
+    {
+      "id": "process.pss",
+      "section": "PROCESS",
+      "valueKind": "INTEGER",
+      "unit": "BYTES"
+    },
+    {
+      "id": "process.soc_model",
+      "section": "PROCESS",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "process.thermal_status",
+      "section": "PROCESS",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "processing.app_dsp_active",
+      "section": "PROCESSING",
+      "valueKind": "FLAG",
+      "unit": null
+    },
+    {
+      "id": "processing.crossfade_active",
+      "section": "PROCESSING",
+      "valueKind": "FLAG",
+      "unit": null
+    },
+    {
+      "id": "processing.equalizer_active",
+      "section": "PROCESSING",
+      "valueKind": "FLAG",
+      "unit": null
+    },
+    {
+      "id": "processing.loudness_active",
+      "section": "PROCESSING",
+      "valueKind": "FLAG",
+      "unit": null
+    },
+    {
+      "id": "processing.pitch",
+      "section": "PROCESSING",
+      "valueKind": "DECIMAL",
+      "unit": "PERCENT"
+    },
+    {
+      "id": "processing.player_volume",
+      "section": "PROCESSING",
+      "valueKind": "DECIMAL",
+      "unit": "PERCENT"
+    },
+    {
+      "id": "processing.replay_gain_active",
+      "section": "PROCESSING",
+      "valueKind": "FLAG",
+      "unit": null
+    },
+    {
+      "id": "processing.sample_rate_conversion_detected",
+      "section": "PROCESSING",
+      "valueKind": "FLAG",
+      "unit": null
+    },
+    {
+      "id": "processing.skip_silence",
+      "section": "PROCESSING",
+      "valueKind": "FLAG",
+      "unit": null
+    },
+    {
+      "id": "processing.speed",
+      "section": "PROCESSING",
+      "valueKind": "DECIMAL",
+      "unit": "PERCENT"
+    },
+    {
+      "id": "route.anticipated_mixer_profile_count",
+      "section": "ROUTE",
+      "valueKind": "INTEGER",
+      "unit": "COUNT"
+    },
+    {
+      "id": "route.anticipated_name",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.anticipated_preferred_mixer_profile",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.anticipated_type",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.audio_track_request_format",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.bluetooth_capabilities",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.bluetooth_codec",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.bluetooth_configuration",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.bluetooth_configured_bitrate",
+      "section": "ROUTE",
+      "valueKind": "INTEGER",
+      "unit": "BITS_PER_SECOND"
+    },
+    {
+      "id": "route.bluetooth_connected_names",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.bluetooth_connected_types",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.bluetooth_transport_bitrate",
+      "section": "ROUTE",
+      "valueKind": "DECIMAL",
+      "unit": "BITS_PER_SECOND"
+    },
+    {
+      "id": "route.connected_types",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.external_verification_evidence",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.external_verification_method",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.external_verification_record",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.external_verification_test_vector",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.last_strategy_decision",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.observed_output_format",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.output_declaration",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.request_format_direct_modes",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.request_format_direct_supported",
+      "section": "ROUTE",
+      "valueKind": "FLAG",
+      "unit": null
+    },
+    {
+      "id": "route.selected_system_name",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.selected_system_type",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.system_dsp_state",
+      "section": "ROUTE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "route.system_music_muted",
+      "section": "ROUTE",
+      "valueKind": "FLAG",
+      "unit": null
+    },
+    {
+      "id": "route.system_music_volume",
+      "section": "ROUTE",
+      "valueKind": "DECIMAL",
+      "unit": "PERCENT"
+    },
+    {
+      "id": "source.average_bitrate",
+      "section": "SOURCE",
+      "valueKind": "INTEGER",
+      "unit": "BITS_PER_SECOND"
+    },
+    {
+      "id": "source.bit_depth",
+      "section": "SOURCE",
+      "valueKind": "INTEGER",
+      "unit": "BITS"
+    },
+    {
+      "id": "source.channel_count",
+      "section": "SOURCE",
+      "valueKind": "INTEGER",
+      "unit": "COUNT"
+    },
+    {
+      "id": "source.codec_label",
+      "section": "SOURCE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "source.codec_mime",
+      "section": "SOURCE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "source.container",
+      "section": "SOURCE",
+      "valueKind": "TEXT",
+      "unit": null
+    },
+    {
+      "id": "source.file_size",
+      "section": "SOURCE",
+      "valueKind": "INTEGER",
+      "unit": "BYTES"
+    },
+    {
+      "id": "source.sample_rate",
+      "section": "SOURCE",
+      "valueKind": "INTEGER",
+      "unit": "HERTZ"
+    },
+    {
+      "id": "usb.audio_device_count",
+      "section": "USB",
+      "valueKind": "INTEGER",
+      "unit": "COUNT"
+    },
+    {
+      "id": "usb.device_inventory",
+      "section": "USB",
+      "valueKind": "USB_INVENTORY",
+      "unit": null
+    },
+    {
+      "id": "usb.host_supported",
+      "section": "USB",
+      "valueKind": "FLAG",
+      "unit": null
+    }
+  ]
+}

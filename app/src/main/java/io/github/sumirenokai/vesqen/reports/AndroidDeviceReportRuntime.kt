@@ -3,7 +3,6 @@ package io.github.sumirenokai.vesqen.reports
 import android.app.ActivityManager
 import android.app.ApplicationExitInfo
 import android.content.Context
-import android.database.SQLException
 import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
@@ -23,6 +22,9 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricSelection
 import io.github.sumirenokai.vesqen.telemetry.TelemetryObservation
 import io.github.sumirenokai.vesqen.telemetry.TelemetryUnavailableReason
+import io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot
+import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
+import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,7 +44,8 @@ internal class AndroidDeviceReportRuntime(
             ExitHistoryAvailability.UNSUPPORTED_ANDROID_VERSION to emptyList() },
     )
     private val strictListener: (UsbOutputStatus) -> Unit = { status ->
-        if (status.phase == UsbOutputPhase.FAILED) {
+        // A strict session ends with SERVICE_STOPPED whenever playback stops; that is not an error.
+        if (status.phase == UsbOutputPhase.FAILED && status.failure != UsbOutputFailure.SERVICE_STOPPED) {
             // This callback may run on the audio thread. Use the failure's own immutable source
             // format, never read a possibly different current MediaItem later on the main thread.
             val format = status.sourceFormat?.let {
@@ -67,12 +70,21 @@ internal class AndroidDeviceReportRuntime(
         scope = CoroutineScope(scope.coroutineContext + Dispatchers.IO),
         capture = { options ->
             val evidence = if (options.audioCapabilities || options.chainEvidence) {
+                // Rates need two samples. Wait for a warmed-up snapshot, keeping the latest one if
+                // the window runs out, rather than exporting every rate as WARMING_UP.
+                var latest: TelemetrySnapshot? = null
                 withTimeoutOrNull(5_000) {
                     telemetry().observe(TelemetryObservation(selection = TelemetryMetricSelection.Explicit(
                         if (options.chainEvidence) TelemetryMetricCatalog.allIds else
                             TelemetryMetricCatalog.allIds.filterTo(linkedSetOf()) { it.value.startsWith("route.") || it.value.startsWith("usb.") },
-                    ))).first()
+                    ))).first { snapshot ->
+                        latest = snapshot
+                        snapshot.metrics.none {
+                            (it.evidence as? TelemetryEvidence.Unavailable)?.reason == TelemetryUnavailableReason.WARMING_UP
+                        }
+                    }
                 }
+                latest
             } else null
             DeviceReportData(
                 basic = DeviceReportBasic(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.BUILD_TYPE,
@@ -111,9 +123,11 @@ private fun readDisplayName(context: Context, uri: Uri): String? = try {
         }
         else -> null
     }
-} catch (_: SecurityException) { null }
-catch (_: IllegalArgumentException) { null }
-catch (_: SQLException) { null }
+} catch (_: RuntimeException) {
+    // The name is optional and the provider sits across Binder; any provider failure (security,
+    // SQL, state or argument errors) leaves the event recorded without a file name.
+    null
+}
 
 @RequiresApi(30)
 private fun historicalExits(context: Context): Pair<ExitHistoryAvailability, List<ReportErrorEvent>> = try {
@@ -123,6 +137,12 @@ private fun historicalExits(context: Context): Pair<ExitHistoryAvailability, Lis
             ApplicationExitInfo.REASON_CRASH, ApplicationExitInfo.REASON_CRASH_NATIVE, ApplicationExitInfo.REASON_ANR,
             ApplicationExitInfo.REASON_INITIALIZATION_FAILURE, ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE,
             ApplicationExitInfo.REASON_DEPENDENCY_DIED) }
+        // Killing a cached background process is normal memory management; only kills while the
+        // app was visible or playing in its foreground service count as errors.
+        .filterNot {
+            it.reason in setOf(ApplicationExitInfo.REASON_SIGNALED, ApplicationExitInfo.REASON_LOW_MEMORY) &&
+                it.importance > ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND_SERVICE
+        }
         .map { ReportErrorEvent(ReportErrorKind.PROCESS_EXIT, it.timestamp, platformCode = it.reason) }
     ExitHistoryAvailability.AVAILABLE to entries
 } catch (_: RuntimeException) {

@@ -14,6 +14,10 @@ internal class ErrorHistoryStore(private val directory: File) {
     private val file = File(directory, "errors.bin")
     private val pending = File(directory, "errors.next")
 
+    /** Set once an unreadable journal (truncated, or written by another version) was discarded. */
+    @Volatile var discardedUnreadableJournal = false
+        private set
+
     @Synchronized
     fun append(event: ReportErrorEvent, nowEpochMs: Long) {
         val entries = load()
@@ -41,7 +45,20 @@ internal class ErrorHistoryStore(private val directory: File) {
             .sortedBy { it.occurredAtEpochMs }.takeLast(MAX_EVENTS)
     }
 
-    private fun load(): List<ReportErrorEvent> {
+    /**
+     * The journal is a bounded cache of recent errors. One that cannot be decoded is dropped so the
+     * history keeps working; the reset is reported instead of failing every later read and write.
+     */
+    private fun load(): List<ReportErrorEvent> = try {
+        decode()
+    } catch (unreadable: IOException) {
+        if (unreadable is java.nio.file.FileSystemException) throw unreadable
+        Files.deleteIfExists(file.toPath())
+        discardedUnreadableJournal = true
+        emptyList()
+    }
+
+    private fun decode(): List<ReportErrorEvent> {
         if (!file.exists()) return emptyList()
         if (file.length() > MAX_FILE_BYTES) throw IOException("Error journal exceeds its size limit")
         try {
@@ -77,7 +94,8 @@ internal class ErrorHistoryStore(private val directory: File) {
 
     private fun save(entries: List<ReportErrorEvent>) {
         Files.createDirectories(directory.toPath())
-        DataOutputStream(pending.outputStream().buffered()).use { output ->
+        val stream = pending.outputStream()
+        DataOutputStream(stream.buffered()).use { output ->
             output.writeInt(1)
             output.writeInt(entries.size)
             entries.forEach { event ->
@@ -98,6 +116,9 @@ internal class ErrorHistoryStore(private val directory: File) {
                 }
                 output.writeUTF(event.fileName.orEmpty())
             }
+            output.flush()
+            // Durable before the rename, so a power loss cannot leave a truncated journal behind.
+            stream.fd.sync()
         }
         if (pending.length() > MAX_FILE_BYTES) throw IOException("Error journal exceeds its size limit")
         Files.move(pending.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)

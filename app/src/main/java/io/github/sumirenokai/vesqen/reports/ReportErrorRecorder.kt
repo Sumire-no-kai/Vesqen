@@ -27,23 +27,34 @@ internal class ReportErrorRecorder(
         scope.launch(Dispatchers.IO) {
             val (status, events) = exits()
             exitAvailability = status
-            try {
+            storage {
                 store.read(clock())
                 events.forEach { store.append(it, clock()) }
-            } catch (_: IOException) { availability.set(ErrorHistoryAvailability.STORAGE_UNAVAILABLE) }
+            }
             for (command in queue) {
                 when (command) {
-                    is Command.Append -> try {
+                    is Command.Append -> storage {
                         store.append(command.event.copy(fileName = command.name?.invoke() ?: command.event.fileName), clock())
-                    } catch (_: IOException) { availability.set(ErrorHistoryAvailability.STORAGE_UNAVAILABLE) }
+                    }
                     is Command.Read -> {
-                        val retained = try { store.read(clock()) }
-                        catch (_: IOException) { availability.set(ErrorHistoryAvailability.STORAGE_UNAVAILABLE); emptyList() }
+                        val retained = storage { store.read(clock()) } ?: emptyList()
                         command.result.complete(ErrorHistorySnapshot(retained, availability.get(), exitAvailability))
                     }
                 }
             }
         }
+    }
+
+    private inline fun <T> storage(block: () -> T): T? = try {
+        block().also {
+            availability.compareAndSet(ErrorHistoryAvailability.STORAGE_UNAVAILABLE, ErrorHistoryAvailability.AVAILABLE)
+            if (store.discardedUnreadableJournal) {
+                availability.compareAndSet(ErrorHistoryAvailability.AVAILABLE, ErrorHistoryAvailability.JOURNAL_RESET)
+            }
+        }
+    } catch (_: IOException) {
+        availability.set(ErrorHistoryAvailability.STORAGE_UNAVAILABLE)
+        null
     }
 
     fun record(event: ReportErrorEvent, resolveFileName: (() -> String?)? = null) {

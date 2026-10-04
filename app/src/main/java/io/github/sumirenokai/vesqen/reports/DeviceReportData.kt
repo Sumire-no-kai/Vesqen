@@ -38,7 +38,11 @@ internal data class ReportErrorEvent(
     }
 }
 
-internal enum class ErrorHistoryAvailability { AVAILABLE, STORAGE_UNAVAILABLE, QUEUE_OVERFLOW }
+/**
+ * QUEUE_OVERFLOW and JOURNAL_RESET describe this process run (events were dropped, or an unreadable
+ * journal was discarded); STORAGE_UNAVAILABLE clears once storage works again.
+ */
+internal enum class ErrorHistoryAvailability { AVAILABLE, STORAGE_UNAVAILABLE, QUEUE_OVERFLOW, JOURNAL_RESET }
 internal enum class ExitHistoryAvailability { AVAILABLE, UNSUPPORTED_ANDROID_VERSION, PLATFORM_UNAVAILABLE }
 
 internal data class ErrorHistorySnapshot(

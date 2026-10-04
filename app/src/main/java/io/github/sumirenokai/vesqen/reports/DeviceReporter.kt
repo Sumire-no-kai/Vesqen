@@ -30,6 +30,8 @@ sealed interface DeviceReportState {
     data object Generating : DeviceReportState
     data class Preview(val report: DeviceReportArtifact) : DeviceReportState
     data class Sending(val report: DeviceReportArtifact, val delivery: DeviceReportDelivery) : DeviceReportState
+    /** The share sheet opened or the upload was accepted; the same report can be sent again. */
+    data class Sent(val report: DeviceReportArtifact, val delivery: DeviceReportDelivery) : DeviceReportState
     data class Failed(val reason: DeviceReportFailure, val report: DeviceReportArtifact? = null) : DeviceReportState
 }
 data class DeviceReportSnapshot(

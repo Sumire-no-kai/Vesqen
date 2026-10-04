@@ -67,14 +67,15 @@ class ErrorHistoryStoreTest {
         assertFalse(File(directory, "errors.bin").readBytes().toString(Charsets.ISO_8859_1).contains("private-folder"))
     }
 
-    @Test fun `corrupt storage is explicit and never silently reset`() {
+    @Test fun `an unreadable journal is discarded and reported, and history keeps working`() {
         val directory = temporary.newFolder()
         val file = File(directory, "errors.bin")
         file.writeText("not a journal")
         val store = ErrorHistoryStore(directory)
-        assertThrows(IOException::class.java) { store.read(200) }
-        assertThrows(IOException::class.java) { store.append(error(), 200) }
-        assertEquals("not a journal", file.readText())
+        assertTrue(store.read(200).isEmpty())
+        assertTrue(store.discardedUnreadableJournal)
+        store.append(error(), 200)
+        assertEquals(1, store.read(200).size)
     }
 
     @Test fun `recorder flushes queued errors and exposes historical query availability`() = runBlocking {
@@ -107,12 +108,26 @@ class ErrorHistoryStoreTest {
         } finally { release.countDown(); scope.cancel() }
     }
 
-    @Test fun `recorder reports storage failure without breaking playback caller`() = runBlocking {
+    @Test fun `recorder reports a discarded journal and keeps recording`() = runBlocking {
         val directory = temporary.newFolder()
         File(directory, "errors.bin").writeText("corrupt")
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         try {
             val recorder = ReportErrorRecorder(scope, ErrorHistoryStore(directory), { 200 }) { ExitHistoryAvailability.AVAILABLE to emptyList() }
+            recorder.record(error())
+            val snapshot = withTimeout(5000) { recorder.snapshot() }
+            assertEquals(ErrorHistoryAvailability.JOURNAL_RESET, snapshot.availability)
+            assertEquals(1, snapshot.events.size)
+        } finally { scope.cancel() }
+    }
+
+    @Test fun `recorder reports storage failure without breaking playback caller`() = runBlocking {
+        val directory = temporary.newFolder()
+        // A regular file where the journal directory should be: every write fails.
+        val blocked = File(directory, "journal").apply { writeText("not a directory") }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        try {
+            val recorder = ReportErrorRecorder(scope, ErrorHistoryStore(blocked), { 200 }) { ExitHistoryAvailability.AVAILABLE to emptyList() }
             recorder.record(error())
             val snapshot = withTimeout(5000) { recorder.snapshot() }
             assertEquals(ErrorHistoryAvailability.STORAGE_UNAVAILABLE, snapshot.availability)

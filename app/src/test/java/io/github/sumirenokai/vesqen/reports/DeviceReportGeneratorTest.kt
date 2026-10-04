@@ -78,9 +78,25 @@ class DeviceReportGeneratorTest {
             assertNull(DeviceReportPrivacy.fileName(it))
         }
         val data = reportData().copy(telemetry = TelemetrySnapshot(200, metrics = listOf(
-            textMetric(Metrics.ROUTE_SELECTED_SYSTEM_NAME, TelemetrySection.ROUTE, "Secret Headphones"),
+            textMetric(Metrics.ROUTE_BLUETOOTH_CONNECTED_NAMES, TelemetrySection.ROUTE, "bluetooth_a2dp: Secret Headphones"),
         )), history = ErrorHistorySnapshot(listOf(error().copy(fileName = "Secret Headphones.flac"))))
         assertFalse(DeviceReportGenerator.generate(data, DeviceReportOptions(true, true, true, true, true)).previewText.contains("Secret Headphones"))
+    }
+
+    @Test fun `route names never null the model or ordinary file names`() {
+        // AOSP names the built-in speaker route after Build.MODEL; "none" means no Bluetooth device.
+        val data = reportData().copy(
+            basic = reportData().basic.copy(model = "Nothing Phone (2)"),
+            telemetry = TelemetrySnapshot(200, metrics = listOf(
+                textMetric(Metrics.ROUTE_SELECTED_SYSTEM_NAME, TelemetrySection.ROUTE, "Phone"),
+                textMetric(Metrics.ROUTE_ANTICIPATED_NAME, TelemetrySection.ROUTE, "Nothing Phone (2)"),
+                textMetric(Metrics.ROUTE_BLUETOOTH_CONNECTED_NAMES, TelemetrySection.ROUTE, "none"),
+            )),
+            history = ErrorHistorySnapshot(listOf(error().copy(fileName = "Saxophone.flac"))),
+        )
+        val report = DeviceReportGenerator.generate(data, DeviceReportOptions(true, true, true, true, true)).previewText
+        assertTrue(report.contains("\"model\":\"Nothing Phone (2)\""))
+        assertTrue(report.contains("Saxophone.flac"))
     }
 
     @Test fun `all catalog text fields reject filenames paths and MAC addresses`() {

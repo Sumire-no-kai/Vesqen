@@ -18,13 +18,15 @@ class DefaultDeviceReporterTest {
         val expected = preview.previewText.toByteArray(Charsets.UTF_8)
         preview.copyBytes().fill(0)
         reporter.send(DeviceReportDelivery.SHARE)
+        assertEquals(DeviceReportState.Sent(preview, DeviceReportDelivery.SHARE), reporter.snapshot.value.state)
         reporter.send(DeviceReportDelivery.EMAIL)
         reporter.send(DeviceReportDelivery.UPLOAD)
+        assertEquals(DeviceReportState.Sent(preview, DeviceReportDelivery.UPLOAD), reporter.snapshot.value.state)
         assertEquals(1, captures)
         assertEquals(listOf(false, true), delivered.map { it.first })
         delivered.forEach { assertArrayEquals(expected, it.second) }
         assertArrayEquals(expected, uploader.uploads.single())
-        assertSame(preview, (reporter.snapshot.value.state as DeviceReportState.Preview).report)
+        assertSame(preview, (reporter.snapshot.value.state as DeviceReportState.Sent).report)
         uploader.uploads.single().fill(0)
         assertArrayEquals(expected, uploader.uploads.single())
     }
@@ -81,7 +83,7 @@ class DefaultDeviceReporterTest {
         assertSame(preview, failed.report)
         fail = false
         reporter.send(DeviceReportDelivery.EMAIL)
-        assertSame(preview, (reporter.snapshot.value.state as DeviceReportState.Preview).report)
+        assertSame(preview, (reporter.snapshot.value.state as DeviceReportState.Sent).report)
         assertEquals(1, captures)
         reporter.send(DeviceReportDelivery.UPLOAD)
         assertEquals(DeviceReportFailure.UPLOAD_NOT_CONFIGURED, (reporter.snapshot.value.state as DeviceReportState.Failed).reason)

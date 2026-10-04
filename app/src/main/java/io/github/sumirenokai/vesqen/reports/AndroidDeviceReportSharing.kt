@@ -23,6 +23,8 @@ internal class AndroidDeviceReportSharing(private val context: Context) : Device
         } catch (_: IllegalArgumentException) { return DeviceReportFailure.SHARE_FAILED }
         catch (_: SecurityException) { return DeviceReportFailure.SHARE_FAILED }
         val intent = deviceReportShareIntent(uri, email)
+        // The chooser itself always resolves, so check that something can take the report.
+        if (intent.resolveActivity(context.packageManager) == null) return DeviceReportFailure.NO_SHARE_APPLICATION
         return withContext(Dispatchers.Main) {
             try {
                 context.startActivity(Intent.createChooser(intent, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

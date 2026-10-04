@@ -8,11 +8,18 @@ class FakeDeviceReporter(initial: DeviceReportSnapshot = DeviceReportSnapshot())
     private val mutable = MutableStateFlow(initial)
     override val snapshot = mutable.asStateFlow()
     fun emit(state: DeviceReportState) { mutable.value = mutable.value.copy(state = state) }
-    override fun setOptions(options: DeviceReportOptions) { mutable.value = DeviceReportSnapshot(options) }
+    override fun setOptions(options: DeviceReportOptions) {
+        if (options != mutable.value.options) mutable.value = DeviceReportSnapshot(options)
+    }
     override fun generate() = emit(DeviceReportState.Generating)
     override fun discard() = emit(DeviceReportState.Editing)
     override fun send(delivery: DeviceReportDelivery) {
-        val report = (mutable.value.state as? DeviceReportState.Preview)?.report ?: return
+        val report = when (val state = mutable.value.state) {
+            is DeviceReportState.Preview -> state.report
+            is DeviceReportState.Failed -> state.report
+            is DeviceReportState.Sent -> state.report
+            else -> null
+        } ?: return
         emit(DeviceReportState.Sending(report, delivery))
     }
 }

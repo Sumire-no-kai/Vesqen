@@ -53,6 +53,7 @@ internal class DefaultDeviceReporter(
         val report = when (val state = mutable.value.state) {
             is DeviceReportState.Preview -> state.report
             is DeviceReportState.Failed -> state.report
+            is DeviceReportState.Sent -> state.report
             else -> null
         } ?: return@synchronized
         val request = revision
@@ -63,7 +64,7 @@ internal class DefaultDeviceReporter(
                 else sharer.share(report, delivery == DeviceReportDelivery.EMAIL)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: IOException) { if (delivery == DeviceReportDelivery.UPLOAD) DeviceReportFailure.UPLOAD_FAILED else DeviceReportFailure.SHARE_FAILED }
-            publish(request, if (failure == null) DeviceReportState.Preview(report) else DeviceReportState.Failed(failure, report))
+            publish(request, if (failure == null) DeviceReportState.Sent(report, delivery) else DeviceReportState.Failed(failure, report))
         }
     }
 
