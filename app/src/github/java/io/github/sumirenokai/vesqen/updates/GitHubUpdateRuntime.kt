@@ -32,6 +32,8 @@ class GitHubUpdateRuntime(application: Application, scope: CoroutineScope) {
     /** #70 sets this when its daily request will provide the manifest; no separate GET then. */
     var usageRequestExpected: suspend () -> Boolean = { false }
     fun acceptUsageResponse(manifest: String) = engine.acceptUsageResponse(manifest)
+    /** The usage ping succeeded without update data (e.g. relay not configured): check directly. */
+    fun checkWithoutUsageResponse() = engine.onForeground(usageRequestExpected = false)
 
     init {
         installer.onResult = engine::installationResult

@@ -40,8 +40,26 @@ internal data class UsagePing(val facts: UsageFacts, val recentUsbAudio: Boolean
     )
 }
 
-internal fun usageAttemptDue(now: Long, last: Long?): Boolean = now >= 0 && (last == null ||
-    (now >= last && now - last >= USAGE_DAY_MS))
+/**
+ * At most one attempt per UTC day, the server's day: a rolling 24 hours would skip a person who
+ * opens the app a little earlier each day. A clock once set far ahead must not block until real
+ * time catches up with the stamp it left.
+ */
+internal fun usageAttemptDue(now: Long, last: Long?): Boolean {
+    if (now < 0) return false
+    if (last == null || last > now + USAGE_DAY_MS) return true
+    return now >= last && Math.floorDiv(now, USAGE_DAY_MS) != Math.floorDiv(last, USAGE_DAY_MS)
+}
+
+/**
+ * Device strings in the server's accepted alphabet (letters, digits, space and "._()+-", at most
+ * 160), so an unusual ROM string is still counted. Self-built ROMs put the builder's login after
+ * "eng." or "userdebug."; it is dropped.
+ */
+internal fun usageText(raw: String): String = raw
+    .replace(Regex("(?i)\\b(eng|userdebug)\\.[A-Za-z0-9_-]+"), "$1")
+    .map { if (it.isLetterOrDigit() || it in " ._()+-") it else '_' }
+    .joinToString("").trim().take(160).ifEmpty { "unknown" }
 
 /** UTC and ISO Monday weeks are shared with the server. Only booleans leave the device. */
 internal fun usagePing(facts: UsageFacts, now: Long, preferences: UsagePreferences): UsagePing {

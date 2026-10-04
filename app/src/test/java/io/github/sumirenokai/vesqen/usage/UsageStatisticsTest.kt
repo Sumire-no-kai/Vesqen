@@ -7,16 +7,22 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class UsageStatisticsTest {
-    @Test fun regionsAreCentralizedAndEitherSystemOrSimCanRequireConsent() {
-        assertEquals(31, UsageRegionRules.explicitConsentCountries.size)
+    @Test fun regionsAreCentralizedAndAnySignalCanRequireConsent() {
+        // EU-27, seven outermost regions with their own codes, the EEA three and the UK.
+        assertEquals(38, UsageRegionRules.explicitConsentCountries.size)
         UsageRegionRules.explicitConsentCountries.forEach { country ->
-            assertEquals(UsageRegionPolicy.EXPLICIT_CONSENT, UsageRegionRules.evaluate(listOf(country.lowercase()), listOf("US")))
-            assertEquals(UsageRegionPolicy.EXPLICIT_CONSENT, UsageRegionRules.evaluate(listOf("US"), listOf(country)))
+            assertEquals(UsageRegionPolicy.EXPLICIT_CONSENT, UsageRegionRules.evaluate(listOf(country.lowercase(), "US")))
+            assertEquals(UsageRegionPolicy.EXPLICIT_CONSENT, UsageRegionRules.evaluate(listOf("US", "CN", country)))
         }
-        assertEquals(UsageRegionPolicy.EXPLICIT_CONSENT, UsageRegionRules.evaluate(listOf("uk"), emptyList()))
-        assertEquals(UsageRegionPolicy.DEFAULT_ENABLED, UsageRegionRules.evaluate(listOf("AU"), emptyList()))
-        assertEquals(UsageRegionPolicy.REGION_UNAVAILABLE, UsageRegionRules.evaluate(listOf("", "invalid"), emptyList()))
-        assertEquals(UsageRegionPolicy.REGION_UNAVAILABLE, UsageRegionRules.evaluate(listOf("US"), listOf("US"), false))
+        listOf("RE", "GP", "MQ", "GF", "YT", "MF", "AX").forEach {
+            assertEquals(it, UsageRegionPolicy.EXPLICIT_CONSENT, UsageRegionRules.evaluate(listOf(it)))
+        }
+        assertEquals(UsageRegionPolicy.EXPLICIT_CONSENT, UsageRegionRules.evaluate(listOf("uk")))
+        // A dual-SIM phone outside the EU is default-on, like any other phone there.
+        assertEquals(UsageRegionPolicy.DEFAULT_ENABLED, UsageRegionRules.evaluate(listOf("CN", "cn", "CN")))
+        assertEquals(UsageRegionPolicy.DEFAULT_ENABLED, UsageRegionRules.evaluate(listOf("AU")))
+        assertEquals(UsageRegionPolicy.REGION_UNAVAILABLE, UsageRegionRules.evaluate(listOf("", "invalid")))
+        assertEquals(UsageRegionPolicy.REGION_UNAVAILABLE, UsageRegionRules.evaluate(emptyList()))
         listOf("CH", "KR", "BR", "US", "CN").forEach { assertFalse(UsageRegionRules.explicitConsentCountries.contains(it)) }
     }
 
@@ -27,9 +33,22 @@ class UsageStatisticsTest {
         assertTrue(usagePing(facts, at("2027-01-04T00:00:00Z"), ready.copy(lastAttemptEpochMs = now)).firstThisWeek)
         val sameDay = usagePing(facts, now, ready.copy(lastAttemptEpochMs = now - 1000))
         assertFalse(sameDay.firstToday); assertFalse(sameDay.firstThisWeek); assertFalse(sameDay.firstThisMonth)
+        // One attempt per UTC day: a different UTC date is due even if less than 24 h passed.
+        assertFalse(usageAttemptDue(now, now - 1000))
+        assertFalse(usageAttemptDue(now, at("2027-01-01T00:00:00Z")))
+        assertTrue(usageAttemptDue(now, at("2026-12-31T23:59:59Z")))
+        assertTrue(usageAttemptDue(at("2027-01-02T00:00:01Z"), at("2027-01-01T23:59:00Z")))
+        // A slightly ahead stamp waits; one a day or more ahead (clock was wrong) does not.
         assertFalse(usageAttemptDue(now, now + 1000))
-        assertFalse(usageAttemptDue(now, now - USAGE_DAY_MS + 1))
-        assertTrue(usageAttemptDue(now, now - USAGE_DAY_MS))
+        assertTrue(usageAttemptDue(now, now + USAGE_DAY_MS + 1))
+    }
+
+    @Test fun deviceStringsAreCleanedForTheServer() {
+        assertEquals("PD2171_A_15.0.20.1", usageText("PD2171_A_15.0.20.1"))
+        assertEquals("lineage_x-userdebug 14 AP2A eng.20240901", usageText("lineage_x-userdebug 14 AP2A eng.john.20240901"))
+        assertEquals("ROM_build_ 1", usageText("ROM/build# 1"))
+        assertEquals(160, usageText("x".repeat(300)).length)
+        assertEquals("unknown", usageText("  "))
     }
 
     @Test fun payloadHasOnlyReviewedFieldsAndRecentUsbExpires() {
@@ -127,10 +146,26 @@ class UsageStatisticsTest {
         assertFalse(sent)
         assertEquals(UsageSettingsStatus.STORAGE_UNAVAILABLE, engine.snapshot.value.status)
         var accepted: String? = null
+        var standalone = 0
         val success = DefaultUsageStatistics(CoroutineScope(coroutineContext + Dispatchers.Unconfined), MemoryStore(ready), { UsageRegionPolicy.DEFAULT_ENABLED }, true,
-            { true }, { facts }, UsageTransport { "manifest" }, { accepted = it }, { USAGE_DAY_MS * 10 })
+            { true }, { facts }, UsageTransport { "manifest" }, { accepted = it }, { standalone++ }, { USAGE_DAY_MS * 10 })
         success.onForeground()
         assertEquals("manifest", accepted)
+        assertEquals(0, standalone)
+    }
+
+    @Test fun aSuccessfulPingWithoutUpdateDataHandsTheCheckBack() = runBlocking {
+        fun CoroutineScope.run(transport: UsageTransport): Int {
+            var standalone = 0
+            DefaultUsageStatistics(CoroutineScope(coroutineContext + Dispatchers.Unconfined), MemoryStore(ready), { UsageRegionPolicy.DEFAULT_ENABLED }, true,
+                { true }, { facts }, transport, {}, { standalone++ }, { USAGE_DAY_MS * 10 }).also { runBlocking { it.onForeground() } }
+            return standalone
+        }
+        assertEquals(1, run(UsageTransport { null }))
+        // A failed ping was the day's only request (#78): no extra update request follows it.
+        assertEquals(0, run(UsageTransport { throw IOException("offline") }))
+        // OEM firewalls raise SecurityException from DNS; it must not crash playback.
+        assertEquals(0, run(UsageTransport { throw SecurityException("Permission denied") }))
     }
 
     @Test fun fakeExposesSelectionsWithoutStorageOrNetwork() {
@@ -140,6 +175,9 @@ class UsageStatisticsTest {
         assertFalse(fake.snapshot.value.introductionRequired)
         fake.setEnabled(true)
         assertEquals(UsageConsent.ACCEPTED, fake.snapshot.value.consent)
+        val defaultOn = FakeUsageStatistics(UsageStatisticsSnapshot(UsageSettingsStatus.READY, regionPolicy = UsageRegionPolicy.DEFAULT_ENABLED))
+        defaultOn.completeIntroduction(true)
+        assertEquals(UsageConsent.DEFAULT_ENABLED, defaultOn.snapshot.value.consent)
     }
 
     private fun CoroutineScope.engine(store: MemoryStore, region: () -> UsageRegionPolicy = { UsageRegionPolicy.DEFAULT_ENABLED },

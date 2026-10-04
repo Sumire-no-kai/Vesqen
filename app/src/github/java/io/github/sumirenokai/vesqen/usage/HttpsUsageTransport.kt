@@ -1,5 +1,7 @@
 package io.github.sumirenokai.vesqen.usage
 
+import io.github.sumirenokai.vesqen.updates.UpdateChannel
+import io.github.sumirenokai.vesqen.updates.defaultUpdateChannel
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -43,7 +45,10 @@ internal class HttpsUsageTransport(
             }
             return try {
                 val response = JSONObject(output.toString(Charsets.UTF_8.name()))
-                val channel = if (ping.facts.appVersion.contains('-')) "beta" else "stable"
+                val channel = when (defaultUpdateChannel(ping.facts.appVersion)) {
+                    UpdateChannel.BETA -> "beta"
+                    UpdateChannel.STABLE -> "stable"
+                }
                 response.optJSONObject("updateManifests")?.optJSONObject(channel)?.toString()
             } catch (invalid: JSONException) { throw IOException("Invalid usage response", invalid) }
         } finally { connection.disconnect() }

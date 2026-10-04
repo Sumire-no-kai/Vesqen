@@ -18,6 +18,8 @@ internal class DefaultUsageStatistics(
     private val facts: () -> UsageFacts,
     private val transport: UsageTransport,
     private val acceptUpdate: (String) -> Unit = {},
+    /** A successful ping without update data: the updater checks on its own instead. */
+    private val missingUpdate: () -> Unit = {},
     private val clock: () -> Long = System::currentTimeMillis,
 ) : UsageStatistics {
     private val mutex = Mutex()
@@ -82,8 +84,14 @@ internal class DefaultUsageStatistics(
                     prepared
                 } }
                 if (ping != null && mutable.value.enabled && mutable.value.status == UsageSettingsStatus.READY) {
-                    try { transport.send(ping)?.let(acceptUpdate) }
-                    catch (_: IOException) { /* No retry, logging or playback dependency. */ }
+                    var failed = false
+                    // A failed ping skips today's automatic update check (#78): the ping was that
+                    // day's only request. A successful one without update data hands it back.
+                    val manifest = try { transport.send(ping) }
+                    catch (_: IOException) { null.also { failed = true } /* No retry, logging or playback dependency. */ }
+                    // OEM per-app firewalls surface as SecurityException from DNS, not IOException.
+                    catch (_: SecurityException) { null.also { failed = true } }
+                    if (manifest != null) acceptUpdate(manifest) else if (!failed) missingUpdate()
                 }
             } finally { pending.set(false) }
         }
