@@ -116,6 +116,7 @@ class PlaybackService : MediaSessionService() {
                 setWakeMode(C.WAKE_MODE_LOCAL)
                 pauseAtEndOfMediaItems = false
             }
+        player.addListener((application as VesqenApplication).deviceReportRuntime.playbackListener(player))
         telemetry.attachPlayer(player)
         outputCoordinator.attachPlayer(player)
         playbackStateKeeper = PlaybackStateKeeper(

@@ -371,7 +371,7 @@ private val USB_ENDPOINT_TYPE_ALLOWLIST = setOf("usb_device", "usb_accessory", "
 
 private fun Enum<*>.jsonName(): String = name.lowercase(Locale.ROOT)
 
-private class JsonSink(private val writer: BufferedWriter) {
+internal class JsonSink(private val writer: BufferedWriter) {
     fun objectValue(block: ObjectFields.() -> Unit) {
         raw("{")
         ObjectFields().block()

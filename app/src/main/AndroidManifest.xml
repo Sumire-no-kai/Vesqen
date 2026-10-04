@@ -25,6 +25,15 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Vesqen">
+        <provider
+            android:name=".reports.DeviceReportFileProvider"
+            android:authorities="${applicationId}.device-reports"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/device_report_paths" />
+        </provider>
         <activity
             android:name=".MainActivity"
             android:exported="true"
