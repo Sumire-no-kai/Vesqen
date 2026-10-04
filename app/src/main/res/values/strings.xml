@@ -585,6 +585,7 @@
     <string name="chain_metric_decoder_input_mime">Decoder input MIME type</string>
     <string name="chain_metric_decoder_input_sample_rate">Decoder input sample rate</string>
     <string name="chain_metric_decoder_input_channel_count">Decoder input channels</string>
+    <string name="chain_metric_decoder_input_pcm_encoding">Decoder input PCM encoding</string>
     <string name="chain_metric_decoder_initialization_duration">Decoder initialization</string>
     <string name="chain_metric_decoder_software_only">Software-only decoder</string>
     <string name="chain_metric_decoder_hardware_accelerated">Hardware-accelerated decoder</string>
