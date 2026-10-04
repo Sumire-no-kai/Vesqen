@@ -96,10 +96,16 @@ npm run check
 
 Tests cover real SQLite migrations/atomic rollback, a local Workers+D1 runtime,
 strict schemas, #69 group combinations, privacy rejection, rate limits, retention,
-owner-query injection rejection and static-update reuse. The catalog drift test
-fails when Android adds/changes a metric; review its export policy and update the
-server schema together. `npm run check` uses **dry-run**, not deployment. The test
-harness creates disposable local databases and never contacts remote D1.
+owner-query injection rejection and static-update reuse. Report validation imports
+`../../contracts/device-report/vocabulary.json`: enums, allowed text and encoding
+patterns, metric IDs/value kinds/units, and error-history limits come from the app.
+`sample-report.json` is accepted unchanged by both schema tests and the local Worker;
+mutations outside the vocabulary, incompatible confidence and wrong units fail.
+There is no private metric-catalog copy or Kotlin-source parser in the server tests.
+The app's `DeviceReportContractTest` checks and regenerates these shared artifacts;
+review its generated output when changing the app contract. CI also runs when
+`contracts/device-report/**` changes. `npm run check` uses **dry-run**, not deployment.
+The test harness creates disposable local databases and never contacts remote D1.
 
 For manual local requests, run `npx wrangler d1 migrations apply vesqen-usage --local`
 then `npm run dev`. Actual deployment compatibility and owner account settings are

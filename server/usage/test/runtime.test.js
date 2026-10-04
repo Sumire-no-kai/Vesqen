@@ -1,7 +1,9 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createTestHarness} from 'wrangler';
-import {ping,report} from './fixtures.js';
+import {ping} from './fixtures.js';
+import {readFileSync} from 'node:fs';
+const sampleText=readFileSync(new URL('../../../contracts/device-report/sample-report.json',import.meta.url),'utf8');
 
 test('real local Worker and D1 apply migrations accept reports and roll back quota failures', {timeout:30000}, async t=>{
   const server=createTestHarness({workers:[{configPath:'wrangler.jsonc'}]});
@@ -14,9 +16,10 @@ test('real local Worker and D1 apply migrations accept reports and roll back quo
   const usage=await worker.fetch('/v1/usage',post(ping()));
   assert.equal(usage.status,200,await usage.text());
   assert.equal((await env.DB.prepare('SELECT requests FROM daily_totals').first()).requests,1);
-  const accepted=await worker.fetch('/v1/reports',post(report()));
+  const accepted=await worker.fetch('/v1/reports',{method:'POST',headers:{'content-type':'application/json'},body:sampleText});
   assert.equal(accepted.status,201,await accepted.text());
   assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM reports').first()).n,1);
+  assert.equal((await env.DB.prepare('SELECT document FROM reports').first()).document,sampleText);
   await env.DB.prepare('UPDATE daily_totals SET requests=10000').run();
   assert.equal((await worker.fetch('/v1/usage',post(ping()))).status,429);
   assert.equal((await env.DB.prepare('SELECT SUM(count) AS n FROM daily_dimensions').first()).n,7);
