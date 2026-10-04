@@ -31,7 +31,11 @@ sealed interface DeviceReportState {
     data class Preview(val report: DeviceReportArtifact) : DeviceReportState
     data class Sending(val report: DeviceReportArtifact, val delivery: DeviceReportDelivery) : DeviceReportState
     /** The share sheet opened or the upload was accepted; the same report can be sent again. */
-    data class Sent(val report: DeviceReportArtifact, val delivery: DeviceReportDelivery) : DeviceReportState
+    data class Sent(
+        val report: DeviceReportArtifact,
+        val delivery: DeviceReportDelivery,
+        val reportId: String? = null,
+    ) : DeviceReportState
     data class Failed(val reason: DeviceReportFailure, val report: DeviceReportArtifact? = null) : DeviceReportState
 }
 data class DeviceReportSnapshot(
@@ -48,12 +52,18 @@ interface DeviceReporter {
     fun discard()
 }
 
+sealed interface DeviceReportUploadResult {
+    data class Uploaded(val reportId: String) : DeviceReportUploadResult
+    data class Failed(val reason: DeviceReportFailure) : DeviceReportUploadResult
+}
+
 interface DeviceReportUploader {
-    suspend fun upload(report: DeviceReportArtifact): DeviceReportFailure?
+    suspend fun upload(report: DeviceReportArtifact): DeviceReportUploadResult
 }
 
 internal object UnconfiguredDeviceReportUploader : DeviceReportUploader {
-    override suspend fun upload(report: DeviceReportArtifact) = DeviceReportFailure.UPLOAD_NOT_CONFIGURED
+    override suspend fun upload(report: DeviceReportArtifact) =
+        DeviceReportUploadResult.Failed(DeviceReportFailure.UPLOAD_NOT_CONFIGURED)
 }
 
 internal fun interface DeviceReportSharer {

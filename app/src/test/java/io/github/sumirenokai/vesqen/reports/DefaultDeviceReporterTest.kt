@@ -21,7 +21,7 @@ class DefaultDeviceReporterTest {
         assertEquals(DeviceReportState.Sent(preview, DeviceReportDelivery.SHARE), reporter.snapshot.value.state)
         reporter.send(DeviceReportDelivery.EMAIL)
         reporter.send(DeviceReportDelivery.UPLOAD)
-        assertEquals(DeviceReportState.Sent(preview, DeviceReportDelivery.UPLOAD), reporter.snapshot.value.state)
+        assertEquals(DeviceReportState.Sent(preview, DeviceReportDelivery.UPLOAD, uploader.reportId), reporter.snapshot.value.state)
         assertEquals(1, captures)
         assertEquals(listOf(false, true), delivered.map { it.first })
         delivered.forEach { assertArrayEquals(expected, it.second) }
