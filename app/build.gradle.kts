@@ -1,3 +1,5 @@
+import io.github.sumirenokai.vesqen.build.GenerateThirdPartyLicenses
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import java.io.File
 import java.util.Properties
 
@@ -196,11 +198,49 @@ tasks.matching { it.name in setOf("bundleRelease", "assembleRelease", "packageRe
     dependsOn(checkPrivacyPolicyFinal)
 }
 
+val checkThirdPartyLicenses by tasks.registering {
+    group = "verification"
+    description = "Validate and generate third-party license catalogs for every enabled variant."
+}
+tasks.named("check") { dependsOn(checkThirdPartyLicenses) }
+
 androidComponents {
     beforeVariants(selector().withBuildType("debug")) {
         it.hostTests[com.android.build.api.variant.HostTestBuilder.UNIT_TEST_TYPE]?.enable = true
     }
     onVariants { variant ->
+        val runtimeArtifacts = variant.runtimeConfiguration.incoming.artifacts
+        val generateLicenses = tasks.register<GenerateThirdPartyLicenses>(
+            "generate${variant.name.replaceFirstChar(Char::uppercaseChar)}ThirdPartyLicenses",
+        ) {
+            outputDirectory.set(layout.buildDirectory.dir("generated/thirdPartyLicenses/${variant.name}"))
+            this.runtimeArtifacts.from(runtimeArtifacts.artifactFiles)
+            artifactNamesByCoordinate.set(runtimeArtifacts.resolvedArtifacts.map { artifacts ->
+                artifacts.associate { artifact ->
+                    val id = artifact.id.componentIdentifier
+                    require(id is ModuleComponentIdentifier) { "Review non-Maven runtime dependency: $id" }
+                    "${id.group}:${id.module}:${id.version}" to artifact.file.name
+                }
+            })
+            catalogDirectory.set(rootProject.layout.projectDirectory.dir("third-party-licenses"))
+            fontDirectory.set(layout.projectDirectory.dir("src/main/res/font"))
+            fontLicenseDirectory.set(layout.projectDirectory.dir("src/main/assets/licenses/fonts"))
+        }
+        variant.sources.assets?.addGeneratedSourceDirectory(
+            generateLicenses,
+            GenerateThirdPartyLicenses::getOutputDirectory,
+        )
+        checkThirdPartyLicenses.configure { dependsOn(generateLicenses) }
+        variant.hostTests.values.forEach { hostTest ->
+            hostTest.configureTestTask { test ->
+                test.dependsOn(generateLicenses)
+                test.inputs.file(generateLicenses.flatMap { it.outputDirectory.file("licenses/third-party.xml") })
+                test.systemProperty(
+                    "licenses.generatedFile",
+                    generateLicenses.get().outputDirectory.file("licenses/third-party.xml").get().asFile.absolutePath,
+                )
+            }
+        }
         val packagePrivacyPolicy = tasks.register<PackagePrivacyPolicyTask>(
             "package${variant.name.replaceFirstChar(Char::uppercaseChar)}PrivacyPolicy",
         ) {
