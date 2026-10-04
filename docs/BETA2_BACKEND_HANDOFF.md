@@ -42,3 +42,13 @@ Release APK 的 assemble/package 与 bundle 都依赖 `checkPrivacyPolicyFinal`�
 - 独立 deviceTest 宿主名称为 `Vesqen Test`；已检查生成 APK 的包名、标签及原有 versionCode 10。
 - 本地 JDK 25：256 项 JVM 测试全部通过，Debug lint、Debug/Release、deviceTest/AndroidTest APK 构建通过。
 - `StrictUsbStartupDeviceTest` 新增恢复时长、位置刷新后时长及暂停跳转断言；本轮只编译，尚未执行。两台手机正被其他会话使用，遵照所有者要求等待空闲。上文真机结果属于修订前版本，不能视为新增断言已通过。
+
+## #62 后续核查（2026-10-04）
+
+- 基线 master `73589ac`：#76 已修复原始原因被 `MIXER_CLEAR_FAILED` 覆盖，以及完全丢弃清理异常类型的问题。`failClosed` 仍发布原始 `failure`、`decisionCode` 和 `failureOrigin`，清理结果单独保留在 `mixerCleanup`；本次不改恢复或 PCM 门控规则。
+- 本次补充 `mixerCleanup.exceptionReasons`，从已有异常类型集合计算稳定分类，MediaSession 字段和默认值不变。权限拒绝、服务不可用、远程调用失败、参数/状态错误、不支持操作与未知异常分别保留。服务不可用不等于已证实音频服务崩溃。
+- 本地 Android SDK 37.0 源码的 `AudioManager.clearPreferredMixerAttributes` 调用 `RemoteException.rethrowFromSystemServer`：远程异常可包装为 RuntimeException，DeadObjectException 可转换为 DeadSystemRuntimeException。因此保留最多 8 层、按对象身份去重的异常类型，不保留消息或堆栈；超过上限的更深原因没有被观测，不能推断。未知类型保留为 OTHER_EXCEPTION，不猜测原因。
+- 消费者核查：`UsbOutputSessionContract` 原样传递异常类型；PlaybackController/PlaybackSnapshot 沿用整个状态；遥测仍消费原始 decisionCode、原始观测时间与既有输出声明，不新增采样或指标，不改变 unavailable reason。
+- #83 尚未合并的设备报告使用原始 `strictFailure` / `strictOrigin`，目前不导出 `mixerCleanup`。本次未扩充它的 JSON 或 `UsbOutputFailure` 等已导出词表；新的清理分类仅为本地状态接口。后续若报告纳入清理分类，须同时扩充报告结构、过滤器、服务端与 `contracts/device-report` 并运行 DeviceReportContractTest。当前 master 没有该测试或契约目录，本次未声称运行它。
+- `assembleRelease`、`packageRelease`、`bundleRelease` 已在构建脚本中依赖 `checkPrivacyPolicyFinal`，不需要再次修改发布流程。第 4 项界面工作仍未处理。
+- 本次本地 JDK 25 验证：先通过清理相关定向测试，再通过 313 项 JVM 单元测试（0 失败/错误/跳过）、Debug lint、Debug/Release APK 构建，以及 deviceTest 仪器测试 Kotlin 编译。`checkPrivacyPolicyFinal` 实际执行通过。未执行仪器测试、手动手机 QA、DAC 验收；远程 CI 另见 PR。

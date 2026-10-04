@@ -1241,7 +1241,7 @@ internal class MixerPreferenceCleanupTracker<T>(
     private val clearPreference: (T) -> Result<Boolean>,
 ) {
     private val tracked = linkedSetOf<T>()
-    private val cleanupExceptionTypes = mutableMapOf<T, String>()
+    private val cleanupExceptionTypes = mutableMapOf<T, Set<String>>()
 
     @Synchronized
     fun track(preference: T) {
@@ -1269,9 +1269,9 @@ internal class MixerPreferenceCleanupTracker<T>(
             Result.failure(failure)
         }
         // Keep only the type; exception messages and stack traces can contain device identifiers.
-        val exceptionType = result.exceptionOrNull()?.javaClass?.name
-        if (exceptionType == null) cleanupExceptionTypes.remove(preference)
-        else cleanupExceptionTypes[preference] = exceptionType
+        val failure = result.exceptionOrNull()
+        if (failure == null) cleanupExceptionTypes.remove(preference)
+        else cleanupExceptionTypes[preference] = cleanupExceptionTypes(failure)
         if (result.getOrNull() == true) tracked -= preference
         return result.getOrNull() == true
     }
@@ -1288,8 +1288,22 @@ internal class MixerPreferenceCleanupTracker<T>(
     @Synchronized
     fun snapshot(): MixerCleanupStatus = MixerCleanupStatus(
         pendingCount = tracked.size,
-        exceptionTypes = cleanupExceptionTypes.values.toSet(),
+        exceptionTypes = cleanupExceptionTypes.values.flatten().toSet(),
     )
+}
+
+/** AudioManager wraps RemoteException; retain causes without traversing unbounded/cyclic chains. */
+internal fun cleanupExceptionTypes(failure: Throwable): Set<String> {
+    val seen = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Throwable, Boolean>())
+    val types = linkedSetOf<String>()
+    var current: Throwable? = failure
+    repeat(8) {
+        val cause = current ?: return types
+        if (!seen.add(cause)) return types
+        types += cause.javaClass.name
+        current = cause.cause
+    }
+    return types
 }
 
 /** Blocks PCM until strict-route verification and closes again on pause or non-neutral volume. */
