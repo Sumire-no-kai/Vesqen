@@ -1367,6 +1367,11 @@
           "name": "Apache-2.0",
           "file": "texts/Apache-2.0.txt",
           "source": "https://www.apache.org/licenses/LICENSE-2.0.txt"
+        },
+        {
+          "name": "BSD-3-Clause",
+          "file": "texts/d1bc53b493a3ab38.txt",
+          "source": "https://github.com/JetBrains/kotlin/blob/v2.4.10/license/third_party/threetenbp_license.txt"
         }
       ],
       "notices": []

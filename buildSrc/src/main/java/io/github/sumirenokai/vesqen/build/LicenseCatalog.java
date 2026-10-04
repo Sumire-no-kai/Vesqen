@@ -24,6 +24,7 @@ final class LicenseCatalog {
             require(entry != null, "Unreviewed runtime dependency: " + coordinate);
             require(coordinate.endsWith(":" + string(entry, "version")), "Version mismatch: " + coordinate);
             verifyHash(artifacts.get(coordinate), string(entry, "sha256"));
+            requireArchiveDocumentsCited(coordinate, artifacts.get(coordinate), entry);
             selected.add(entry);
         }
         List<Map<?, ?>> fontEntries = records(catalog, "fonts");
@@ -78,6 +79,47 @@ final class LicenseCatalog {
         xml.writeCharacters(text);
         xml.writeEndElement();
     }
+
+    /**
+     * Every LICENSE, NOTICE or COPYING document a pinned archive ships, including those inside nested
+     * jars, must be cited as a source by its record. A dependency bump then cannot keep an old review
+     * while a new notice goes unshipped. lint.jar holds Android Lint checks and never reaches the app.
+     */
+    private static void requireArchiveDocumentsCited(String coordinate, File archive, Map<?, ?> entry) throws Exception {
+        Set<String> cited = new HashSet<>();
+        for (String key : List.of("licenses", "notices")) {
+            for (Map<?, ?> document : records(entry, key)) cited.add(string(document, "source"));
+        }
+        Set<String> shipped = new TreeSet<>();
+        try (var input = Files.newInputStream(archive.toPath())) {
+            collectLicenseDocuments(input, "", shipped);
+        }
+        for (String path : shipped) {
+            String source = coordinate + "!/" + path;
+            require(cited.contains(source), "Unreviewed license document: " + source);
+        }
+    }
+
+    private static void collectLicenseDocuments(java.io.InputStream input, String prefix, Set<String> found)
+            throws java.io.IOException {
+        // Not closed here: a nested stream must not close the archive it is read from.
+        java.util.zip.ZipInputStream zip = new java.util.zip.ZipInputStream(input);
+        java.util.zip.ZipEntry zipEntry;
+        while ((zipEntry = zip.getNextEntry()) != null) {
+            if (zipEntry.isDirectory()) continue;
+            String name = zipEntry.getName();
+            if (name.endsWith(".jar")) {
+                if (!(prefix.isEmpty() && name.equals("lint.jar"))) {
+                    collectLicenseDocuments(new java.io.ByteArrayInputStream(zip.readAllBytes()), prefix + name + "!/", found);
+                }
+            } else if (LICENSE_DOCUMENT.matcher(name).find()) {
+                found.add(prefix + name);
+            }
+        }
+    }
+
+    private static final java.util.regex.Pattern LICENSE_DOCUMENT =
+        java.util.regex.Pattern.compile("(?i)(^|/)(LICENSE|NOTICE|COPYING)[^/]*$");
 
     private static Map<String, Map<?, ?>> index(List<Map<?, ?>> entries) {
         Map<String, Map<?, ?>> index = new LinkedHashMap<>();

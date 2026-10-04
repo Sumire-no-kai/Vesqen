@@ -71,6 +71,43 @@ public class LicenseCatalogTest {
         assertThrows(IllegalStateException.class, () -> fixture.generate(Map.of("example:one:1", fixture.artifact)));
     }
 
+    @Test public void shippedLicenseDocumentsMustBeCited() throws Exception {
+        Fixture fixture = fixture();
+        writeArchive(fixture.artifact, Map.of(
+            "META-INF/NOTICE.txt", "top-level notice",
+            "libs/inner.jar", "nested",
+            "lint.jar", "ignored"));
+        List<String> cited = List.of(
+            "example:one:1!/META-INF/NOTICE.txt",
+            "example:one:1!/libs/inner.jar!/META-INF/LICENSE");
+        writeCatalog(fixture, List.of(component(fixture, "example:one:1", cited)));
+        fixture.generate(Map.of("example:one:1", fixture.artifact));
+
+        writeCatalog(fixture, List.of(component(fixture, "example:one:1", cited.subList(0, 1))));
+        assertTrue(assertThrows(IllegalStateException.class,
+            () -> fixture.generate(Map.of("example:one:1", fixture.artifact)))
+            .getMessage().contains("Unreviewed license document: example:one:1!/libs/inner.jar!/META-INF/LICENSE"));
+    }
+
+    private void writeArchive(File archive, Map<String, String> entries) throws Exception {
+        try (var zip = new java.util.zip.ZipOutputStream(Files.newOutputStream(archive.toPath()))) {
+            for (Map.Entry<String, String> entry : new TreeMap<>(entries).entrySet()) {
+                zip.putNextEntry(new java.util.zip.ZipEntry(entry.getKey()));
+                if (entry.getKey().endsWith(".jar")) {
+                    // A nested jar shipping a LICENSE; lint.jar ships one too but is never packaged.
+                    var nested = new java.io.ByteArrayOutputStream();
+                    try (var inner = new java.util.zip.ZipOutputStream(nested)) {
+                        inner.putNextEntry(new java.util.zip.ZipEntry("META-INF/LICENSE"));
+                        inner.write(entry.getValue().getBytes());
+                    }
+                    zip.write(nested.toByteArray());
+                } else {
+                    zip.write(entry.getValue().getBytes());
+                }
+            }
+        }
+    }
+
     private Fixture fixture() throws Exception {
         Fixture fixture = new Fixture(temporary.newFolder("catalog"), temporary.newFolder("fonts"),
             temporary.newFolder("font-licenses"), temporary.newFile("library.jar"), new File(temporary.getRoot(), "out/catalog.xml"));
@@ -82,10 +119,16 @@ public class LicenseCatalogTest {
     }
 
     private Map<String, Object> component(Fixture fixture, String id) throws Exception {
+        return component(fixture, id, List.of());
+    }
+
+    private Map<String, Object> component(Fixture fixture, String id, List<String> citedNotices) throws Exception {
+        List<Map<String, String>> notices = new ArrayList<>(List.of(Map.of("file", "NOTICE", "source", "upstream/NOTICE")));
+        for (String source : citedNotices) notices.add(Map.of("file", "NOTICE", "source", source));
         return Map.of("id", id, "name", id, "version", "1",
             "sha256", HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(fixture.artifact.toPath()))),
             "licenses", List.of(Map.of("name", "Apache-2.0", "file", "LICENSE", "source", "upstream/LICENSE")),
-            "notices", List.of(Map.of("file", "NOTICE", "source", "upstream/NOTICE")));
+            "notices", notices);
     }
 
     private void writeCatalog(Fixture fixture, List<Map<String, Object>> entries) throws Exception {

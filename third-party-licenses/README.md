@@ -55,6 +55,12 @@ Services plugin and changes no signing/release workflow.
   are included. The Kotlin compiler's NOTICE is explicitly for the compiler
   distribution; the compiler is not an app runtime component. Guava and Media3's
   checked release trees have LICENSE files and no root NOTICE.
+- Code inside a library can carry another license than its POM declares. Kotlin's
+  [license README at v2.4.10](https://github.com/JetBrains/kotlin/blob/v2.4.10/license/README.md)
+  lists `kotlin.time` in kotlin-stdlib as derived from ThreeTen backport under the
+  3-clause BSD license, which requires the notice in binary redistributions. The
+  stdlib record therefore carries that BSD-3-Clause text next to Apache-2.0. The
+  other stdlib derivations it lists (GWT, Guava) are Apache-2.0.
 - Instrument Sans and Instrument Serif retain the existing unmodified OFL texts
   in `app/src/main/assets/licenses/fonts`, including their copyright statements.
   Version `1.000` comes from each bundled TTF's name table (name ID 5); all three
@@ -72,7 +78,11 @@ same file (currently androidx.core:core) are one component, not duplicate licens
    `./gradlew :app:dependencies --configuration releaseRuntimeClasspath`.
 2. Review the exact version's POM (including inherited licenses), original archive,
    nested runtime JARs, and upstream distribution for additional license/NOTICE
-   content. Do not simply update a hash to make the check pass.
+   content, including a project's own list of bundled third-party code (such as
+   Kotlin's `license/README.md`). Do not simply update a hash to make the check pass.
+   Generation fails while any LICENSE, NOTICE or COPYING document shipped in the
+   archive (or a nested JAR other than `lint.jar`) is not cited as a `source`, in the
+   form `group:name:version!/path` or `group:name:version!/inner.jar!/path`.
 3. Add/update the exact coordinate, upstream name/version, SHA-256, metadata source,
    and local license/NOTICE text references in `catalog.json`. Preserve attribution
    text verbatim. Shared texts may be deduplicated; an empty `notices` list means no

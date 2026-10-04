@@ -1,0 +1,3 @@
+# License texts ship byte-for-byte in the app; keep them LF on every checkout (#37).
+third-party-licenses/texts/** text eol=lf
+app/src/main/assets/licenses/** text eol=lf
