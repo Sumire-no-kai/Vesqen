@@ -28,6 +28,12 @@ require(debugUpdateEndpoint.matches(Regex("https://[A-Za-z0-9._~:/%-]+/"))) {
     "The Debug update manifest base URL must be HTTPS and end with /"
 }
 
+// Empty until the owner deploys #70. Shared across build types, with no production host in source.
+val usageEndpoint = providers.gradleProperty("vesqen.usageEndpoint").orElse("").get()
+require(usageEndpoint.isEmpty() || usageEndpoint.matches(Regex("https://[A-Za-z0-9.-]+(:[0-9]+)?/v1/usage"))) {
+    "Usage endpoint must be empty or an HTTPS /v1/usage URL"
+}
+
 android {
     namespace = "io.github.sumirenokai.vesqen"
     compileSdk {
@@ -35,6 +41,7 @@ android {
     }
 
     defaultConfig {
+        buildConfigField("String", "USAGE_ENDPOINT", "\"$usageEndpoint\"")
         buildConfigField("String", "UPDATE_MANIFEST_BASE_URL", "\"https://vesqen.sumirenokai.com/updates/\"")
         applicationId = "io.github.sumirenokai.vesqen"
         minSdk = 26
