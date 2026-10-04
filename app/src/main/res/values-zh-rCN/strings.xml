@@ -561,6 +561,7 @@
     <string name="chain_metric_decoder_input_mime">解码输入 MIME 类型</string>
     <string name="chain_metric_decoder_input_sample_rate">解码输入采样率</string>
     <string name="chain_metric_decoder_input_channel_count">解码输入声道数</string>
+    <string name="chain_metric_decoder_input_pcm_encoding">解码输入 PCM 编码</string>
     <string name="chain_metric_decoder_initialization_duration">解码器初始化耗时</string>
     <string name="chain_metric_decoder_software_only">纯软件解码器</string>
     <string name="chain_metric_decoder_hardware_accelerated">硬件加速解码器</string>

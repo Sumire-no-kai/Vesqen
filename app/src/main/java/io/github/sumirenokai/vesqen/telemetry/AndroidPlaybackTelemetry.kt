@@ -510,6 +510,17 @@ class AndroidPlaybackTelemetry internal constructor(
             formatInstant,
             activeReason,
         )
+        // Media3's extractors state the PCM width of lossless streams (FLAC, ALAC, WAV/AIFF PCM).
+        // Compressed lossy input has none; it decodes to whatever the codec outputs.
+        metrics.measuredTextOrUnavailable(
+            TelemetryMetricCatalog.DECODER_INPUT_PCM_ENCODING,
+            activeInputFormat?.pcmEncoding
+                ?.takeIf { it != Format.NO_VALUE && it != C.ENCODING_INVALID }
+                ?.let(::audioEncodingName),
+            MEDIA3_ANALYTICS,
+            formatInstant,
+            if (activeInputFormat != null) TelemetryUnavailableReason.NOT_APPLICABLE else activeReason,
+        )
         metrics.measuredIntegerOrUnavailable(
             TelemetryMetricCatalog.DECODER_RENDERER_QUEUED_INPUT_BUFFERS_TOTAL,
             activeDecoderCounters?.queuedInputBuffers,
