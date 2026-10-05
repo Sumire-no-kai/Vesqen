@@ -195,29 +195,6 @@ class VesqenAppTest {
     }
 
     @Test
-    fun chain_offers_the_explicit_system_fallback_next_to_a_strict_failure() {
-        val failure = UsbOutputStatus(
-            mode = UsbOutputMode.STRICT_BIT_PERFECT,
-            phase = UsbOutputPhase.FAILED,
-            failure = UsbOutputFailure.NO_USB_AUDIO_DEVICE,
-            failureOrigin = UsbOutputFailureOrigin.USER_PLAYBACK,
-            generation = 1,
-        )
-        val active = activePlaybackState()
-        val modes = mutableListOf<UsbOutputMode>()
-        render(
-            active.copy(playback = active.playback.copy(usbOutputStatus = failure)),
-            playbackTelemetry = FakePlaybackTelemetry(chainTelemetrySnapshot()),
-            onSetUsbOutputMode = { modes += it },
-        )
-        // Keeping strict output in the dialog leaves the same choice next to the claim in Chain.
-        composeRule.onNodeWithTag("vesqen.output.keep-strict").performClick()
-        composeRule.onNodeWithTag("vesqen.nav.chain").performClick()
-        chainNode("vesqen.chain.use-system", "vesqen.chain.summary-list").performClick()
-        composeRule.runOnIdle { assertEquals(listOf(UsbOutputMode.SYSTEM), modes) }
-    }
-
-    @Test
     fun player_output_switch_is_reachable_in_portrait() = assertPlayerOutputSwitch(360.dp, 720.dp, 1f)
 
     @Test
@@ -1606,6 +1583,29 @@ class VesqenAppTest {
 
         composeRule.onAllNodesWithTag("vesqen.chain.diagnostics").assertCountEquals(0)
         composeRule.onAllNodesWithTag("vesqen.chain.diagnostics.start").assertCountEquals(0)
+    }
+
+    @Test
+    fun chain_offers_the_explicit_system_fallback_next_to_a_strict_failure() {
+        val failure = UsbOutputStatus(
+            mode = UsbOutputMode.STRICT_BIT_PERFECT,
+            phase = UsbOutputPhase.FAILED,
+            failure = UsbOutputFailure.NO_USB_AUDIO_DEVICE,
+            failureOrigin = UsbOutputFailureOrigin.USER_PLAYBACK,
+            generation = 1,
+        )
+        val active = activePlaybackState()
+        val modes = mutableListOf<UsbOutputMode>()
+        render(
+            active.copy(playback = active.playback.copy(usbOutputStatus = failure)),
+            playbackTelemetry = FakePlaybackTelemetry(chainTelemetrySnapshot()),
+            onSetUsbOutputMode = { modes += it },
+        )
+        // Keeping strict output in the dialog leaves the same choice next to the claim in Chain.
+        composeRule.onNodeWithTag("vesqen.output.keep-strict").performClick()
+        composeRule.onNodeWithTag("vesqen.nav.chain").performClick()
+        chainNode("vesqen.chain.use-system", "vesqen.chain.summary-list").performClick()
+        composeRule.runOnIdle { assertEquals(listOf(UsbOutputMode.SYSTEM), modes) }
     }
 
     @Test
