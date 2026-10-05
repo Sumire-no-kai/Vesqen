@@ -63,7 +63,8 @@ internal class HttpsDeviceReportUploader(
         private const val MAX_RECEIPT_BYTES = 4 * 1_024
         // The Worker returns exactly {reportId: crypto.randomUUID()}. Accept only that JSON shape,
         // avoiding arbitrary server text in the UI, duplicate fields and an extra JSON dependency.
-        private val RECEIPT = Regex("""[ \t\r\n]*\{[ \t\r\n]*"reportId"[ \t\r\n]*:[ \t\r\n]*"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"[ \t\r\n]*}[ \t\r\n]*""")
+        // Android's ICU regex rejects an unescaped "}" that the desktop JVM accepts: escape both braces.
+        private val RECEIPT = Regex("""[ \t\r\n]*\{[ \t\r\n]*"reportId"[ \t\r\n]*:[ \t\r\n]*"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"[ \t\r\n]*\}[ \t\r\n]*""")
 
         internal fun reportEndpoint(configured: String): URL? = try {
             val uri = URI(configured)
