@@ -122,7 +122,7 @@ fun SettingsScreen(
                         ) { StrictOutputStatusBox(outputStatus) }
                     },
                 ) {
-                    Column(Modifier.selectableGroup()) {
+                    Column(Modifier.selectableGroup().testTag("vesqen.settings.output-modes")) {
                         SettingsRadioRow(
                             title = stringResource(R.string.settings_system_output),
                             description = stringResource(R.string.settings_system_output_body),
