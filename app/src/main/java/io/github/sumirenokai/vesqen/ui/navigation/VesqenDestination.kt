@@ -14,6 +14,7 @@ enum class VesqenDestination(
     CHAIN(R.string.destination_chain, "vesqen.nav.chain"),
     ABOUT(R.string.settings_about, "vesqen.nav.about-detail"),
     PRIVACY_POLICY(R.string.privacy_policy_title, "vesqen.nav.privacy-detail"),
+    LICENSES(R.string.licenses_title, "vesqen.nav.licenses-detail"),
 }
 
 // Bottom-bar order from the B artboard (owner decision 2026-10-03: Chain is a top-level tab).
@@ -27,7 +28,7 @@ internal val TopLevelDestinations = listOf(
 /** 0 for top-level surfaces; details opened from a detail sit one level deeper than their parent. */
 internal val VesqenDestination.detailDepth: Int
     get() = when (this) {
-        VesqenDestination.ABOUT -> 1
+        VesqenDestination.ABOUT, VesqenDestination.LICENSES -> 1
         VesqenDestination.PRIVACY_POLICY -> 2
         else -> 0
     }

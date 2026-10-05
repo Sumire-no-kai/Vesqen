@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen.ui.navigation
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
@@ -64,6 +65,17 @@ class VesqenNavigationStateTest {
         val settings = about.back()
         assertEquals(VesqenDestination.SETTINGS, settings.destination)
         assertEquals(VesqenDestination.LIBRARY, settings.back().destination)
+    }
+
+    @Test
+    fun `licenses and privacy policy opened from settings return to settings then library`() {
+        listOf(VesqenNavigationState::openLicenses, VesqenNavigationState::openPrivacyPolicy).forEach { open ->
+            val detail = open(VesqenNavigationState().selectTopLevel(VesqenDestination.SETTINGS))
+            assertTrue(detail.destination.isSecondaryDetail)
+            val settings = detail.back()
+            assertEquals(VesqenDestination.SETTINGS, settings.destination)
+            assertEquals(VesqenDestination.LIBRARY, settings.back().destination)
+        }
     }
 
     @Test
