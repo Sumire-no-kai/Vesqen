@@ -91,11 +91,39 @@ data class OfficialMixerApiSupport(
     }
 }
 
+/** Diagnostic categories, never output declarations or proof of a service crash. */
+enum class MixerCleanupExceptionReason {
+    PERMISSION_DENIED,
+    SERVICE_UNAVAILABLE,
+    REMOTE_CALL_FAILED,
+    INVALID_ARGUMENT,
+    INVALID_STATE,
+    UNSUPPORTED_OPERATION,
+    OTHER_EXCEPTION;
+
+    companion object {
+        internal fun fromType(type: String): MixerCleanupExceptionReason = when (type) {
+            "java.lang.SecurityException" -> PERMISSION_DENIED
+            "android.os.DeadObjectException", "android.os.DeadSystemException",
+            "android.os.DeadSystemRuntimeException" -> SERVICE_UNAVAILABLE
+            "android.os.RemoteException" -> REMOTE_CALL_FAILED
+            "java.lang.IllegalArgumentException" -> INVALID_ARGUMENT
+            "java.lang.IllegalStateException" -> INVALID_STATE
+            "java.lang.UnsupportedOperationException" -> UNSUPPORTED_OPERATION
+            else -> OTHER_EXCEPTION
+        }
+    }
+}
+
 /** Cleanup evidence is independent of the failure that stopped strict playback. */
 data class MixerCleanupStatus(
     val pendingCount: Int = 0,
     val exceptionTypes: Set<String> = emptySet(),
 ) {
+    // Derived from the existing wire representation, so older session bundles remain readable.
+    val exceptionReasons: Set<MixerCleanupExceptionReason>
+        get() = exceptionTypes.mapTo(linkedSetOf(), MixerCleanupExceptionReason::fromType)
+
     init {
         require(pendingCount >= 0)
         require(exceptionTypes.all { it.matches(Regex("[A-Za-z_$][A-Za-z0-9_.$]*")) })
