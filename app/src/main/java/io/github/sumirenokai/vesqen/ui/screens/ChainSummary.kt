@@ -477,7 +477,7 @@ private fun ChainFact(
         Text(
             text = evidence?.let { telemetryConfidenceLabel(context, it.confidence) + " · " + telemetryEvidenceAge(context, it, nowElapsedRealtimeMs) }
                 ?: stringResource(R.string.chain_sampling_starting_short),
-            style = MaterialTheme.typography.labelSmall,
+            style = evidenceStyle(),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -533,7 +533,7 @@ private fun ChainProcessingFact(
         Text(
             text = evidence?.let { telemetryConfidenceLabel(context, it.confidence) + " · " + telemetryEvidenceAge(context, it, nowElapsedRealtimeMs) }
                 ?: stringResource(R.string.chain_sampling_starting_short),
-            style = MaterialTheme.typography.labelSmall,
+            style = evidenceStyle(),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -706,7 +706,7 @@ private fun ChainPinnedCard(
                     evidence == null -> stringResource(R.string.chain_sampling_starting_short)
                     else -> telemetryConfidenceLabel(context, evidence.confidence) + " · " + telemetryEvidenceAge(context, evidence, nowElapsedRealtimeMs)
                 },
-                style = MaterialTheme.typography.labelSmall,
+                style = evidenceStyle(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -715,6 +715,13 @@ private fun ChainPinnedCard(
         }
     }
 }
+
+/**
+ * B §5: confidence and age at 12 sp. The theme's labelSmall is the eyebrow style, whose wide
+ * letter spacing breaks up Chinese text, so the evidence line uses plain small body text.
+ */
+@Composable
+private fun evidenceStyle() = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp)
 
 /** B §5: pinned values are 34 px serif digits. */
 private val PinnedValueSize = 34.sp
