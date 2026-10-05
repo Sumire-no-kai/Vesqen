@@ -99,6 +99,7 @@ import io.github.sumirenokai.vesqen.ui.navigation.navigationOrder
 import io.github.sumirenokai.vesqen.ui.screens.AboutScreen
 import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
 import io.github.sumirenokai.vesqen.ui.screens.LibraryScreen
+import io.github.sumirenokai.vesqen.ui.screens.LicensesScreen
 import io.github.sumirenokai.vesqen.ui.screens.NowScreen
 import io.github.sumirenokai.vesqen.ui.screens.PrivacyPolicyScreen
 import io.github.sumirenokai.vesqen.ui.screens.SettingsScreen
@@ -106,6 +107,7 @@ import io.github.sumirenokai.vesqen.ui.screens.nowPortraitYieldsNavigation
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
+import io.github.sumirenokai.vesqen.updates.AppUpdater
 import io.github.sumirenokai.vesqen.verification.OutputVerificationImportFailure
 import io.github.sumirenokai.vesqen.verification.OutputVerificationImportResult
 import io.github.sumirenokai.vesqen.verification.OutputVerificationRegistryState
@@ -318,6 +320,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
             verificationImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
         },
         managePhoneOrientation = true,
+        appUpdater = application.appUpdater,
     )
 }
 
@@ -376,6 +379,7 @@ fun VesqenAppContent(
     verificationRegistryState: OutputVerificationRegistryState = OutputVerificationRegistryState.Empty,
     verificationImportResult: OutputVerificationImportResult? = null,
     onImportVerificationRegistry: () -> Unit = {},
+    appUpdater: AppUpdater? = null,
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     var showStrictUsbUnavailable by rememberSaveable { mutableStateOf(false) }
@@ -473,6 +477,10 @@ fun VesqenAppContent(
         applyNavigation(navigationState.openPrivacyPolicy())
     }
 
+    fun openLicenses() {
+        applyNavigation(navigationState.openLicenses())
+    }
+
     fun togglePlayerOrientation() {
         playerOrientationOverrideName = if (isLandscape) {
             PlayerOrientationOverride.FORCE_PORTRAIT.name
@@ -516,6 +524,8 @@ fun VesqenAppContent(
                 onOpenChain = ::openChain,
                 onOpenAbout = ::openAbout,
                 onOpenPrivacyPolicy = ::openPrivacyPolicy,
+                onOpenLicenses = ::openLicenses,
+                appUpdater = appUpdater,
                 onNavigateBack = ::navigateBack,
                 onRequestMusicAccess = onRequestMusicAccess,
                 onOpenAppSettings = onOpenAppSettings,
@@ -578,6 +588,8 @@ fun VesqenAppContent(
             onOpenChain = ::openChain,
             onOpenAbout = ::openAbout,
             onOpenPrivacyPolicy = ::openPrivacyPolicy,
+            onOpenLicenses = ::openLicenses,
+            appUpdater = appUpdater,
             onNavigateBack = ::navigateBack,
             onRequestMusicAccess = onRequestMusicAccess,
             onOpenAppSettings = onOpenAppSettings,
@@ -642,6 +654,8 @@ private fun VesqenDestinationFrame(
     onOpenChain: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenPrivacyPolicy: () -> Unit,
+    onOpenLicenses: () -> Unit,
+    appUpdater: AppUpdater?,
     onNavigateBack: () -> Unit,
     onRequestMusicAccess: () -> Unit,
     onOpenAppSettings: () -> Unit,
@@ -1024,6 +1038,9 @@ private fun VesqenDestinationFrame(
                         onOpenPlaybackChain = onOpenChain,
                         onImportVerificationRegistry = onImportVerificationRegistry,
                         onOpenAbout = onOpenAbout,
+                        onOpenPrivacyPolicy = onOpenPrivacyPolicy,
+                        onOpenLicenses = onOpenLicenses,
+                        appUpdater = appUpdater,
                         versionName = versionName,
                         modifier = destinationModifier,
                     )
@@ -1050,6 +1067,11 @@ private fun VesqenDestinationFrame(
                     )
 
                     VesqenDestination.PRIVACY_POLICY -> PrivacyPolicyScreen(
+                        onBack = onNavigateBack,
+                        modifier = destinationModifier,
+                    )
+
+                    VesqenDestination.LICENSES -> LicensesScreen(
                         onBack = onNavigateBack,
                         modifier = destinationModifier,
                     )

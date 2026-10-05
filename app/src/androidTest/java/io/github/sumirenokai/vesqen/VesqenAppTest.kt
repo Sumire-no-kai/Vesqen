@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen
 
+import android.text.format.Formatter
 import android.content.res.Configuration
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
@@ -13,6 +14,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -80,6 +82,14 @@ import io.github.sumirenokai.vesqen.playback.UsbOutputFailureOrigin
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.telemetry.FakePlaybackTelemetry
+import io.github.sumirenokai.vesqen.updates.AppUpdater
+import io.github.sumirenokai.vesqen.updates.FakeAppUpdater
+import io.github.sumirenokai.vesqen.updates.UpdateFailure
+import io.github.sumirenokai.vesqen.updates.UpdateInstallationSource
+import io.github.sumirenokai.vesqen.updates.UpdateLanguage
+import io.github.sumirenokai.vesqen.updates.UpdateRelease
+import io.github.sumirenokai.vesqen.updates.UpdateSnapshot
+import io.github.sumirenokai.vesqen.updates.UpdateState
 import io.github.sumirenokai.vesqen.telemetry.PlaybackTelemetry
 import io.github.sumirenokai.vesqen.telemetry.TelemetryDataSource
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
@@ -128,6 +138,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -535,14 +546,141 @@ class VesqenAppTest {
     }
 
     @Test
+    fun settings_groups_keep_every_entry_without_slogans() {
+        render(grantedState(), appUpdater = FakeAppUpdater())
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        listOf(
+            "vesqen.settings.section.playback-output",
+            "vesqen.settings.section.audio-proof",
+            "vesqen.settings.section.updates",
+            "vesqen.settings.section.application",
+            "vesqen.settings.privacy-policy",
+            "vesqen.settings.licenses",
+            "vesqen.settings.section.advanced",
+            "vesqen.settings.verification-registry",
+            "vesqen.settings.footer",
+        ).forEach { tag ->
+            composeRule.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag(tag))
+            composeRule.onNodeWithTag(tag).assertIsDisplayed()
+        }
+    }
+
+    @Test
+    fun settings_open_privacy_policy_and_full_license_texts() {
+        render(grantedState())
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.privacy-policy"))
+        composeRule.onNodeWithTag("vesqen.settings.privacy-policy").performClick()
+        composeRule.onNodeWithTag("vesqen.privacy").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.privacy.back").performClick()
+        composeRule.onNodeWithTag("vesqen.settings").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.licenses"))
+        composeRule.onNodeWithTag("vesqen.settings.licenses").performClick()
+        composeRule.onNodeWithTag("vesqen.licenses").assertIsDisplayed()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("vesqen.licenses.entry.0").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("vesqen.licenses.entry.0").performClick()
+        composeRule.onNodeWithTag("vesqen.licenses.detail").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.licenses.text.0").assertExists()
+        // System Back leaves the license text for the list first, then Settings.
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag("vesqen.licenses").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.licenses.back").performClick()
+        composeRule.onNodeWithTag("vesqen.settings").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.nav.settings").assertIsSelected()
+    }
+
+    @Test
+    fun settings_update_card_follows_each_update_state() {
+        val release = UpdateRelease(
+            versionName = "1.0.0-beta.3",
+            versionCode = 12,
+            minimumAndroidApi = 26,
+            apkUrls = listOf("https://github.com/Sumire-no-kai/Vesqen/releases/download/v1.0.0-beta.3/Vesqen.apk"),
+            sha256 = "0".repeat(64),
+            releaseNotes = mapOf(UpdateLanguage.ENGLISH to "Fixes", UpdateLanguage.SIMPLIFIED_CHINESE to "修复"),
+        )
+        val updater = FakeAppUpdater()
+        render(grantedState(), appUpdater = updater)
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        val check = composeRule.onNodeWithTag("vesqen.settings.updates.check")
+        composeRule.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.updates.check"))
+        check.assert(hasText(context.getString(R.string.update_status_never))).performClick()
+        check.assert(hasText(context.getString(R.string.update_status_checking))).assertHasNoClickAction()
+        composeRule.runOnIdle { updater.emit(UpdateState.UpToDate) }
+        check.assert(hasText(context.getString(R.string.update_status_up_to_date)))
+
+        composeRule.runOnIdle { updater.emit(UpdateState.Available(release)) }
+        composeRule.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.updates.release"))
+        composeRule.onNodeWithTag("vesqen.settings.updates.version").assertTextEquals("1.0.0-beta.3")
+        composeRule.onNodeWithTag("vesqen.settings.updates.skip").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.update_skipped)).assertExists()
+        composeRule.onAllNodesWithTag("vesqen.settings.updates.skip").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.settings.updates.download").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.updates.progress").assertExists()
+        composeRule.runOnIdle { updater.emit(UpdateState.Downloading(release, 5_000_000, 10_000_000)) }
+        composeRule.onNodeWithText(context.getString(
+            R.string.update_downloading,
+            Formatter.formatShortFileSize(context, 5_000_000),
+            Formatter.formatShortFileSize(context, 10_000_000),
+        )).assertExists()
+
+        composeRule.runOnIdle { updater.emit(UpdateState.ReadyToInstall(release, requiresInstallPermission = true)) }
+        composeRule.onNodeWithText(context.getString(R.string.update_permission_needed)).assertExists()
+        composeRule.onNodeWithTag("vesqen.settings.updates.install").performClick()
+        // The runtime opens the system permission; nothing installs until the user returns.
+        composeRule.runOnIdle { assertTrue(updater.snapshot.value.state is UpdateState.ReadyToInstall) }
+
+        composeRule.runOnIdle { updater.emit(UpdateState.Failed(UpdateFailure.SIGNATURE_MISMATCH, release)) }
+        composeRule.onNodeWithTag("vesqen.settings.updates.failure")
+            .assertTextEquals(context.getString(R.string.update_failure_signature))
+        composeRule.onNodeWithTag("vesqen.settings.updates.retry").assertExists()
+        composeRule.runOnIdle {
+            updater.emit(UpdateState.Failed(UpdateFailure.UNSUPPORTED_ANDROID_VERSION, release.copy(minimumAndroidApi = 99)))
+        }
+        composeRule.onNodeWithTag("vesqen.settings.updates.failure")
+            .assertTextEquals(context.getString(R.string.update_requires_android, 99))
+        composeRule.onAllNodesWithTag("vesqen.settings.updates.retry").assertCountEquals(0)
+    }
+
+    @Test
+    fun settings_leaves_updates_to_google_play_when_it_installed_the_app() {
+        val updater = FakeAppUpdater(UpdateSnapshot(
+            state = UpdateState.ManagedExternally(UpdateInstallationSource.GOOGLE_PLAY, "com.android.vending"),
+            automaticChecksEnabled = false,
+            installationSource = UpdateInstallationSource.GOOGLE_PLAY,
+            installerPackageName = "com.android.vending",
+        ))
+        render(grantedState(), appUpdater = updater)
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.updates.check"))
+        composeRule.onNodeWithTag("vesqen.settings.updates.check")
+            .assert(hasText(context.getString(R.string.update_managed, "Google Play")))
+            .assertHasNoClickAction()
+        composeRule.onAllNodesWithTag("vesqen.settings.updates.automatic").assertCountEquals(0)
+    }
+
+    @Test
+    fun settings_turns_automatic_update_checks_off() {
+        val updater = FakeAppUpdater()
+        render(grantedState(), appUpdater = updater)
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.updates.automatic"))
+        composeRule.onNodeWithTag("vesqen.settings.updates.automatic").assertIsOn().performClick()
+        composeRule.runOnIdle { assertFalse(updater.snapshot.value.automaticChecksEnabled) }
+        composeRule.onNodeWithTag("vesqen.settings.updates.automatic").assertIsOff()
+    }
+
+    @Test
     fun settings_opens_a_real_about_surface_with_the_build_version() {
         render(grantedState(), versionName = "0.1.0", versionCode = 1)
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
         composeRule.onNodeWithTag("vesqen.settings")
             .performScrollToNode(hasTestTag("vesqen.settings.about"))
-        composeRule.onNodeWithText(context.getString(R.string.settings_version, "0.1.0"))
-            .assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.settings.about").assert(hasText("0.1.0")).assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.settings.about").performClick()
 
         composeRule.onNodeWithTag("vesqen.about").assertIsDisplayed()
@@ -590,8 +728,9 @@ class VesqenAppTest {
         render(grantedState())
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
-        composeRule.onNodeWithTag("vesqen.settings.section.playback-output")
-            .assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.settings.section.playback-output").assertIsDisplayed()
+        // The two radio rows, and only they, form the selectable group.
+        composeRule.onNodeWithTag("vesqen.settings.output-modes")
             .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.SelectableGroup))
         composeRule.onNodeWithTag("vesqen.settings.output.system").assertIsSelected()
         composeRule.onNodeWithTag("vesqen.settings.output.system").assertIsNotEnabled()
@@ -602,14 +741,20 @@ class VesqenAppTest {
             .fetchSemanticsNode().boundsInRoot
         assertTrue("Strict USB must follow System output", strictUsb.top >= systemOutput.bottom)
 
+        // Scroll to each row itself: a section heading at the screen edge leaves its rows below.
         composeRule.onNodeWithTag("vesqen.settings")
-            .performScrollToNode(hasTestTag("vesqen.settings.section.audio-proof"))
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.settings.verification-registry").assertIsDisplayed()
-
         composeRule.onNodeWithTag("vesqen.settings")
-            .performScrollToNode(hasTestTag("vesqen.settings.section.application"))
+            .performScrollToNode(hasTestTag("vesqen.settings.about"))
         composeRule.onNodeWithTag("vesqen.settings.about").assertIsDisplayed()
+        // Output verification records are a maintainer tool, so they sit in Advanced after the app info.
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.verification-registry"))
+        composeRule.onNodeWithTag("vesqen.settings.verification-registry").assertIsDisplayed()
+        val about = composeRule.onNodeWithTag("vesqen.settings.about").fetchSemanticsNode().positionInRoot
+        val registry = composeRule.onNodeWithTag("vesqen.settings.verification-registry").fetchSemanticsNode().positionInRoot
+        assertTrue("Advanced must follow the application group", registry.y > about.y)
     }
 
     @Test
@@ -3073,6 +3218,7 @@ class VesqenAppTest {
         onRequestDiagnosticExport: () -> Unit = {},
         verificationRegistryState: OutputVerificationRegistryState = OutputVerificationRegistryState.Empty,
         onImportVerificationRegistry: () -> Unit = {},
+        appUpdater: AppUpdater? = null,
     ) {
         composeRule.setContent {
             VesqenTheme(darkTheme = darkTheme) {
@@ -3107,6 +3253,7 @@ class VesqenAppTest {
                         onRequestDiagnosticExport = onRequestDiagnosticExport,
                         verificationRegistryState = verificationRegistryState,
                         onImportVerificationRegistry = onImportVerificationRegistry,
+                        appUpdater = appUpdater,
                     )
                 }
                 val renderWithinSize: @Composable () -> Unit = {

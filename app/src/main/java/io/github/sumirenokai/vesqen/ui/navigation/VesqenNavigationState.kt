@@ -62,6 +62,8 @@ data class VesqenNavigationState(
 
     fun openPrivacyPolicy(): VesqenNavigationState = openDetail(VesqenDestination.PRIVACY_POLICY)
 
+    fun openLicenses(): VesqenNavigationState = openDetail(VesqenDestination.LICENSES)
+
     fun back(): VesqenNavigationState = when {
         destination == VesqenDestination.LIBRARY -> this
         destination == VesqenDestination.CHAIN -> copy(
