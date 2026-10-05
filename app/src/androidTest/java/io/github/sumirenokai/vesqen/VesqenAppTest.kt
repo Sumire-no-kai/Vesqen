@@ -671,8 +671,9 @@ class VesqenAppTest {
         render(grantedState())
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
-        composeRule.onNodeWithTag("vesqen.settings.section.playback-output")
-            .assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.settings.section.playback-output").assertIsDisplayed()
+        // The two radio rows, and only they, form the selectable group.
+        composeRule.onNodeWithTag("vesqen.settings.output-modes")
             .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.SelectableGroup))
         composeRule.onNodeWithTag("vesqen.settings.output.system").assertIsSelected()
         composeRule.onNodeWithTag("vesqen.settings.output.system").assertIsNotEnabled()
