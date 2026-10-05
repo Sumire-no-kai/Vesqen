@@ -4,6 +4,7 @@ import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -32,7 +33,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
-import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DashboardCustomize
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -155,9 +155,9 @@ import io.github.sumirenokai.vesqen.ui.chain.telemetryMetricLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetrySectionLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetrySourceLabelResource
 import io.github.sumirenokai.vesqen.ui.chain.segmentChartHistory
-import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.components.VesqenEmptyState
 import io.github.sumirenokai.vesqen.ui.theme.VesqenDataStyle
+import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import java.util.Locale
@@ -166,31 +166,11 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-private val SummarySections = listOf(
-    TelemetrySection.SOURCE,
-    TelemetrySection.DECODER,
-    TelemetrySection.PROCESSING,
-    TelemetrySection.ROUTE,
-    TelemetrySection.USB,
-    TelemetrySection.PLAYBACK,
-)
-
 private fun ChainDashboardPreferences.observedMetricIds(): Set<TelemetryMetricId> =
-    selectedMetricIds.toSet() + TelemetryMetricCatalog.defaultIds + ChainCoreMetricIds
-
-private val ChainCoreMetricIds = setOf(
-    TelemetryMetricCatalog.SOURCE_SAMPLE_RATE,
-    TelemetryMetricCatalog.SOURCE_BIT_DEPTH,
-    TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE,
-    TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_ENCODING,
-    TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_NAME,
-    TelemetryMetricCatalog.PLAYBACK_CURRENT_MEDIA_READ_BITRATE,
-    TelemetryMetricCatalog.PLAYBACK_ESTIMATED_TOTAL_BUFFERED_DURATION,
-    TelemetryMetricCatalog.PLAYBACK_UNDERRUN_COUNT,
-)
+    selectedMetricIds.toSet() + ChainSummaryMetricIds
 
 // Leave margin below Android's 1.3 preset because OEM/non-linear scaling can report it just under 1.3.
-private const val ChainLargeTextFontScale = 1.25f
+internal const val ChainLargeTextFontScale = 1.25f
 
 @Composable
 fun ChainScreen(
@@ -205,6 +185,8 @@ fun ChainScreen(
     onBack: (() -> Unit)?,
     onBrowseLibrary: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Offered on a strict failure, as the claim's explicit fallback (B §2.5). */
+    onUseSystemOutput: (() -> Unit)? = null,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     var preferences by remember(preferencesRepository) {
@@ -238,7 +220,7 @@ fun ChainScreen(
             selection = if (showAdvanced) {
                 TelemetryMetricSelection.Explicit(preferences.observedMetricIds())
             } else {
-                TelemetryMetricSelection.Explicit(TelemetryMetricCatalog.defaultIds + ChainCoreMetricIds)
+                TelemetryMetricSelection.Explicit(ChainSummaryMetricIds)
             },
         )
     }
@@ -360,7 +342,7 @@ fun ChainScreen(
                 refreshInterval = preferences.refreshInterval,
                 powerMode = preferences.powerMode,
                 unitDisplayMode = preferences.unitDisplayMode,
-                requestedMetricIds = TelemetryMetricCatalog.defaultIds + ChainCoreMetricIds,
+                onUseSystemOutput = onUseSystemOutput,
                 onOpenAdvanced = { showAdvanced = true },
                 onRetry = { retryEpoch++ },
                 modifier = Modifier.weight(1f),
@@ -384,40 +366,43 @@ private fun ChainHeader(
     onBack: (() -> Unit)?,
     onShowSummary: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 64.dp)
-            .padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (onBack != null) {
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier.size(48.dp).testTag("vesqen.chain.back"),
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.back),
-                )
-            }
-        }
-        Text(
-            text = stringResource(if (showAdvanced) R.string.chain_advanced_title else R.string.destination_chain),
-            style = if (showAdvanced) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val compactTitle = showAdvanced || maxWidth < 360.dp || LocalDensity.current.fontScale >= ChainLargeTextFontScale
+        Row(
             modifier = Modifier
-                .weight(1f)
-                .testTag("vesqen.chain.title")
-                .semantics { heading() },
-        )
-        if (showAdvanced) {
-            TextButton(
-                onClick = onShowSummary,
-                modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.chain.show-summary"),
-            ) {
-                Text(stringResource(R.string.chain_summary_action))
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .padding(start = if (onBack != null) VesqenSpacing.xxs else VesqenSpacing.lg, end = VesqenSpacing.xxs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (onBack != null) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.size(48.dp).testTag("vesqen.chain.back"),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.back),
+                    )
+                }
+            }
+            Text(
+                text = stringResource(if (showAdvanced) R.string.chain_advanced_title else R.string.destination_chain),
+                style = if (compactTitle) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.displayMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("vesqen.chain.title")
+                    .semantics { heading() },
+            )
+            if (showAdvanced) {
+                TextButton(
+                    onClick = onShowSummary,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.chain.show-summary"),
+                ) {
+                    Text(stringResource(R.string.chain_summary_action))
+                }
             }
         }
     }
@@ -497,90 +482,6 @@ private fun ChainEmptyScreen(
     }
 }
 
-@Composable
-private fun ChainSummaryScreen(
-    playback: PlaybackSnapshot,
-    observationState: ChainObservationState,
-    nowElapsedRealtimeMs: Long,
-    refreshInterval: TelemetryRefreshInterval,
-    powerMode: TelemetryPowerMode,
-    unitDisplayMode: ChainUnitDisplayMode,
-    requestedMetricIds: Set<TelemetryMetricId>,
-    onOpenAdvanced: () -> Unit,
-    onRetry: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val lastPlayback = describesLastPlayback(observationState.lastSnapshot(), playback)
-    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 720.dp)
-                .testTag("vesqen.chain.summary-list"),
-            contentPadding = PaddingValues(
-                start = VesqenSpacing.lg,
-                top = VesqenSpacing.xs,
-                end = VesqenSpacing.lg,
-                bottom = VesqenSpacing.xl,
-            ),
-            verticalArrangement = Arrangement.spacedBy(VesqenSpacing.md),
-        ) {
-            item(key = "current-source") { ChainCurrentSource(playback) }
-            item(key = "output-status") { ChainSummaryPanel(playback = playback) }
-            item {
-                ChainObservationNotice(
-                    state = observationState,
-                    nowElapsedRealtimeMs = nowElapsedRealtimeMs,
-                    refreshInterval = refreshInterval,
-                    powerMode = powerMode,
-                    requestedMetricIds = requestedMetricIds,
-                    lastPlayback = lastPlayback,
-                    onRetry = onRetry,
-                    compact = true,
-                )
-            }
-            item {
-                ChainCorePanel(observationState.lastSnapshot(), nowElapsedRealtimeMs, unitDisplayMode, lastPlayback)
-            }
-            item {
-                Button(
-                    onClick = onOpenAdvanced,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .testTag("vesqen.chain.open-advanced"),
-                ) {
-                    Icon(Icons.Filled.Speed, contentDescription = null)
-                    Spacer(Modifier.width(VesqenSpacing.xs))
-                    Text(stringResource(R.string.chain_open_advanced))
-                }
-            }
-            item {
-                ChainPathSummary(
-                    telemetrySnapshot = observationState.lastSnapshot(),
-                    nowElapsedRealtimeMs = nowElapsedRealtimeMs,
-                    unitDisplayMode = unitDisplayMode,
-                    lastPlayback = lastPlayback,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ChainCurrentSource(playback: PlaybackSnapshot) {
-    Text(
-        text = stringResource(R.string.chain_current_source, playback.title.ifBlank {
-            stringResource(R.string.unknown_title)
-        }),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.fillMaxWidth().testTag("vesqen.chain.current-source"),
-    )
-}
-
 /** The listener-facing claim title shared by Chain and the Now liner notes. */
 @Composable
 internal fun outputClaimTitle(playback: PlaybackSnapshot): String {
@@ -635,107 +536,7 @@ internal fun outputClaimBody(playback: PlaybackSnapshot): String {
 }
 
 @Composable
-private fun ChainSummaryPanel(playback: PlaybackSnapshot) {
-    val title = outputClaimTitle(playback)
-    val body = outputClaimBody(playback)
-    Surface(
-        modifier = Modifier.fillMaxWidth().testTag("vesqen.chain.summary"),
-        shape = RoundedCornerShape(VesqenRadii.surface),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    ) {
-        Column(
-            modifier = Modifier.padding(VesqenSpacing.lg),
-            verticalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
-        ) {
-            OutputStatusChip(declaration = playback.declaration)
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Text(
-                text = body,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ChainCorePanel(
-    snapshot: TelemetrySnapshot?,
-    nowElapsedRealtimeMs: Long,
-    unitDisplayMode: ChainUnitDisplayMode,
-    lastPlayback: Boolean,
-) {
-    val metrics = snapshot?.metrics.orEmpty().associateBy { it.id }
-    Surface(
-        modifier = Modifier.fillMaxWidth().testTag("vesqen.chain.core"),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.AccountTree, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    stringResource(if (lastPlayback) R.string.chain_core_title_last else R.string.chain_core_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.semantics { heading() },
-                )
-            }
-            BoxWithConstraints {
-                val source: @Composable () -> Unit = {
-                    ChainCoreSectionTitle(stringResource(R.string.chain_core_source))
-                    ChainCoreFact(TelemetryMetricCatalog.SOURCE_SAMPLE_RATE, metrics, nowElapsedRealtimeMs, unitDisplayMode, prominent = true)
-                    ChainCoreFact(TelemetryMetricCatalog.SOURCE_BIT_DEPTH, metrics, nowElapsedRealtimeMs, unitDisplayMode)
-                }
-                val pcm: @Composable () -> Unit = {
-                    ChainCoreSectionTitle(stringResource(R.string.chain_core_output))
-                    ChainCoreFact(TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE, metrics, nowElapsedRealtimeMs, unitDisplayMode, prominent = true)
-                    ChainCoreFact(TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_ENCODING, metrics, nowElapsedRealtimeMs, unitDisplayMode)
-                }
-                if (maxWidth >= 280.dp && LocalDensity.current.fontScale < ChainLargeTextFontScale) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { source() }
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { pcm() }
-                    }
-                } else {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        source()
-                        pcm()
-                    }
-                }
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            ChainCoreSectionTitle(stringResource(R.string.chain_core_route))
-            ChainCoreFact(TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_NAME, metrics, nowElapsedRealtimeMs, unitDisplayMode)
-            listOf(
-                TelemetryMetricCatalog.PLAYBACK_CURRENT_MEDIA_READ_BITRATE,
-                TelemetryMetricCatalog.PLAYBACK_ESTIMATED_TOTAL_BUFFERED_DURATION,
-                TelemetryMetricCatalog.PLAYBACK_UNDERRUN_COUNT,
-            ).forEach { id -> ChainCoreFact(id, metrics, nowElapsedRealtimeMs, unitDisplayMode) }
-            Text(stringResource(R.string.chain_core_boundary), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@Composable
-private fun ChainCoreSectionTitle(title: String) {
-    Text(
-        title,
-        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp).semantics { heading() },
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-    )
-}
-
-@Composable
-private fun rememberedTelemetryReading(reading: TelemetryReading?, unitDisplayMode: ChainUnitDisplayMode): String {
+internal fun rememberedTelemetryReading(reading: TelemetryReading?, unitDisplayMode: ChainUnitDisplayMode): String {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     // Evidence timestamps still update each sample; an unchanged reading needs no new formatter.
@@ -745,56 +546,7 @@ private fun rememberedTelemetryReading(reading: TelemetryReading?, unitDisplayMo
 }
 
 @Composable
-private fun ChainCoreFact(
-    id: TelemetryMetricId,
-    metrics: Map<TelemetryMetricId, TelemetryMetric>,
-    nowElapsedRealtimeMs: Long,
-    unitDisplayMode: ChainUnitDisplayMode,
-    prominent: Boolean = false,
-) {
-    val context = LocalContext.current
-    val evidence = metrics[id]?.evidence
-    val label = telemetryMetricLabel(context, id)
-    val value = rememberedTelemetryReading(evidence?.reading, unitDisplayMode)
-    var expanded by remember(id) { mutableStateOf(false) }
-    val action = stringResource(R.string.chain_evidence_details)
-    Column(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp)
-            .testTag("vesqen.chain.core.${id.value}")
-            .clickable(onClickLabel = action) { expanded = !expanded }
-            .semantics(mergeDescendants = true) {},
-        verticalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            value,
-            style = (if (prominent) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium)
-                .copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium),
-            textAlign = TextAlign.Start,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("vesqen.chain.core-value.${id.value}"),
-        )
-        Text(
-            evidence?.let { telemetryConfidenceLabel(context, it.confidence) + " · " + telemetryEvidenceAge(context, it, nowElapsedRealtimeMs) }
-                ?: stringResource(R.string.chain_sampling_starting_short),
-            modifier = Modifier.fillMaxWidth().testTag("vesqen.chain.core-evidence.${id.value}"),
-            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (evidence != null && (expanded || evidence is TelemetryEvidence.Unavailable)) {
-            telemetryEvidenceMethod(context, evidence)?.let { method ->
-                Text(method, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        if (expanded && evidence != null) {
-            Text(listOfNotNull(telemetryEvidenceSource(context, evidence), telemetryEvidenceWindow(context, evidence)).joinToString(" · "),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@Composable
-private fun ChainObservationNotice(
+internal fun ChainObservationNotice(
     state: ChainObservationState,
     nowElapsedRealtimeMs: Long,
     refreshInterval: TelemetryRefreshInterval,
@@ -869,8 +621,8 @@ private fun ChainObservationNotice(
     if (compact && state is ChainObservationState.Content && !isStale) {
         Row(Modifier.fillMaxWidth().heightIn(min = 32.dp).testTag(content.tag)
             .semantics { contentDescription = content.body }, verticalAlignment = Alignment.CenterVertically) {
-            Icon(content.icon, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.width(6.dp))
+            ChainLiveDot(live = content.tag == "vesqen.chain.live")
+            Spacer(Modifier.width(8.dp))
             Text(content.title + if (content.unavailableCount > 0) " (${content.unavailableCount})" else "",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -882,8 +634,9 @@ private fun ChainObservationNotice(
         color = if (state is ChainObservationState.Failed) {
             MaterialTheme.colorScheme.errorContainer
         } else {
-            MaterialTheme.colorScheme.surfaceContainerLow
+            MaterialTheme.colorScheme.surface
         },
+        border = if (state is ChainObservationState.Failed) null else BorderStroke(1.dp, LocalVesqenColors.current.hairline),
         contentColor = if (state is ChainObservationState.Failed) {
             MaterialTheme.colorScheme.onErrorContainer
         } else {
@@ -935,86 +688,6 @@ private data class ChainNoticeContent(
 )
 
 @Composable
-private fun ChainPathSummary(
-    telemetrySnapshot: TelemetrySnapshot?,
-    nowElapsedRealtimeMs: Long,
-    unitDisplayMode: ChainUnitDisplayMode,
-    lastPlayback: Boolean,
-) {
-    val context = LocalContext.current
-    val metricsBySection = telemetrySnapshot?.metrics.orEmpty().groupBy { it.section }
-    Surface(
-        modifier = Modifier.fillMaxWidth().testTag("vesqen.chain.path"),
-        shape = RoundedCornerShape(VesqenRadii.surface),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
-        Column(modifier = Modifier.padding(VesqenSpacing.md)) {
-            Text(
-                text = stringResource(if (lastPlayback) R.string.chain_last_path else R.string.chain_current_path),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.semantics { heading() },
-            )
-            Spacer(Modifier.height(VesqenSpacing.sm))
-            SummarySections.forEach { section ->
-                val metrics = metricsBySection[section]
-                    .orEmpty()
-                    .filter { metric ->
-                        runCatching { TelemetryMetricCatalog.descriptor(metric.id).defaultVisible }.getOrDefault(false)
-                    }
-                    .take(2)
-                val value = when {
-                    metrics.isNotEmpty() -> metrics.joinToString(" · ") { metric ->
-                        "${telemetryMetricLabel(context, metric.id)} ${
-                            formatTelemetryReading(context, metric.evidence.reading, unitDisplayMode)
-                        }"
-                    }
-                    else -> stringResource(R.string.unavailable)
-                }
-                val updated = metrics.maxOfOrNull { it.evidence.observedAtElapsedRealtimeMs }?.let { observedAt ->
-                    val evidence = metrics.first { it.evidence.observedAtElapsedRealtimeMs == observedAt }.evidence
-                    telemetryEvidenceAge(context, evidence, nowElapsedRealtimeMs)
-                }
-                ChainPathRow(
-                    section = section,
-                    value = value,
-                    updated = updated,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ChainPathRow(section: TelemetrySection, value: String, updated: String?) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = VesqenSpacing.sm)
-            .testTag("vesqen.chain.path.${section.name.lowercase()}"),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Surface(
-            modifier = Modifier.size(36.dp),
-            shape = RoundedCornerShape(VesqenRadii.control),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.AccountTree, contentDescription = null, modifier = Modifier.size(18.dp))
-            }
-        }
-        Spacer(Modifier.width(VesqenSpacing.sm))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(telemetrySectionLabel(LocalContext.current, section), style = MaterialTheme.typography.titleSmall)
-            Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            updated?.let {
-                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-}
-
-@Composable
 private fun ChainAdvancedLayout(
     playback: PlaybackSnapshot,
     observationState: ChainObservationState,
@@ -1045,7 +718,7 @@ private fun ChainAdvancedLayout(
                     contentPadding = PaddingValues(bottom = VesqenSpacing.xl),
                     verticalArrangement = Arrangement.spacedBy(VesqenSpacing.md),
                 ) {
-                    item { ChainSummaryPanel(playback) }
+                    item { ChainDeclarationCard(playback, onUseSystemOutput = null) }
                     item {
                         ChainObservationNotice(
                             state = observationState,
@@ -1055,14 +728,6 @@ private fun ChainAdvancedLayout(
                             requestedMetricIds = preferences.observedMetricIds(),
                             lastPlayback = lastPlayback,
                             onRetry = onRetry,
-                        )
-                    }
-                    item {
-                        ChainPathSummary(
-                            telemetrySnapshot = observationState.lastSnapshot(),
-                            nowElapsedRealtimeMs = nowElapsedRealtimeMs,
-                            unitDisplayMode = preferences.unitDisplayMode,
-                            lastPlayback = lastPlayback,
                         )
                     }
                 }
@@ -1167,7 +832,7 @@ private fun ChainMetricsGrid(
         horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.md),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        item(key = "current-source", span = { GridItemSpan(maxLineSpan) }) { ChainCurrentSource(playback) }
+        item(key = "current-source", span = { GridItemSpan(maxLineSpan) }) { ChainNowPlaying(playback) }
         if (showObservationNotice) {
             item(key = "observation-notice", span = { GridItemSpan(maxLineSpan) }) {
                 ChainObservationNotice(
@@ -1181,9 +846,6 @@ private fun ChainMetricsGrid(
                     compact = true,
                 )
             }
-        }
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            ChainCorePanel(snapshot, nowElapsedRealtimeMs, preferences.unitDisplayMode, lastPlayback)
         }
         item(span = { GridItemSpan(maxLineSpan) }) {
             ChainDashboardControls(
@@ -1867,7 +1529,7 @@ private fun unitDisplayModeLabel(mode: ChainUnitDisplayMode): String = stringRes
 )
 
 @Composable
-private fun refreshIntervalLabel(interval: TelemetryRefreshInterval): String = stringResource(
+internal fun refreshIntervalLabel(interval: TelemetryRefreshInterval): String = stringResource(
     when (interval) {
         TelemetryRefreshInterval.QUARTER_SECOND -> R.string.chain_refresh_250ms
         TelemetryRefreshInterval.HALF_SECOND -> R.string.chain_refresh_500ms
@@ -2661,7 +2323,7 @@ private fun List<TelemetryMetricId>.movedWithin(
     return toMutableList().apply { add(targetGlobal, removeAt(fromGlobal)) }
 }
 
-private fun ChainObservationState.lastSnapshot(): TelemetrySnapshot? = when (this) {
+internal fun ChainObservationState.lastSnapshot(): TelemetrySnapshot? = when (this) {
     is ChainObservationState.Content -> snapshot
     is ChainObservationState.Failed -> lastSnapshot
     ChainObservationState.Waiting -> null
