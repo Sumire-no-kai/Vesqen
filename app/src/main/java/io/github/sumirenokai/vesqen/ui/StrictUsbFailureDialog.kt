@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.playback.OfficialMixerApiSupport
+import io.github.sumirenokai.vesqen.playback.UsbOutputFailureOrigin
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.ui.screens.strictUsbFailureLabel
@@ -48,6 +49,26 @@ internal fun StrictUsbUnavailableDialog(
     )
 }
 
+/**
+ * #34: a failure interrupts with a dialog only when it blocked something the user asked for:
+ * pressing play, the next track of a queue they started, or turning strict output on. Failures
+ * from startup, queue restore, route or processing changes and service stop stay non-modal;
+ * the Now status chip and output dialog, Chain and Settings show the reason.
+ */
+internal fun UsbOutputStatus.failureInterruptsUser(): Boolean = failure != null && when (failureOrigin) {
+    UsbOutputFailureOrigin.USER_PLAYBACK,
+    UsbOutputFailureOrigin.TRACK_TRANSITION,
+    UsbOutputFailureOrigin.USER_MODE_CHANGE,
+    -> true
+    UsbOutputFailureOrigin.SERVICE_START,
+    UsbOutputFailureOrigin.QUEUE_RESTORE,
+    UsbOutputFailureOrigin.ROUTE_CHANGE,
+    UsbOutputFailureOrigin.PROCESSING_CHANGE,
+    UsbOutputFailureOrigin.SERVICE_STOP,
+    null,
+    -> false
+}
+
 /** The app shell owns feedback, including failures started from Library or the mini-player. */
 @Composable
 internal fun StrictUsbFailureDialog(
@@ -56,7 +77,7 @@ internal fun StrictUsbFailureDialog(
     onSetUsbOutputMode: (UsbOutputMode) -> Unit,
 ) {
     var dismissedFailure by rememberSaveable { mutableStateOf<String?>(null) }
-    val failure = status.failure ?: return
+    val failure = status.failure?.takeIf { status.failureInterruptsUser() } ?: return
     // A fresh failed attempt has a new coordinator generation. Telemetry refreshes do not.
     val failureKey = "${status.generation}:${status.observedAtEpochMs}:${failure.name}"
     if (dismissedFailure == failureKey) return
