@@ -15,6 +15,20 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
+    <!-- Device report sharing checks for a receiving app before opening the chooser. From
+         Android 11 that check only sees apps handling an intent declared here: SEND for
+         sharing, and the SENDTO mailto selector for email. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="application/json" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+    </queries>
+
     <application
         android:name=".VesqenApplication"
         android:allowBackup="false"
