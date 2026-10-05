@@ -76,6 +76,7 @@ import io.github.sumirenokai.vesqen.playback.OfficialMixerApiSupport
 import io.github.sumirenokai.vesqen.playback.UsbHardwareIdentity
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
+import io.github.sumirenokai.vesqen.playback.UsbOutputFailureOrigin
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.telemetry.FakePlaybackTelemetry
@@ -147,6 +148,7 @@ class VesqenAppTest {
             phase = UsbOutputPhase.FAILED,
             failure = UsbOutputFailure.NO_USB_AUDIO_DEVICE,
             generation = 1,
+            failureOrigin = UsbOutputFailureOrigin.USER_PLAYBACK,
         )
         var state by mutableStateOf(activePlaybackState().let {
             it.copy(playback = it.playback.copy(usbOutputStatus = failure))
@@ -188,6 +190,61 @@ class VesqenAppTest {
             state = state.copy(playback = state.playback.copy(usbOutputStatus = UsbOutputStatus()))
         }
         composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertDoesNotExist()
+    }
+
+    @Test
+    fun strict_failures_without_a_user_action_stay_out_of_a_dialog_but_visible() {
+        var state by mutableStateOf(activePlaybackState())
+        render(state, stateProvider = { state })
+        // #34: startup, queue restore and unknown origins never interrupt with a modal.
+        listOf(UsbOutputFailureOrigin.SERVICE_START, UsbOutputFailureOrigin.QUEUE_RESTORE, null)
+            .forEachIndexed { index, origin ->
+                composeRule.runOnIdle {
+                    state = state.copy(playback = state.playback.copy(usbOutputStatus = UsbOutputStatus(
+                        mode = UsbOutputMode.STRICT_BIT_PERFECT,
+                        phase = UsbOutputPhase.FAILED,
+                        failure = UsbOutputFailure.NO_USB_AUDIO_DEVICE,
+                        generation = index + 1L,
+                        failureOrigin = origin,
+                    )))
+                }
+                composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertDoesNotExist()
+            }
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithText(context.getString(
+            R.string.settings_strict_usb_failed, context.getString(R.string.usb_failure_no_device),
+        )).assertIsDisplayed()
+    }
+
+    @Test
+    fun saved_strict_mode_turns_off_in_now_where_the_official_api_is_missing() {
+        val modes = mutableListOf<UsbOutputMode>()
+        val restoredOnAndroid13 = UsbOutputStatus(
+            mode = UsbOutputMode.STRICT_BIT_PERFECT,
+            phase = UsbOutputPhase.FAILED,
+            failure = UsbOutputFailure.UNSUPPORTED_ANDROID_VERSION,
+            generation = 1,
+            officialMixerApiSupport = OfficialMixerApiSupport(
+                androidRelease = "13",
+                apiLevel = 33,
+                mixerApiAvailable = false,
+            ),
+            failureOrigin = UsbOutputFailureOrigin.SERVICE_START,
+        )
+        render(
+            state = activePlaybackState().let { state ->
+                state.copy(playback = state.playback.copy(usbOutputStatus = restoredOnAndroid13))
+            },
+            onSetUsbOutputMode = modes::add,
+        )
+        composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertDoesNotExist()
+        composeRule.onNodeWithTag("vesqen.nav.now").performClick()
+        openLinerNotes()
+        composeRule.onNodeWithTag("vesqen.now.output-mode").performScrollTo().performClick()
+        // #62 item 4: the switch cannot turn strict on here, but a saved strict mode turns off.
+        composeRule.onNodeWithTag("vesqen.now.strict-usb-switch").assertIsEnabled().assertIsOn().performClick()
+        composeRule.onNodeWithTag("vesqen.output.unavailable-dialog").assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals(listOf(UsbOutputMode.SYSTEM), modes) }
     }
 
     @Test

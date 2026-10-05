@@ -1275,6 +1275,13 @@ private fun PlaybackProblemBanner(
     }
 }
 
+/**
+ * #62: without the official mixer API strict output can never start, so the switch cannot turn it
+ * on. A strict mode saved earlier (for example restored onto Android 13) must still turn off here.
+ */
+internal fun strictUsbSwitchEnabled(canSetMode: Boolean, platformUnavailable: Boolean, strictOn: Boolean): Boolean =
+    canSetMode && (strictOn || !platformUnavailable)
+
 @Composable
 private fun OutputModeDialog(
     snapshot: PlaybackSnapshot,
@@ -1283,6 +1290,8 @@ private fun OutputModeDialog(
     onDismiss: () -> Unit,
 ) {
     val strictUsbPlatformUnavailable = snapshot.usbOutputStatus.officialMixerApiSupport?.mixerApiAvailable == false
+    val strictOn = snapshot.usbOutputStatus.mode == UsbOutputMode.STRICT_BIT_PERFECT
+    val switchEnabled = strictUsbSwitchEnabled(snapshot.canSetUsbOutputMode, strictUsbPlatformUnavailable, strictOn)
     val strictOutputLabel = stringResource(R.string.settings_strict_usb_output)
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1297,24 +1306,24 @@ private fun OutputModeDialog(
                         .testTag("vesqen.now.strict-usb-row")
                         .fillMaxWidth()
                         .then(
-                            if (snapshot.canSetUsbOutputMode && strictUsbPlatformUnavailable) {
+                            if (snapshot.canSetUsbOutputMode && strictUsbPlatformUnavailable && !strictOn) {
                                 Modifier.clickable(onClick = onExplainStrictUsbUnavailable, role = Role.Button)
                             } else {
                                 Modifier
                             },
                         )
-                        .alpha(if (snapshot.canSetUsbOutputMode && !strictUsbPlatformUnavailable) 1f else .56f)
+                        .alpha(if (switchEnabled) 1f else .56f)
                         .padding(vertical = VesqenSpacing.xs),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(strictOutputLabel, modifier = Modifier.weight(1f).padding(end = VesqenSpacing.sm))
                     Switch(
-                        checked = snapshot.usbOutputStatus.mode == UsbOutputMode.STRICT_BIT_PERFECT,
+                        checked = strictOn,
                         onCheckedChange = { enabled ->
                             onSetUsbOutputMode(if (enabled) UsbOutputMode.STRICT_BIT_PERFECT else UsbOutputMode.SYSTEM)
                             onDismiss()
                         },
-                        enabled = snapshot.canSetUsbOutputMode && !strictUsbPlatformUnavailable,
+                        enabled = switchEnabled,
                         modifier = Modifier
                             .testTag("vesqen.now.strict-usb-switch")
                             .semantics { contentDescription = strictOutputLabel },
