@@ -1,0 +1,28 @@
+name: Usage service CI
+on:
+  push:
+    branches: [master]
+    paths: ["server/usage/**", ".github/workflows/usage.yml", "contracts/device-report/**"]
+  pull_request:
+    paths: ["server/usage/**", ".github/workflows/usage.yml", "contracts/device-report/**"]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      WRANGLER_SEND_METRICS: "false"
+    defaults:
+      run:
+        working-directory: server/usage
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: server/usage/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run check
