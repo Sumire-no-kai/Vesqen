@@ -90,6 +90,52 @@
       "VOLTS",
       "MILLIAMPERES",
       "MILLIWATTS"
+    ],
+    "appSegmentStatus": [
+      "UNCHANGED",
+      "MODIFIED",
+      "UNKNOWN"
+    ],
+    "sourceCompression": [
+      "LOSSLESS",
+      "LOSSY",
+      "UNKNOWN"
+    ],
+    "appSegmentCondition": [
+      "SPEED",
+      "PITCH",
+      "PLAYER_VOLUME",
+      "SKIP_SILENCE",
+      "REPLAY_GAIN",
+      "EQUALIZER",
+      "LOUDNESS",
+      "CROSSFADE",
+      "APP_DSP",
+      "SAMPLE_RATE",
+      "CHANNELS",
+      "PCM_PRECISION",
+      "TRACK_TRANSITION"
+    ],
+    "segmentReason": [
+      "VALUE_CHANGED",
+      "PRECISION_LOSS",
+      "MISSING",
+      "UNAVAILABLE",
+      "INSUFFICIENT_CONFIDENCE",
+      "EXPIRED",
+      "INVALID_TIME",
+      "UNSUPPORTED_VALUE",
+      "DEPENDENCY_CYCLE",
+      "DECODER_MAY_CHANGE_FORMAT",
+      "TRANSITION_IN_PROGRESS"
+    ],
+    "routeKind": [
+      "BLUETOOTH",
+      "OTHER",
+      "UNKNOWN"
+    ],
+    "bluetoothSegmentStatus": [
+      "LOSSY_OR_UNKNOWN_DEPENDING_ON_CODEC"
     ]
   },
   "text": {

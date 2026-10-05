@@ -7,6 +7,9 @@ import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailureOrigin
 import io.github.sumirenokai.vesqen.playback.telemetryLabel
 import io.github.sumirenokai.vesqen.telemetry.TelemetryDataSource
+import io.github.sumirenokai.vesqen.telemetry.TelemetryEvent
+import io.github.sumirenokai.vesqen.telemetry.TelemetryEventKind
+import io.github.sumirenokai.vesqen.telemetry.TelemetryEventSeverity
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetric
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricId
@@ -83,7 +86,8 @@ class DeviceReportContractTest {
         fun measured(id: TelemetryMetricId, reading: TelemetryReading, from: String) =
             TelemetryMetric(id, Metrics.descriptor(id).section, TelemetryEvidence.Measured(reading, source(from), 1_000, 900))
         val metrics = listOf(
-            measured(Metrics.ROUTE_SELECTED_SYSTEM_TYPE, TelemetryReading.Text("phone_speaker"), "android.system_media_route"),
+            measured(Metrics.DECODER_INPUT_MIME, TelemetryReading.Text("audio/flac"), "media3.analytics"),
+            measured(Metrics.ROUTE_SELECTED_SYSTEM_TYPE, TelemetryReading.Text("bluetooth_a2dp"), "android.system_media_route"),
             measured(Metrics.ROUTE_OUTPUT_DECLARATION, TelemetryReading.Text("SYSTEM MIXED"), "vesqen.output_coordinator"),
             measured(Metrics.ROUTE_SELECTED_SYSTEM_NAME, TelemetryReading.Text("Phone"), "android.system_media_route"),
             measured(Metrics.PLAYBACK_AUDIO_TRACK_ENCODING, TelemetryReading.Text("pcm-float"), "media3.audio_track"),
@@ -115,7 +119,13 @@ class DeviceReportContractTest {
         return DeviceReportData(
             DeviceReportBasic("1.0.0-beta.2", 9, "release", "vivo", "V2171A", "15", 35, "PD2171_A_15.0.20.1"),
             generatedAtEpochMs = 1_000,
-            telemetry = TelemetrySnapshot(1_000, 900, "sample-session", metrics),
+            telemetry = TelemetrySnapshot(1_000, 900, "sample-session", metrics, recentEvents = listOf(
+                TelemetryEvent(
+                    1, TelemetryEventKind.SEEK_COMPLETED,
+                    TelemetryEventSeverity.INFO, 950, code = "test.seek",
+                    occurredAtElapsedRealtimeMs = 850,
+                ),
+            )),
             history = history,
         )
     }

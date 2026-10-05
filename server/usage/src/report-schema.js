@@ -95,13 +95,49 @@ function snapshot(s) {
   check(ids.size === s.metrics.length);
   check(s.metrics.every(m => (m.inputMetricIds ?? []).every(id => ids.has(id))));
 }
+// This is an app-local assessment, never an output declaration or proof of bit-perfect output.
+function appSegment(a, evidence) {
+  const ids = new Set((evidence.metrics ?? []).map(m => m.id));
+  const metricIds = values => array(values, vocabulary.metrics.length, id => ids.has(id)) && new Set(values).size === values.length;
+  const issues = values => array(values, vocabulary.metrics.length * enums.segmentReason.length, issue => {
+    checkFields(issue, {metricId:id => Object.hasOwn(catalog,id),reason:oneOf(enums.segmentReason)});
+    check(issue.reason === 'MISSING' ? !ids.has(issue.metricId) : ids.has(issue.metricId));
+    return true;
+  });
+  checkFields(a, {
+    status:oneOf(enums.appSegmentStatus),sourceCompression:oneOf(enums.sourceCompression),
+    sourceCompressionMetricId:id => id === 'decoder.input_mime',route:oneOf(enums.routeKind),
+    checks:values => array(values,enums.appSegmentCondition.length,c => {
+      checkFields(c, {condition:oneOf(enums.appSegmentCondition),status:oneOf(enums.appSegmentStatus),
+        reason:r => nullable(r,oneOf(enums.segmentReason)),metricIds,issues});
+      check(c.status === 'UNCHANGED' ? c.reason === null && c.issues.length === 0 : c.reason !== null || c.issues.length > 0);
+      return true;
+    }),
+    routeMetricIds:metricIds,routeIssues:issues,
+    bluetooth:b => nullable(b,value => {checkFields(value,{status:oneOf(enums.bluetoothSegmentStatus)});return true;}),
+  });
+  check(new Set(a.checks.map(c => c.condition)).size === enums.appSegmentCondition.length);
+  const status = a.checks.some(c => c.status === 'MODIFIED') ? 'MODIFIED' : a.checks.some(c => c.status === 'UNKNOWN') ? 'UNKNOWN' : 'UNCHANGED';
+  check(a.status === status);
+  check((a.route === 'BLUETOOTH') === (a.bluetooth !== null));
+  check(a.route === 'UNKNOWN' ? a.routeIssues.length > 0 : a.routeIssues.length === 0 && a.routeMetricIds.includes('route.selected_system_type'));
+  if (!ids.has(a.sourceCompressionMetricId)) check(a.sourceCompression === 'UNKNOWN');
+  if (Object.hasOwn(evidence,'unavailableReason')) {
+    check(a.status === 'UNKNOWN' && a.route === 'UNKNOWN');
+    check(a.checks.every(c => c.status === 'UNKNOWN' && c.reason === 'MISSING'));
+  }
+}
 export function validateReport(v) {
-  object(v, ['schemaVersion','generatedAtEpochMs','basic'], ['audioCapabilities','chainEvidence','recentErrors','failedTrackFormats']);
+  object(v, ['schemaVersion','generatedAtEpochMs','basic'], ['audioCapabilities','chainEvidence','appSegment','recentErrors','failedTrackFormats']);
   check(v.schemaVersion === vocabulary.schemaVersion && integer(v.generatedAtEpochMs));
   checkFields(v.basic, {appVersion:x => nullable(x,pathlessLabel),versionCode:integer,buildType:x => nullable(x,pathlessLabel),
     manufacturer:x => nullable(x,pathlessLabel),model:x => nullable(x,pathlessLabel),androidVersion:x => nullable(x,pathlessLabel),
     androidApi:count(1000),romBuild:x => nullable(x,pathlessLabel),redactedValuesAreNull:x => x === true});
   for (const key of ['audioCapabilities','chainEvidence']) if (Object.hasOwn(v,key)) snapshot(v[key]);
+  if (Object.hasOwn(v,'appSegment')) {
+    check(Object.hasOwn(v,'chainEvidence'));
+    appSegment(v.appSegment,v.chainEvidence);
+  }
   if (Object.hasOwn(v,'recentErrors')) {
     checkFields(v.recentErrors, {availability,exitHistory:oneOf(enums.exitHistoryAvailability),
       maxEvents:x => x === limits.maxEvents,maxAgeMs:x => x === limits.maxAgeMs,events:events => array(events,limits.maxEvents,event => {

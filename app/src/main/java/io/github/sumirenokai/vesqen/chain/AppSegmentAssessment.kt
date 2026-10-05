@@ -1,4 +1,4 @@
-package io.github.sumirenokai.vesqen.ui.chain
+package io.github.sumirenokai.vesqen.chain
 
 import io.github.sumirenokai.vesqen.telemetry.TelemetryConfidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEventKind

@@ -119,13 +119,14 @@ test('mutated sample enums provenance text and confidence are rejected',()=>{
     return [[path,value]];
   }
   const controlled=new Set(['id','confidence','source','unavailableReason','methodId','calculationId','unit',
-    'redactedReason','availability','exitHistory','kind','strictFailure','strictOrigin','missingFieldReason','fileNameUnavailableReason']);
+    'redactedReason','availability','exitHistory','kind','strictFailure','strictOrigin','missingFieldReason','fileNameUnavailableReason',
+    'status','sourceCompression','sourceCompressionMetricId','route','condition','reason','metricId']);
   for(const [path,original] of leaves(sample)) {
     const key=path.at(-1);
     const textReading=key==='value' && path.at(-2)==='reading' && typeof original==='string';
     const operand=key==='name' && path.includes('operands');
     const formatText=['container','codecMime','codecLabel'].includes(key);
-    const dependency=path.includes('inputMetricIds');
+    const dependency=path.includes('inputMetricIds') || path.includes('metricIds') || path.includes('routeMetricIds');
     if(typeof original!=='string' || !(controlled.has(key)||textReading||operand||formatText||dependency)) continue;
     const changed=structuredClone(sample);
     const parent=path.slice(0,-1).reduce((value,key)=>value[key],changed);
@@ -164,4 +165,51 @@ test('error availability format provenance and retention follow the contract',()
   const tooManyFormats=structuredClone(sample);
   tooManyFormats.failedTrackFormats.tracks=Array.from({length:vocabulary.limits.maxEvents+1},()=>sample.failedTrackFormats.tracks[0]);
   assert.throws(()=>validateReport(tooManyFormats));
+});
+
+
+test('app segment is optional for old reports but requires chain evidence',()=>{
+  const old=structuredClone(sample);delete old.appSegment;validateReport(old);
+  const noChain=structuredClone(sample);delete noChain.chainEvidence;
+  assert.throws(()=>validateReport(noChain));
+  const capabilitiesOnly=structuredClone(sample);
+  delete capabilitiesOnly.chainEvidence;delete capabilitiesOnly.appSegment;validateReport(capabilitiesOnly);
+  assert.equal(sample.appSegment.route,'BLUETOOTH');
+  assert.ok(sample.appSegment.checks.some(c=>c.status==='UNKNOWN' && c.reason!==null));
+});
+
+test('app segment rejects raw text missing conditions broken references and inconsistent states',()=>{
+  const mutations=[
+    a=>{a.message='/private/music.flac';},a=>{a.checks[0].value='Secret Headphones';},
+    a=>{a.checks.pop();},a=>{a.checks[0]=a.checks[1];},
+    a=>{a.checks[0].metricIds=['processing.speed'];}, // Missing from the sample snapshot.
+    a=>{a.checks[0].issues=[{metricId:'route.selected_system_type',reason:'MISSING'}];},
+    a=>{a.checks[0].issues=[{metricId:'processing.speed',reason:'UNAVAILABLE'}];},
+    a=>{a.checks[0].reason=null;a.checks[0].issues=[];},
+    a=>{a.status='UNCHANGED';},a=>{a.bluetooth=null;},
+    a=>{a.route='OTHER';},a=>{a.bluetooth.codec='Secret Headphones';},
+    a=>{a.routeMetricIds=[];},a=>{a.routeIssues=[{metricId:'route.selected_system_type',reason:'EXPIRED'}];},
+  ];
+  for(const mutation of mutations) {
+    const value=structuredClone(sample);mutation(value.appSegment);
+    assert.throws(()=>validateReport(value));
+  }
+});
+
+test('unavailable snapshot and non-Bluetooth route preserve explicit segment states',()=>{
+  const value=structuredClone(sample);
+  value.chainEvidence={unavailableReason:'TEMPORARILY_UNAVAILABLE'};
+  Object.assign(value.appSegment,{status:'UNKNOWN',sourceCompression:'UNKNOWN',route:'UNKNOWN',bluetooth:null,
+    routeMetricIds:[],routeIssues:[{metricId:'route.selected_system_type',reason:'MISSING'}],
+    checks:vocabulary.enums.appSegmentCondition.map(condition=>({condition,status:'UNKNOWN',reason:'MISSING',metricIds:[],issues:[]}))});
+  validateReport(value);
+  value.appSegment.checks.at(-1).status='UNCHANGED';
+  value.appSegment.checks.at(-1).reason=null;
+  assert.throws(()=>validateReport(value));
+  for(const route of ['phone_speaker','wired_or_usb']) {
+    const other=structuredClone(sample);
+    other.chainEvidence.metrics.find(m=>m.id==='route.selected_system_type').reading.value=route;
+    other.appSegment.route='OTHER';other.appSegment.bluetooth=null;
+    validateReport(other);
+  }
 });

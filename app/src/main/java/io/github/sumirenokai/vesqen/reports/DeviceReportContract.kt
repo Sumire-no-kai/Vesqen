@@ -30,7 +30,7 @@ internal object DeviceReportContract {
                 "telemetryUnavailableReason" to TelemetryUnavailableReason.entries.map { it.name },
                 "telemetryConfidence" to TelemetryConfidence.entries.map { it.name },
                 "telemetryUnit" to TelemetryUnit.entries.map { it.name },
-            ),
+            ).apply { putAll(words.appSegmentEnums) },
             "text" to linkedMapOf(
                 "containers" to words.containers.sorted(),
                 "mimes" to words.mimes.sorted(),
