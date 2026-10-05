@@ -684,14 +684,20 @@ class VesqenAppTest {
             .fetchSemanticsNode().boundsInRoot
         assertTrue("Strict USB must follow System output", strictUsb.top >= systemOutput.bottom)
 
+        // Scroll to each row itself: a section heading at the screen edge leaves its rows below.
         composeRule.onNodeWithTag("vesqen.settings")
-            .performScrollToNode(hasTestTag("vesqen.settings.section.audio-proof"))
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.settings.verification-registry").assertIsDisplayed()
-
         composeRule.onNodeWithTag("vesqen.settings")
-            .performScrollToNode(hasTestTag("vesqen.settings.section.application"))
+            .performScrollToNode(hasTestTag("vesqen.settings.about"))
         composeRule.onNodeWithTag("vesqen.settings.about").assertIsDisplayed()
+        // Output verification records are a maintainer tool, so they sit in Advanced after the app info.
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.verification-registry"))
+        composeRule.onNodeWithTag("vesqen.settings.verification-registry").assertIsDisplayed()
+        val about = composeRule.onNodeWithTag("vesqen.settings.about").fetchSemanticsNode().positionInRoot
+        val registry = composeRule.onNodeWithTag("vesqen.settings.verification-registry").fetchSemanticsNode().positionInRoot
+        assertTrue("Advanced must follow the application group", registry.y > about.y)
     }
 
     @Test
