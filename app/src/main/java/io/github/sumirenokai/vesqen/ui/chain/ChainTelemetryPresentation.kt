@@ -335,25 +335,33 @@ internal fun elapsedChartFraction(
         .toFloat()
 }
 
+internal fun effectiveTelemetryRefreshInterval(
+    refreshInterval: TelemetryRefreshInterval,
+    powerMode: TelemetryPowerMode,
+): TelemetryRefreshInterval =
+    if (powerMode == TelemetryPowerMode.LOW_POWER && refreshInterval.milliseconds < TelemetryRefreshInterval.TWO_SECONDS.milliseconds) {
+        TelemetryRefreshInterval.TWO_SECONDS
+    } else {
+        refreshInterval
+    }
+
 internal fun effectiveTelemetryIntervalMs(
     refreshInterval: TelemetryRefreshInterval,
     powerMode: TelemetryPowerMode,
-): Long = if (powerMode == TelemetryPowerMode.LOW_POWER) {
-    maxOf(refreshInterval.milliseconds, 2_000L)
-} else {
-    refreshInterval.milliseconds
-}
+): Long = effectiveTelemetryRefreshInterval(refreshInterval, powerMode).milliseconds
+
+/** How long Chain lets a snapshot go without an update; shared by the stale notice and #72. */
+internal fun telemetrySnapshotMaxAgeMs(
+    refreshInterval: TelemetryRefreshInterval,
+    powerMode: TelemetryPowerMode,
+): Long = maxOf(effectiveTelemetryIntervalMs(refreshInterval, powerMode) * 2, 1_500L)
 
 internal fun isTelemetrySnapshotStale(
     snapshot: TelemetrySnapshot,
     nowElapsedRealtimeMs: Long,
     refreshInterval: TelemetryRefreshInterval,
     powerMode: TelemetryPowerMode,
-): Boolean {
-    val effectiveIntervalMs = effectiveTelemetryIntervalMs(refreshInterval, powerMode)
-    val allowedSilence = maxOf(effectiveIntervalMs * 2, 1_500L)
-    return nowElapsedRealtimeMs - snapshot.capturedAtElapsedRealtimeMs > allowedSilence
-}
+): Boolean = nowElapsedRealtimeMs - snapshot.capturedAtElapsedRealtimeMs > telemetrySnapshotMaxAgeMs(refreshInterval, powerMode)
 
 private fun formatTelemetryNumber(
     context: Context,

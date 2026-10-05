@@ -12,6 +12,7 @@ import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -60,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.Lifecycle
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.chain.AppSegmentMetricIds
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecordingState
 import io.github.sumirenokai.vesqen.library.LibraryScanProgress
@@ -76,6 +78,7 @@ import io.github.sumirenokai.vesqen.playback.OfficialMixerApiSupport
 import io.github.sumirenokai.vesqen.playback.UsbHardwareIdentity
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
+import io.github.sumirenokai.vesqen.playback.UsbOutputFailureOrigin
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.telemetry.FakePlaybackTelemetry
@@ -112,6 +115,7 @@ import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.navigation.NavigationRailWidth
 import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
+import io.github.sumirenokai.vesqen.ui.screens.ChainSummaryMetricIds
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
 import io.github.sumirenokai.vesqen.verification.OutputVerificationRegistryState
@@ -188,6 +192,29 @@ class VesqenAppTest {
             state = state.copy(playback = state.playback.copy(usbOutputStatus = UsbOutputStatus()))
         }
         composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertDoesNotExist()
+    }
+
+    @Test
+    fun chain_offers_the_explicit_system_fallback_next_to_a_strict_failure() {
+        val failure = UsbOutputStatus(
+            mode = UsbOutputMode.STRICT_BIT_PERFECT,
+            phase = UsbOutputPhase.FAILED,
+            failure = UsbOutputFailure.NO_USB_AUDIO_DEVICE,
+            failureOrigin = UsbOutputFailureOrigin.USER_PLAYBACK,
+            generation = 1,
+        )
+        val active = activePlaybackState()
+        val modes = mutableListOf<UsbOutputMode>()
+        render(
+            active.copy(playback = active.playback.copy(usbOutputStatus = failure)),
+            playbackTelemetry = FakePlaybackTelemetry(chainTelemetrySnapshot()),
+            onSetUsbOutputMode = { modes += it },
+        )
+        // Keeping strict output in the dialog leaves the same choice next to the claim in Chain.
+        composeRule.onNodeWithTag("vesqen.output.keep-strict").performClick()
+        composeRule.onNodeWithTag("vesqen.nav.chain").performClick()
+        chainNode("vesqen.chain.use-system", "vesqen.chain.summary-list").performClick()
+        composeRule.runOnIdle { assertEquals(listOf(UsbOutputMode.SYSTEM), modes) }
     }
 
     @Test
@@ -796,7 +823,10 @@ class VesqenAppTest {
             .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
         composeRule.waitUntil(5_000) { telemetry.activeObservationCount == 1 }
-        assertEquals(summaryMetricIds, (telemetry.observationHistory.last().selection as TelemetryMetricSelection.Explicit).metricIds)
+        val summarySelection = (telemetry.observationHistory.last().selection as TelemetryMetricSelection.Explicit).metricIds
+        assertEquals(summaryMetricIds, summarySelection)
+        // The segment verdict (#72) is reachable only when every input it reads is requested.
+        assertTrue(summarySelection.containsAll(AppSegmentMetricIds))
 
         openAdvancedChain()
         composeRule.waitUntil(5_000) {
@@ -830,22 +860,25 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.settings")
             .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
-        chainSummaryText(R.string.chain_last_path).assertIsDisplayed()
         chainNode("vesqen.chain.idle", "vesqen.chain.summary-list").assertIsDisplayed()
         // Metrics are missing here, but the unavailable count belongs to the partial notice only.
         composeRule.onNodeWithText(context.getString(R.string.chain_idle_title)).assertIsDisplayed()
-        chainSummaryText(R.string.chain_core_title_last).assertIsDisplayed()
+        chainSummaryText(R.string.chain_last_path).assertIsDisplayed()
+        // Kept values are not judged as the current path.
+        composeRule.onNodeWithTag("vesqen.chain.segment.app")
+            .assertTextContains(context.getString(R.string.chain_segment_waiting), substring = true)
 
-        // No scrolling until the absence checks, so the notice slot and the core title stay composed.
+        // No scrolling until the heading check, so the path stays composed.
         composeRule.runOnIdle { currentState.value = playing }
         composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithText(context.getString(R.string.chain_core_title))
+            composeRule.onAllNodesWithText(context.getString(R.string.chain_current_path))
                 .fetchSemanticsNodes()
                 .isNotEmpty()
         }
+        composeRule.onAllNodesWithText(context.getString(R.string.chain_last_path)).assertCountEquals(0)
+        // Back at the top the notice slot is composed again, so its absence means something.
+        composeRule.onNodeWithTag("vesqen.chain.summary-list").performScrollToIndex(0)
         composeRule.onAllNodesWithTag("vesqen.chain.idle").assertCountEquals(0)
-        composeRule.onAllNodesWithText(context.getString(R.string.chain_core_title_last)).assertCountEquals(0)
-        chainSummaryText(R.string.chain_current_path).assertIsDisplayed()
     }
 
     @Test
@@ -1146,7 +1179,7 @@ class VesqenAppTest {
         assertDecoderIdentifierLayout(1.5f, 2)
 
     @Test
-    fun chain_core_stacks_and_keeps_aged_evidence_on_one_line_at_130_percent_text() {
+    fun chain_path_keeps_station_facts_in_one_column_and_aged_evidence_on_one_line_at_130_percent_text() {
         val epochMs = System.currentTimeMillis()
         val elapsedMs = SystemClock.elapsedRealtime() - 120_000
         val source = TelemetryDataSource(TelemetrySourceId("test.telemetry"))
@@ -1197,12 +1230,12 @@ class VesqenAppTest {
         val playbackPosition = composeRule.onNodeWithTag("vesqen.chain.core.playback.audio_track_sample_rate")
             .fetchSemanticsNode().positionInRoot
         assertEquals(
-            "Large text must give paired core facts the same full-width column",
+            "Station facts must share the path's column",
             sourcePosition.x,
             playbackPosition.x,
             1f,
         )
-        assertTrue("Playback facts must follow source facts vertically", playbackPosition.y > sourcePosition.y)
+        assertTrue("AudioTrack facts must follow source facts down the path", playbackPosition.y > sourcePosition.y)
 
         composeRule.onNodeWithTag("vesqen.chain.summary-list")
             .performScrollToNode(hasTestTag("vesqen.chain.core.playback.audio_track_sample_rate"))
@@ -1214,7 +1247,7 @@ class VesqenAppTest {
         val layout = layouts.single()
         assertEquals(1, layout.lineCount)
         assertTrue(
-            "Core evidence annotation must not be clipped: " +
+            "Station evidence annotation must not be clipped: " +
                 "size=${layout.size}, overflowWidth=${layout.didOverflowWidth}, " +
                 "overflowHeight=${layout.didOverflowHeight}, source=$sourcePosition, playback=$playbackPosition",
             !layout.hasVisualOverflow,
@@ -1579,7 +1612,7 @@ class VesqenAppTest {
     fun chain_source_title_is_available_from_settings_and_player() {
         val active = activePlaybackState()
         render(active, playbackTelemetry = FakePlaybackTelemetry(chainTelemetrySnapshot()))
-        val expected = context.getString(R.string.chain_current_source, active.playback.title)
+        val expected = active.playback.title
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
         composeRule.onNodeWithTag("vesqen.settings")
             .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
@@ -2872,12 +2905,7 @@ class VesqenAppTest {
         }
     }
 
-    private val summaryMetricIds = TelemetryMetricCatalog.defaultIds + setOf(
-        TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_ENCODING,
-        TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_NAME,
-        TelemetryMetricCatalog.PLAYBACK_CURRENT_MEDIA_READ_BITRATE,
-        TelemetryMetricCatalog.PLAYBACK_ESTIMATED_TOTAL_BUFFERED_DURATION,
-    )
+    private val summaryMetricIds = ChainSummaryMetricIds
 
     private fun openAdvancedChain() {
         composeRule.onNodeWithTag("vesqen.chain.summary-list")

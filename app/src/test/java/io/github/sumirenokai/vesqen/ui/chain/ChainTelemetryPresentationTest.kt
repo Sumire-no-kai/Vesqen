@@ -55,6 +55,20 @@ class ChainTelemetryPresentationTest {
     }
 
     @Test
+    fun `low power reports the cadence it really samples at`() {
+        TelemetryRefreshInterval.entries.forEach { interval ->
+            assertEquals(interval, effectiveTelemetryRefreshInterval(interval, TelemetryPowerMode.STANDARD))
+        }
+        assertEquals(
+            listOf(
+                TelemetryRefreshInterval.TWO_SECONDS, TelemetryRefreshInterval.TWO_SECONDS, TelemetryRefreshInterval.TWO_SECONDS,
+                TelemetryRefreshInterval.TWO_SECONDS, TelemetryRefreshInterval.FIVE_SECONDS,
+            ),
+            TelemetryRefreshInterval.entries.map { effectiveTelemetryRefreshInterval(it, TelemetryPowerMode.LOW_POWER) },
+        )
+    }
+
+    @Test
     fun `evidence age uses the largest whole unit`() {
         fun age(seconds: Long, extraMs: Long = 0) = evidenceAge(seconds * 1_000 + extraMs)
 

@@ -1039,6 +1039,7 @@ private fun VesqenDestinationFrame(
                         onBack = if (chainOpenedInContext) onNavigateBack else null,
                         onBrowseLibrary = { onDestinationSelected(VesqenDestination.LIBRARY) },
                         modifier = destinationModifier,
+                        onUseSystemOutput = { onSetUsbOutputMode(UsbOutputMode.SYSTEM) },
                     )
 
                     VesqenDestination.ABOUT -> AboutScreen(
