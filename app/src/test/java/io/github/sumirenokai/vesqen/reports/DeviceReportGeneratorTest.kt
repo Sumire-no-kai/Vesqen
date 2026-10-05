@@ -13,6 +13,7 @@ class DeviceReportGeneratorTest {
             assertTrue(report.contains("\"basic\""))
             assertEquals(options.audioCapabilities, report.contains("\"audioCapabilities\""))
             assertEquals(options.chainEvidence, report.contains("\"chainEvidence\""))
+            assertEquals(options.chainEvidence, report.contains("\"appSegment\""))
             assertEquals(options.recentErrors, report.contains("\"recentErrors\""))
             assertEquals(options.failedTrackFormats, report.contains("\"failedTrackFormats\""))
             assertEquals(options.failedTrackFormats && options.includeFileNames, report.contains("private-track.flac"))

@@ -20,6 +20,10 @@ test('real local Worker and D1 apply migrations accept reports and roll back quo
   assert.equal(accepted.status,201,await accepted.text());
   assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM reports').first()).n,1);
   assert.equal((await env.DB.prepare('SELECT document FROM reports').first()).document,sampleText);
+  const invalid=JSON.parse(sampleText);
+  delete invalid.chainEvidence;
+  assert.equal((await worker.fetch('/v1/reports',post(invalid))).status,400);
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM reports').first()).n,1);
   await env.DB.prepare('UPDATE daily_totals SET requests=10000').run();
   assert.equal((await worker.fetch('/v1/usage',post(ping()))).status,429);
   assert.equal((await env.DB.prepare('SELECT SUM(count) AS n FROM daily_dimensions').first()).n,7);

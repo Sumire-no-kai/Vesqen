@@ -101,6 +101,16 @@ owner-query injection rejection and static-update reuse. Report validation impor
 patterns, metric IDs/value kinds/units, and error-history limits come from the app.
 `sample-report.json` is accepted unchanged by both schema tests and the local Worker;
 mutations outside the vocabulary, incompatible confidence and wrong units fail.
+The optional `appSegment` is accepted only alongside `chainEvidence`. Its enums
+come from the same vocabulary; validation checks the complete, unique condition
+list, metric references (missing evidence is explicit), reasons, aggregate status
+and Bluetooth second-segment shape. Older clients may omit it. A snapshot capture
+failure keeps all conditions `UNKNOWN` with `MISSING` and preserves the capture
+reason in `chainEvidence`. No new free-text field is accepted. This is Vesqen's
+assessment of its own PCM path, separate from `route.output_declaration`; the
+Worker never upgrades it to a bit-perfect claim. Deploy the updated validator
+before accepting reports from clients that include this new optional field;
+older server versions reject unknown fields.
 There is no private metric-catalog copy or Kotlin-source parser in the server tests.
 The app's `DeviceReportContractTest` checks and regenerates these shared artifacts;
 review its generated output when changing the app contract. CI also runs when

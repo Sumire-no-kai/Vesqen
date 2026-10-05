@@ -1,5 +1,11 @@
 package io.github.sumirenokai.vesqen.reports
 
+import io.github.sumirenokai.vesqen.chain.AppSegmentCondition
+import io.github.sumirenokai.vesqen.chain.AppSegmentStatus
+import io.github.sumirenokai.vesqen.chain.BluetoothSegmentStatus
+import io.github.sumirenokai.vesqen.chain.RouteKind
+import io.github.sumirenokai.vesqen.chain.SegmentReason
+import io.github.sumirenokai.vesqen.chain.SourceCompression
 import io.github.sumirenokai.vesqen.audio.AudioOutputType
 import io.github.sumirenokai.vesqen.library.M1_AUDIO_FORMAT_MATRIX
 import io.github.sumirenokai.vesqen.playback.OutputDeclaration
@@ -16,6 +22,14 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetrySection
  * The server validates against the generated contract in contracts/device-report.
  */
 internal object DeviceReportVocabulary {
+    val appSegmentEnums = linkedMapOf(
+        "appSegmentStatus" to AppSegmentStatus.entries.map { it.name },
+        "sourceCompression" to SourceCompression.entries.map { it.name },
+        "appSegmentCondition" to AppSegmentCondition.entries.map { it.name },
+        "segmentReason" to SegmentReason.entries.map { it.name },
+        "routeKind" to RouteKind.entries.map { it.name },
+        "bluetoothSegmentStatus" to BluetoothSegmentStatus.entries.map { it.name },
+    )
     /** playbackContainerFromFileName in PlaybackController. */
     val containers = setOf("flac", "wave", "wav", "aiff", "mpeg_audio", "mp4", "adts", "ogg")
     /** Library MIME hints plus the MIME types Media3 reports for decoder input. */
@@ -99,7 +113,10 @@ internal object DeviceReportPrivacy {
             ) },
         )
         if (options.audioCapabilities) result["audioCapabilities"] = snapshot(data, capabilitiesOnly = true)
-        if (options.chainEvidence) result["chainEvidence"] = snapshot(data, capabilitiesOnly = false)
+        if (options.chainEvidence) {
+            result["chainEvidence"] = snapshot(data, capabilitiesOnly = false)
+            result["appSegment"] = deviceReportAppSegment(data.telemetry)
+        }
         if (options.recentErrors) result["recentErrors"] = mapOf(
             "availability" to data.history.availability.name, "exitHistory" to data.history.exitHistory.name,
             "maxEvents" to ErrorHistoryStore.MAX_EVENTS, "maxAgeMs" to ErrorHistoryStore.MAX_AGE_MS,

@@ -122,11 +122,40 @@ on the next share after 24 hours. The receiving app controls delivery. Android
 share/email compatibility and historical exit behavior require owner-scheduled
 device acceptance; compiling the integration tests does not establish that.
 
+## App segment assessment (#72)
+
+Selecting **Chain evidence** also includes the optional top-level `appSegment`.
+Capability-only reports omit it. The generator calls the pure `chain.assessAppSegment`
+on the exact captured snapshot, with `now` equal to its captured monotonic time
+(and maximum snapshot age zero). It records the verdict at capture, not at preview
+or send time, and does not open another observer. Latched metric timestamps keep
+their original meaning; they are not refreshed or treated as snapshot age.
+
+`appSegment` contains `status`, `sourceCompression`, `route`, all `checks`
+(`condition`, `status`, nullable `reason`, `metricIds`, and `issues` with `metricId`
+and `reason`), `routeMetricIds`, `routeIssues`, and nullable `bluetooth` with its
+second-segment `status`. `sourceCompressionMetricId` identifies `decoder.input_mime`.
+Metric references point into `chainEvidence`, where values, confidence, provenance,
+observation times and unavailable reasons remain intact. Missing metrics are named
+by `MISSING` issues; no placeholder values are invented. A missing compression
+metric still has its ID and an `UNKNOWN` compression result.
+
+If capture produces no snapshot, the report still includes `appSegment`: every
+condition is `UNKNOWN` with `MISSING`, compression and route are `UNKNOWN`, and the
+route issue names its missing metric. `chainEvidence.unavailableReason` preserves
+the capture failure. Recent transition events become a `TRANSITION_IN_PROGRESS`
+reason only; event details are not exported. All new values are enum codes or metric
+IDs, never free text, names or paths. The assessment does not change
+`route.output_declaration`, infer bit-perfect output, or describe the entire chain
+as lossless. Bluetooth retains `LOSSY_OR_UNKNOWN_DEPENDING_ON_CODEC`.
+
 ## Server contract
 
 `contracts/device-report/vocabulary.json` (enums, allowed text values, the metric
 catalog and limits) and `sample-report.json` (one of each group and evidence kind)
-are generated from the app. `DeviceReportContractTest` fails when either differs
+are generated from the app. App-segment enum lists come directly from the production
+assessment enums via `DeviceReportVocabulary`; the sample includes Bluetooth and a
+reasoned `UNKNOWN` transition condition. `DeviceReportContractTest` fails when either differs
 from the code and writes the current output under `app/build/contracts/` for review.
 The report server validates against these files instead of its own copies.
 
