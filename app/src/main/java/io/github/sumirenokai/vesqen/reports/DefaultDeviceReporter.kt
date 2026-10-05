@@ -59,12 +59,21 @@ internal class DefaultDeviceReporter(
         val request = revision
         mutable.value = mutable.value.copy(state = DeviceReportState.Sending(report, delivery))
         operation = scope.launch {
-            val failure = try {
-                if (delivery == DeviceReportDelivery.UPLOAD) uploader.upload(report)
-                else sharer.share(report, delivery == DeviceReportDelivery.EMAIL)
+            val failureCode = if (delivery == DeviceReportDelivery.UPLOAD) DeviceReportFailure.UPLOAD_FAILED else DeviceReportFailure.SHARE_FAILED
+            val sentState = try {
+                if (delivery == DeviceReportDelivery.UPLOAD) {
+                    when (val result = uploader.upload(report)) {
+                        is DeviceReportUploadResult.Uploaded -> DeviceReportState.Sent(report, delivery, result.reportId)
+                        is DeviceReportUploadResult.Failed -> DeviceReportState.Failed(result.reason, report)
+                    }
+                } else {
+                    val failure = sharer.share(report, delivery == DeviceReportDelivery.EMAIL)
+                    if (failure == null) DeviceReportState.Sent(report, delivery) else DeviceReportState.Failed(failure, report)
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: IOException) { if (delivery == DeviceReportDelivery.UPLOAD) DeviceReportFailure.UPLOAD_FAILED else DeviceReportFailure.SHARE_FAILED }
-            publish(request, if (failure == null) DeviceReportState.Sent(report, delivery) else DeviceReportState.Failed(failure, report))
+            catch (_: IOException) { DeviceReportState.Failed(failureCode, report) }
+            catch (_: SecurityException) { DeviceReportState.Failed(failureCode, report) }
+            publish(request, sentState)
         }
     }
 

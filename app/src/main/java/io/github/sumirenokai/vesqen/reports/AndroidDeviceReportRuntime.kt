@@ -37,6 +37,7 @@ internal class AndroidDeviceReportRuntime(
     scope: CoroutineScope,
     outputState: UsbOutputStateRepository,
     telemetry: () -> PlaybackTelemetry,
+    uploader: DeviceReportUploader = UnconfiguredDeviceReportUploader,
 ) {
     private val errors = ReportErrorRecorder(
         scope, ErrorHistoryStore(File(context.noBackupFilesDir, "device-report-errors")),
@@ -95,6 +96,7 @@ internal class AndroidDeviceReportRuntime(
             )
         },
         sharer = AndroidDeviceReportSharing(context),
+        uploader = uploader,
     )
 
     fun playbackListener(player: Player): Player.Listener = object : Player.Listener {

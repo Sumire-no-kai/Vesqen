@@ -26,10 +26,11 @@ class FakeDeviceReporter(initial: DeviceReportSnapshot = DeviceReportSnapshot())
 
 class FakeDeviceReportUploader : DeviceReportUploader {
     var failure: DeviceReportFailure? = null
+    var reportId: String = "00000000-0000-4000-8000-000000000000"
     private val received = mutableListOf<ByteArray>()
     val uploads: List<ByteArray> get() = received.map { it.copyOf() }
-    override suspend fun upload(report: DeviceReportArtifact): DeviceReportFailure? {
+    override suspend fun upload(report: DeviceReportArtifact): DeviceReportUploadResult {
         received += report.copyBytes()
-        return failure
+        return failure?.let(DeviceReportUploadResult::Failed) ?: DeviceReportUploadResult.Uploaded(reportId)
     }
 }

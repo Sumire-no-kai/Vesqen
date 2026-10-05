@@ -1,7 +1,8 @@
 # Device Report data contract
 
 Part of #69. The settings/preview UI is intentionally a separate integration. No
-network transport is enabled; #70 can implement `DeviceReportUploader` later.
+automatic network transport is enabled. GitHub builds provide the explicit HTTPS
+uploader described below.
 
 ## UI integration
 
@@ -11,17 +12,51 @@ Obtain `VesqenApplication.deviceReporter`, collect its `snapshot`, and update
 
 `generate()` captures the selected inputs once and produces `Preview(report)`.
 Display the **complete** `report.previewText`. Only after the user confirms, call
-`send(SHARE)`, `send(EMAIL)` or, when implemented, `send(UPLOAD)`. The uploader and
+`send(SHARE)`, `send(EMAIL)` or `send(UPLOAD)`. The uploader and
 share file receive the same immutable artifact; sending never captures again.
 Changing options or discarding invalidates the preview and cancels pending work.
 A delivery failure retains the artifact for retry; errors are reason codes for UI
-localization. Success moves to `Sent(report, delivery)`, from which the same report
-can be sent again. Successful sharing means Android accepted the chooser request,
+localization. Success moves to `Sent(report, delivery, reportId)`, from which the same report
+can be sent again. `reportId` is the server receipt for an upload and null for
+share/email. `DeviceReportUploader.upload` now returns `DeviceReportUploadResult`
+(`Uploaded(reportId)` or `Failed(reason)`); custom implementations must adopt that
+result. The Debug uploader exposes a configurable receipt and failure.
+Successful sharing means Android accepted the chooser request,
 not that an email or upload was delivered. When no app can take the report, the
 reason is `NO_SHARE_APPLICATION`.
 
 `FakeDeviceReporter` and `FakeDeviceReportUploader` in `src/debug` allow controlled
 loading, preview, sending and error states without sampling, storage or network.
+
+## GitHub upload
+
+`HttpsDeviceReportUploader` lives in `src/github`. It uses the existing
+`vesqen.usageEndpoint` Gradle property (`BuildConfig.USAGE_ENDPOINT`), replacing
+`/v1/usage` with `/v1/reports` on the same HTTPS host and port. There is no default
+production host. Empty configuration returns `UPLOAD_NOT_CONFIGURED` without
+opening a connection. The configuration declaration is identical to #84, so both
+features share one property when integrated. All current build types include the
+GitHub source set; #47 will split it into a flavor. The existing GitHub INTERNET
+permission is reused, without another manifest declaration.
+
+Only `send(UPLOAD)` after a preview calls this uploader. It does not depend on the
+usage statistics switch, run on startup, schedule background work, or retry on its
+own. It writes exactly `DeviceReportArtifact.copyBytes()` with fixed-length POST,
+Content-Type `application/json`, a maximum of 256 KiB, redirects disabled and
+5-second connection/read timeouts. Network work runs on Dispatchers.IO; TLS uses
+the platform defaults. Those timeouts are socket timeouts, not a total operation
+deadline. A cancelled preview cannot receive a late result, but cancellation
+cannot retract bytes already sent to the server.
+
+The #70 Worker in `server/usage` accepts `POST /v1/reports` and responds with
+HTTP 201 and `{"reportId":"<UUID>"}`. Receipts are bounded to 4 KiB and accepted
+only in this exact single-field JSON shape (with optional JSON whitespace), with
+a canonical UUID string. Other statuses, redirects, oversized requests/responses,
+malformed receipts, IO failures and SecurityException map to `UPLOAD_FAILED`;
+no server response text or exception message reaches the UI. These failures keep
+the same artifact for an explicit retry. A timeout after server acceptance can
+therefore create a second report if the user retries; the service has no upload
+idempotency contract. The receipt identifies a report, not a device or install.
 
 ## Local error history
 

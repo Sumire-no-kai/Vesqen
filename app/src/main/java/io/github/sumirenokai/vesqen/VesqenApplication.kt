@@ -36,6 +36,7 @@ class VesqenApplication : Application() {
     internal val deviceReportRuntime by lazy {
         io.github.sumirenokai.vesqen.reports.AndroidDeviceReportRuntime(
             this, applicationScope, usbOutputStateRepository, { playbackTelemetry },
+            uploader = io.github.sumirenokai.vesqen.reports.HttpsDeviceReportUploader(BuildConfig.USAGE_ENDPOINT),
         )
     }
     val deviceReporter: io.github.sumirenokai.vesqen.reports.DeviceReporter
