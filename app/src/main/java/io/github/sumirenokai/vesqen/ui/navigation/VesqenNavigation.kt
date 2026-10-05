@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountTree
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LibraryMusic
@@ -214,4 +216,6 @@ private val VesqenDestination.icon: ImageVector
         VesqenDestination.ABOUT -> Icons.Outlined.Info
         VesqenDestination.PRIVACY_POLICY -> Icons.Outlined.PrivacyTip
         VesqenDestination.LICENSES -> Icons.Outlined.Description
+        VesqenDestination.USAGE_STATISTICS -> Icons.Outlined.BarChart
+        VesqenDestination.DEVICE_REPORT -> Icons.Outlined.BugReport
     }

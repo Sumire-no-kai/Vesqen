@@ -30,9 +30,11 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
@@ -51,6 +53,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
@@ -62,6 +65,7 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 import io.github.sumirenokai.vesqen.updates.AppUpdater
+import io.github.sumirenokai.vesqen.usage.UsageStatistics
 import io.github.sumirenokai.vesqen.verification.OutputVerificationImportFailure
 import io.github.sumirenokai.vesqen.verification.OutputVerificationImportResult
 import io.github.sumirenokai.vesqen.verification.OutputVerificationMatch
@@ -83,6 +87,10 @@ fun SettingsScreen(
     onOpenPrivacyPolicy: () -> Unit = {},
     onOpenLicenses: () -> Unit = {},
     appUpdater: AppUpdater? = null,
+    usageStatistics: UsageStatistics? = null,
+    onOpenUsageStatistics: () -> Unit = {},
+    deviceReportAvailable: Boolean = false,
+    onOpenDeviceReport: () -> Unit = {},
     outputModeSelectionEnabled: Boolean = true,
     outputVerification: OutputVerificationMatch? = null,
     verificationRegistryState: OutputVerificationRegistryState = OutputVerificationRegistryState.Empty,
@@ -153,6 +161,7 @@ fun SettingsScreen(
                     )
                 }
             }
+            item { SettingsPrivacyGroup(usageStatistics, onOpenUsageStatistics, deviceReportAvailable, onOpenDeviceReport) }
             if (appUpdater != null) item { SettingsUpdatesGroup(appUpdater) }
             item {
                 SettingsGroup(
@@ -320,6 +329,42 @@ internal fun strictUsbFailureLabel(failure: UsbOutputFailure): String = stringRe
 )
 
 
+/**
+ * Usage statistics appear only when this build has a server to send them to; the device report
+ * works without one (share and email).
+ */
+@Composable
+private fun SettingsPrivacyGroup(
+    usageStatistics: UsageStatistics?,
+    onOpenUsageStatistics: () -> Unit,
+    deviceReportAvailable: Boolean,
+    onOpenDeviceReport: () -> Unit,
+) {
+    val usage = usageStatistics?.snapshot?.collectAsStateWithLifecycle()?.value?.takeIf { it.endpointConfigured }
+    if (usage == null && !deviceReportAvailable) return
+    SettingsGroup(
+        title = stringResource(R.string.settings_privacy_data),
+        modifier = Modifier.testTag("vesqen.settings.section.privacy-data"),
+    ) {
+        if (usage != null) {
+            SettingsRow(
+                title = stringResource(R.string.settings_usage_statistics),
+                value = stringResource(if (usage.enabled) R.string.settings_usage_on else R.string.settings_usage_off),
+                onClick = onOpenUsageStatistics,
+                modifier = Modifier.testTag("vesqen.settings.usage-statistics"),
+            )
+        }
+        if (usage != null && deviceReportAvailable) SettingsDivider()
+        if (deviceReportAvailable) {
+            SettingsRow(
+                title = stringResource(R.string.settings_device_report),
+                onClick = onOpenDeviceReport,
+                modifier = Modifier.testTag("vesqen.settings.device-report"),
+            )
+        }
+    }
+}
+
 @Composable
 private fun SettingsTitle() {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -342,6 +387,29 @@ private fun SettingsTitle() {
                     .testTag("vesqen.settings.title"),
             )
         }
+    }
+}
+
+/** Header for pages opened from Settings: back arrow and a serif title. */
+@Composable
+internal fun SettingsDetailHeader(title: String, backTag: String, onBack: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .padding(start = VesqenSpacing.xxs, end = VesqenSpacing.lg),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onBack, modifier = Modifier.size(48.dp).testTag(backTag)) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+        }
+        Spacer(Modifier.width(VesqenSpacing.xs))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineSmall,
+            maxLines = 2,
+            modifier = Modifier.semantics { heading() },
+        )
     }
 }
 
