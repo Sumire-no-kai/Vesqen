@@ -30,6 +30,8 @@ import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.licenses.ThirdPartyLicense
 import io.github.sumirenokai.vesqen.licenses.ThirdPartyLicenses
 import io.github.sumirenokai.vesqen.licenses.ThirdPartyLicensesResult
+import io.github.sumirenokai.vesqen.ui.components.PaperCard
+import io.github.sumirenokai.vesqen.ui.components.PaperDivider
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -62,9 +64,9 @@ fun LicensesScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     is ThirdPartyLicensesResult.Loaded -> {
                         item { LicensesMessage(stringResource(R.string.licenses_intro)) }
                         item {
-                            SettingsCard(Modifier.padding(horizontal = VesqenSpacing.lg)) {
+                            PaperCard(Modifier.padding(horizontal = VesqenSpacing.lg)) {
                                 loaded.entries.forEachIndexed { index, entry ->
-                                    if (index > 0) SettingsDivider()
+                                    if (index > 0) PaperDivider()
                                     SettingsRow(
                                         title = entry.name,
                                         description = licenseSummary(entry),

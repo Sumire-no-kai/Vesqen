@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.ui.components.PaperDivider
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
@@ -66,7 +67,7 @@ internal fun SettingsUpdatesGroup(appUpdater: AppUpdater) {
                 onCheckedChange = appUpdater::setAutomaticChecksEnabled,
                 modifier = Modifier.testTag("vesqen.settings.updates.automatic"),
             )
-            SettingsDivider()
+            PaperDivider()
         }
         SettingsRow(
             title = stringResource(R.string.settings_check_update),

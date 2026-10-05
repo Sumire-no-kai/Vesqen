@@ -246,8 +246,6 @@
     <string name="track_details">Track details</string>
     <string name="track_information">Track information</string>
     <string name="close">Close</string>
-    <string name="detail_title">Title</string>
-    <string name="detail_artist">Artist</string>
     <string name="detail_album">Album</string>
     <string name="detail_duration">Duration</string>
     <string name="unknown_album">Unknown album</string>

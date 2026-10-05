@@ -34,6 +34,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.ui.components.PaperCard
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.usage.UsageRegionPolicy
 import io.github.sumirenokai.vesqen.usage.UsageSettingsStatus
@@ -63,7 +64,7 @@ fun UsageStatisticsScreen(usageStatistics: UsageStatistics, onBack: () -> Unit, 
             item { SettingsDetailHeader(stringResource(R.string.usage_title), "vesqen.usage.back", onBack) }
             item { UsageExplanation(Modifier.padding(horizontal = VesqenSpacing.lg)) }
             item {
-                SettingsCard(Modifier.padding(start = VesqenSpacing.lg, end = VesqenSpacing.lg, top = VesqenSpacing.lg)) {
+                PaperCard(Modifier.padding(start = VesqenSpacing.lg, end = VesqenSpacing.lg, top = VesqenSpacing.lg)) {
                     SettingsSwitchRow(
                         title = stringResource(R.string.usage_switch),
                         checked = snapshot.enabled,
@@ -113,7 +114,7 @@ fun UsageIntroductionScreen(usageStatistics: UsageStatistics, modifier: Modifier
                         UsageChoice(R.string.usage_decline, "vesqen.usage-intro.decline") { usageStatistics.completeIntroduction(false) }
                     }
                 } else {
-                    SettingsCard {
+                    PaperCard {
                         SettingsSwitchRow(
                             title = stringResource(R.string.usage_switch),
                             checked = send,
