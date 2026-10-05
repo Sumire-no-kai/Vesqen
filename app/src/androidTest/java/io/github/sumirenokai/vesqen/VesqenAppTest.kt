@@ -859,7 +859,7 @@ class VesqenAppTest {
     }
 
     @Test
-    fun chain_advanced_observes_summary_defaults_and_refreshes_wide_path_for_a_repeated_track() {
+    fun chain_advanced_observes_summary_defaults_and_the_path_refreshes_for_a_repeated_track() {
         val telemetry = FakePlaybackTelemetry(chainTelemetrySnapshot(codecLabel = "FLAC"))
         val selectedMetricId = TelemetryMetricCatalog.PROCESS_DATA_SOURCE_READ_THROUGHPUT
         val preferences = InMemoryChainDashboardPreferencesRepository(
@@ -886,8 +886,13 @@ class VesqenAppTest {
         }
         val advancedSelection = telemetry.observationHistory.last().selection as TelemetryMetricSelection.Explicit
         assertEquals(summaryMetricIds + selectedMetricId, advancedSelection.metricIds)
-        composeRule.onNodeWithText("FLAC", substring = true).assertIsDisplayed()
 
+        // The path lives in the summary; a new session for the same track must refresh it.
+        composeRule.onNodeWithTag("vesqen.chain.show-summary").performClick()
+        val codec = "vesqen.chain.core-value.${TelemetryMetricCatalog.SOURCE_CODEC_LABEL.value}"
+        chainNode(codec, "vesqen.chain.summary-list", useUnmergedTree = true)
+            .assertIsDisplayed()
+            .assertTextContains("FLAC", substring = true)
         telemetry.publish(
             chainTelemetrySnapshot(
                 codecLabel = "ALAC",
@@ -895,11 +900,10 @@ class VesqenAppTest {
             ),
         )
         composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithText("ALAC", substring = true)
-                .fetchSemanticsNodes()
-                .isNotEmpty()
+            runCatching {
+                composeRule.onNodeWithTag(codec, useUnmergedTree = true).assertTextContains("ALAC", substring = true)
+            }.isSuccess
         }
-        composeRule.onNodeWithText("ALAC", substring = true).assertIsDisplayed()
     }
 
     @Test

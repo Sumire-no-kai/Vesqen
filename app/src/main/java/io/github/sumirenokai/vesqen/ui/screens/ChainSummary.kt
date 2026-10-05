@@ -74,7 +74,6 @@ import io.github.sumirenokai.vesqen.chain.RouteKind
 import io.github.sumirenokai.vesqen.chain.SegmentReason
 import io.github.sumirenokai.vesqen.chain.SourceCompression
 import io.github.sumirenokai.vesqen.chain.assessAppSegment
-import io.github.sumirenokai.vesqen.playback.OutputDeclaration
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
@@ -348,7 +347,7 @@ private fun ChainPath(
                 if (station == ChainStation.ROUTE) {
                     ChainSegmentLabel(
                         title = stringResource(R.string.chain_segment_system),
-                        body = systemSegmentText(playback, assessment),
+                        body = systemSegmentText(assessment),
                         tag = "vesqen.chain.segment.system",
                         hairline = hairline,
                     )
@@ -376,7 +375,7 @@ private val NodeCenter = 10.dp
 
 /** A segment heading on the rail: no node, just the line passing beside it. */
 @Composable
-private fun ChainSegmentLabel(title: String, body: String, tag: String, hairline: Color) {
+private fun ChainSegmentLabel(title: String, body: String?, tag: String, hairline: Color) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -389,7 +388,7 @@ private fun ChainSegmentLabel(title: String, body: String, tag: String, hairline
         Spacer(Modifier.width(RailWidth))
         Column(Modifier.weight(1f).padding(bottom = VesqenSpacing.sm), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(text = title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(text = body, style = MaterialTheme.typography.bodyMedium)
+            body?.let { Text(text = it, style = MaterialTheme.typography.bodyMedium) }
         }
     }
 }
@@ -572,13 +571,13 @@ private fun appSegmentVerdict(assessment: AppSegmentAssessment?, waiting: Boolea
     else -> stringResource(R.string.chain_segment_unknown, segmentReasonText(assessment.checks))
 }
 
-/** The system's part never upgrades the claim: it repeats the declaration's own limits. */
+/**
+ * PRD F6.5.1: only Bluetooth adds a statement about the system's part. Elsewhere the label just
+ * marks where Vesqen's part ends; the declaration card above says what the system does.
+ */
 @Composable
-private fun systemSegmentText(playback: PlaybackSnapshot, assessment: AppSegmentAssessment?): String = when {
-    assessment?.route == RouteKind.BLUETOOTH -> stringResource(R.string.chain_segment_bluetooth)
-    playback.declaration == OutputDeclaration.SYSTEM_MIXED -> stringResource(R.string.chain_segment_system_mixed)
-    else -> outputClaimTitle(playback)
-}
+private fun systemSegmentText(assessment: AppSegmentAssessment?): String? =
+    if (assessment?.route == RouteKind.BLUETOOTH) stringResource(R.string.chain_segment_bluetooth) else null
 
 @Composable
 private fun conditionList(conditions: List<AppSegmentCondition>): String =

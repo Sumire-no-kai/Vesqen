@@ -81,8 +81,8 @@ class ChainSummaryTest {
         show(FakeAppSegmentTelemetry.snapshot())
 
         segment(AppSegment).assertTextContains(string(R.string.chain_segment_unchanged_lossless), substring = true)
-        // The system's part repeats the declaration's limits; Vesqen's verdict never upgrades it.
-        segment(SystemSegment).assertTextContains(string(R.string.chain_segment_system_mixed), substring = true)
+        // Off Bluetooth the system's part only marks the boundary; the declaration card covers it.
+        segment(SystemSegment).assertTextEquals(string(R.string.chain_segment_system))
         processing().assertTextContains(string(R.string.chain_processing_none), substring = true)
     }
 

@@ -714,7 +714,6 @@
     <string name="chain_segment_reason_stale">the data is out of date</string>
     <string name="chain_segment_reason_missing">reliable data is missing</string>
     <string name="chain_segment_reason_unsupported">the format isn’t recognised</string>
-    <string name="chain_segment_system_mixed">Android may mix, resample, or apply system processing.</string>
     <string name="chain_segment_bluetooth">Lossy or unknown, depending on the Bluetooth codec.</string>
     <string name="chain_segment_list_separator">", "</string>
     <string name="chain_condition_speed">speed</string>

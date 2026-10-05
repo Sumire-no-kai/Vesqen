@@ -689,7 +689,6 @@
     <string name="chain_segment_reason_stale">数据已过期</string>
     <string name="chain_segment_reason_missing">缺少可靠的数据</string>
     <string name="chain_segment_reason_unsupported">无法识别的格式</string>
-    <string name="chain_segment_system_mixed">Android 可能混音、重采样或应用系统处理。</string>
     <string name="chain_segment_bluetooth">有损或未知，取决于蓝牙编码。</string>
     <string name="chain_segment_list_separator">、</string>
     <string name="chain_condition_speed">播放速度</string>
