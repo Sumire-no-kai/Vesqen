@@ -4,21 +4,12 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -62,7 +53,7 @@ fun LicensesScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             contentPadding = PaddingValues(bottom = VesqenSpacing.xl),
         ) {
             if (selected == null) {
-                item { LicensesHeader(stringResource(R.string.licenses_title), "vesqen.licenses.back", onBack) }
+                item { SettingsDetailHeader(stringResource(R.string.licenses_title), "vesqen.licenses.back", onBack) }
                 when (val loaded = result) {
                     null -> item { LicensesMessage(stringResource(R.string.licenses_loading)) }
                     is ThirdPartyLicensesResult.Unavailable -> item {
@@ -86,7 +77,7 @@ fun LicensesScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     }
                 }
             } else {
-                item { LicensesHeader(selected.name, "vesqen.licenses.detail.back") { selectedId = null } }
+                item { SettingsDetailHeader(selected.name, "vesqen.licenses.detail.back") { selectedId = null } }
                 if (selected.version.isNotBlank()) item { LicensesMessage(selected.version) }
                 selected.licenses.forEachIndexed { index, license ->
                     item { LicenseText(license.name, license.text, Modifier.testTag("vesqen.licenses.text.$index")) }
@@ -101,28 +92,6 @@ fun LicensesScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
 internal fun licenseSummary(entry: ThirdPartyLicense): String =
     (listOf(entry.version) + entry.licenses.map { it.name }.distinct()).filter(String::isNotBlank).joinToString(" · ")
-
-@Composable
-private fun LicensesHeader(title: String, backTag: String, onBack: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .padding(start = VesqenSpacing.xxs, end = VesqenSpacing.lg),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(onClick = onBack, modifier = Modifier.size(48.dp).testTag(backTag)) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
-        }
-        Spacer(Modifier.width(VesqenSpacing.xs))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineSmall,
-            maxLines = 2,
-            modifier = Modifier.semantics { heading() },
-        )
-    }
-}
 
 @Composable
 private fun LicensesMessage(text: String, modifier: Modifier = Modifier) {

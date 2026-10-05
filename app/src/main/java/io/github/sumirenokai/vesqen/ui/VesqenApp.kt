@@ -81,6 +81,7 @@ import io.github.sumirenokai.vesqen.diagnostics.exportTo
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
+import io.github.sumirenokai.vesqen.reports.DeviceReporter
 import io.github.sumirenokai.vesqen.telemetry.PlaybackTelemetry
 import io.github.sumirenokai.vesqen.ui.chain.ChainDashboardPreferencesRepository
 import io.github.sumirenokai.vesqen.ui.chain.ChainDashboardPreferencesStore
@@ -98,16 +99,21 @@ import io.github.sumirenokai.vesqen.ui.navigation.isSecondaryDetail
 import io.github.sumirenokai.vesqen.ui.navigation.navigationOrder
 import io.github.sumirenokai.vesqen.ui.screens.AboutScreen
 import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
+import io.github.sumirenokai.vesqen.ui.screens.DeviceReportScreen
 import io.github.sumirenokai.vesqen.ui.screens.LibraryScreen
 import io.github.sumirenokai.vesqen.ui.screens.LicensesScreen
 import io.github.sumirenokai.vesqen.ui.screens.NowScreen
 import io.github.sumirenokai.vesqen.ui.screens.PrivacyPolicyScreen
 import io.github.sumirenokai.vesqen.ui.screens.SettingsScreen
+import io.github.sumirenokai.vesqen.ui.screens.UsageIntroductionScreen
+import io.github.sumirenokai.vesqen.ui.screens.UsageStatisticsScreen
 import io.github.sumirenokai.vesqen.ui.screens.nowPortraitYieldsNavigation
+import io.github.sumirenokai.vesqen.ui.screens.usageIntroductionDue
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 import io.github.sumirenokai.vesqen.updates.AppUpdater
+import io.github.sumirenokai.vesqen.usage.UsageStatistics
 import io.github.sumirenokai.vesqen.verification.OutputVerificationImportFailure
 import io.github.sumirenokai.vesqen.verification.OutputVerificationImportResult
 import io.github.sumirenokai.vesqen.verification.OutputVerificationRegistryState
@@ -254,6 +260,12 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
 
     val state = viewModel.uiState
 
+    // #70: the statistics explanation comes first whenever the runtime requires it.
+    val usageSnapshot by application.usageStatistics.snapshot.collectAsStateWithLifecycle()
+    if (usageIntroductionDue(usageSnapshot)) {
+        UsageIntroductionScreen(application.usageStatistics)
+        return
+    }
     VesqenAppContent(
         state = state,
         playbackTelemetry = application.playbackTelemetry,
@@ -321,6 +333,10 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
         },
         managePhoneOrientation = true,
         appUpdater = application.appUpdater,
+        usageStatistics = application.usageStatistics,
+        deviceReporter = application.deviceReporter,
+        // Reports upload to the same server as statistics; builds without one share and email only.
+        reportUploadAvailable = BuildConfig.USAGE_ENDPOINT.isNotEmpty(),
     )
 }
 
@@ -380,6 +396,9 @@ fun VesqenAppContent(
     verificationImportResult: OutputVerificationImportResult? = null,
     onImportVerificationRegistry: () -> Unit = {},
     appUpdater: AppUpdater? = null,
+    usageStatistics: UsageStatistics? = null,
+    deviceReporter: DeviceReporter? = null,
+    reportUploadAvailable: Boolean = false,
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     var showStrictUsbUnavailable by rememberSaveable { mutableStateOf(false) }
@@ -481,6 +500,14 @@ fun VesqenAppContent(
         applyNavigation(navigationState.openLicenses())
     }
 
+    fun openUsageStatistics() {
+        applyNavigation(navigationState.openUsageStatistics())
+    }
+
+    fun openDeviceReport() {
+        applyNavigation(navigationState.openDeviceReport())
+    }
+
     fun togglePlayerOrientation() {
         playerOrientationOverrideName = if (isLandscape) {
             PlayerOrientationOverride.FORCE_PORTRAIT.name
@@ -526,6 +553,11 @@ fun VesqenAppContent(
                 onOpenPrivacyPolicy = ::openPrivacyPolicy,
                 onOpenLicenses = ::openLicenses,
                 appUpdater = appUpdater,
+                onOpenUsageStatistics = ::openUsageStatistics,
+                onOpenDeviceReport = ::openDeviceReport,
+                usageStatistics = usageStatistics,
+                deviceReporter = deviceReporter,
+                reportUploadAvailable = reportUploadAvailable,
                 onNavigateBack = ::navigateBack,
                 onRequestMusicAccess = onRequestMusicAccess,
                 onOpenAppSettings = onOpenAppSettings,
@@ -590,6 +622,11 @@ fun VesqenAppContent(
             onOpenPrivacyPolicy = ::openPrivacyPolicy,
             onOpenLicenses = ::openLicenses,
             appUpdater = appUpdater,
+            onOpenUsageStatistics = ::openUsageStatistics,
+            onOpenDeviceReport = ::openDeviceReport,
+            usageStatistics = usageStatistics,
+            deviceReporter = deviceReporter,
+            reportUploadAvailable = reportUploadAvailable,
             onNavigateBack = ::navigateBack,
             onRequestMusicAccess = onRequestMusicAccess,
             onOpenAppSettings = onOpenAppSettings,
@@ -656,6 +693,11 @@ private fun VesqenDestinationFrame(
     onOpenPrivacyPolicy: () -> Unit,
     onOpenLicenses: () -> Unit,
     appUpdater: AppUpdater?,
+    onOpenUsageStatistics: () -> Unit,
+    onOpenDeviceReport: () -> Unit,
+    usageStatistics: UsageStatistics?,
+    deviceReporter: DeviceReporter?,
+    reportUploadAvailable: Boolean,
     onNavigateBack: () -> Unit,
     onRequestMusicAccess: () -> Unit,
     onOpenAppSettings: () -> Unit,
@@ -1041,6 +1083,10 @@ private fun VesqenDestinationFrame(
                         onOpenPrivacyPolicy = onOpenPrivacyPolicy,
                         onOpenLicenses = onOpenLicenses,
                         appUpdater = appUpdater,
+                        usageStatistics = usageStatistics,
+                        onOpenUsageStatistics = onOpenUsageStatistics,
+                        deviceReportAvailable = deviceReporter != null,
+                        onOpenDeviceReport = onOpenDeviceReport,
                         versionName = versionName,
                         modifier = destinationModifier,
                     )
@@ -1075,6 +1121,19 @@ private fun VesqenDestinationFrame(
                         onBack = onNavigateBack,
                         modifier = destinationModifier,
                     )
+
+                    VesqenDestination.USAGE_STATISTICS -> usageStatistics?.let {
+                        UsageStatisticsScreen(usageStatistics = it, onBack = onNavigateBack, modifier = destinationModifier)
+                    }
+
+                    VesqenDestination.DEVICE_REPORT -> deviceReporter?.let {
+                        DeviceReportScreen(
+                            deviceReporter = it,
+                            uploadAvailable = reportUploadAvailable,
+                            onBack = onNavigateBack,
+                            modifier = destinationModifier,
+                        )
+                    }
                 }
             }
         }

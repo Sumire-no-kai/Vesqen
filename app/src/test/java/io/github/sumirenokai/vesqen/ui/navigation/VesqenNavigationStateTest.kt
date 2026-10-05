@@ -68,8 +68,13 @@ class VesqenNavigationStateTest {
     }
 
     @Test
-    fun `licenses and privacy policy opened from settings return to settings then library`() {
-        listOf(VesqenNavigationState::openLicenses, VesqenNavigationState::openPrivacyPolicy).forEach { open ->
+    fun `pages opened from settings return to settings then library`() {
+        listOf(
+            VesqenNavigationState::openLicenses,
+            VesqenNavigationState::openPrivacyPolicy,
+            VesqenNavigationState::openUsageStatistics,
+            VesqenNavigationState::openDeviceReport,
+        ).forEach { open ->
             val detail = open(VesqenNavigationState().selectTopLevel(VesqenDestination.SETTINGS))
             assertTrue(detail.destination.isSecondaryDetail)
             val settings = detail.back()

@@ -81,6 +81,13 @@ import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailureOrigin
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
+import io.github.sumirenokai.vesqen.reports.DeviceReportArtifact
+import io.github.sumirenokai.vesqen.reports.DeviceReportDelivery
+import io.github.sumirenokai.vesqen.reports.DeviceReportFailure
+import io.github.sumirenokai.vesqen.reports.DeviceReportOptions
+import io.github.sumirenokai.vesqen.reports.DeviceReportState
+import io.github.sumirenokai.vesqen.reports.DeviceReporter
+import io.github.sumirenokai.vesqen.reports.FakeDeviceReporter
 import io.github.sumirenokai.vesqen.telemetry.FakePlaybackTelemetry
 import io.github.sumirenokai.vesqen.updates.AppUpdater
 import io.github.sumirenokai.vesqen.updates.FakeAppUpdater
@@ -90,6 +97,13 @@ import io.github.sumirenokai.vesqen.updates.UpdateLanguage
 import io.github.sumirenokai.vesqen.updates.UpdateRelease
 import io.github.sumirenokai.vesqen.updates.UpdateSnapshot
 import io.github.sumirenokai.vesqen.updates.UpdateState
+import io.github.sumirenokai.vesqen.usage.FakeUsageStatistics
+import io.github.sumirenokai.vesqen.usage.UsageConsent
+import io.github.sumirenokai.vesqen.usage.UsageRegionPolicy
+import io.github.sumirenokai.vesqen.usage.UsageSettingsStatus
+import io.github.sumirenokai.vesqen.usage.UsageStatistics
+import io.github.sumirenokai.vesqen.usage.UsageStatisticsSnapshot
+import io.github.sumirenokai.vesqen.ui.screens.UsageIntroductionScreen
 import io.github.sumirenokai.vesqen.telemetry.PlaybackTelemetry
 import io.github.sumirenokai.vesqen.telemetry.TelemetryDataSource
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
@@ -671,6 +685,141 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.settings.updates.automatic").assertIsOn().performClick()
         composeRule.runOnIdle { assertFalse(updater.snapshot.value.automaticChecksEnabled) }
         composeRule.onNodeWithTag("vesqen.settings.updates.automatic").assertIsOff()
+    }
+
+    @Test
+    fun settings_show_statistics_only_with_a_server_and_turn_them_off() {
+        val usage = FakeUsageStatistics(UsageStatisticsSnapshot(
+            status = UsageSettingsStatus.READY,
+            enabled = true,
+            introductionRequired = false,
+            endpointConfigured = false,
+        ))
+        render(grantedState(), usageStatistics = usage, deviceReporter = FakeDeviceReporter())
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.device-report"))
+        // Without a server Vesqen never sends statistics, so it does not offer them.
+        composeRule.onAllNodesWithTag("vesqen.settings.usage-statistics").assertCountEquals(0)
+        composeRule.runOnIdle { usage.emit(usage.snapshot.value.copy(endpointConfigured = true)) }
+        composeRule.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.usage-statistics"))
+        composeRule.onNodeWithTag("vesqen.settings.usage-statistics")
+            .assert(hasText(context.getString(R.string.settings_usage_on)))
+            .performClick()
+        composeRule.onNodeWithTag("vesqen.usage").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.usage.switch").assertIsOn().performClick()
+        composeRule.runOnIdle { assertFalse(usage.snapshot.value.enabled) }
+        composeRule.onNodeWithTag("vesqen.usage.switch").assertIsOff()
+        composeRule.onNodeWithTag("vesqen.usage.back").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.usage-statistics")
+            .assert(hasText(context.getString(R.string.settings_usage_off)))
+    }
+
+    @Test
+    fun usage_introduction_where_statistics_start_on_keeps_the_switch_on_the_same_page() {
+        val usage = FakeUsageStatistics(UsageStatisticsSnapshot(
+            status = UsageSettingsStatus.READY,
+            enabled = true,
+            regionPolicy = UsageRegionPolicy.DEFAULT_ENABLED,
+            introductionRequired = true,
+            endpointConfigured = true,
+        ))
+        composeRule.setContent { VesqenTheme { UsageIntroductionScreen(usage) } }
+        composeRule.onAllNodesWithTag("vesqen.usage-intro.accept").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.usage-intro.switch").performScrollTo().assertIsOn().performClick()
+        composeRule.onNodeWithTag("vesqen.usage-intro.continue").performScrollTo().performClick()
+        composeRule.runOnIdle {
+            assertFalse(usage.snapshot.value.introductionRequired)
+            assertFalse(usage.snapshot.value.enabled)
+        }
+    }
+
+    @Test
+    fun usage_introduction_where_consent_comes_first_offers_two_answers_and_no_switch() {
+        val usage = FakeUsageStatistics(UsageStatisticsSnapshot(
+            status = UsageSettingsStatus.READY,
+            enabled = false,
+            regionPolicy = UsageRegionPolicy.EXPLICIT_CONSENT,
+            introductionRequired = true,
+            endpointConfigured = true,
+        ))
+        composeRule.setContent { VesqenTheme { UsageIntroductionScreen(usage) } }
+        composeRule.onAllNodesWithTag("vesqen.usage-intro.switch").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.usage-intro.decline").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.usage-intro.accept").performScrollTo().performClick()
+        composeRule.runOnIdle {
+            assertFalse(usage.snapshot.value.introductionRequired)
+            assertTrue(usage.snapshot.value.enabled)
+            assertEquals(UsageConsent.ACCEPTED, usage.snapshot.value.consent)
+        }
+    }
+
+    @Test
+    fun device_report_previews_the_exact_report_then_uploads_and_shows_the_receipt() {
+        val reporter = FakeDeviceReporter()
+        render(grantedState(), deviceReporter = reporter, reportUploadAvailable = true)
+        openDeviceReport()
+        // File names belong to failed-track formats, so they wait for that group.
+        composeRule.onNodeWithTag("vesqen.report.option.file-names").assertIsNotEnabled()
+        composeRule.onNodeWithTag("vesqen.report.option.formats").performClick()
+        composeRule.onNodeWithTag("vesqen.report.option.file-names").assertIsEnabled().performClick()
+        composeRule.onNodeWithTag("vesqen.report.option.errors").performClick()
+        composeRule.runOnIdle {
+            assertEquals(
+                DeviceReportOptions(recentErrors = true, failedTrackFormats = true, includeFileNames = true),
+                reporter.snapshot.value.options,
+            )
+        }
+        composeRule.onNodeWithTag("vesqen.report.option.formats").performClick()
+        composeRule.runOnIdle { assertFalse(reporter.snapshot.value.options.includeFileNames) }
+
+        composeRule.onNodeWithTag("vesqen.report").performScrollToNode(hasTestTag("vesqen.report.create"))
+        composeRule.onNodeWithTag("vesqen.report.create").performClick()
+        composeRule.onNodeWithTag("vesqen.report.progress").assertExists()
+        val text = "{\"schemaVersion\":1,\"basic\":{\"model\":\"V2171A\"}}\n"
+        val artifact = DeviceReportArtifact(text.toByteArray(Charsets.UTF_8))
+        composeRule.runOnIdle { reporter.emit(DeviceReportState.Preview(artifact)) }
+        composeRule.onNodeWithTag("vesqen.report.preview.0").assertTextEquals(text)
+        composeRule.onNodeWithTag("vesqen.report").performScrollToNode(hasTestTag("vesqen.report.upload"))
+        composeRule.onNodeWithTag("vesqen.report.upload").performClick()
+        composeRule.runOnIdle {
+            assertEquals(DeviceReportState.Sending(artifact, DeviceReportDelivery.UPLOAD), reporter.snapshot.value.state)
+        }
+        val receipt = "00000000-0000-4000-8000-000000000000"
+        composeRule.runOnIdle { reporter.emit(DeviceReportState.Sent(artifact, DeviceReportDelivery.UPLOAD, receipt)) }
+        composeRule.onNodeWithTag("vesqen.report").performScrollToNode(hasTestTag("vesqen.report.receipt"))
+        composeRule.onNodeWithTag("vesqen.report.receipt").assertTextEquals(context.getString(R.string.report_receipt, receipt))
+        // System Back from a preview returns to the choices instead of leaving the page.
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.runOnIdle { assertEquals(DeviceReportState.Editing, reporter.snapshot.value.state) }
+        composeRule.onNodeWithTag("vesqen.report").assertIsDisplayed()
+    }
+
+    @Test
+    fun device_report_without_a_server_shares_or_emails_and_explains_failures() {
+        val reporter = FakeDeviceReporter()
+        render(grantedState(), deviceReporter = reporter, reportUploadAvailable = false)
+        openDeviceReport()
+        val artifact = DeviceReportArtifact("{\"schemaVersion\":1}\n".toByteArray(Charsets.UTF_8))
+        composeRule.runOnIdle { reporter.emit(DeviceReportState.Preview(artifact)) }
+        composeRule.onNodeWithTag("vesqen.report").performScrollToNode(hasTestTag("vesqen.report.share"))
+        composeRule.onAllNodesWithTag("vesqen.report.upload").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.report.share").performClick()
+        composeRule.runOnIdle { reporter.emit(DeviceReportState.Failed(DeviceReportFailure.NO_SHARE_APPLICATION, artifact)) }
+        composeRule.onNodeWithTag("vesqen.report").performScrollToNode(hasTestTag("vesqen.report.failure"))
+        composeRule.onNodeWithTag("vesqen.report.failure").assertTextEquals(context.getString(R.string.report_failure_no_app))
+        composeRule.runOnIdle { reporter.emit(DeviceReportState.Sent(artifact, DeviceReportDelivery.EMAIL)) }
+        composeRule.onNodeWithTag("vesqen.report").performScrollToNode(hasTestTag("vesqen.report.shared"))
+        composeRule.onNodeWithTag("vesqen.report.shared").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.report").performScrollToNode(hasTestTag("vesqen.report.start-over"))
+        composeRule.onNodeWithTag("vesqen.report.start-over").performClick()
+        composeRule.runOnIdle { assertEquals(DeviceReportState.Editing, reporter.snapshot.value.state) }
+    }
+
+    private fun openDeviceReport() {
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.device-report"))
+        composeRule.onNodeWithTag("vesqen.settings.device-report").performClick()
+        composeRule.onNodeWithTag("vesqen.report").assertIsDisplayed()
     }
 
     @Test
@@ -3219,6 +3368,9 @@ class VesqenAppTest {
         verificationRegistryState: OutputVerificationRegistryState = OutputVerificationRegistryState.Empty,
         onImportVerificationRegistry: () -> Unit = {},
         appUpdater: AppUpdater? = null,
+        usageStatistics: UsageStatistics? = null,
+        deviceReporter: DeviceReporter? = null,
+        reportUploadAvailable: Boolean = false,
     ) {
         composeRule.setContent {
             VesqenTheme(darkTheme = darkTheme) {
@@ -3254,6 +3406,9 @@ class VesqenAppTest {
                         verificationRegistryState = verificationRegistryState,
                         onImportVerificationRegistry = onImportVerificationRegistry,
                         appUpdater = appUpdater,
+                        usageStatistics = usageStatistics,
+                        deviceReporter = deviceReporter,
+                        reportUploadAvailable = reportUploadAvailable,
                     )
                 }
                 val renderWithinSize: @Composable () -> Unit = {
