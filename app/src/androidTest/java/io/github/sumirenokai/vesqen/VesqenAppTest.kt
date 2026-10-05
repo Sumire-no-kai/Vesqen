@@ -1040,8 +1040,9 @@ class VesqenAppTest {
             .fetchSemanticsNode().boundsInRoot
         val viewportBottom = composeRule.onNodeWithTag("vesqen.track-details.content")
             .fetchSemanticsNode().boundsInRoot.bottom
-        val contentEnd = composeRule.onNodeWithTag("vesqen.track-details.end")
-            .fetchSemanticsNode().boundsInRoot.bottom
+        // A layout position: the zero-height marker's clipped bounds would read as empty.
+        val end = composeRule.onNodeWithTag("vesqen.track-details.end").fetchSemanticsNode()
+        val contentEnd = end.positionInRoot.y + end.size.height
         // Only the content's own 16 dp bottom padding may follow it: the sheet wraps its content.
         val maximumBottomGap = with(fixtureDensity) { 24.dp.toPx() }
 
@@ -2017,8 +2018,8 @@ class VesqenAppTest {
         assertTrue("Chain title must not overlap its summary action", title.right <= summary.left)
 
         composeRule.onNodeWithTag("vesqen.chain.control.settings").performScrollTo().performClick()
-        val controls = composeRule.onNodeWithTag("vesqen.chain.dashboard-controls")
-            .fetchSemanticsNode().boundsInRoot
+        // At 2x text the opened controls can sit below the grid's composed items; bring them in first.
+        val controls = chainNode("vesqen.chain.dashboard-controls").fetchSemanticsNode().boundsInRoot
         val viewNode = viewControl.fetchSemanticsNode()
         val view = viewNode.boundsInRoot
         val refreshNode = composeRule.onNodeWithTag("vesqen.chain.control.refresh").fetchSemanticsNode()
