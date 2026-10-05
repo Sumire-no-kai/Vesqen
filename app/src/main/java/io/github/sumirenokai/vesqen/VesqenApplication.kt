@@ -33,6 +33,14 @@ class VesqenApplication : Application() {
 
     val usbOutputStateRepository = UsbOutputStateRepository()
 
+    internal val deviceReportRuntime by lazy {
+        io.github.sumirenokai.vesqen.reports.AndroidDeviceReportRuntime(
+            this, applicationScope, usbOutputStateRepository, { playbackTelemetry },
+        )
+    }
+    val deviceReporter: io.github.sumirenokai.vesqen.reports.DeviceReporter
+        get() = deviceReportRuntime.reporter
+
     val outputVerificationRepository: OutputVerificationRepository by lazy {
         AndroidOutputVerificationRepository(this)
     }
@@ -74,6 +82,7 @@ class VesqenApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        deviceReportRuntime
         developerDiagnosticRecorder
         updateRuntime.usageRequestExpected = usageRuntime::onForeground
         applicationScope.launch { outputVerificationRepository.load() }

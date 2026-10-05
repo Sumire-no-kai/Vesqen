@@ -30,6 +30,7 @@ import io.github.sumirenokai.vesqen.audio.AudioRouteSource
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.playback.UsbOutputStateRepository
+import io.github.sumirenokai.vesqen.playback.telemetryLabel
 import io.github.sumirenokai.vesqen.verification.OutputVerificationMatch
 import io.github.sumirenokai.vesqen.verification.resolveOutputDeclaration
 import java.util.ArrayDeque
@@ -1020,7 +1021,7 @@ class AndroidPlaybackTelemetry internal constructor(
         val outputDeclaration = resolveOutputDeclaration(usbOutputStatus, outputVerification)
         metrics.measuredText(
             TelemetryMetricCatalog.ROUTE_OUTPUT_DECLARATION,
-            outputDeclaration.name.replace('_', ' '),
+            outputDeclaration.telemetryLabel,
             if (outputVerification == null) usbOutputSource else EXTERNAL_OUTPUT_VERIFICATION,
             usbOutputInstant,
         )

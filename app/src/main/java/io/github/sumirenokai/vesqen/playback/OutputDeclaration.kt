@@ -8,3 +8,7 @@ enum class OutputDeclaration {
     BIT_PERFECT_VERIFIED,
     BIT_PERFECT_FAILED,
 }
+
+/** The text Audio Proof publishes for a declaration, e.g. "BIT PERFECT ACTIVE". */
+internal val OutputDeclaration.telemetryLabel: String
+    get() = name.replace('_', ' ')
