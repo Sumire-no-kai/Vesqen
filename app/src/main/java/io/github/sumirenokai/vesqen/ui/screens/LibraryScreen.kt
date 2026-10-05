@@ -521,6 +521,7 @@ fun LibraryScreen(
                         body = stringResource(R.string.library_favorites_empty),
                         actionLabel = stringResource(R.string.show_all_music),
                         onAction = { favoritesOnly = false },
+                        primaryAction = false,
                         modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
                     )
 
@@ -529,6 +530,7 @@ fun LibraryScreen(
                         body = stringResource(R.string.no_search_results_body),
                         actionLabel = stringResource(R.string.clear_search),
                         onAction = { query = "" },
+                        primaryAction = false,
                         modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
                     )
 
@@ -1222,6 +1224,7 @@ private fun CollectionTrackList(
                 actionLabel = stringResource(R.string.back),
                 onAction = onBack,
                 modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
+                primaryAction = false,
             )
         } else {
             Box(modifier = Modifier.weight(1f)) {

@@ -47,6 +47,8 @@ import io.github.sumirenokai.vesqen.reports.DeviceReportFailure
 import io.github.sumirenokai.vesqen.reports.DeviceReportOptions
 import io.github.sumirenokai.vesqen.reports.DeviceReportState
 import io.github.sumirenokai.vesqen.reports.DeviceReporter
+import io.github.sumirenokai.vesqen.ui.components.PaperCard
+import io.github.sumirenokai.vesqen.ui.components.PaperDivider
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 
 /** One preview item holds about this many characters, so long reports stay fast to scroll. */
@@ -124,21 +126,21 @@ private val DeviceReportState.report: DeviceReportArtifact?
 
 @Composable
 private fun ReportOptions(options: DeviceReportOptions, enabled: Boolean, onChange: (DeviceReportOptions) -> Unit) {
-    SettingsCard(Modifier.padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.sm)) {
+    PaperCard(Modifier.padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.sm)) {
         ReportOption(R.string.report_basic, R.string.report_basic_body, checked = true, enabled = false, tag = "basic") {}
-        SettingsDivider()
+        PaperDivider()
         ReportOption(R.string.report_audio, R.string.report_audio_body, options.audioCapabilities, enabled, "audio") {
             onChange(options.copy(audioCapabilities = it))
         }
-        SettingsDivider()
+        PaperDivider()
         ReportOption(R.string.report_chain, R.string.report_chain_body, options.chainEvidence, enabled, "chain") {
             onChange(options.copy(chainEvidence = it))
         }
-        SettingsDivider()
+        PaperDivider()
         ReportOption(R.string.report_errors, R.string.report_errors_body, options.recentErrors, enabled, "errors") {
             onChange(options.copy(recentErrors = it))
         }
-        SettingsDivider()
+        PaperDivider()
         ReportOption(R.string.report_formats, R.string.report_formats_body, options.failedTrackFormats, enabled, "formats") {
             // File names only describe failed-track formats, so they go with them.
             onChange(options.copy(failedTrackFormats = it, includeFileNames = it && options.includeFileNames))

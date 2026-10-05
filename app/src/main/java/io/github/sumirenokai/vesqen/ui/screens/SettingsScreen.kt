@@ -6,7 +6,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,13 +31,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,6 +57,8 @@ import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
+import io.github.sumirenokai.vesqen.ui.components.PaperCard
+import io.github.sumirenokai.vesqen.ui.components.PaperDivider
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
@@ -131,7 +130,7 @@ fun SettingsScreen(
                             onClick = { onSetUsbOutputMode(UsbOutputMode.SYSTEM) },
                             modifier = Modifier.testTag("vesqen.settings.output.system"),
                         )
-                        SettingsDivider()
+                        PaperDivider()
                         SettingsRadioRow(
                             title = stringResource(R.string.settings_strict_usb_output),
                             description = unsupportedPlatform?.let {
@@ -174,13 +173,13 @@ fun SettingsScreen(
                         onClick = onOpenAbout,
                         modifier = Modifier.testTag("vesqen.settings.about"),
                     )
-                    SettingsDivider()
+                    PaperDivider()
                     SettingsRow(
                         title = stringResource(R.string.privacy_policy_title),
                         onClick = onOpenPrivacyPolicy,
                         modifier = Modifier.testTag("vesqen.settings.privacy-policy"),
                     )
-                    SettingsDivider()
+                    PaperDivider()
                     SettingsRow(
                         title = stringResource(R.string.licenses_title),
                         onClick = onOpenLicenses,
@@ -354,7 +353,7 @@ private fun SettingsPrivacyGroup(
                 modifier = Modifier.testTag("vesqen.settings.usage-statistics"),
             )
         }
-        if (usage != null && deviceReportAvailable) SettingsDivider()
+        if (usage != null && deviceReportAvailable) PaperDivider()
         if (deviceReportAvailable) {
             SettingsRow(
                 title = stringResource(R.string.settings_device_report),
@@ -433,20 +432,8 @@ internal fun SettingsGroup(
                 .padding(start = VesqenSpacing.xxs, bottom = 10.dp)
                 .semantics { heading() },
         )
-        SettingsCard(content = content)
+        PaperCard(content = content)
         footer()
-    }
-}
-
-@Composable
-internal fun SettingsCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(VesqenRadii.surface),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, LocalVesqenColors.current.hairline),
-    ) {
-        Column(content = content)
     }
 }
 
@@ -566,15 +553,6 @@ internal fun SettingsSwitchRow(
         Spacer(Modifier.width(VesqenSpacing.sm))
         Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
-}
-
-@Composable
-internal fun SettingsDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(start = VesqenSpacing.md),
-        thickness = 1.dp,
-        color = LocalVesqenColors.current.hairline,
-    )
 }
 
 @Composable

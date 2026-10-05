@@ -426,6 +426,7 @@ private fun ChainEmptyScreen(
             actionLabel = stringResource(R.string.browse_library),
             onAction = onBrowseLibrary,
             modifier = modifier.padding(horizontal = VesqenSpacing.lg),
+            primaryAction = false,
         )
         return
     }

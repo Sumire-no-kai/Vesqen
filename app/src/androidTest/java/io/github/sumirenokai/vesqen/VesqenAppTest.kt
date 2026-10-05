@@ -19,6 +19,7 @@ import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -137,6 +138,7 @@ import io.github.sumirenokai.vesqen.ui.chain.DiagnosticExportFeedback
 import io.github.sumirenokai.vesqen.ui.chain.formatSeconds
 import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
+import io.github.sumirenokai.vesqen.ui.components.QueueSheet
 import io.github.sumirenokai.vesqen.ui.navigation.NavigationRailWidth
 import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
 import io.github.sumirenokai.vesqen.ui.screens.ChainSummaryMetricIds
@@ -1029,7 +1031,8 @@ class VesqenAppTest {
         val headerBefore = composeRule.onNodeWithTag("vesqen.track-details.header")
             .fetchSemanticsNode().boundsInRoot
 
-        composeRule.onNodeWithTag("vesqen.track-details.add-to-queue").performScrollTo()
+        composeRule.onNodeWithTag("vesqen.track-details.add-to-queue").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.track-details.end").performScrollTo()
         composeRule.onNodeWithTag("vesqen.track-details.content").performTouchInput { swipeUp() }
         composeRule.waitForIdle()
 
@@ -1037,15 +1040,16 @@ class VesqenAppTest {
             .fetchSemanticsNode().boundsInRoot
         val viewportBottom = composeRule.onNodeWithTag("vesqen.track-details.content")
             .fetchSemanticsNode().boundsInRoot.bottom
-        val finalActionBottom = composeRule.onNodeWithTag("vesqen.track-details.add-to-queue")
-            .fetchSemanticsNode().boundsInRoot.bottom
-        val maximumBottomGap = with(fixtureDensity) { 16.dp.toPx() }
+        // A layout position: the zero-height marker's clipped bounds would read as empty.
+        val end = composeRule.onNodeWithTag("vesqen.track-details.end").fetchSemanticsNode()
+        val contentEnd = end.positionInRoot.y + end.size.height
+        // Only the content's own 16 dp bottom padding may follow it: the sheet wraps its content.
+        val maximumBottomGap = with(fixtureDensity) { 24.dp.toPx() }
 
         assertEquals("The details title must stay fixed while metadata scrolls", headerBefore, headerAfter)
         assertTrue(
-            "The final details action must end near the sheet bottom; " +
-                "gap=${viewportBottom - finalActionBottom}px",
-            viewportBottom - finalActionBottom <= maximumBottomGap,
+            "The details must end near the sheet bottom; gap=${viewportBottom - contentEnd}px",
+            viewportBottom - contentEnd <= maximumBottomGap,
         )
     }
 
@@ -2014,8 +2018,8 @@ class VesqenAppTest {
         assertTrue("Chain title must not overlap its summary action", title.right <= summary.left)
 
         composeRule.onNodeWithTag("vesqen.chain.control.settings").performScrollTo().performClick()
-        val controls = composeRule.onNodeWithTag("vesqen.chain.dashboard-controls")
-            .fetchSemanticsNode().boundsInRoot
+        // At 2x text the opened controls can sit below the grid's composed items; bring them in first.
+        val controls = chainNode("vesqen.chain.dashboard-controls").fetchSemanticsNode().boundsInRoot
         val viewNode = viewControl.fetchSemanticsNode()
         val view = viewNode.boundsInRoot
         val refreshNode = composeRule.onNodeWithTag("vesqen.chain.control.refresh").fetchSemanticsNode()
@@ -3076,6 +3080,46 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.queue.sheet").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.queue.item.0").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.queue.item.1").assertIsDisplayed()
+    }
+
+    @Test
+    fun queue_rows_play_on_tap_mark_the_current_track_and_edit_in_place() {
+        val played = mutableListOf<Int>()
+        val moved = mutableListOf<Pair<Int, Int>>()
+        val removed = mutableListOf<Int>()
+        composeRule.setContent {
+            VesqenTheme {
+                QueueSheet(
+                    snapshot = PlaybackSnapshot(
+                        isControllerReady = true,
+                        queue = listOf(
+                            PlaybackQueueItem(1, "Dawn Signal", "Mori", true),
+                            PlaybackQueueItem(2, "Long Light", "Mori", false),
+                        ),
+                    ),
+                    onDismiss = {},
+                    onPlayItem = { played += it },
+                    onRemoveItem = { removed += it },
+                    onMoveItem = { from, to -> moved += from to to },
+                    onClearQueue = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("vesqen.queue.item.0").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, context.getString(R.string.chain_current_playing)),
+        )
+        composeRule.onNodeWithTag("vesqen.queue.item.1").performClick()
+        // The first row cannot move up and the last cannot move down; the others edit in place.
+        composeRule.onAllNodesWithContentDescription(context.getString(R.string.move_up))[0].assertIsNotEnabled()
+        composeRule.onAllNodesWithContentDescription(context.getString(R.string.move_down))[1].assertIsNotEnabled()
+        composeRule.onAllNodesWithContentDescription(context.getString(R.string.move_up))[1].performClick()
+        composeRule.onAllNodesWithContentDescription(context.getString(R.string.remove_from_queue))[0].performClick()
+        composeRule.runOnIdle {
+            assertEquals(listOf(1), played)
+            assertEquals(listOf(1 to 0), moved)
+            assertEquals(listOf(0), removed)
+        }
     }
 
     private fun assertFocusedNowControlsAreFullyVisible() {
