@@ -24,6 +24,13 @@ class VesqenApplication : Application() {
     }
     val appUpdater: io.github.sumirenokai.vesqen.updates.AppUpdater get() = updateRuntime.updater
 
+    private val usageRuntime by lazy {
+        io.github.sumirenokai.vesqen.usage.AndroidUsageRuntime(
+            this, applicationScope, updateRuntime::acceptUsageResponse, updateRuntime::checkWithoutUsageResponse,
+        )
+    }
+    val usageStatistics: io.github.sumirenokai.vesqen.usage.UsageStatistics get() = usageRuntime.statistics
+
     val usbOutputStateRepository = UsbOutputStateRepository()
 
     val outputVerificationRepository: OutputVerificationRepository by lazy {
@@ -68,7 +75,7 @@ class VesqenApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         developerDiagnosticRecorder
-        updateRuntime
+        updateRuntime.usageRequestExpected = usageRuntime::onForeground
         applicationScope.launch { outputVerificationRepository.load() }
     }
 

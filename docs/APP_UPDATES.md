@@ -50,6 +50,8 @@ For #70, set `GitHubUpdateRuntime.usageRequestExpected` before the first activit
 its daily statistics request will carry the channel manifest. Feed the response to
 `acceptUsageResponse()`; it passes through the same parser and local comparison without a
 separate GET. A failed statistics request must not silently enable an extra updater request.
+A successful one that carries no manifest calls `checkWithoutUsageResponse()`, which runs the
+ordinary automatic check, so a server without the relay cannot stop automatic updates.
 That statistics subsystem is outside this PR.
 
 Transport requires HTTPS, bounded redirects with no HTTP downgrade, a 128 KiB manifest limit,

@@ -11,6 +11,7 @@ import io.github.sumirenokai.vesqen.BuildConfig
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /** Distribution composition root. Move this source set to the GitHub flavor when #47 lands. */
 class GitHubUpdateRuntime(application: Application, scope: CoroutineScope) {
@@ -29,8 +30,10 @@ class GitHubUpdateRuntime(application: Application, scope: CoroutineScope) {
     val updater: AppUpdater get() = engine
 
     /** #70 sets this when its daily request will provide the manifest; no separate GET then. */
-    var usageRequestExpected: () -> Boolean = { false }
+    var usageRequestExpected: suspend () -> Boolean = { false }
     fun acceptUsageResponse(manifest: String) = engine.acceptUsageResponse(manifest)
+    /** The usage ping succeeded without update data (e.g. relay not configured): check directly. */
+    fun checkWithoutUsageResponse() = engine.onForeground(usageRequestExpected = false)
 
     init {
         installer.onResult = engine::installationResult
@@ -45,7 +48,7 @@ class GitHubUpdateRuntime(application: Application, scope: CoroutineScope) {
             private var started = 0
             override fun onActivityStarted(activity: Activity) {
                 if (activity is UpdateInstallActivity) return
-                if (started++ == 0) engine.onForeground(usageRequestExpected())
+                if (started++ == 0) scope.launch { engine.onForeground(usageRequestExpected()) }
             }
             override fun onActivityStopped(activity: Activity) {
                 if (activity !is UpdateInstallActivity) started--
