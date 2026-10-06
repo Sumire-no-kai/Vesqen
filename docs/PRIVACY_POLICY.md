@@ -1,7 +1,7 @@
 # Vesqen Privacy Policy
 
 - Effective date: September 26, 2026
-- Last updated: September 26, 2026
+- Last updated: October 6, 2026
 
 This policy explains what information the Vesqen Android app handles, where that information stays, and what we receive when you contact us or join a test. It applies to every build of Vesqen we distribute, including Google Play and GitHub Releases, and to the Vesqen website.
 
@@ -45,7 +45,7 @@ Vesqen does not request the Internet, location, contacts, phone, camera, microph
 ## When information leaves the app
 
 - **Android media controls.** While music plays, Vesqen gives Android the current track's title, artist, album, artwork and playback position for the notification and lock-screen controls. Android may pass this to devices and services you connect or authorize, such as Bluetooth car audio, watches or voice assistants. Only Android's system components, and apps you have allowed to read notifications or control media (such as a smartwatch app), can connect to Vesqen's playback session. Other apps on your phone cannot.
-- **Moving to a new phone.** Vesqen turns off Android cloud backup, so its data is not backed up to Google Drive. On some phones, Android's device-to-device transfer can still copy app data directly to a new phone when you choose to transfer your data.
+- **Moving to a new phone.** Vesqen does not move its data to a new phone. Your library, favorites, playlists, play counts and last-played times, queue, settings and output verification records stay only on your old phone. On the new phone, you need to allow Vesqen to read your audio files again, or add your music folders again. Vesqen turns off Android cloud backup, so this data is not backed up to Google Drive, and it asks Android not to copy this data during device-to-device transfer. Some phone makers' transfer tools may not follow this request and may still copy the app's data to the new phone.
 - **Nothing else.** Vesqen contains no advertising, analytics, crash-reporting or tracking software. Public builds include no diagnostic recording or export.
 
 ## Information we receive
