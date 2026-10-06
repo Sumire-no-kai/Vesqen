@@ -82,6 +82,7 @@ import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.reports.DeviceReporter
+import io.github.sumirenokai.vesqen.service.ServiceState
 import io.github.sumirenokai.vesqen.telemetry.PlaybackTelemetry
 import io.github.sumirenokai.vesqen.ui.chain.ChainDashboardPreferencesRepository
 import io.github.sumirenokai.vesqen.ui.chain.ChainDashboardPreferencesStore
@@ -262,6 +263,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
 
     // #70: the statistics explanation comes first whenever the runtime requires it.
     val usageSnapshot by application.usageStatistics.snapshot.collectAsStateWithLifecycle()
+    val serviceStatus by application.serviceStatus.collectAsStateWithLifecycle()
     if (usageIntroductionDue(usageSnapshot)) {
         UsageIntroductionScreen(application.usageStatistics)
         return
@@ -335,8 +337,9 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
         appUpdater = application.appUpdater,
         usageStatistics = application.usageStatistics,
         deviceReporter = application.deviceReporter,
-        // Reports upload to the same server as statistics; builds without one share and email only.
-        reportUploadAvailable = BuildConfig.USAGE_ENDPOINT.isNotEmpty(),
+        // Reports upload to the same server as statistics; builds without one share and email only,
+        // as does every build once the owner retired uploads (#96).
+        reportUploadAvailable = BuildConfig.USAGE_ENDPOINT.isNotEmpty() && serviceStatus.reportUploads != ServiceState.RETIRED,
     )
 }
 

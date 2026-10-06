@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.reports
 
+import io.github.sumirenokai.vesqen.service.ServiceState
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -26,7 +27,7 @@ class HttpsDeviceReportUploaderDeviceTest {
     }
 
     private suspend fun upload(body: String): DeviceReportUploadResult =
-        HttpsDeviceReportUploader("https://example.test/v1/usage") { Receipt(it, body) }
+        HttpsDeviceReportUploader("https://example.test/v1/usage", { ServiceState.ENABLED }) { Receipt(it, body) }
             .upload(DeviceReportArtifact("{\"n\":1}".toByteArray()))
 
     private class Receipt(url: URL, private val body: String) : HttpURLConnection(url) {

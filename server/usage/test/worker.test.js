@@ -115,3 +115,31 @@ test('invalid retention configuration prevents ingestion rather than collecting 
   assert.equal((await handle(request(),env,now)).status,503);
   assert.equal(env.DB.rows('SELECT * FROM daily_totals').length,0);
 });
+
+test('a closed endpoint answers 503 before rate limiting and reads or stores nothing',async t=>{
+  const env=environment();t.after(()=>env.DB.close());
+  env.USAGE_INGEST='closed';env.REPORT_INGEST='closed';
+  let bodyRead=false;
+  // highWaterMark 0: the stream pulls only when someone reads, not when it is created.
+  const body=new ReadableStream({pull(){bodyRead=true;throw new Error('must not read');}},{highWaterMark:0});
+  const unread=path=>new Request(`https://example.invalid${path}`,{method:'POST',body,duplex:'half',headers:{'content-type':'application/json'}});
+  const usage=await handle(unread('/v1/usage'),env,now);
+  assert.equal(usage.status,503);
+  assert.deepEqual(await usage.json(),{error:'SERVICE_PAUSED'});
+  assert.equal((await handle(request(report(),'/v1/reports'),env,now)).status,503);
+  assert.equal(bodyRead,false);
+  assert.deepEqual(env.calls,[]);
+  assert.equal(env.DB.rows('SELECT * FROM daily_totals').length,0);
+  assert.equal(env.DB.rows('SELECT * FROM reports').length,0);
+  // Each switch is independent, and reopening restores normal service.
+  env.USAGE_INGEST='open';
+  assert.equal((await handle(request(ping(),'/v1/usage'),env,now)).status,200);
+  assert.equal((await handle(request(report(),'/v1/reports'),env,now)).status,503);
+});
+
+test('an unknown ingest value closes the endpoint instead of opening it',async t=>{
+  const env=environment();t.after(()=>env.DB.close());
+  env.USAGE_INGEST='paused';
+  assert.equal((await handle(request(ping(),'/v1/usage'),env,now)).status,503);
+  assert.equal(env.DB.rows('SELECT * FROM daily_totals').length,0);
+});

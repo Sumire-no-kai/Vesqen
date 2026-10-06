@@ -48,6 +48,18 @@ policy, so it is decided together with the Cloudflare setup.
 estimates. Client failures, reinstalls, clock changes and malicious requests can
 undercount or overcount. They are not independently deduplicated unique-user counts.
 
+## Pausing (#96)
+
+The owner can stop either endpoint at once without touching the app:
+
+- `USAGE_INGEST` and `REPORT_INGEST` (Worker variables, default `open`). Set one to `closed`
+  in the Cloudflare dashboard or with `wrangler`, and that endpoint answers `503
+  {"error":"SERVICE_PAUSED"}` before rate limiting and before reading the body; nothing is
+  stored. Any value other than `open` or `closed` also closes the endpoint.
+- This stops collection, including from old or forged clients. To make current apps stop
+  sending at all, change `service/status.json` on the website as well (#96): apps read it
+  right before each ping or upload and send nothing unless the matching entry is `enabled`.
+
 ## Existing updates (#68 / #78)
 
 There is **no new version-file endpoint**. #78 already consumes/generated stable

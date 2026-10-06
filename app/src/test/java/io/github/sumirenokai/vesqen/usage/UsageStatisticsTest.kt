@@ -1,5 +1,11 @@
 package io.github.sumirenokai.vesqen.usage
 
+import io.github.sumirenokai.vesqen.service.ServiceState
+import io.github.sumirenokai.vesqen.service.ServiceStatus
+import io.github.sumirenokai.vesqen.service.ServiceSwitchGate
+import io.github.sumirenokai.vesqen.service.ServiceSwitchSource
+import io.github.sumirenokai.vesqen.service.ServiceSwitchStore
+import io.github.sumirenokai.vesqen.service.StoredServiceSwitch
 import java.io.IOException
 import java.time.Instant
 import kotlinx.coroutines.*
@@ -168,6 +174,41 @@ class UsageStatisticsTest {
         assertEquals(0, run(UsageTransport { throw SecurityException("Permission denied") }))
     }
 
+    @Test fun theServiceSwitchCanOnlyStopThePingAndHandsTheUpdateCheckBack() = runBlocking {
+        fun CoroutineScope.run(status: ServiceStatus?, preferences: UsagePreferences = ready): Triple<Int, Int, Int> {
+            var sends = 0
+            var standalone = 0
+            val source = CountingSource(status)
+            DefaultUsageStatistics(CoroutineScope(coroutineContext + Dispatchers.Unconfined), MemoryStore(preferences),
+                { UsageRegionPolicy.DEFAULT_ENABLED }, true, { true }, { facts }, UsageTransport { sends++; null }, {},
+                { standalone++ }, { USAGE_DAY_MS * 10 }, ServiceSwitchGate(source, MemorySwitchStore(), 12),
+            ).also { runBlocking { it.onForeground() } }
+            return Triple(sends, standalone, source.reads)
+        }
+        // Enabled: the ping goes out, then hands the update check back as before.
+        assertEquals(Triple(1, 1, 1), run(switch(ServiceState.ENABLED)))
+        // Paused, retired or unreadable: nothing is sent, and the updater checks on its own.
+        listOf(switch(ServiceState.PAUSED), switch(ServiceState.RETIRED), null).forEach { assertEquals(Triple(0, 1, 1), run(it)) }
+        // Statistics turned off: the switch file is never read.
+        assertEquals(Triple(0, 0, 0), run(switch(ServiceState.ENABLED), ready.copy(enabled = false, consent = UsageConsent.DECLINED)))
+    }
+
+    @Test fun aRetiredPingLeavesTheUiAndIsNotAttemptedAgain() = runBlocking {
+        var now = USAGE_DAY_MS * 10
+        val source = CountingSource(switch(ServiceState.RETIRED))
+        var sends = 0
+        val engine = DefaultUsageStatistics(CoroutineScope(coroutineContext + Dispatchers.Unconfined), MemoryStore(ready),
+            { UsageRegionPolicy.DEFAULT_ENABLED }, true, { true }, { facts }, UsageTransport { sends++; null },
+            clock = { now }, serviceSwitch = ServiceSwitchGate(source, MemorySwitchStore(), 12))
+        engine.onForeground()
+        yield()
+        assertEquals(ServiceState.RETIRED, engine.snapshot.value.service)
+        now += USAGE_DAY_MS
+        assertFalse(engine.onForeground())
+        assertEquals(1, source.reads)
+        assertEquals(0, sends)
+    }
+
     @Test fun fakeExposesSelectionsWithoutStorageOrNetwork() {
         val fake = FakeUsageStatistics()
         fake.completeIntroduction(false)
@@ -189,6 +230,16 @@ class UsageStatisticsTest {
         override fun write(value: UsagePreferences) { if (fail) throw IOException("storage"); this.value = value }
     }
     private val ready = UsagePreferences(true, UsageConsent.ACCEPTED, true)
+    private fun switch(usage: ServiceState) = ServiceStatus(usage, ServiceState.ENABLED)
+    private class CountingSource(private val status: ServiceStatus?) : ServiceSwitchSource {
+        var reads = 0
+        override suspend fun read(): ServiceStatus? { reads++; return status }
+    }
+    private class MemorySwitchStore : ServiceSwitchStore {
+        private var value: StoredServiceSwitch? = null
+        override fun read() = value
+        override fun write(value: StoredServiceSwitch) { this.value = value }
+    }
     private val facts = UsageFacts("1.0.0-beta.2", "github", "16", "Example", "Model", "Build", null)
     private fun at(value: String) = Instant.parse(value).toEpochMilli()
 }

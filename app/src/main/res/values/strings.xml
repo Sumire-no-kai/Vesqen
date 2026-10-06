@@ -126,6 +126,7 @@
     <string name="settings_usage_statistics">Usage statistics</string>
     <string name="settings_usage_on">On</string>
     <string name="settings_usage_off">Off</string>
+    <string name="settings_usage_paused">Paused</string>
     <string name="settings_device_report">Export device report</string>
     <string name="usage_title">Usage statistics</string>
     <string name="usage_body">Vesqen sends anonymous usage statistics at most once a day, to learn which phones it runs on. They contain only:</string>
@@ -141,6 +142,7 @@
     <string name="usage_accept">Send statistics</string>
     <string name="usage_decline">Don’t send</string>
     <string name="usage_storage_unavailable">This setting can’t be saved right now.</string>
+    <string name="usage_paused">Vesqen has paused usage statistics, so nothing is sent for now. Your setting stays as it is, and sending resumes when the pause ends.</string>
     <string name="report_title">Export device report</string>
     <string name="report_intro">A report helps the developer understand problems on different phones. You choose what goes in and see all of it before sending.</string>
     <string name="report_basic">Basic information</string>
@@ -174,6 +176,8 @@
     <string name="report_failure_no_app">No app on this phone can take the report.</string>
     <string name="report_failure_not_configured">This version can’t upload reports.</string>
     <string name="report_failure_upload">The upload failed. Try again later, or share or email it.</string>
+    <string name="report_failure_upload_paused">Uploads are paused for now. You can share or email the report instead.</string>
+    <string name="report_failure_upload_unavailable">Uploading isn’t available right now. Try again later, or share or email it.</string>
     <string name="licenses_title">Open-source licenses</string>
     <string name="licenses_intro">Vesqen uses the following open-source software.</string>
     <string name="licenses_loading">Loading…</string>

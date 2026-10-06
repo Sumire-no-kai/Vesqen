@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.telephony.TelephonyManager
 import io.github.sumirenokai.vesqen.BuildConfig
+import io.github.sumirenokai.vesqen.service.ServiceSwitchGate
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,7 @@ internal class AndroidUsageRuntime(
     scope: CoroutineScope,
     acceptUpdate: (String) -> Unit,
     missingUpdate: () -> Unit,
+    serviceSwitch: ServiceSwitchGate,
 ) {
     private val audio = application.getSystemService(AudioManager::class.java)
     private val engine = DefaultUsageStatistics(
@@ -32,7 +34,7 @@ internal class AndroidUsageRuntime(
             UsageFacts(BuildConfig.VERSION_NAME, "github", usageText(Build.VERSION.RELEASE), usageText(Build.MANUFACTURER),
                 usageText(Build.MODEL), usageText(Build.DISPLAY), bitPerfectMixer(audio))
         }, transport = HttpsUsageTransport(BuildConfig.USAGE_ENDPOINT), acceptUpdate = acceptUpdate,
-        missingUpdate = missingUpdate,
+        missingUpdate = missingUpdate, serviceSwitch = serviceSwitch,
     )
     val statistics: UsageStatistics get() = engine
     suspend fun onForeground(): Boolean = engine.onForeground()

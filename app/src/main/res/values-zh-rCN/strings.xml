@@ -123,6 +123,7 @@
     <string name="settings_usage_statistics">使用统计</string>
     <string name="settings_usage_on">开</string>
     <string name="settings_usage_off">关</string>
+    <string name="settings_usage_paused">已暂停</string>
     <string name="settings_device_report">导出设备报告</string>
     <string name="usage_title">使用统计</string>
     <string name="usage_body">Vesqen 每天最多发送一次匿名使用统计，用来了解它在哪些手机上运行。内容只有：</string>
@@ -138,6 +139,7 @@
     <string name="usage_accept">同意发送</string>
     <string name="usage_decline">不发送</string>
     <string name="usage_storage_unavailable">这个设置暂时无法保存。</string>
+    <string name="usage_paused">Vesqen 暂停了使用统计，目前不会发送。你的开关保持不变，暂停结束后照常发送。</string>
     <string name="report_title">导出设备报告</string>
     <string name="report_intro">报告帮助开发者了解不同手机上的问题。你决定包含哪些内容，发送前可以看到全文。</string>
     <string name="report_basic">基本信息</string>
@@ -171,6 +173,8 @@
     <string name="report_failure_no_app">手机上没有能接收报告的应用。</string>
     <string name="report_failure_not_configured">这个版本不能上传报告。</string>
     <string name="report_failure_upload">上传失败。可以稍后再试，或者分享、发邮件。</string>
+    <string name="report_failure_upload_paused">上传暂停中。可以分享或发邮件发送报告。</string>
+    <string name="report_failure_upload_unavailable">上传暂时不可用。可以稍后再试，或者分享、发邮件。</string>
     <string name="licenses_title">开源许可</string>
     <string name="licenses_intro">Vesqen 使用了下面这些开源软件。</string>
     <string name="licenses_loading">正在读取…</string>

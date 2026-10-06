@@ -56,6 +56,7 @@ import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
+import io.github.sumirenokai.vesqen.service.ServiceState
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.components.PaperCard
 import io.github.sumirenokai.vesqen.ui.components.PaperDivider
@@ -339,7 +340,9 @@ private fun SettingsPrivacyGroup(
     deviceReportAvailable: Boolean,
     onOpenDeviceReport: () -> Unit,
 ) {
-    val usage = usageStatistics?.snapshot?.collectAsStateWithLifecycle()?.value?.takeIf { it.endpointConfigured }
+    // #96: a retired service leaves Settings; a paused one says so instead of On or Off.
+    val usage = usageStatistics?.snapshot?.collectAsStateWithLifecycle()?.value
+        ?.takeIf { it.endpointConfigured && it.service != ServiceState.RETIRED }
     if (usage == null && !deviceReportAvailable) return
     SettingsGroup(
         title = stringResource(R.string.settings_privacy_data),
@@ -348,7 +351,13 @@ private fun SettingsPrivacyGroup(
         if (usage != null) {
             SettingsRow(
                 title = stringResource(R.string.settings_usage_statistics),
-                value = stringResource(if (usage.enabled) R.string.settings_usage_on else R.string.settings_usage_off),
+                value = stringResource(
+                    when {
+                        usage.service == ServiceState.PAUSED -> R.string.settings_usage_paused
+                        usage.enabled -> R.string.settings_usage_on
+                        else -> R.string.settings_usage_off
+                    },
+                ),
                 onClick = onOpenUsageStatistics,
                 modifier = Modifier.testTag("vesqen.settings.usage-statistics"),
             )

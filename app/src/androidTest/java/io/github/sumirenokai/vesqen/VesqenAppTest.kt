@@ -91,6 +91,7 @@ import io.github.sumirenokai.vesqen.reports.DeviceReportOptions
 import io.github.sumirenokai.vesqen.reports.DeviceReportState
 import io.github.sumirenokai.vesqen.reports.DeviceReporter
 import io.github.sumirenokai.vesqen.reports.FakeDeviceReporter
+import io.github.sumirenokai.vesqen.service.ServiceState
 import io.github.sumirenokai.vesqen.telemetry.FakePlaybackTelemetry
 import io.github.sumirenokai.vesqen.updates.AppUpdater
 import io.github.sumirenokai.vesqen.updates.FakeAppUpdater
@@ -717,6 +718,30 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.usage.back").performClick()
         composeRule.onNodeWithTag("vesqen.settings.usage-statistics")
             .assert(hasText(context.getString(R.string.settings_usage_off)))
+    }
+
+    @Test
+    fun settings_show_a_paused_statistics_service_and_drop_a_retired_one() {
+        val usage = FakeUsageStatistics(UsageStatisticsSnapshot(
+            status = UsageSettingsStatus.READY,
+            enabled = true,
+            introductionRequired = false,
+            endpointConfigured = true,
+            service = ServiceState.PAUSED,
+        ))
+        render(grantedState(), usageStatistics = usage, deviceReporter = FakeDeviceReporter())
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.usage-statistics"))
+        // #96: paused by the owner reads "Paused", not "On", and the page explains it.
+        composeRule.onNodeWithTag("vesqen.settings.usage-statistics")
+            .assert(hasText(context.getString(R.string.settings_usage_paused)))
+            .performClick()
+        composeRule.onNodeWithText(context.getString(R.string.usage_paused)).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.usage.back").performClick()
+        composeRule.runOnIdle { usage.emit(usage.snapshot.value.copy(service = ServiceState.RETIRED)) }
+        composeRule.onAllNodesWithTag("vesqen.settings.usage-statistics").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.device-report"))
+        composeRule.onNodeWithTag("vesqen.settings.device-report").assertIsDisplayed()
     }
 
     @Test

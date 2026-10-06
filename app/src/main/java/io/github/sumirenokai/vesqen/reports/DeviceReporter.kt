@@ -23,6 +23,10 @@ class DeviceReportArtifact internal constructor(bytes: ByteArray) {
 
 enum class DeviceReportFailure {
     GENERATION_FAILED, SHARE_FAILED, NO_SHARE_APPLICATION, UPLOAD_NOT_CONFIGURED, UPLOAD_FAILED,
+    /** #96: the owner paused or retired uploads. Sharing and email still work. */
+    UPLOAD_PAUSED,
+    /** #96: the service switch could not be read, so nothing was sent. */
+    UPLOAD_UNAVAILABLE,
 }
 enum class DeviceReportDelivery { SHARE, EMAIL, UPLOAD }
 sealed interface DeviceReportState {

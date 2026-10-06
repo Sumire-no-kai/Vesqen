@@ -34,6 +34,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.service.ServiceState
 import io.github.sumirenokai.vesqen.ui.components.PaperCard
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.usage.UsageRegionPolicy
@@ -44,10 +45,11 @@ import io.github.sumirenokai.vesqen.usage.UsageStatisticsSnapshot
 /**
  * #70: the explanation is due whenever the runtime asks for it (first launch, or a region change
  * that resets it), and only when pings can actually be sent. Without a configured server Vesqen
- * never sends statistics, so it does not ask about them either.
+ * never sends statistics, so it does not ask about them either; nor once the owner retired them (#96).
  */
 internal fun usageIntroductionDue(snapshot: UsageStatisticsSnapshot): Boolean =
-    snapshot.status == UsageSettingsStatus.READY && snapshot.endpointConfigured && snapshot.introductionRequired
+    snapshot.status == UsageSettingsStatus.READY && snapshot.endpointConfigured && snapshot.introductionRequired &&
+        snapshot.service != ServiceState.RETIRED
 
 /** Settings page for usage statistics: the same explanation as the introduction, with the switch. */
 @Composable
@@ -74,6 +76,9 @@ fun UsageStatisticsScreen(usageStatistics: UsageStatistics, onBack: () -> Unit, 
                         modifier = Modifier.testTag("vesqen.usage.switch"),
                     )
                 }
+            }
+            if (snapshot.service == ServiceState.PAUSED) {
+                item { UsageNote(stringResource(R.string.usage_paused), Modifier.padding(start = VesqenSpacing.lg, end = VesqenSpacing.lg, top = VesqenSpacing.sm)) }
             }
             if (snapshot.status == UsageSettingsStatus.STORAGE_UNAVAILABLE) {
                 item { UsageNote(stringResource(R.string.usage_storage_unavailable), Modifier.padding(horizontal = VesqenSpacing.lg)) }

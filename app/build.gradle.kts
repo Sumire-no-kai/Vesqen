@@ -45,6 +45,8 @@ android {
     defaultConfig {
         buildConfigField("String", "USAGE_ENDPOINT", "\"$usageEndpoint\"")
         buildConfigField("String", "UPDATE_MANIFEST_BASE_URL", "\"https://vesqen.sumirenokai.com/updates/\"")
+        // #96: the owner's remote switch, read only right before a usage ping or report upload.
+        buildConfigField("String", "SERVICE_SWITCH_URL", "\"https://vesqen.sumirenokai.com/service/status.json\"")
         applicationId = "io.github.sumirenokai.vesqen"
         minSdk = 26
         targetSdk = 36
