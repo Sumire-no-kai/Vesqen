@@ -216,15 +216,15 @@
     <string name="update_failure_signature">The package’s signature doesn’t match this app, so it was deleted.</string>
     <string name="update_failure_cancelled">Installation cancelled.</string>
     <string name="update_failure_install">The system couldn’t finish installing.</string>
-    <string name="about_tagline">Local music. Clear playback truth.</string>
-    <string name="about_description">Vesqen is a lightweight, offline-first player for your on-device music library, with playback evidence available when you need it.</string>
+    <string name="about_summary">Vesqen plays the music stored on this phone. The Chain page lists each step the sound takes from the file to your speaker, headphones or DAC.</string>
     <string name="about_version">Version</string>
     <string name="about_version_value">%1$s (%2$d)</string>
     <string name="about_license">License</string>
     <string name="about_license_value">Apache-2.0</string>
-    <string name="about_accounts">Account</string>
-    <string name="about_accounts_value">Not required</string>
-    <string name="about_privacy">Playback works without an account or network connection. Your music and artwork stay on this device.</string>
+    <string name="about_developer">Developer</string>
+    <string name="about_developer_value">Sumire Studio</string>
+    <string name="about_data_title">Your data</string>
+    <string name="about_data_body">Your library, favorites, playlists, play history and settings are kept only on this phone, and no account is needed. Vesqen does not back them up or move them to a new phone. On a new phone you add your music again and rebuild your favorites and playlists.</string>
     <string name="privacy_policy_title">Privacy policy</string>
     <string name="privacy_policy_open_web">Open the web version</string>
     <string name="privacy_policy_no_browser">No app on this device can open web pages.</string>
@@ -293,7 +293,7 @@
     <string name="chain_core_source">01 · Source file</string>
     <string name="chain_core_output">02 · AudioTrack</string>
     <string name="chain_core_route">03 · Route and stability</string>
-    <string name="unavailable">UNAVAILABLE</string>
+    <string name="unavailable">Unavailable</string>
     <string name="library_songs">Songs</string>
     <string name="library_albums">Albums</string>
     <string name="library_artists">Artists</string>
@@ -538,11 +538,7 @@
         <item quantity="one">%1$d line break marks a sampling gap or evidence change.</item>
         <item quantity="other">%1$d line breaks mark sampling gaps or evidence changes.</item>
     </plurals>
-    <string name="chain_updated_now">Now</string>
-    <plurals name="chain_updated_seconds_ago">
-        <item quantity="one">%1$d second ago</item>
-        <item quantity="other">%1$d seconds ago</item>
-    </plurals>
+    <string name="chain_updated_now">Just now</string>
     <plurals name="chain_updated_minutes_ago">
         <item quantity="one">%1$d minute ago</item>
         <item quantity="other">%1$d minutes ago</item>

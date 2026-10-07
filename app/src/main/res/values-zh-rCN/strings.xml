@@ -213,15 +213,15 @@
     <string name="update_failure_signature">安装包的签名和当前应用不一致，已删除。</string>
     <string name="update_failure_cancelled">安装已取消。</string>
     <string name="update_failure_install">系统没有完成安装。</string>
-    <string name="about_tagline">本地音乐，清晰可信的播放状态。</string>
-    <string name="about_description">Vesqen 是一款轻量、离线优先的本地音乐播放器，并在你需要时提供可核查的播放链路信息。</string>
+    <string name="about_summary">Vesqen 播放这台手机上的音乐。“链路”页会列出声音从文件到扬声器、耳机或 DAC 经过的每一步。</string>
     <string name="about_version">版本</string>
     <string name="about_version_value">%1$s（%2$d）</string>
     <string name="about_license">开源许可</string>
     <string name="about_license_value">Apache-2.0</string>
-    <string name="about_accounts">账号</string>
-    <string name="about_accounts_value">无需账号</string>
-    <string name="about_privacy">播放无需账号或网络连接，你的音乐与封面始终留在此设备上。</string>
+    <string name="about_developer">开发者</string>
+    <string name="about_developer_value">Sumire Studio</string>
+    <string name="about_data_title">你的数据</string>
+    <string name="about_data_body">曲库、我的喜欢、播放列表、播放记录和设置只保存在这台手机上，也不需要账号。Vesqen 不会备份这些数据，也不会把它们迁移到新手机。换到新手机后，需要重新添加音乐，我的喜欢和播放列表也要重新整理。</string>
     <string name="privacy_policy_title">隐私政策</string>
     <string name="privacy_policy_open_web">在浏览器中打开网页版</string>
     <string name="privacy_policy_no_browser">这台设备上没有可以打开网页的应用。</string>
@@ -521,9 +521,6 @@
         <item quantity="other">%1$d 处断线表示采样间隔或证据发生变化。</item>
     </plurals>
     <string name="chain_updated_now">刚刚</string>
-    <plurals name="chain_updated_seconds_ago">
-        <item quantity="other">%1$d 秒前</item>
-    </plurals>
     <plurals name="chain_updated_minutes_ago">
         <item quantity="other">%1$d 分钟前</item>
     </plurals>

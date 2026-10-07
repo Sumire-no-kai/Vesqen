@@ -16,10 +16,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.slideInHorizontally
@@ -36,7 +38,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -57,14 +58,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.isSpecified
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.isSpecified
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -108,7 +106,6 @@ import io.github.sumirenokai.vesqen.ui.screens.PrivacyPolicyScreen
 import io.github.sumirenokai.vesqen.ui.screens.SettingsScreen
 import io.github.sumirenokai.vesqen.ui.screens.UsageIntroductionScreen
 import io.github.sumirenokai.vesqen.ui.screens.UsageStatisticsScreen
-import io.github.sumirenokai.vesqen.ui.screens.nowPortraitYieldsNavigation
 import io.github.sumirenokai.vesqen.ui.screens.usageIntroductionDue
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
@@ -465,8 +462,8 @@ fun VesqenAppContent(
         playerOverride = playerOrientationOverride,
         enabled = managePhoneOrientation,
     )
-    // Now keeps the navigation in portrait (B artboard). Only the immersive landscape player owns
-    // the whole window, so neither the rail nor the compact bar competes with it there.
+    // The focused player owns the window. In landscape the shell drops the rail altogether; in
+    // portrait the rail stays in the layout and yields its width while Now is open.
     val isSecondaryDetail = destination.isSecondaryDetail
     val windowWidth = with(LocalDensity.current) {
         LocalWindowInfo.current.containerSize.width.toDp()
@@ -529,14 +526,23 @@ fun VesqenAppContent(
 
     if (useNavigationRail) {
         Row(modifier = modifier.fillMaxSize()) {
-            VesqenNavigation(
-                selectedDestination = destination,
-                onDestinationSelected = ::selectTopLevel,
-                useNavigationRail = true,
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(NavigationRailWidth),
-            )
+            AnimatedVisibility(
+                visible = !hasFocusedPlayer,
+                enter = fadeIn(tween(appliedMotionPolicy.stateChangeMillis)) +
+                    expandHorizontally(tween(appliedMotionPolicy.stateChangeMillis)),
+                exit = fadeOut(tween(appliedMotionPolicy.stateChangeMillis)) +
+                    shrinkHorizontally(tween(appliedMotionPolicy.stateChangeMillis)),
+                label = "vesqen.navigation-rail-visibility",
+            ) {
+                VesqenNavigation(
+                    selectedDestination = destination,
+                    onDestinationSelected = ::selectTopLevel,
+                    useNavigationRail = true,
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(NavigationRailWidth),
+                )
+            }
             VesqenDestinationFrame(
                 state = state,
                 destination = destination,
@@ -747,24 +753,10 @@ private fun VesqenDestinationFrame(
     val usesFocusedPlayerInsets = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
     val showMiniPlayer = state.playback.hasActiveTrack &&
         destination != VesqenDestination.NOW && !destination.isSecondaryDetail
-    // Measured a frame late rather than by subcomposing the whole shell. Now normally opens
-    // after the frame has its size, so the bar's place is settled before the player appears.
-    // The insets are read unconditionally: a composable read that only starts once Now opens
-    // shifts the groups after it and restarts the shell, which skips the player's entrance.
-    val density = LocalDensity.current
-    val systemBarsHeight = with(density) {
-        (WindowInsets.statusBars.getTop(this) + WindowInsets.navigationBars.getBottom(this)).toDp()
-    }
-    var frameHeight by remember { mutableStateOf(Dp.Unspecified) }
     var libraryPageBackground by remember { mutableStateOf(Color.Unspecified) }
-    val nowYieldsNavigation = usesFocusedPlayerInsets && (
-        isLandscape || frameHeight.isSpecified && nowPortraitYieldsNavigation(
-            pageHeight = frameHeight - systemBarsHeight,
-            barHeight = CompactNavigationBarContentHeight,
-            fontScale = density.fontScale,
-        )
-    )
-    val showCompactNavigation = showNavigation && !nowYieldsNavigation && !destination.isSecondaryDetail
+    // Now with a track is a focused player in every orientation (DESIGN.md "Focus mode"): the
+    // navigation yields to it, and the player's own Back and Android Back leave it.
+    val showCompactNavigation = showNavigation && !usesFocusedPlayerInsets && !destination.isSecondaryDetail
     val miniPlayerContentClearance = if (showMiniPlayer) {
         MiniPlayerHeight + VesqenSpacing.xxs
     } else {
@@ -791,11 +783,7 @@ private fun VesqenDestinationFrame(
     // MediaStore permission is therefore not a valid gate for the MediaSession fallback; the
     // loader itself safely handles a URI whose underlying grant has actually been revoked.
     val artworkTrack = currentTrack ?: state.playback.toArtworkTrackOrNull()
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .onSizeChanged { size -> frameHeight = with(density) { size.height.toDp() } },
-    ) {
+    Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             // An open album tints the Library edge to edge, behind the status bar too; the bar and

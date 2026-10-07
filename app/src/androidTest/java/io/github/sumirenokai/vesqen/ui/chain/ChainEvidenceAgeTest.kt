@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.ui.chain
 
+import android.content.Context
 import android.content.res.Configuration
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.telemetry.TelemetryDataSource
@@ -19,31 +20,34 @@ class ChainEvidenceAgeTest {
 
         assertEquals(
             listOf(
-                "Now", "1 second ago", "59 seconds ago", "1 minute ago",
+                "Just now", "Just now", "Just now", "1 minute ago",
                 "59 minutes ago", "2 hours ago", "1 day ago", "4 days ago",
             ),
             ageSeconds.map { format(Locale.US, it) },
         )
         assertEquals(
-            listOf("刚刚", "1 秒前", "59 秒前", "1 分钟前", "59 分钟前", "2 小时前", "1 天前", "4 天前"),
+            listOf("刚刚", "刚刚", "刚刚", "1 分钟前", "59 分钟前", "2 小时前", "1 天前", "4 天前"),
             ageSeconds.map { format(Locale.SIMPLIFIED_CHINESE, it) },
         )
     }
 
-    private fun format(locale: Locale, ageSeconds: Long): String {
+    private val evidence = TelemetryEvidence.Measured(
+        reading = TelemetryReading.Text("FLAC"),
+        source = TelemetryDataSource(TelemetrySourceId("test.telemetry")),
+        observedAtEpochMs = ObservedAtMs,
+        observedAtElapsedRealtimeMs = ObservedAtMs,
+    )
+
+    private fun localized(locale: Locale): Context {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val configuration = Configuration(context.resources.configuration).apply { setLocale(locale) }
-        val observedAtMs = 1_000L
-        val evidence = TelemetryEvidence.Measured(
-            reading = TelemetryReading.Text("FLAC"),
-            source = TelemetryDataSource(TelemetrySourceId("test.telemetry")),
-            observedAtEpochMs = observedAtMs,
-            observedAtElapsedRealtimeMs = observedAtMs,
-        )
-        return telemetryEvidenceAge(
-            context.createConfigurationContext(configuration),
-            evidence,
-            nowElapsedRealtimeMs = observedAtMs + ageSeconds * 1_000,
-        )
+        return context.createConfigurationContext(configuration)
+    }
+
+    private fun format(locale: Locale, ageSeconds: Long): String =
+        telemetryEvidenceAge(localized(locale), evidence, nowElapsedRealtimeMs = ObservedAtMs + ageSeconds * 1_000)
+
+    private companion object {
+        const val ObservedAtMs = 1_000L
     }
 }
