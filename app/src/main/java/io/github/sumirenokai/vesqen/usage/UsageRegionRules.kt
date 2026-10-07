@@ -12,6 +12,9 @@ object UsageRegionRules {
         "RE", "GP", "MQ", "GF", "YT", "MF", "AX",
         // EEA and the UK
         "IS", "LI", "NO", "GB",
+        // Mainland China (PIPL has no legitimate-interest basis) and South Korea: owner decision
+        // 2026-10-07 after the #70 review. Hong Kong, Macao and Taiwan carry their own codes.
+        "CN", "KR",
     )
 
     /**
