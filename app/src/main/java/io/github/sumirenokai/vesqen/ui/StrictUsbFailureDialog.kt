@@ -88,7 +88,7 @@ internal fun StrictUsbFailureDialog(
         title = { Text(stringResource(R.string.chain_strict_failed_title)) },
         text = {
             Text(
-                stringResource(R.string.player_strict_failure_body, strictUsbFailureLabel(failure)),
+                stringResource(R.string.player_strict_failure_body, strictUsbFailureLabel(failure, status.decisionCode)),
                 modifier = Modifier.verticalScroll(rememberScrollState()),
             )
         },

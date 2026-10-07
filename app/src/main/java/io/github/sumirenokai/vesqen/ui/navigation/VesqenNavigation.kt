@@ -45,6 +45,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -151,10 +152,14 @@ private fun DestinationShortBarItem(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
+                // #35: the 60 dp bar holds an icon and one label line up to 130 % text. Larger
+                // settings keep the label at that size instead of cutting it off at the bottom.
+                val labelScale = minOf(LocalDensity.current.fontScale, 1.3f) / LocalDensity.current.fontScale
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = 12.sp,
+                        fontSize = (12 * labelScale).sp,
+                        lineHeight = (16 * labelScale).sp,
                         letterSpacing = 0.sp,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                     ),

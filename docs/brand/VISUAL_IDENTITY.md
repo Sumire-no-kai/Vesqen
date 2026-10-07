@@ -191,4 +191,6 @@ Chain 默认先显示可理解摘要，用户再展开源、解码、处理、�
 - `vesqen-visual-system-board.svg`
 - `vesqen-visual-system-board.png`（由同名 SVG 渲染的审阅预览）
 
+视觉板画的是改版前 v1.0 “Quiet Signal” 的配色和页面（包括深靛蓝的播放页），已被 Paper & Sound 取代；标识部分仍然有效。现行页面以 `DESIGN.md` 和 `docs/redesign/mockups/` 的 B 画板为准。
+
 Android 运行时版本位于 `app/src/main/res/`。以后修改几何或核心色时，必须同时更新 SVG、Android VectorDrawable、`DESIGN.md`、`.impeccable/design.json` 与对比度测试记录，并在开发日志中写明迁移原因。

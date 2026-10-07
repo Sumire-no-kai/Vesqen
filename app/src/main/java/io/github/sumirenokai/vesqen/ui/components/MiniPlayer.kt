@@ -30,7 +30,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -57,6 +60,9 @@ fun MiniPlayer(
     // stays in Now's liner notes and Chain.
     val colors = LocalVesqenColors.current
     val shape = RoundedCornerShape(14.dp)
+    // #35: above 150 % text the two lines no longer fit the fixed 72 dp card. The title stays and
+    // the artist is still read out with it.
+    val titleOnly = LocalDensity.current.fontScale > 1.5f
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -78,7 +84,8 @@ fun MiniPlayer(
                     .weight(1f)
                     .heightIn(min = 56.dp)
                     .testTag("vesqen.mini-player.open-now")
-                    .clickable(onClick = onOpenNow),
+                    .clickable(onClick = onOpenNow)
+                    .then(if (titleOnly) Modifier.semantics { contentDescription = "$title, $artist" } else Modifier),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AlbumArtwork(track = currentTrack, targetSize = 44.dp, modifier = Modifier.size(44.dp))
@@ -93,7 +100,7 @@ fun MiniPlayer(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
+                    if (!titleOnly) Text(
                         text = artist,
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

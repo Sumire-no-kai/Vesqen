@@ -320,11 +320,13 @@ internal class UsbOutputCoordinator(
         }
         val preflightCandidate = preflight as UsbOutputDecision.Candidate
         var anyMixerQuerySucceeded = false
+        var anyBitPerfectMixer = false
         var selected: Triple<AudioDeviceInfo, List<MixerProfile>, UsbOutputDecision.Candidate>? = null
         devices.forEach { candidateDevice ->
             if (selected != null) return@forEach
             val profiles = mixerAdapter.profiles(candidateDevice).getOrNull() ?: return@forEach
             anyMixerQuerySucceeded = true
+            anyBitPerfectMixer = anyBitPerfectMixer || profiles.any(MixerProfile::bitPerfect)
             val capability = resolver.resolve(
                 mode = UsbOutputMode.STRICT_BIT_PERFECT,
                 apiLevel = Build.VERSION.SDK_INT,
@@ -347,10 +349,10 @@ internal class UsbOutputCoordinator(
                 } else {
                     UsbOutputFailure.MIXER_QUERY_FAILED
                 },
-                code = if (anyMixerQuerySucceeded) {
-                    "strict_usb.no_matching_mixer_attribute"
-                } else {
-                    "strict_usb.mixer_query_failed"
+                code = when {
+                    !anyMixerQuerySucceeded -> "strict_usb.mixer_query_failed"
+                    !anyBitPerfectMixer -> NO_BIT_PERFECT_MIXER_CODE
+                    else -> "strict_usb.no_matching_mixer_attribute"
                 },
                 expectedGeneration = generation,
             )

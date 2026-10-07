@@ -131,21 +131,21 @@ class UsbOutputStrategyResolverTest {
 
     @Test
     fun `default mixer behavior cannot satisfy strict mode`() {
-        assertRejected(
-            UsbOutputFailure.NO_MATCHING_MIXER_ATTRIBUTE,
-            resolve(mixerProfiles = listOf(floatProfile.copy(bitPerfect = false))),
-        )
+        val decision = resolve(mixerProfiles = listOf(floatProfile.copy(bitPerfect = false)))
+        assertRejected(UsbOutputFailure.NO_MATCHING_MIXER_ATTRIBUTE, decision)
+        // #35: no bit-perfect mixer at all reads as the phone's path, not as the DAC's formats.
+        assertEquals(NO_BIT_PERFECT_MIXER_CODE, (decision as UsbOutputDecision.Rejected).code)
     }
 
     @Test
     fun `32 bit integer source does not accept float conversion`() {
-        assertRejected(
-            UsbOutputFailure.NO_MATCHING_MIXER_ATTRIBUTE,
-            resolve(
-                source = source24.copy(bitDepth = 32),
-                mixerProfiles = listOf(floatProfile),
-            ),
+        val decision = resolve(
+            source = source24.copy(bitDepth = 32),
+            mixerProfiles = listOf(floatProfile),
         )
+        assertRejected(UsbOutputFailure.NO_MATCHING_MIXER_ATTRIBUTE, decision)
+        // A bit-perfect mixer exists, just not for this format: that is the DAC's side.
+        assertEquals("strict_usb.no_matching_mixer_attribute", (decision as UsbOutputDecision.Rejected).code)
     }
 
     @Test

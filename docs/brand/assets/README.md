@@ -10,7 +10,7 @@ These SVG files are the canonical visual-identity sources for Vesqen v1.0.
 - `vesqen-lockup-inverse.svg`: horizontal mark and typeset name for dark surfaces.
 - `vesqen-mark-construction.svg`: geometry, safe-zone, and clear-space reference.
 - `vesqen-notification-symbol.svg`: optically enlarged monochrome source for Android 24 dp notification rendering.
-- `vesqen-visual-system-board.svg`: formal one-page overview of the v1.0 system.
+- `vesqen-visual-system-board.svg`: one-page overview of the pre-redesign v1.0 system. Its palette and screens are superseded by Paper & Sound (`DESIGN.md`, `docs/redesign/mockups/`); the mark itself is current.
 - `vesqen-visual-system-board.png`: reviewed 1600 × 1200 preview rendered from the canonical SVG.
 
 The standalone mark paths are authoritative. Lockup text remains live text in SVG and must use Roboto Medium/SemiBold with the documented system fallback; convert it to outlines only in an exported production format, never in the canonical source.

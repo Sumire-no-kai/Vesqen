@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.playback.NO_BIT_PERFECT_MIXER_CODE
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
@@ -288,7 +289,8 @@ internal fun strictUsbOutputBody(status: UsbOutputStatus): String {
     }
     val device = status.deviceName ?: stringResource(R.string.settings_usb_device_unknown)
     return when (status.phase) {
-        UsbOutputPhase.SYSTEM -> stringResource(R.string.settings_strict_usb_output_body)
+        // Strict is chosen but nothing has played yet: say what happens next, not the option again.
+        UsbOutputPhase.SYSTEM -> stringResource(R.string.settings_strict_usb_waiting)
         UsbOutputPhase.AVAILABLE -> stringResource(R.string.settings_strict_usb_available, device)
         UsbOutputPhase.APPLYING -> stringResource(R.string.settings_strict_usb_applying, device)
         UsbOutputPhase.ACTIVE -> stringResource(
@@ -298,13 +300,14 @@ internal fun strictUsbOutputBody(status: UsbOutputStatus): String {
         )
         UsbOutputPhase.FAILED -> stringResource(
             R.string.settings_strict_usb_failed,
-            strictUsbFailureLabel(requireNotNull(status.failure)),
+            strictUsbFailureLabel(requireNotNull(status.failure), status.decisionCode),
         )
     }
 }
 
+/** [decisionCode] tells "this phone offers no bit-perfect path" from "the DAC lacks this format". */
 @Composable
-internal fun strictUsbFailureLabel(failure: UsbOutputFailure): String = stringResource(
+internal fun strictUsbFailureLabel(failure: UsbOutputFailure, decisionCode: String? = null): String = stringResource(
     when (failure) {
         UsbOutputFailure.UNSUPPORTED_ANDROID_VERSION -> R.string.usb_failure_android_version
         UsbOutputFailure.USB_HOST_UNAVAILABLE -> R.string.usb_failure_host_unavailable
@@ -313,7 +316,8 @@ internal fun strictUsbFailureLabel(failure: UsbOutputFailure): String = stringRe
         UsbOutputFailure.SOURCE_FORMAT_UNKNOWN -> R.string.usb_failure_source_unknown
         UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED -> R.string.usb_failure_source_unsupported
         UsbOutputFailure.MIXER_QUERY_FAILED -> R.string.usb_failure_query
-        UsbOutputFailure.NO_MATCHING_MIXER_ATTRIBUTE -> R.string.usb_failure_no_profile
+        UsbOutputFailure.NO_MATCHING_MIXER_ATTRIBUTE ->
+            if (decisionCode == NO_BIT_PERFECT_MIXER_CODE) R.string.usb_failure_no_bit_perfect else R.string.usb_failure_no_profile
         UsbOutputFailure.MIXER_REQUEST_REJECTED -> R.string.usb_failure_request
         UsbOutputFailure.MIXER_READBACK_MISMATCH -> R.string.usb_failure_readback
         UsbOutputFailure.MIXER_CLEAR_FAILED -> R.string.usb_failure_clear
@@ -466,8 +470,11 @@ internal fun SettingsRow(
             .padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SettingsRowText(title, description, Modifier.weight(1f))
-        if (value != null) {
+        // #35: above 130 % text a value beside the title squeezed the title into one letter per
+        // line ("Ver/sio/n"), so the value moves under it.
+        val valueBelow = value != null && LocalDensity.current.fontScale > 1.3f
+        SettingsRowText(title, description, Modifier.weight(1f), value.takeIf { valueBelow })
+        if (value != null && !valueBelow) {
             Text(
                 text = value,
                 style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
@@ -489,13 +496,20 @@ internal fun SettingsRow(
 }
 
 @Composable
-private fun SettingsRowText(title: String, description: String?, modifier: Modifier = Modifier) {
+private fun SettingsRowText(title: String, description: String?, modifier: Modifier = Modifier, value: String? = null) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(text = title, style = MaterialTheme.typography.bodyLarge)
         if (description != null) {
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (value != null) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
