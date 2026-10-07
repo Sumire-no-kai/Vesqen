@@ -2,7 +2,7 @@
 <resources>
     <style name="Theme.Vesqen" parent="Theme.Vesqen.Base">
         <item name="android:windowSplashScreenBackground">@color/splash_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_brand_mark</item>
-        <item name="android:windowSplashScreenAnimationDuration">180</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/avd_splash_mark</item>
+        <item name="android:windowSplashScreenAnimationDuration">700</item>
     </style>
 </resources>

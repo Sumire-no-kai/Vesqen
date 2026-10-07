@@ -147,7 +147,8 @@ private fun TwinPathsPlaceholder(emphasized: Boolean) {
                 radius = radius,
                 center = center,
             )
-            val lineWidth = size.minDimension * if (emphasized) .07f else .09f
+            // Twin Paths B (2026-10-06): strokes 6.5 / 5.5 of 108, optically heavier when small.
+            val lineWidth = size.minDimension * if (emphasized) .065f else .084f
             val left = size.width * .27f
             val right = size.width * .73f
             val top = size.height * .29f
@@ -170,14 +171,14 @@ private fun TwinPathsPlaceholder(emphasized: Boolean) {
                 color = primary,
                 start = Offset(size.width * .39f, top),
                 end = Offset(size.width / 2f, size.height * .57f),
-                strokeWidth = lineWidth * .78f,
+                strokeWidth = lineWidth * .77f,
                 cap = StrokeCap.Round,
             )
             drawLine(
                 color = primary,
                 start = Offset(size.width / 2f, size.height * .57f),
                 end = Offset(size.width * .61f, top),
-                strokeWidth = lineWidth * .78f,
+                strokeWidth = lineWidth * .77f,
                 cap = StrokeCap.Round,
             )
         }

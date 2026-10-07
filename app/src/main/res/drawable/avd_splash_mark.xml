@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Splash (Android 12+): the ink path draws first, then the Moss path, about 0.65 s in all.
+     Android shows the end state when animations are off; 8-11 show the window background only. -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="108dp"
+            android:height="108dp"
+            android:viewportWidth="108"
+            android:viewportHeight="108">
+            <path
+                android:name="outer"
+                android:fillColor="#00000000"
+                android:pathData="M29,32L54,78L79,32"
+                android:strokeColor="@color/brand_mark_ink"
+                android:strokeLineCap="round"
+                android:strokeLineJoin="round"
+                android:strokeWidth="6.5"
+                android:trimPathEnd="0" />
+            <path
+                android:name="inner"
+                android:fillColor="#00000000"
+                android:pathData="M39,32L54,60L69,32"
+                android:strokeColor="@color/brand_mark_moss"
+                android:strokeLineCap="round"
+                android:strokeLineJoin="round"
+                android:strokeWidth="5.5"
+                android:trimPathEnd="0" />
+        </vector>
+    </aapt:attr>
+    <target android:name="outer">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="420"
+                android:interpolator="@android:interpolator/fast_out_slow_in"
+                android:propertyName="trimPathEnd"
+                android:valueFrom="0"
+                android:valueTo="1"
+                android:valueType="floatType" />
+        </aapt:attr>
+    </target>
+    <target android:name="inner">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="400"
+                android:interpolator="@android:interpolator/fast_out_slow_in"
+                android:propertyName="trimPathEnd"
+                android:startOffset="260"
+                android:valueFrom="0"
+                android:valueTo="1"
+                android:valueType="floatType" />
+        </aapt:attr>
+    </target>
+</animated-vector>

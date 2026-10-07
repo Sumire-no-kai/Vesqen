@@ -3,6 +3,10 @@
     <color name="signal_moss">#9FBF4B</color>
     <color name="signal_moss_bright">#BFD66B</color>
     <color name="signal_moss_deep">#536B1E</color>
-    <color name="window_background">#FFFFFF</color>
-    <color name="splash_background">#FFFFFF</color>
+    <!-- B paper (light) and night (dark): the window and splash match the first Compose frame. -->
+    <color name="window_background">#F3EFE6</color>
+    <color name="splash_background">#F3EFE6</color>
+    <!-- Twin Paths primary: ink outer path, Signal Moss inner path (docs/brand/VISUAL_IDENTITY.md §3). -->
+    <color name="brand_mark_ink">#1B1C18</color>
+    <color name="brand_mark_moss">@color/signal_moss</color>
 </resources>

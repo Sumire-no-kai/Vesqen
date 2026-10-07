@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="window_background">#0F0F0F</color>
-    <color name="splash_background">#0F0F0F</color>
+    <color name="window_background">#151411</color>
+    <color name="splash_background">#151411</color>
+    <!-- Twin Paths inverse. -->
+    <color name="brand_mark_ink">#E7E8E1</color>
+    <color name="brand_mark_moss">@color/signal_moss_bright</color>
 </resources>
