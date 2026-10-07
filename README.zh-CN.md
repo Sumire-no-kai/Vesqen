@@ -45,7 +45,7 @@ Vesqen 是一款 Android 离线音乐播放器，播放你手机里的音乐，�
 
 ## 隐私
 
-Vesqen 没有申请 Android 的网络访问权限，应用本身无法发送或接收数据。曲库、歌单和播放次数都保存在应用的私有存储里，只在你的手机上。[隐私政策](https://vesqen.sumirenokai.com/zh/privacy/)（[English](https://vesqen.sumirenokai.com/privacy/)）在应用的“设置 → 关于”里也能看到。
+播放和曲库从不使用网络，曲库、歌单和播放次数都保存在应用的私有存储里，只在你的手机上。从 1.0.0-beta.2 起，应用会在三件事上使用网络，每一项都可以关闭：每天最多一次、不带任何 ID 的使用统计（在欧盟、欧洲经济区和英国，只有你同意才发送），你自己选择上传的设备报告，以及检查更新。[隐私政策](https://vesqen.sumirenokai.com/zh/privacy/)（[English](https://vesqen.sumirenokai.com/privacy/)）写明了每一项发送什么、保留多久，在应用的“设置 → 隐私政策”里也能看到。
 
 ## 已知限制
 
