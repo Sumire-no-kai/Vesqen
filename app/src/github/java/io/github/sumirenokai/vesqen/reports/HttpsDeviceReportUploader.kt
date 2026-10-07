@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.reports
 
+import io.github.sumirenokai.vesqen.service.ServiceState
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -10,9 +11,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
-/** Configured from the usage service address, but never gated on the usage-statistics switch. */
+/**
+ * Configured from the usage service address, but never gated on the usage-statistics switch. The
+ * owner's service switch (#96) is asked right before each upload and can only stop it.
+ */
 internal class HttpsDeviceReportUploader(
     private val usageEndpoint: String,
+    private val serviceSwitch: suspend () -> ServiceState?,
     private val open: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
 ) : DeviceReportUploader {
     override suspend fun upload(report: DeviceReportArtifact): DeviceReportUploadResult = withContext(Dispatchers.IO) {
@@ -21,6 +26,12 @@ internal class HttpsDeviceReportUploader(
             val url = reportEndpoint(usageEndpoint) ?: return@withContext failed()
             val bytes = report.copyBytes()
             if (bytes.size > MAX_REPORT_BYTES) return@withContext failed()
+            when (serviceSwitch()) {
+                ServiceState.ENABLED -> Unit
+                null -> return@withContext DeviceReportUploadResult.Failed(DeviceReportFailure.UPLOAD_UNAVAILABLE)
+                ServiceState.PAUSED, ServiceState.RETIRED ->
+                    return@withContext DeviceReportUploadResult.Failed(DeviceReportFailure.UPLOAD_PAUSED)
+            }
             ensureActive()
             val connection = open(url)
             try {

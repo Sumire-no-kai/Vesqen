@@ -8,6 +8,13 @@ const DAY = 86400000;
 const response = (status, value) => new Response(JSON.stringify(value), {
   status, headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'},
 });
+// #96: the owner closes an endpoint by setting USAGE_INGEST or REPORT_INGEST to "closed".
+// Unset means open; any other value is a misconfiguration and closes the endpoint as well.
+function ingestOpen(value) {
+  if (value === undefined || value === 'open') return true;
+  if (value === 'closed') return false;
+  throw new Error('invalid_ingest_configuration');
+}
 function retention(value, maximum) {
   if (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > maximum) throw new Error('invalid_retention_configuration');
   return Number(value);
@@ -71,6 +78,8 @@ export async function handle(request, env, now = Date.now(), fetcher = fetch) {
     const reportDays = retention(env.REPORT_RETENTION_DAYS,30);
     retention(env.AGGREGATE_RETENTION_DAYS,365);
     const isUsage = url.pathname === '/v1/usage';
+    // Before rate limiting and before the body is read: a closed endpoint reads and stores nothing.
+    if (!ingestOpen(isUsage ? env.USAGE_INGEST : env.REPORT_INGEST)) return response(503,{error:'SERVICE_PAUSED'});
     // Fixed route keys only. Never read/store/hash IP, cookies, authorization or client identifiers.
     const limiter = isUsage ? env.USAGE_LIMITER : env.REPORT_LIMITER;
     if (!(await limiter.limit({key:isUsage ? 'usage' : 'reports'})).success) return response(429,{error:'RATE_LIMITED'});

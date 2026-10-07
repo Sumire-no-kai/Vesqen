@@ -1,5 +1,8 @@
 package io.github.sumirenokai.vesqen.usage
 
+import io.github.sumirenokai.vesqen.service.ReportService
+import io.github.sumirenokai.vesqen.service.ServiceState
+import io.github.sumirenokai.vesqen.service.ServiceSwitchGate
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
@@ -21,6 +24,8 @@ internal class DefaultUsageStatistics(
     /** A successful ping without update data: the updater checks on its own instead. */
     private val missingUpdate: () -> Unit = {},
     private val clock: () -> Long = System::currentTimeMillis,
+    /** #96: asked right before each ping. Null only in tests that do not exercise the switch. */
+    private val serviceSwitch: ServiceSwitchGate? = null,
 ) : UsageStatistics {
     private val mutex = Mutex()
     private val pending = AtomicBoolean(false)
@@ -60,9 +65,13 @@ internal class DefaultUsageStatistics(
     /** Called through the updater's foreground hook. True suppresses its duplicate manifest GET. */
     suspend fun onForeground(): Boolean {
         initialization.join()
+        // A report upload may have read the switch since; show its current word on usage too.
+        refreshService()
         val state = mutable.value
         if (state.status != UsageSettingsStatus.READY || !state.enabled || state.introductionRequired ||
             !endpointConfigured || !online()) return false
+        // Retired by the owner: no attempt and no switch reading in this app version (#96).
+        if (serviceSwitch?.known?.value?.usagePings == ServiceState.RETIRED) return false
         if (pending.get()) return true
         if (!usageAttemptDue(clock(), preferences?.lastAttemptEpochMs)) return false
         if (!pending.compareAndSet(false, true)) return true
@@ -84,6 +93,12 @@ internal class DefaultUsageStatistics(
                     prepared
                 } }
                 if (ping != null && mutable.value.enabled && mutable.value.status == UsageSettingsStatus.READY) {
+                    // The switch can only stop the ping. Paused, retired or unreadable: nothing is sent,
+                    // and the updater checks on its own as it does when statistics are off.
+                    if (serviceSwitch != null && serviceSwitch.check(ReportService.USAGE_PINGS).also { refreshService() } != ServiceState.ENABLED) {
+                        missingUpdate()
+                        return@launch
+                    }
                     var failed = false
                     // A failed ping skips today's automatic update check (#78): the ping was that
                     // day's only request. A successful one without update data hands it back.
@@ -110,8 +125,14 @@ internal class DefaultUsageStatistics(
     private fun publish(policy: UsageRegionPolicy) {
         val saved = requireNotNull(preferences)
         mutable.value = UsageStatisticsSnapshot(UsageSettingsStatus.READY, saved.enabled, saved.consent,
-            policy, !saved.introductionCompleted, endpointConfigured)
+            policy, !saved.introductionCompleted, endpointConfigured, serviceSwitch?.known?.value?.usagePings)
     }
+    /** No collector: the switch changes only on a reading, and each reading is followed by this. */
+    private fun refreshService() {
+        val service = serviceSwitch?.known?.value?.usagePings
+        if (mutable.value.service != service) mutable.value = mutable.value.copy(service = service)
+    }
+
     private inline fun <T> storage(block: () -> T): T? = try { block() }
     catch (_: IOException) { mutable.value = mutable.value.copy(status = UsageSettingsStatus.STORAGE_UNAVAILABLE); null }
 }

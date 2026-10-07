@@ -24,9 +24,21 @@ class VesqenApplication : Application() {
     }
     val appUpdater: io.github.sumirenokai.vesqen.updates.AppUpdater get() = updateRuntime.updater
 
+    /** #96: one switch reader shared by usage pings and report uploads, so one reading serves both. */
+    internal val serviceSwitch by lazy {
+        io.github.sumirenokai.vesqen.service.ServiceSwitchGate(
+            io.github.sumirenokai.vesqen.service.HttpsServiceSwitchSource(BuildConfig.SERVICE_SWITCH_URL),
+            io.github.sumirenokai.vesqen.service.AndroidServiceSwitchStore(this),
+            BuildConfig.VERSION_CODE.toLong(),
+        )
+    }
+    val serviceStatus: kotlinx.coroutines.flow.StateFlow<io.github.sumirenokai.vesqen.service.KnownServiceStatus>
+        get() = serviceSwitch.known
+
     private val usageRuntime by lazy {
         io.github.sumirenokai.vesqen.usage.AndroidUsageRuntime(
             this, applicationScope, updateRuntime::acceptUsageResponse, updateRuntime::checkWithoutUsageResponse,
+            serviceSwitch,
         )
     }
     val usageStatistics: io.github.sumirenokai.vesqen.usage.UsageStatistics get() = usageRuntime.statistics
@@ -36,7 +48,9 @@ class VesqenApplication : Application() {
     internal val deviceReportRuntime by lazy {
         io.github.sumirenokai.vesqen.reports.AndroidDeviceReportRuntime(
             this, applicationScope, usbOutputStateRepository, { playbackTelemetry },
-            uploader = io.github.sumirenokai.vesqen.reports.HttpsDeviceReportUploader(BuildConfig.USAGE_ENDPOINT),
+            uploader = io.github.sumirenokai.vesqen.reports.HttpsDeviceReportUploader(BuildConfig.USAGE_ENDPOINT, {
+                serviceSwitch.check(io.github.sumirenokai.vesqen.service.ReportService.REPORT_UPLOADS)
+            }),
         )
     }
     val deviceReporter: io.github.sumirenokai.vesqen.reports.DeviceReporter

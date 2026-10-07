@@ -293,4 +293,6 @@ internal fun reportFailureLabel(failure: DeviceReportFailure): Int = when (failu
     DeviceReportFailure.NO_SHARE_APPLICATION -> R.string.report_failure_no_app
     DeviceReportFailure.UPLOAD_NOT_CONFIGURED -> R.string.report_failure_not_configured
     DeviceReportFailure.UPLOAD_FAILED -> R.string.report_failure_upload
+    DeviceReportFailure.UPLOAD_PAUSED -> R.string.report_failure_upload_paused
+    DeviceReportFailure.UPLOAD_UNAVAILABLE -> R.string.report_failure_upload_unavailable
 }

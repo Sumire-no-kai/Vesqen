@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.usage
 
+import io.github.sumirenokai.vesqen.service.ServiceState
 import kotlinx.coroutines.flow.StateFlow
 
 enum class UsageConsent { UNDECIDED, DEFAULT_ENABLED, ACCEPTED, DECLINED }
@@ -13,6 +14,8 @@ data class UsageStatisticsSnapshot(
     val regionPolicy: UsageRegionPolicy = UsageRegionPolicy.REGION_UNAVAILABLE,
     val introductionRequired: Boolean = true,
     val endpointConfigured: Boolean = false,
+    /** #96: the owner's switch as last read. Null until it has been read; the UI then looks normal. */
+    val service: ServiceState? = null,
 )
 
 /** UI owns explanation/consent copy. Neither toggle nor confirmation causes an immediate upload. */

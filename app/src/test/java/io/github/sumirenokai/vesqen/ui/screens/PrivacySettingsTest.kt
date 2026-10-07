@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen.ui.screens
 
 import io.github.sumirenokai.vesqen.reports.DeviceReportFailure
+import io.github.sumirenokai.vesqen.service.ServiceState
 import io.github.sumirenokai.vesqen.usage.UsageSettingsStatus
 import io.github.sumirenokai.vesqen.usage.UsageStatisticsSnapshot
 import org.junit.Assert.assertEquals
@@ -22,6 +23,9 @@ class PrivacySettingsTest {
         assertFalse(usageIntroductionDue(due.copy(introductionRequired = false)))
         assertFalse(usageIntroductionDue(due.copy(status = UsageSettingsStatus.LOADING)))
         assertFalse(usageIntroductionDue(due.copy(status = UsageSettingsStatus.STORAGE_UNAVAILABLE)))
+        // #96: once the owner retired statistics, nobody is asked about them.
+        assertFalse(usageIntroductionDue(due.copy(service = ServiceState.RETIRED)))
+        assertTrue(usageIntroductionDue(due.copy(service = ServiceState.PAUSED)))
     }
 
     @Test fun `every report failure has its own message`() {
