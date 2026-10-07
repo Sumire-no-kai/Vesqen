@@ -75,8 +75,9 @@ class ChainTelemetryPresentationTest {
         assertEquals(EvidenceAge(EvidenceAgeUnit.NOW, 0), evidenceAge(0))
         assertEquals(EvidenceAge(EvidenceAgeUnit.NOW, 0), evidenceAge(999))
         assertEquals(EvidenceAge(EvidenceAgeUnit.NOW, 0), evidenceAge(-5_000))
-        assertEquals(EvidenceAge(EvidenceAgeUnit.SECONDS, 1), age(1))
-        assertEquals(EvidenceAge(EvidenceAgeUnit.SECONDS, 59), age(59, extraMs = 999))
+        // #35: a ticking seconds count moved the evidence line sideways, so under a minute is "now".
+        assertEquals(EvidenceAge(EvidenceAgeUnit.NOW, 0), age(1))
+        assertEquals(EvidenceAge(EvidenceAgeUnit.NOW, 0), age(59, extraMs = 999))
         assertEquals(EvidenceAge(EvidenceAgeUnit.MINUTES, 1), age(60))
         assertEquals(EvidenceAge(EvidenceAgeUnit.MINUTES, 59), age(3_599))
         assertEquals(EvidenceAge(EvidenceAgeUnit.HOURS, 1), age(3_600))
@@ -108,7 +109,8 @@ class ChainTelemetryPresentationTest {
 
     @Test
     fun `every evidence age plural exists in English and Chinese`() {
-        val plurals = listOf("seconds", "minutes", "hours", "days").map { "chain_updated_${it}_ago" }
+        // #35: ages never count seconds, so there is no seconds plural to keep.
+        val plurals = listOf("minutes", "hours", "days").map { "chain_updated_${it}_ago" }
         for (path in listOf("src/main/res/values/strings.xml", "src/main/res/values-zh-rCN/strings.xml")) {
             val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(File(path))
             val nodes = document.getElementsByTagName("plurals")

@@ -425,7 +425,9 @@ fun LibraryScreen(
                 },
             )
         }
-        if (isFavoriteList || isPlaylist) {
+        // #35: an empty or one-song list has no order to edit, so it shows no dimmed button.
+        val orderableCount = (selectedCollection?.tracks ?: visibleTracks).size
+        if ((isFavoriteList || isPlaylist) && (orderTarget != null || orderableCount > 1)) {
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (orderTarget == null) {
                     TextButton(
@@ -433,8 +435,7 @@ fun LibraryScreen(
                             orderSaveFailed = false
                             orderTarget = selectedCollection?.let { it.playlistId to it.tracks } ?: (null to visibleTracks)
                         },
-                        enabled = query.isBlank() && (!favoritesOnly || favoriteCustomOrder) &&
-                            (selectedCollection?.tracks ?: visibleTracks).size > 1,
+                        enabled = query.isBlank() && (!favoritesOnly || favoriteCustomOrder),
                         modifier = Modifier.testTag("vesqen.library.edit-order"),
                     ) { Text(stringResource(R.string.edit_track_order)) }
                 } else {

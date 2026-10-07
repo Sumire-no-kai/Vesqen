@@ -37,15 +37,6 @@ class NowLayoutTest {
     }
 
     @Test
-    fun bottomBarYieldsOnlyWhenThatBringsTheCoverBack() {
-        assertFalse(nowPortraitYieldsNavigation(700.dp, 60.dp, 1f))
-        // Large text in a short window: the bar would cost the cover, which fits without it.
-        assertTrue(nowPortraitYieldsNavigation(480.dp, 60.dp, 2f))
-        // No cover fits either way, so the bar stays.
-        assertFalse(nowPortraitYieldsNavigation(300.dp, 60.dp, 2f))
-    }
-
-    @Test
     fun formatSummaryUsesCatalogMetadataOnly() {
         val flac = track(codec = "FLAC", bitDepth = 24, sampleRateHz = 96_000)
         assertEquals("FLAC 24/96", nowFormatSummary(flac))

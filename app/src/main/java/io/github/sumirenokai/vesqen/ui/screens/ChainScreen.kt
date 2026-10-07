@@ -145,6 +145,7 @@ import io.github.sumirenokai.vesqen.ui.chain.elapsedChartFraction
 import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
 import io.github.sumirenokai.vesqen.ui.chain.formatSeconds
 import io.github.sumirenokai.vesqen.ui.chain.isTelemetrySnapshotStale
+import io.github.sumirenokai.vesqen.ui.chain.telemetryAgeLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetryConfidenceLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetryEvidenceAge
 import io.github.sumirenokai.vesqen.ui.chain.telemetryEvidenceMethod
@@ -911,6 +912,10 @@ private fun ChainMetricsGrid(
     }
 }
 
+/**
+ * The latest events in one dashboard card. #35: rows are ruled by hairlines like the rest of the
+ * page; severity is the label's color, never a near-white block per row.
+ */
 @Composable
 private fun ChainRecentEventsPanel(
     events: List<TelemetryEvent>,
@@ -919,6 +924,7 @@ private fun ChainRecentEventsPanel(
 ) {
     val context = LocalContext.current
     val visibleEvents = events.asReversed().take(8)
+    val hairline = LocalVesqenColors.current.hairline
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -926,10 +932,7 @@ private fun ChainRecentEventsPanel(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
-        Column(
-            modifier = Modifier.padding(vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
-        ) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             Text(
                 text = stringResource(R.string.chain_recent_events_title),
                 style = MaterialTheme.typography.titleMedium,
@@ -937,65 +940,53 @@ private fun ChainRecentEventsPanel(
             )
             Text(
                 text = stringResource(R.string.chain_recent_events_body),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = VesqenSpacing.xxs, bottom = VesqenSpacing.xs),
             )
             if (visibleEvents.isEmpty()) {
                 Text(
                     text = stringResource(R.string.chain_recent_events_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.testTag("vesqen.chain.recent-events.empty"),
+                    modifier = Modifier.padding(vertical = VesqenSpacing.xs).testTag("vesqen.chain.recent-events.empty"),
                 )
             } else {
                 visibleEvents.forEach { event ->
-                    val containerColor = when (event.severity) {
-                        TelemetryEventSeverity.INFO -> MaterialTheme.colorScheme.surface
-                        TelemetryEventSeverity.WARNING -> MaterialTheme.colorScheme.tertiaryContainer
-                        TelemetryEventSeverity.ERROR -> MaterialTheme.colorScheme.errorContainer
-                    }
-                    val contentColor = when (event.severity) {
-                        TelemetryEventSeverity.INFO -> MaterialTheme.colorScheme.onSurface
-                        TelemetryEventSeverity.WARNING -> MaterialTheme.colorScheme.onTertiaryContainer
-                        TelemetryEventSeverity.ERROR -> MaterialTheme.colorScheme.onErrorContainer
-                    }
-                    Surface(
+                    HorizontalDivider(thickness = 1.dp, color = hairline)
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .padding(vertical = 10.dp)
                             .testTag("vesqen.chain.event.${event.sequence}"),
-                        shape = androidx.compose.ui.graphics.RectangleShape,
-                        color = containerColor,
-                        contentColor = contentColor,
+                        verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs),
                     ) {
-                        Column(
-                            modifier = Modifier.padding(vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xs),
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = telemetryEventKindLabel(event.kind),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                Text(
-                                    text = telemetryEventSeverityLabel(event.severity),
-                                    style = MaterialTheme.typography.labelMedium,
-                                )
-                            }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = event.code,
-                                style = VesqenDataStyle,
+                                text = telemetryEventKindLabel(event.kind),
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.weight(1f),
                             )
                             Text(
-                                text = stringResource(
-                                    R.string.chain_event_metadata,
-                                    telemetryEventAge(context, event, nowElapsedRealtimeMs),
-                                    telemetryEventScopeLabel(event, currentPlaybackSessionId),
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = contentColor,
+                                text = telemetryEventSeverityLabel(event.severity),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = when (event.severity) {
+                                    TelemetryEventSeverity.INFO -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    TelemetryEventSeverity.WARNING -> LocalVesqenColors.current.warning
+                                    TelemetryEventSeverity.ERROR -> MaterialTheme.colorScheme.error
+                                },
                             )
                         }
+                        Text(text = event.code, style = VesqenDataStyle)
+                        Text(
+                            text = stringResource(
+                                R.string.chain_event_metadata,
+                                telemetryEventAge(context, event, nowElapsedRealtimeMs),
+                                telemetryEventScopeLabel(event, currentPlaybackSessionId),
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
@@ -1047,20 +1038,7 @@ private fun telemetryEventAge(
     context: android.content.Context,
     event: TelemetryEvent,
     nowElapsedRealtimeMs: Long,
-): String {
-    val elapsedSeconds = (
-        (nowElapsedRealtimeMs - event.occurredAtElapsedRealtimeMs).coerceAtLeast(0) / 1_000
-    ).toInt()
-    return if (elapsedSeconds == 0) {
-        context.getString(R.string.chain_updated_now)
-    } else {
-        context.resources.getQuantityString(
-            R.plurals.chain_updated_seconds_ago,
-            elapsedSeconds,
-            elapsedSeconds,
-        )
-    }
-}
+): String = telemetryAgeLabel(context, nowElapsedRealtimeMs - event.occurredAtElapsedRealtimeMs)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1652,12 +1630,7 @@ private fun ChainMetricCard(
                     .fillMaxWidth()
                     .testTag("vesqen.chain.metric-value.${metricId.value}"),
             )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-                Box(Modifier.weight(1f)) { ChainConfidenceChip(evidence?.confidence, confidence) }
-                if (viewMode != ChainMetricViewMode.COMPACT) updated?.let {
-                    Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+            ChainConfidenceChip(evidence?.confidence, confidence)
             if (viewMode != ChainMetricViewMode.COMPACT) {
                 usbInventory?.let { ChainUsbInventoryDetails(it) }
                 if (source != null || window != null) Text(
@@ -1667,6 +1640,9 @@ private fun ChainMetricCard(
                 if (evidenceExpanded || evidence is TelemetryEvidence.Unavailable) {
                     method?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
+                // #35: live values refresh every few seconds, so the observation time is a detail
+                // for the expanded card, not a label that sits on every card.
+                if (evidenceExpanded) updated?.let { ChainMetricMeta(stringResource(R.string.chain_metric_updated), it) }
             }
             if (viewMode == ChainMetricViewMode.CHART && chartDescription != null) {
                 ChainMetricChart(

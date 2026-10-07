@@ -3,7 +3,6 @@ package io.github.sumirenokai.vesqen.ui.screens
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -125,7 +124,6 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricSelection
 import io.github.sumirenokai.vesqen.telemetry.TelemetryObservation
 import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
 import io.github.sumirenokai.vesqen.ui.chain.telemetryConfidenceLabel
-import io.github.sumirenokai.vesqen.ui.chain.telemetryEvidenceAge
 import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.components.PlaybackControls
@@ -222,18 +220,6 @@ internal fun nowPortraitLayout(height: Dp, fontScale: Float): NowPortraitLayout 
     val artwork = if (available >= 64f) available.coerceAtMost(280f) else 0f
     val notesArtwork = (available - notesContent).let { room -> if (room >= 96f) room.coerceAtMost(164f) else 0f }
     return NowPortraitLayout(artwork.dp, notesArtwork.dp, compact)
-}
-
-/**
- * Portrait Now keeps the bottom bar unless the bar would cost the cover (split screen, very large
- * text). The bar then yields, as it does in landscape. It only yields when that brings the cover
- * back. [pageHeight] is the window less the status and navigation bars.
- */
-internal fun nowPortraitYieldsNavigation(pageHeight: Dp, barHeight: Dp, fontScale: Float): Boolean {
-    // NowTopBar: a 48 dp touch row, or the title and queue position lines once text outgrows it.
-    val topBar = maxOf(48f, 38f * fontScale).dp
-    fun keepsCover(height: Dp) = nowPortraitLayout(height - topBar, fontScale).artwork > 0.dp
-    return !keepsCover(pageHeight - barHeight) && keepsCover(pageHeight)
 }
 
 /** "FLAC 24/96" style file summary from catalog metadata; null when the file reports nothing. */
@@ -917,7 +903,6 @@ private fun NowLinerNotesBody(
         ) ?: kotlinx.coroutines.flow.emptyFlow<io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot>()
     }.collectAsState(initial = null)
     val metrics = observed?.metrics.orEmpty().associateBy(TelemetryMetric::id)
-    val now = SystemClock.elapsedRealtime()
     fun value(id: TelemetryMetricId) = metrics[id]?.evidence
     val collecting = stringResource(R.string.chain_sampling_starting_short)
 
@@ -929,8 +914,7 @@ private fun NowLinerNotesBody(
             .ifBlank { formatTelemetryReading(context, null) }
         // The weakest piece of evidence decides the row's confidence label.
         val weakest = evidence.maxBy { it.confidence.ordinal }
-        return text to telemetryConfidenceLabel(context, weakest.confidence) + " · " +
-            telemetryEvidenceAge(context, weakest, now)
+        return text to telemetryConfidenceLabel(context, weakest.confidence)
     }
 
     val source = row(

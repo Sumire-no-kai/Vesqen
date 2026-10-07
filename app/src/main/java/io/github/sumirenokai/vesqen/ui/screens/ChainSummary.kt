@@ -88,7 +88,6 @@ import io.github.sumirenokai.vesqen.ui.chain.describesLastPlayback
 import io.github.sumirenokai.vesqen.ui.chain.effectiveTelemetryRefreshInterval
 import io.github.sumirenokai.vesqen.ui.chain.isTelemetrySnapshotStale
 import io.github.sumirenokai.vesqen.ui.chain.telemetryConfidenceLabel
-import io.github.sumirenokai.vesqen.ui.chain.telemetryEvidenceAge
 import io.github.sumirenokai.vesqen.ui.chain.telemetryEvidenceMethod
 import io.github.sumirenokai.vesqen.ui.chain.telemetryEvidenceSource
 import io.github.sumirenokai.vesqen.ui.chain.telemetryEvidenceWindow
@@ -202,7 +201,6 @@ internal fun ChainSummaryScreen(
                     waiting = telemetry == null,
                     lastPlayback = lastPlayback,
                     live = live,
-                    nowElapsedRealtimeMs = nowElapsedRealtimeMs,
                     unitDisplayMode = unitDisplayMode,
                     expanded = expanded,
                     onToggle = { station -> expanded = if (expanded == station) null else station },
@@ -218,7 +216,6 @@ internal fun ChainSummaryScreen(
             item(key = "pinned") {
                 ChainPinnedMetrics(
                     metrics = metrics,
-                    nowElapsedRealtimeMs = nowElapsedRealtimeMs,
                     unitDisplayMode = unitDisplayMode,
                     idle = lastPlayback,
                     // Lower power stretches the cadence; the label says what the readings actually do.
@@ -296,7 +293,6 @@ private fun ChainPath(
     waiting: Boolean,
     lastPlayback: Boolean,
     live: Boolean,
-    nowElapsedRealtimeMs: Long,
     unitDisplayMode: ChainUnitDisplayMode,
     expanded: ChainStation?,
     onToggle: (ChainStation) -> Unit,
@@ -356,7 +352,6 @@ private fun ChainPath(
                     station = station,
                     metrics = metrics,
                     assessment = assessment,
-                    nowElapsedRealtimeMs = nowElapsedRealtimeMs,
                     unitDisplayMode = unitDisplayMode,
                     expanded = expanded == station,
                     onToggle = { onToggle(station) },
@@ -398,7 +393,6 @@ private fun ChainStationRow(
     station: ChainStation,
     metrics: Map<TelemetryMetricId, TelemetryMetric>,
     assessment: AppSegmentAssessment?,
-    nowElapsedRealtimeMs: Long,
     unitDisplayMode: ChainUnitDisplayMode,
     expanded: Boolean,
     onToggle: () -> Unit,
@@ -434,22 +428,21 @@ private fun ChainStationRow(
                 modifier = Modifier.semantics { heading() },
             )
             if (station == ChainStation.PROCESSING) {
-                ChainProcessingFact(assessment, metrics, nowElapsedRealtimeMs, unitDisplayMode, expanded, onToggle)
+                ChainProcessingFact(assessment, metrics, unitDisplayMode, expanded, onToggle)
             } else {
                 ChainStationFacts.getValue(station).forEach { id ->
-                    ChainFact(id, metrics, nowElapsedRealtimeMs, unitDisplayMode, expanded, onToggle, prominent = id == ChainStationFacts.getValue(station).first())
+                    ChainFact(id, metrics, unitDisplayMode, expanded, onToggle, prominent = id == ChainStationFacts.getValue(station).first())
                 }
             }
         }
     }
 }
 
-/** One measured fact: label, value, confidence and age; tapping shows its source and method. */
+/** One measured fact: label, value and confidence; tapping shows its source and method. */
 @Composable
 private fun ChainFact(
     id: TelemetryMetricId,
     metrics: Map<TelemetryMetricId, TelemetryMetric>,
-    nowElapsedRealtimeMs: Long,
     unitDisplayMode: ChainUnitDisplayMode,
     expanded: Boolean,
     onToggle: () -> Unit,
@@ -475,7 +468,7 @@ private fun ChainFact(
             modifier = Modifier.fillMaxWidth().testTag("vesqen.chain.core-value.${id.value}"),
         )
         Text(
-            text = evidence?.let { telemetryConfidenceLabel(context, it.confidence) + " · " + telemetryEvidenceAge(context, it, nowElapsedRealtimeMs) }
+            text = evidence?.let { telemetryConfidenceLabel(context, it.confidence) }
                 ?: stringResource(R.string.chain_sampling_starting_short),
             style = evidenceStyle(),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -503,7 +496,6 @@ private fun ChainFact(
 private fun ChainProcessingFact(
     assessment: AppSegmentAssessment?,
     metrics: Map<TelemetryMetricId, TelemetryMetric>,
-    nowElapsedRealtimeMs: Long,
     unitDisplayMode: ChainUnitDisplayMode,
     expanded: Boolean,
     onToggle: () -> Unit,
@@ -531,7 +523,7 @@ private fun ChainProcessingFact(
     ) {
         Text(summary, style = MaterialTheme.typography.bodyLarge)
         Text(
-            text = evidence?.let { telemetryConfidenceLabel(context, it.confidence) + " · " + telemetryEvidenceAge(context, it, nowElapsedRealtimeMs) }
+            text = evidence?.let { telemetryConfidenceLabel(context, it.confidence) }
                 ?: stringResource(R.string.chain_sampling_starting_short),
             style = evidenceStyle(),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -621,7 +613,6 @@ internal fun conditionLabel(condition: AppSegmentCondition): Int = when (conditi
 @Composable
 private fun ChainPinnedMetrics(
     metrics: Map<TelemetryMetricId, TelemetryMetric>,
-    nowElapsedRealtimeMs: Long,
     unitDisplayMode: ChainUnitDisplayMode,
     idle: Boolean,
     refreshInterval: TelemetryRefreshInterval,
@@ -645,7 +636,7 @@ private fun ChainPinnedMetrics(
                 ChainPinnedMetricIds.chunked(columns).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.sm)) {
                         row.forEach { id ->
-                            ChainPinnedCard(id, metrics[id]?.evidence, nowElapsedRealtimeMs, unitDisplayMode, idle, Modifier.weight(1f))
+                            ChainPinnedCard(id, metrics[id]?.evidence, unitDisplayMode, idle, Modifier.weight(1f))
                         }
                         if (row.size < columns) Spacer(Modifier.weight(1f))
                     }
@@ -659,7 +650,6 @@ private fun ChainPinnedMetrics(
 private fun ChainPinnedCard(
     id: TelemetryMetricId,
     evidence: TelemetryEvidence?,
-    nowElapsedRealtimeMs: Long,
     unitDisplayMode: ChainUnitDisplayMode,
     idle: Boolean,
     modifier: Modifier = Modifier,
@@ -704,7 +694,7 @@ private fun ChainPinnedCard(
                 text = when {
                     idle -> stringResource(R.string.chain_idle_title)
                     evidence == null -> stringResource(R.string.chain_sampling_starting_short)
-                    else -> telemetryConfidenceLabel(context, evidence.confidence) + " · " + telemetryEvidenceAge(context, evidence, nowElapsedRealtimeMs)
+                    else -> telemetryConfidenceLabel(context, evidence.confidence)
                 },
                 style = evidenceStyle(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

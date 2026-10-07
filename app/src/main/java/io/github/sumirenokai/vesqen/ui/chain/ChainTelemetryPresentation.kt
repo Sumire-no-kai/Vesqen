@@ -196,11 +196,12 @@ internal fun telemetryEvidenceAge(
     context: Context,
     evidence: TelemetryEvidence,
     nowElapsedRealtimeMs: Long,
-): String {
-    val age = evidenceAge(nowElapsedRealtimeMs - evidence.observedAtElapsedRealtimeMs)
+): String = telemetryAgeLabel(context, nowElapsedRealtimeMs - evidence.observedAtElapsedRealtimeMs)
+
+internal fun telemetryAgeLabel(context: Context, elapsedMs: Long): String {
+    val age = evidenceAge(elapsedMs)
     val plural = when (age.unit) {
         EvidenceAgeUnit.NOW -> return context.getString(R.string.chain_updated_now)
-        EvidenceAgeUnit.SECONDS -> R.plurals.chain_updated_seconds_ago
         EvidenceAgeUnit.MINUTES -> R.plurals.chain_updated_minutes_ago
         EvidenceAgeUnit.HOURS -> R.plurals.chain_updated_hours_ago
         EvidenceAgeUnit.DAYS -> R.plurals.chain_updated_days_ago
@@ -208,16 +209,18 @@ internal fun telemetryEvidenceAge(
     return context.resources.getQuantityString(plural, age.count, age.count)
 }
 
-internal enum class EvidenceAgeUnit { NOW, SECONDS, MINUTES, HOURS, DAYS }
+internal enum class EvidenceAgeUnit { NOW, MINUTES, HOURS, DAYS }
 
 internal data class EvidenceAge(val unit: EvidenceAgeUnit, val count: Int)
 
-/** The largest whole unit of an observation's age, so values kept for days read "3 days ago". */
+/**
+ * The largest whole unit of an observation's age, so values kept for days read "3 days ago".
+ * Anything under a minute is "just now": no age counts seconds.
+ */
 internal fun evidenceAge(elapsedMs: Long): EvidenceAge {
     val seconds = elapsedMs.coerceAtLeast(0) / 1_000
     return when {
-        seconds < 1 -> EvidenceAge(EvidenceAgeUnit.NOW, 0)
-        seconds < 60 -> EvidenceAge(EvidenceAgeUnit.SECONDS, seconds.toInt())
+        seconds < 60 -> EvidenceAge(EvidenceAgeUnit.NOW, 0)
         seconds < 3_600 -> EvidenceAge(EvidenceAgeUnit.MINUTES, (seconds / 60).toInt())
         seconds < 86_400 -> EvidenceAge(EvidenceAgeUnit.HOURS, (seconds / 3_600).toInt())
         else -> EvidenceAge(EvidenceAgeUnit.DAYS, (seconds / 86_400).toInt())

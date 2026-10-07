@@ -66,7 +66,9 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     private var lastMusicPermissionGranted: Boolean? = null
     private val latestPlaybackHistory = mutableMapOf<Long, PlaybackHistoryUpdate>()
 
-    var uiState by mutableStateOf(VesqenUiState())
+    // Until the private catalog has been read once, an empty list means "not read yet", not "no
+    // music": the first frames show the loading rows instead of flashing the empty state.
+    var uiState by mutableStateOf(VesqenUiState(library = LibraryUiState(isLoading = true)))
         private set
 
     init {
@@ -358,6 +360,9 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun restoreCatalogThenRefresh() {
+        // The permission sync above may have cleared loading for a library without device access;
+        // its cached folder rows are still being read.
+        updateLibrary { it.copy(isLoading = true) }
         viewModelScope.launch {
             try {
                 loadCachedLibrary()

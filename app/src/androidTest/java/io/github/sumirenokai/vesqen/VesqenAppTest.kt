@@ -867,6 +867,9 @@ class VesqenAppTest {
             .assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.about_license_value)).assertIsDisplayed()
         composeRule.onAllNodesWithTag("vesqen.nav.settings").assertCountEquals(0)
+        // #39: the page says plainly that nothing is backed up or moved to a new phone.
+        composeRule.onNodeWithTag("vesqen.about").performScrollToNode(hasTestTag("vesqen.about.data"))
+        composeRule.onNodeWithText(context.getString(R.string.about_data_body)).assertIsDisplayed()
 
         composeRule.onNodeWithTag("vesqen.about.back").performClick()
         composeRule.onNodeWithTag("vesqen.settings").assertIsDisplayed()
@@ -2860,7 +2863,12 @@ class VesqenAppTest {
     }
 
     @Test
-    fun focused_player_keeps_the_navigation_in_portrait() {
+    fun focused_player_takes_the_window_from_the_bottom_bar() = assertFocusedPlayerTakesTheWindow(360.dp, 720.dp)
+
+    @Test
+    fun focused_player_takes_the_window_from_the_rail() = assertFocusedPlayerTakesTheWindow(720.dp, 720.dp)
+
+    private fun assertFocusedPlayerTakesTheWindow(width: Dp, height: Dp) {
         render(
             state = grantedState(
                 tracks = sampleTracks,
@@ -2874,18 +2882,20 @@ class VesqenAppTest {
                     hasNext = true,
                 ),
             ),
-            containerWidth = 720.dp,
-            containerHeight = 720.dp,
+            containerWidth = width,
+            containerHeight = height,
             darkTheme = false,
         )
 
         composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
         composeRule.onNodeWithTag("vesqen.now.focus-surface").assertIsDisplayed()
-        // B artboard: Now keeps the bottom bar in portrait; only the landscape player is immersive.
-        composeRule.onNodeWithTag("vesqen.nav.library").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.nav.now").assertIsSelected()
+        // DESIGN.md "Focus mode": the navigation yields to the player, and the player's Back
+        // brings it back on the page Now was opened from.
+        composeRule.onAllNodesWithTag("vesqen.nav.library").assertCountEquals(0)
         composeRule.onNodeWithTag("vesqen.now.previous").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.next").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.back").performClick()
+        composeRule.onNodeWithTag("vesqen.nav.library").assertIsDisplayed().assertIsSelected()
     }
 
     @Test
