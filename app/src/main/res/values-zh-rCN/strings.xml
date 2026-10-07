@@ -126,7 +126,7 @@
     <string name="settings_usage_paused">已暂停</string>
     <string name="settings_device_report">导出设备报告</string>
     <string name="usage_title">使用统计</string>
-    <string name="usage_body">Vesqen 每天最多发送一次匿名使用统计，用来了解它在哪些手机上运行。内容只有：</string>
+    <string name="usage_body">Vesqen 每天最多发送一次使用统计，不带任何 ID，用来了解它在哪些手机上运行。内容只有：</string>
     <string name="usage_field_app">应用版本和安装渠道</string>
     <string name="usage_field_device">Android 版本、厂商、机型和系统版本号</string>
     <string name="usage_field_bit_perfect">连着的 USB 音频设备是否开放官方 bit-perfect 通道</string>

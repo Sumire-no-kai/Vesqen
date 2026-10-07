@@ -129,7 +129,7 @@
     <string name="settings_usage_paused">Paused</string>
     <string name="settings_device_report">Export device report</string>
     <string name="usage_title">Usage statistics</string>
-    <string name="usage_body">Vesqen sends anonymous usage statistics at most once a day, to learn which phones it runs on. They contain only:</string>
+    <string name="usage_body">Vesqen sends usage statistics at most once a day, with no ID attached, to learn which phones it runs on. They contain only:</string>
     <string name="usage_field_app">App version and distribution channel</string>
     <string name="usage_field_device">Android version, manufacturer, model and system build</string>
     <string name="usage_field_bit_perfect">Whether a connected USB audio device offers the official bit-perfect path</string>
