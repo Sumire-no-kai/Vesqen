@@ -45,7 +45,7 @@ A state is never promoted to a stronger one. An active path is not called verifi
 
 ## Privacy
 
-Playback and your library never use the network, and your library, playlists and play counts stay in the app's private storage on your phone. Since 1.0.0-beta.2 the app uses the network for three things, each of which you can turn off: usage statistics at most once a day with no ID attached (in the EU, EEA and UK, only if you agree), device reports you choose to upload, and update checks. The [privacy policy](https://vesqen.sumirenokai.com/privacy/) ([中文](https://vesqen.sumirenokai.com/zh/privacy/)) lists what each one sends and how long it is kept. It is also inside the app, under Settings → Privacy policy.
+Playback and your library never use the network, and your library, playlists and play counts stay in the app's private storage on your phone. Since 1.0.0-beta.2 the app uses the network for three things, each of which you can turn off: usage statistics at most once a day with no ID attached (in the EU, EEA, UK, mainland China and South Korea, only if you agree), device reports you choose to upload, and update checks. The [privacy policy](https://vesqen.sumirenokai.com/privacy/) ([中文](https://vesqen.sumirenokai.com/zh/privacy/)) lists what each one sends and how long it is kept. It is also inside the app, under Settings → Privacy policy.
 
 ## Known limitations
 

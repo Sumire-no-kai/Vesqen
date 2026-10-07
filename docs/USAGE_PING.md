@@ -16,7 +16,8 @@ an enabled toggle sends nothing. Debug has `FakeUsageStatistics` for UI developm
 
 The centralized pure region policy covers EU27, the EU outermost regions and Åland
 that carry their own ISO codes (RE, GP, MQ, GF, YT, MF, AX), Iceland, Liechtenstein,
-Norway and the UK. Its inputs are the system locales, the default subscription's SIM
+Norway, the UK, mainland China and South Korea (owner decision 2026-10-07 after the
+#70 review; Hong Kong, Macao and Taiwan keep their own codes). Its inputs are the system locales, the default subscription's SIM
 and network country, and from Android 11 every slot's network country
 (`getNetworkCountryIso(slot)`). A match in any of them requires consent; when none
 is readable, the user is asked as well. A dual-SIM phone is treated like any other:
@@ -24,9 +25,10 @@ owner decision 2026-10-04, since most phones in China and South-East Asia are
 dual-SIM. Android 8–10 cannot read the other slot, so there a second SIM is covered
 by locale and network only. SIM identifiers, subscription lists, phone permissions,
 IP geolocation and hidden APIs are not used.
-Switzerland, South Korea, Brazil, California and mainland China are intentionally
-not assigned new legal policy; the owner's official-source review in #70 remains
-outstanding. State-level California detection cannot be derived from country codes.
+The #70 review kept Switzerland, Brazil and California default-on: Switzerland
+allows it with notice and a way to refuse, Brazil under legitimate interest, and the
+CCPA does not apply at this size. State-level California detection cannot be derived
+from country codes.
 A default-on user entering a consent region is returned to the consent gate;
 an explicit accepted choice survives restarts. Region inputs remain local.
 

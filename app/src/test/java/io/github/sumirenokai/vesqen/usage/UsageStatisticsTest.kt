@@ -14,22 +14,27 @@ import org.junit.Test
 
 class UsageStatisticsTest {
     @Test fun regionsAreCentralizedAndAnySignalCanRequireConsent() {
-        // EU-27, seven outermost regions with their own codes, the EEA three and the UK.
-        assertEquals(38, UsageRegionRules.explicitConsentCountries.size)
+        // EU-27, seven outermost regions with their own codes, the EEA three, the UK, mainland
+        // China and South Korea.
+        assertEquals(40, UsageRegionRules.explicitConsentCountries.size)
         UsageRegionRules.explicitConsentCountries.forEach { country ->
             assertEquals(UsageRegionPolicy.EXPLICIT_CONSENT, UsageRegionRules.evaluate(listOf(country.lowercase(), "US")))
-            assertEquals(UsageRegionPolicy.EXPLICIT_CONSENT, UsageRegionRules.evaluate(listOf("US", "CN", country)))
+            assertEquals(UsageRegionPolicy.EXPLICIT_CONSENT, UsageRegionRules.evaluate(listOf("US", "JP", country)))
         }
         listOf("RE", "GP", "MQ", "GF", "YT", "MF", "AX").forEach {
             assertEquals(it, UsageRegionPolicy.EXPLICIT_CONSENT, UsageRegionRules.evaluate(listOf(it)))
         }
         assertEquals(UsageRegionPolicy.EXPLICIT_CONSENT, UsageRegionRules.evaluate(listOf("uk")))
-        // A dual-SIM phone outside the EU is default-on, like any other phone there.
-        assertEquals(UsageRegionPolicy.DEFAULT_ENABLED, UsageRegionRules.evaluate(listOf("CN", "cn", "CN")))
+        // A dual-SIM phone outside the consent regions is default-on, like any other phone there.
+        assertEquals(UsageRegionPolicy.DEFAULT_ENABLED, UsageRegionRules.evaluate(listOf("SG", "sg", "SG")))
+        // Mainland China and South Korea ask first; Hong Kong, Macao and Taiwan are separate codes.
+        assertEquals(UsageRegionPolicy.EXPLICIT_CONSENT, UsageRegionRules.evaluate(listOf("HK", "cn")))
+        assertEquals(UsageRegionPolicy.EXPLICIT_CONSENT, UsageRegionRules.evaluate(listOf("KR")))
+        assertEquals(UsageRegionPolicy.DEFAULT_ENABLED, UsageRegionRules.evaluate(listOf("HK", "MO", "TW")))
         assertEquals(UsageRegionPolicy.DEFAULT_ENABLED, UsageRegionRules.evaluate(listOf("AU")))
         assertEquals(UsageRegionPolicy.REGION_UNAVAILABLE, UsageRegionRules.evaluate(listOf("", "invalid")))
         assertEquals(UsageRegionPolicy.REGION_UNAVAILABLE, UsageRegionRules.evaluate(emptyList()))
-        listOf("CH", "KR", "BR", "US", "CN").forEach { assertFalse(UsageRegionRules.explicitConsentCountries.contains(it)) }
+        listOf("CH", "BR", "US", "JP").forEach { assertFalse(UsageRegionRules.explicitConsentCountries.contains(it)) }
     }
 
     @Test fun utcIsoWeekMonthAndYearBoundariesOnlyProduceBooleans() {
