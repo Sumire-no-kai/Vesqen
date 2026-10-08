@@ -73,11 +73,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -163,6 +165,27 @@ private data class NowTrackPresentation(
     val artworkTrack: AudioTrack?,
     val animationIdentity: NowTrackAnimationIdentity,
 )
+
+/**
+ * The Now transitions target [NowTrackAnimationIdentity] alone. Given a new target under an
+ * unchanged content key, AnimatedContent rewrites its visible list on every recomposition until
+ * the transition settles, and a stopped activity pauses animations, so during background playback
+ * a play count update recomposed the screen on every frame (#51). The content reads its
+ * presentation here instead: the current track follows catalog updates, and a track that is
+ * fading out keeps the last presentation it showed.
+ */
+@Composable
+private fun shownPresentation(
+    identity: NowTrackAnimationIdentity,
+    latest: State<NowTrackPresentation>,
+): NowTrackPresentation {
+    val shown = remember { ShownPresentation(latest.value) }
+    latest.value.takeIf { it.animationIdentity == identity }?.let { shown.value = it }
+    return shown.value
+}
+
+/** A plain holder: keeping the last value must not invalidate the composition that reads it. */
+private class ShownPresentation(var value: NowTrackPresentation)
 
 /**
  * Track-change motion follows listening/artwork identity, not mutable catalog annotations.
@@ -671,8 +694,9 @@ private fun NowCover(
         animationSpec = tween(if (motionPolicy.reduceMotion) 0 else 220, easing = PaperEasing),
         label = "vesqen.now.artwork-play-state",
     )
+    val latest = rememberUpdatedState(presentation)
     AnimatedContent(
-        targetState = presentation,
+        targetState = presentation.animationIdentity,
         transitionSpec = {
             if (motionPolicy.reduceMotion) {
                 fadeIn(tween(motionPolicy.coverChangeMillis)) togetherWith fadeOut(tween(motionPolicy.coverChangeMillis))
@@ -682,10 +706,10 @@ private fun NowCover(
                     fadeOut(tween(motionPolicy.coverChangeMillis / 2))
             }
         },
-        contentKey = NowTrackPresentation::animationIdentity,
         contentAlignment = Alignment.Center,
         label = "vesqen.now.artwork-transition",
-    ) { cover ->
+    ) { key ->
+        val cover = shownPresentation(key, latest)
         Box(
             modifier = Modifier
                 .size(size)
@@ -718,16 +742,17 @@ private fun NowTrackIdentity(
     modifier: Modifier = Modifier,
     showArtist: Boolean = true,
 ) {
+    val latest = rememberUpdatedState(presentation)
     AnimatedContent(
-        targetState = presentation,
+        targetState = presentation.animationIdentity,
         transitionSpec = {
             fadeIn(tween(motionPolicy.coverChangeMillis, easing = PaperEasing)) togetherWith
                 fadeOut(tween(motionPolicy.coverChangeMillis / 2))
         },
-        contentKey = NowTrackPresentation::animationIdentity,
         modifier = modifier.fillMaxWidth(),
         label = "vesqen.now.identity-transition",
-    ) { identity ->
+    ) { key ->
+        val identity = shownPresentation(key, latest)
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
