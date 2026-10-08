@@ -1,6 +1,7 @@
 import {InvalidRequest, readJsonRequest, validatePing} from './validation.js';
 import {validateReport} from './report-schema.js';
 import {updateManifests} from './updates.js';
+import {snapshotDownloads} from './downloads.js';
 // The main module may export only handlers, so the limit lives in its own module.
 import {DISTINCT_VALUES_PER_DAY} from './limits.js';
 
@@ -114,5 +115,8 @@ export async function handle(request, env, now = Date.now(), fetcher = fetch) {
 
 export default {
   fetch(request, env) { return handle(request, env); },
-  async scheduled(_event, env) { await prune(env, Date.now()); },
+  async scheduled(_event, env) {
+    await prune(env, Date.now());
+    await snapshotDownloads(env, Date.now());
+  },
 };

@@ -14,6 +14,8 @@ test('owner queries validate all interpolated inputs and hide expired report doc
   assert.match(querySql('monthly','2026-10'),/substr\(day,1,7\)='2026-10'/);
   assert.throws(()=>querySql('monthly',"2026-10' OR 1=1 --"));
   assert.match(querySql('report-counts'),/daily_report_counts/);
+  assert.match(querySql('downloads'),/FROM daily_downloads/);
+  assert.throws(()=>querySql('downloads','2026-10-08'));
   assert.match(querySql('delete-report','12345678-1234-1234-1234-123456789abc'),/^DELETE FROM reports WHERE id='12345678/);
   assert.throws(()=>querySql('delete-report',"x' OR '1'='1"));
 });
