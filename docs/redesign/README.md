@@ -26,12 +26,12 @@
 
 ## 与现行规范的关系
 
-在 #35 实施之前，[DESIGN.md](../../DESIGN.md)、[`.impeccable/design.json`](../../.impeccable/design.json) 和[视觉识别系统](../brand/VISUAL_IDENTITY.md)仍是现行基线，本目录记录的是已选定、尚未实施的方向。实施 B 时需要同步修改：
+B 已在 #35 中实施（2026-10-07 完成总检查，记录见 [REVIEW_2026-10.md](REVIEW_2026-10.md)），现行基线是 [DESIGN.md](../../DESIGN.md) 和[视觉识别系统](../brand/VISUAL_IDENTITY.md)。实施时同步修改了下列内容（旧版的机器可读副本 `.impeccable/design.json` 已删除）：
 
 - 视觉识别 §4.1：正在播放页固定使用深色 Nocturne Graphite，且真实封面最多以约 3.96% 进入背景。B 改为跟随系统深浅色，背景按封面取色规则染色（B 文档 §2.3）。
 - 视觉识别 §5 和 DESIGN.md 的字体：Roboto 改为 Instrument Serif 和 Instrument Sans。中文标题优先用手机自带的宋体，没有就用系统黑体，App 不打包中文字体（B 文档 §3）。技术数据不再用等宽字，改用等宽数字。
 - 视觉识别 §5 规定"不用全大写营造品牌声量"。用户在 2026-09-25 确认 B 可以用全大写的眉题和小标签，实施时修改这条规则。
-- DESIGN.md 与 `.impeccable/design.json` 的颜色令牌：新增纸色系和深色令牌（B 文档 §2）。
+- DESIGN.md 的颜色令牌：换成纸色系和深色令牌（B 文档 §2）。
 - 保持不变：证据状态的区分规则、Signal Budget、Twin Paths 标识的构造与用法。
 
 ## 待决问题（在 #35 中处理）

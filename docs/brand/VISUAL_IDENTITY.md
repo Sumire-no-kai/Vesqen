@@ -5,7 +5,7 @@
 - 品牌主张：The Quiet Signal / 安静而可信的信号
 - 产品标识：Twin Paths / 双路径
 
-本文件定义 Vesqen 的正式视觉识别基线。界面实现以根目录的 `DESIGN.md` 和 `.impeccable/design.json` 为机器可读来源；本文件负责解释品牌含义、资产用法和不可变规则。
+本文件定义 Vesqen 的正式视觉识别基线。界面实现以根目录的 `DESIGN.md` 为准；本文件负责解释品牌含义、资产用法和不可变规则。
 
 ## 1. 品牌核心
 
@@ -58,101 +58,69 @@ Signal Moss 是品牌锚点，但单色媒介中几何识别优先于颜色。�
 
 ### 4.1 核心色
 
-| Token | HEX | 用途 |
-| --- | --- | --- |
-| Signal Moss | `#9FBF4B` | 固定品牌标识、少量身份时刻 |
-| Signal Moss Bright | `#BFD66B` | 深色主题活跃控件、进度、选中状态 |
-| Signal Moss Deep | `#536B1E` | 浅色主题实心主按钮和选中状态 |
-| Carbon Black | `#0F0F0F` | 深色画布、App 图标背景 |
-| Carbon Surface | `#171914` | 深色结构层 |
-| Carbon Elevated | `#23261E` | mini-player、菜单、底部浮层 |
-| Pure White | `#FFFFFF` | 浅色主画布 |
-| Frost Surface | `#F6F7F2` | 浅色次级表面 |
-| Ink Dark | `#1B1C18` | 浅色主题主文字 |
-| Ink Light | `#E7E8E1` | 深色主题主文字 |
-| Now Canvas | `#101415` | Now 专注页与状态栏的近中性夜间石墨画布 |
-| Now Dock | `#191F20` | Now 不透明运输台与导航栏延续面 |
-| Now Raised | `#202728` | Now 的 route chip、会话面与一级抬升材质 |
-| Now Artwork Frame | `#252C2D` | Now 封面舞台边框材质 |
+2026-10 起界面使用 Paper & Sound（B 方案，见 `docs/redesign/B_PAPER_AND_SOUND.md`）。完整的令牌和实测对比度见根目录 `DESIGN.md`，这里只列品牌层面的取值。
 
-Now 使用「夜间石墨 / Nocturne Graphite」专属材质阶梯，而不是 Midnight Violet 上域与橄榄 Carbon 底座的两套皮肤。真实封面最多以 `22% × (1 − 82%) = 3.96%` 的低频反光进入 Now Canvas；无封面或读取失败时保持纯中性，不把 Twin Paths 占位放大成伪光。Warning Amber Bright `#F2C36B` / Deep `#7A4F00` 用于深浅主题的可恢复提醒；Error `#BA1A1A` 只用于错误和破坏性操作。
+| Token | 浅色 | 深色 | 用途 |
+| --- | --- | --- | --- |
+| Signal Moss | `#9FBF4B` | `#9FBF4B` | 标识本身和少量身份时刻 |
+| Moss | `#536B1E` | `#BFD66B` | 主操作、选中状态、正在播放、进度、ACTIVE 和 VERIFIED |
+| Paper / Night | `#F3EFE6` | `#151411` | 页面底色，也是无封面时的正在播放背景 |
+| Paper Raised / Night Raised | `#FBF9F4` | `#1E1C18` | 卡片、迷你播放条、浮层 |
+| Ink / Night Text | `#1A1A16` | `#EDE8DC` | 主文字 |
+| Ink Muted / Night Muted | `#5E5A50` | `#A8A294` | 次要文字 |
+| Amber | `#7A4F00` | `#F2C36B` | 可恢复的提醒 |
+| Error | `#BA1A1A` | `#FFB4AB` | 错误和破坏性操作 |
+
+正在播放页跟随系统深浅色，背景按当前封面的主色相轻微染色：亮度固定、彩度封顶，所以任何色相下次要文字都不低于 5.26:1。文字、控件、证据标签、分隔线、导航和迷你播放条都不随封面变化；没有封面时用 Paper / Night。
 
 ### 4.2 Signal Budget
 
-普通页面中 Moss 色面积原则上不超过约 10%。它只用于品牌、焦点、选择、播放进度和中性播放状态之上的正向证据；大面积背景、整行饱和高亮和装饰渐变均不使用 Moss。
+普通页面中 Moss 色面积原则上不超过约 10%。它只用于主操作、选择、正在播放、进度和中性播放状态之上的正向证据；大面积背景、整行饱和高亮和装饰渐变均不使用 Moss。
 
 ### 4.3 已验证对比度
 
-| 组合 | 对比度 |
-| --- | ---: |
-| Ink Light / Carbon Black | 15.54:1 |
-| Muted Dark / Carbon Black | 11.46:1 |
-| Muted Dark / Carbon Elevated | 9.18:1 |
-| Ink Dark / Pure White | 17.13:1 |
-| Muted Light / Pure White | 6.40:1 |
-| Muted Light / Frost Surface | 5.94:1 |
-| Signal Moss Bright / Carbon Surface | 11.00:1 |
-| Signal Moss Deep / Frost Surface | 5.59:1 |
-| Pure White / Signal Moss Deep | 6.02:1 |
-| Ink Dark / Signal Moss Bright | 10.64:1 |
-| Pure White / Warning Amber Deep | 7.13:1 |
-| Ink Dark / Warning Amber Bright | 10.44:1 |
-| Ink Light / Now Canvas | 15.03:1 |
-| Ink Light / Now Dock | 13.53:1 |
-| Muted Dark / Now Raised | 9.08:1 |
-| Signal Moss Bright / Now Dock | 10.37:1 |
-
-上述组合满足 WCAG 2.2 AA 普通文本目标；实际界面仍需按最终字号、透明度和背景重新验证。
+见 `DESIGN.md` 的颜色表（2026-10-07 按 WCAG 公式逐项计算，`PaperAndSoundColorTest` 校验）：所有文字角色在各自底色上都满足 AA，单选框和勾选框边框满足 3:1。
 
 ### 4.4 证据状态映射
 
 | 状态 | 颜色 | 颜色之外的必要提示 |
 | --- | --- | --- |
-| `SYSTEM MIXED` | 常规深色用 Carbon Elevated + Muted Dark；Now 用 Now Raised + Muted Dark；浅色用 Frost + Muted Light | 路由图标和完整状态文字 |
-| `DIRECT SUPPORTED` | 与中性状态相同，不做成功色 | `DIRECT` 文字；不得显示勾选或验证徽章 |
-| `BIT-PERFECT AVAILABLE` | Moss 描边，不使用实心 Moss 背景 | 空心圆可用性图标和 `AVAILABLE` 文字 |
-| `BIT-PERFECT ACTIVE` | 深色用 Moss Bright 实心；浅色用 Moss Deep 实心 | 实心活动点和 `ACTIVE` 文字 |
-| `BIT-PERFECT VERIFIED` | Moss 描边或低强度色阶，并与精确矩阵上下文同行 | 盾牌/证书图标、`VERIFIED` 文字和设备矩阵入口 |
-| 可恢复限制 | 对应主题的 Warning Amber | 警告图标、原因和下一步 |
-| 失败 / 破坏性操作 | Error | 错误图标、精确原因和恢复操作 |
+| `SYSTEM MIXED` | 中性标签，不用 Moss | 路由图标和完整状态文字 |
+| `BIT-PERFECT AVAILABLE` | Moss 描边，不用实心背景 | 空心圆图标和 `AVAILABLE` 文字 |
+| `BIT-PERFECT REQUESTED` | Moss 描边 | `REQUESTED` 文字 |
+| `BIT-PERFECT ACTIVE` | 实心 Moss | 实心活动点和 `ACTIVE` 文字 |
+| `BIT-PERFECT VERIFIED` | Moss 描边，并与验证记录同行 | 盾牌图标、`VERIFIED` 文字、记录编号和验证方法 |
+| `STRICT OUTPUT STOPPED` | Error | 警告图标；旁边的标题写结果，说明写原因 |
 
-`SYSTEM MIXED` 和 `DIRECT SUPPORTED` 不得使用 Moss。AVAILABLE、ACTIVE、VERIFIED 即使共享品牌色，也必须以描边/实心、图标、文字和证据上下文区分；颜色本身不能提升声明等级。
+证据标签在所有语言里都用同一套英文状态码，标题和说明用当地语言，不重复标签。`SYSTEM MIXED` 不得使用 Moss；AVAILABLE、ACTIVE、VERIFIED 即使共享品牌色，也必须以描边/实心、图标、文字和证据上下文区分，颜色本身不能提升声明等级。
 
 ## 5. 字体与文案
 
-- UI 与展示：Roboto，中文回退 Noto Sans SC，再回退系统 sans-serif。
-- 技术数据：Roboto Mono / 系统 monospace，仅用于采样率、位深、缓冲、时间戳和可信度数据。
-- 标题主要使用 600 字重；正文使用 400；按钮和标签使用 600。
-- 文案短、事实化、可行动。默认只告诉用户下一步，高级证据通过明确入口展开。
-- 不用全大写营造品牌声量；`SYSTEM MIXED` 等固定证据状态例外。
+- 标题：Instrument Serif，字重 400，只用于 16 sp 以上；中文回退到手机自带的宋体，没有时用系统黑体。App 不打包中文字体。
+- 正文、标签和控件：Instrument Sans；中文用系统黑体。
+- 数据：Instrument Sans 加等宽数字（tabular figures），变化的数字不改变宽度。等宽字体只用于 JSON 预览、cookie 名这类代码。
+- 眉题和小标签可以用全大写和较宽的字距；中文不做大小写变换。固定证据状态码始终是全大写英文。
+- 文案短、事实化、可行动，规则和中英文用词对照见 `DESIGN.md` 的 Copy 一节。
 
 ## 6. UI 体系与信息架构
 
-正式体系只有一套，不是三套互不相干的播放器皮肤：
+浅色和深色是同一套系统的两个完整版本，层级、组件、导航和交互一致。
 
-- **A / Library Dark**：品牌的深色主表达，也是默认展示基准。
-- **B / Library Light**：A 的完整浅色主题，对应层级、组件、导航和交互完全一致。
-- **C / Now Playing**：A/B 系统中的受保护深色专注页。它不改变导航语义或交互架构，但以 Nocturne Graphite 覆盖全窗口；专辑色只形成受控、低频的反光层。
+顶层导航是 `Library / Now / Chain / Settings` 四个页签，简体中文显示 `曲库 / 正在播放 / 链路 / 设置`：
 
-顶层导航的稳定语义 ID 固定为 `Library / Now / Settings`；界面文案需要本地化，英文显示上述名称，简体中文显示 `曲库 / 正在播放 / 设置`。Chain 是从 Now 事实状态入口或 Settings 到达的二级证据页：
+1. Library 是首启和冷启动的默认入口，负责选择音乐。
+2. Now 有曲目时占满整个窗口，底部导航和宽屏 rail 都让位；收起按钮和系统返回回到来源页。没有曲目时只提示去曲库选一首。
+3. Chain 是证据页：先显示摘要和五步路径，再进入高级仪表盘。没有播放时说明开始播放后会显示什么。
+4. Settings 是无账号产品的管理入口，其中有 About、隐私政策和开源许可。
 
-1. Library 是首启和冷启动默认入口，负责选择音乐。
-2. Now 是专注播放界面；没有当前曲目时只提示返回曲库选择一首。
-3. Settings 是无账号产品的管理入口；其中保留稳定的 Chain 与 About 入口。
-
-Chain 默认先显示可理解摘要，用户再展开源、解码、处理、路由和实时数据。没有播放会话时显示“开始播放后展示链路”，唯一主操作返回 Library；它不占用永久底栏或 navigation rail。
-
-曲目行只保留封面、标题、艺术家、播放状态和更多操作。时长、格式、采样率、路径和遥测进入详情、Now 或 Chain，不在默认列表堆叠。
+曲目行只保留封面、标题、艺术家、播放状态和更多操作。时长、格式、采样率、路径和遥测进入曲目详情、Now 或 Chain。
 
 ## 7. 形状、材质与光影
 
-- 专辑封面圆角 10 dp；控件 12 dp；独立表面 16 dp；只有短状态 chip 使用胶囊形。
-- 默认通过色阶、留白和对齐分层，不以硬分割线和卡片网格分层。
-- mini-player、菜单和底部浮层可使用小范围柔和阴影；普通曲目行无边框、无阴影。
-- 完整播放页的 Now Canvas、Now Dock、Now Raised 与 Now Artwork Frame 是一条连续的石墨材质阶梯；不保留可见紫色上域、绿色/荧光底座或装饰渐变。
-- 真实封面可在 36 dp 模糊后以 22% 输入到 82% Canvas 遮罩后方，最终贡献固定为约 3.96%；文字、状态 chip、控制器和系统图标始终使用固定语义色，不从封面取色。
-- Now Dock 为完全不透明的 `#191F20`，通过单一 20 dp Player Lift 与 Canvas 分离；不使用亮分割线、描边、玻璃卡、第二阴影或霓虹光晕。
-- 不支持、性能不足、减少透明度或无可读封面时，Now 保持完全不透明的 Canvas/Raised 回退，布局和可操作性保持不变。
+- 专辑封面圆角 4 dp，保留唱片封套的硬边；控件 12 dp；卡片 16 dp；迷你播放条 14 dp；只有短状态标签和主按钮使用胶囊形。
+- 同一组内容放在一张纸面卡片里，卡片有 1 dp 细线描边，行与行之间用细线分隔；不用浅色块分隔行，不用卡片网格。
+- 迷你播放条、菜单、对话框和底部浮层可以用柔和的暖色阴影；普通行没有阴影。
+- 正在播放页的背景是封面染色的纸色或夜色，见 4.1；不使用模糊玻璃、霓虹光晕或装饰渐变。
 
 ## 8. 动效
 
@@ -193,4 +161,4 @@ Chain 默认先显示可理解摘要，用户再展开源、解码、处理、�
 
 视觉板画的是改版前 v1.0 “Quiet Signal” 的配色和页面（包括深靛蓝的播放页），已被 Paper & Sound 取代；标识部分仍然有效。现行页面以 `DESIGN.md` 和 `docs/redesign/mockups/` 的 B 画板为准。
 
-Android 运行时版本位于 `app/src/main/res/`。以后修改几何或核心色时，必须同时更新 SVG、Android VectorDrawable、`DESIGN.md`、`.impeccable/design.json` 与对比度测试记录，并在开发日志中写明迁移原因。
+Android 运行时版本位于 `app/src/main/res/`。以后修改几何或核心色时，必须同时更新 SVG、Android VectorDrawable、`DESIGN.md` 与对比度测试记录，并在开发日志中写明迁移原因。
