@@ -1,73 +1,55 @@
 ---
 name: Vesqen
-description: A quiet, precise visual system for local listening and auditable playback.
+description: Paper & Sound, a quiet visual system for local listening and auditable playback.
 colors:
+  paper: "#F3EFE6"
+  paper-raised: "#FBF9F4"
+  paper-nav: "#F6F3EC"
+  ink: "#1A1A16"
+  ink-muted: "#5E5A50"
+  hairline-light: "ink at 13%"
+  radio-idle-light: "#7C776B"
+  moss-deep: "#536B1E"
+  on-moss: "#FFFFFF"
+  amber-deep: "#7A4F00"
+  error-light: "#BA1A1A"
+  night: "#151411"
+  night-raised: "#1E1C18"
+  night-nav: "#191814"
+  night-text: "#EDE8DC"
+  night-muted: "#A8A294"
+  hairline-dark: "night-text at 13%"
+  radio-idle-dark: "#8A8578"
+  moss-bright: "#BFD66B"
+  amber-bright: "#F2C36B"
+  error-dark: "#FFB4AB"
   signal-moss: "#9FBF4B"
-  signal-moss-bright: "#BFD66B"
-  signal-moss-deep: "#536B1E"
-  carbon-black: "#0F0F0F"
-  carbon-surface: "#171914"
-  carbon-elevated: "#23261E"
-  pure-white: "#FFFFFF"
-  frost-surface: "#F6F7F2"
-  ink-dark: "#1B1C18"
-  ink-light: "#E7E8E1"
-  muted-dark: "#C8C9BE"
-  muted-light: "#5E6056"
-  now-canvas: "#101415"
-  now-dock: "#191F20"
-  now-raised: "#202728"
-  now-artwork-frame: "#252C2D"
-  warning-amber-bright: "#F2C36B"
-  warning-amber-deep: "#7A4F00"
-  error: "#BA1A1A"
 typography:
-  display:
-    fontFamily: "Roboto, Noto Sans SC, sans-serif"
-    fontSize: "32sp"
-    fontWeight: 600
-    lineHeight: "38sp"
-    letterSpacing: "-0.02em"
-  headline:
-    fontFamily: "Roboto, Noto Sans SC, sans-serif"
-    fontSize: "28sp"
-    fontWeight: 600
-    lineHeight: "34sp"
-    letterSpacing: "-0.01em"
   title:
-    fontFamily: "Roboto, Noto Sans SC, sans-serif"
-    fontSize: "20sp"
-    fontWeight: 600
-    lineHeight: "26sp"
-    letterSpacing: "normal"
-  body:
-    fontFamily: "Roboto, Noto Sans SC, sans-serif"
-    fontSize: "16sp"
+    fontFamily: "Instrument Serif, system serif (Songti where present)"
     fontWeight: 400
-    lineHeight: "24sp"
-    letterSpacing: "0.01em"
+    sizes: "34/38, 32/38, 28/31, 26/30, 22/28, 21/25, 19/24, 17/22 sp"
+  body:
+    fontFamily: "Instrument Sans, system sans for Chinese"
+    sizes: "16/24, 15/23, 13/19 sp"
   label:
-    fontFamily: "Roboto, Noto Sans SC, sans-serif"
-    fontSize: "12sp"
+    fontFamily: "Instrument Sans"
     fontWeight: 600
-    lineHeight: "16sp"
-    letterSpacing: "0.02em"
-  action:
-    fontFamily: "Roboto, Noto Sans SC, sans-serif"
-    fontSize: "14sp"
-    fontWeight: 600
-    lineHeight: "20sp"
-    letterSpacing: "0.01em"
+    sizes: "15/20, 14/20, 12/16 sp"
   data:
-    fontFamily: "Roboto Mono, monospace"
-    fontSize: "12sp"
+    fontFamily: "Instrument Sans"
     fontWeight: 500
+    fontSize: "13sp"
     lineHeight: "18sp"
-    letterSpacing: "normal"
+    fontFeature: "tnum"
+  code:
+    fontFamily: "monospace"
+    use: "JSON previews and literal identifiers only"
 rounded:
-  album: "10dp"
+  album: "4dp"
   control: "12dp"
   surface: "16dp"
+  mini-player: "14dp"
   pill: "999dp"
 spacing:
   xxs: "4dp"
@@ -77,316 +59,226 @@ spacing:
   lg: "24dp"
   xl: "32dp"
 components:
-  button-primary-light:
-    backgroundColor: "{colors.signal-moss-deep}"
-    textColor: "{colors.pure-white}"
-    typography: "{typography.action}"
-    rounded: "{rounded.control}"
-    padding: "12dp 20dp"
-    height: "48dp"
-  button-primary-dark:
-    backgroundColor: "{colors.signal-moss-bright}"
-    textColor: "{colors.ink-dark}"
-    typography: "{typography.action}"
-    rounded: "{rounded.control}"
-    padding: "12dp 20dp"
-    height: "48dp"
-  status-chip-neutral-dark:
-    backgroundColor: "{colors.carbon-elevated}"
-    textColor: "{colors.muted-dark}"
-    typography: "{typography.label}"
-    rounded: "{rounded.pill}"
-    padding: "6dp 10dp"
-  status-chip-neutral-light:
-    backgroundColor: "{colors.frost-surface}"
-    textColor: "{colors.muted-light}"
-    typography: "{typography.label}"
-    rounded: "{rounded.pill}"
-    padding: "6dp 10dp"
-  status-chip-available-dark:
-    backgroundColor: "{colors.carbon-surface}"
-    textColor: "{colors.signal-moss-bright}"
-    borderColor: "{colors.signal-moss-bright}"
-    typography: "{typography.label}"
-    rounded: "{rounded.pill}"
-    padding: "6dp 10dp"
-  status-chip-available-light:
-    backgroundColor: "{colors.frost-surface}"
-    textColor: "{colors.signal-moss-deep}"
-    borderColor: "{colors.signal-moss-deep}"
-    typography: "{typography.label}"
-    rounded: "{rounded.pill}"
-    padding: "6dp 10dp"
-  status-chip-active-dark:
-    backgroundColor: "{colors.signal-moss-bright}"
-    textColor: "{colors.ink-dark}"
-    typography: "{typography.label}"
-    rounded: "{rounded.pill}"
-    padding: "6dp 10dp"
-  status-chip-active-light:
-    backgroundColor: "{colors.signal-moss-deep}"
-    textColor: "{colors.pure-white}"
-    typography: "{typography.label}"
-    rounded: "{rounded.pill}"
-    padding: "6dp 10dp"
-  track-row-dark:
-    backgroundColor: "{colors.carbon-black}"
-    textColor: "{colors.ink-light}"
-    rounded: "{rounded.album}"
-    padding: "8dp 16dp"
-    height: "72dp"
-  track-row-light:
-    backgroundColor: "{colors.pure-white}"
-    textColor: "{colors.ink-dark}"
-    rounded: "{rounded.album}"
-    padding: "8dp 16dp"
-    height: "72dp"
-  mini-player-dark:
-    backgroundColor: "{colors.carbon-elevated}"
-    textColor: "{colors.ink-light}"
+  paper-card:
+    backgroundColor: "{colors.paper-raised} / {colors.night-raised}"
+    border: "1dp hairline"
     rounded: "{rounded.surface}"
-    padding: "8dp 12dp"
+  list-row:
+    minHeight: "56dp, 64dp with a description"
+    separator: "1dp hairline, inset 16dp"
+  mini-player:
     height: "72dp"
-  mini-player-light:
-    backgroundColor: "{colors.frost-surface}"
-    textColor: "{colors.ink-dark}"
-    rounded: "{rounded.surface}"
-    padding: "8dp 12dp"
-    height: "72dp"
-  bottom-navigation-dark:
-    backgroundColor: "{colors.carbon-black}"
-    textColor: "{colors.muted-dark}"
-    padding: "8dp 12dp"
-    height: "64dp"
-    systemInset: "navigation bar inset added by platform"
-  bottom-navigation-light:
-    backgroundColor: "{colors.pure-white}"
-    textColor: "{colors.muted-light}"
-    padding: "8dp 12dp"
-    height: "64dp"
-    systemInset: "navigation bar inset added by platform"
+    rounded: "{rounded.mini-player}"
+    elevation: "6dp warm shadow, 1dp hairline"
+  compact-navigation:
+    height: "60dp plus the system inset"
+    backgroundColor: "{colors.paper-nav} / {colors.night-nav}"
+    selection: "ink label at 600 with a 16 x 2dp Moss mark, no pill"
+  touch-target:
+    minimum: "48dp"
 ---
 
 # Design System: Vesqen
 
-> 2026-10-03：#35 正在实施 B · 纸与声。代码里的颜色、字体和封面取色已经换成 [docs/redesign/B_PAPER_AND_SOUND.md](docs/redesign/B_PAPER_AND_SOUND.md) 的取值，以那份规范为准。本文件在 #35 完成时整体改写，在那之前，下面的颜色和字体令牌只描述旧界面。
+This file is the visual and interaction baseline. The board values and their reasoning live in [docs/redesign/B_PAPER_AND_SOUND.md](docs/redesign/B_PAPER_AND_SOUND.md); where the two differ, the code and this file describe what ships. The 2026-10-07 review behind this version is recorded in [docs/redesign/REVIEW_2026-10.md](docs/redesign/REVIEW_2026-10.md).
 
 ## Overview
 
-**Creative North Star: "The Quiet Signal"**
+**North star: liner notes.** Vesqen reads like the sleeve of a record you own: warm paper, a serif title, small factual notes, and nothing that sells. Playback comes first; the evidence of how the sound travels sits one deliberate tap away and is written as plainly as a credit on a sleeve.
 
-Vesqen should feel like a listening instrument used in a dim train carriage, a quiet study, or a softly lit room: the screen recedes until a meaningful state changes. The dark experience is the primary expression, while the light experience is a complete daylight counterpart—not a separate brand. The protected full player uses a single Nocturne Graphite material ladder; album artwork may cast one restrained reflection into it, but navigation, text, and evidence labels remain stable and legible.
+The four destinations are **Library**, **Now**, **Chain** and **Settings**. Library is where people start. Now is the focused player. Chain is the evidence page. Settings holds output modes, privacy and app information. About, track details, the queue, the privacy policy and licenses are secondary pages or sheets, never tabs.
 
-The top-level information architecture is fixed around **Library**, **Now**, and **Settings**. Library is the beginner's starting point, Now is the focused playback surface, and Settings is the account-free management destination. **Chain** is a secondary evidence surface reached deliberately from Now or Settings. Technical density belongs behind explicit disclosure, not in the track list.
+**Key characteristics**
 
-**Key Characteristics:**
+- Light and dark are complete counterparts with the same hierarchy; the system theme decides.
+- One Moss accent for actions, selection and positive evidence, used sparingly.
+- Paper cards with a hairline border group rows; rows are ruled by hairlines, not separated by gaps or fills.
+- Now's background follows the album cover; nothing else does.
+- Technical detail is progressive: the track list shows title, artist and cover; formats live in track details; measurements live in Chain.
 
-- Dark-first and light-complete, with identical hierarchy and behavior.
-- One moss signal color used sparingly for active controls, selection, and positive evidence above the neutral playback states.
-- Soft tonal separation instead of hard divider lines or nested card grids.
-- Album-derived atmosphere only on the full player and only behind protected contrast layers.
-- Familiar Android navigation and controls, with advanced evidence one deliberate tap away.
-
-**The Three-Destination Rule.** Top-level navigation is Library, Now, and Settings. Chain, About, and track details are secondary destinations and never become additional permanent tabs.
-
-**The Progressive Proof Rule.** The track list contains title, artist, artwork, playback state, and overflow only. Format, path, source parameters, route evidence, and live metrics belong in track details, Now, or Chain.
+**The progressive proof rule.** The track list contains title, artist, artwork, playback state and the overflow action only.
 
 ## Colors
 
-Signal Moss is an olive-yellow-green derived from the brand mark rather than streaming-service green. Carbon neutrals carry the dark theme; true white and Frost Surface carry the light theme. The full player has its own near-neutral Nocturne Graphite ladder so it reads as one listening instrument rather than a second colored theme.
+All text roles meet WCAG AA on every surface they use. Measured 2026-10-07 with the WCAG formula; `PaperAndSoundColorTest` guards the token pairs.
 
-### Primary
-
-- **Signal Moss:** The immutable brand anchor used in the mark and small identity moments.
-- **Signal Moss Bright:** Dark-theme active controls, progress, selected navigation, and high-value focus states.
-- **Signal Moss Deep:** Light-theme filled controls and selected states with white foreground content.
-
-### Neutral
-
-- **Carbon Black:** Dark canvas and adaptive-icon background.
-- **Carbon Surface:** Quiet structural layer for toolbars and persistent navigation.
-- **Carbon Elevated:** Mini-player, bottom sheet, and transient elevated surfaces.
-- **Pure White:** Light canvas and inverse identity field.
-- **Frost Surface:** Light-theme secondary surface without cream or paper warmth.
-- **Ink Dark / Ink Light:** Primary readable text for the corresponding theme.
-- **Muted Light / Muted Dark:** Secondary text; both remain readable rather than decorative gray.
-
-### Focused Player Material
-
-- **Now Canvas (`#101415`):** Protected near-neutral midnight field for the full player and its status bar.
-- **Now Dock (`#191F20`):** Fully opaque smoked-graphite transport surface and navigation-bar continuation.
-- **Now Raised (`#202728`) / Artwork Frame (`#252C2D`):** One-step material lift for the factual route chip, session surface, and framed cover stage.
-- **Artwork reflection:** A real cover may enter at 22% behind an 82% Canvas scrim, yielding a capped 3.96% low-frequency reflection. Missing or unreadable artwork remains neutral; Twin Paths never becomes a false full-screen light source.
-
-These values are material roles, never success, selection, proof, or a second action color. Midnight Violet is retired from visible Now surfaces.
-
-### Supporting
-
-- **Warning Amber Bright / Deep:** Fixed warning roles for dark/light themes. Amber communicates attention or a recoverable limitation, never active or verified playback.
-- **Error:** Destructive and failure state only. It never appears as decoration or brand expression.
-
-### Evidence States
-
-| Evidence level | Color treatment | Required non-color cue |
+| Text role | Light: paper / raised / nav | Dark: night / raised / nav |
 | --- | --- | --- |
-| `SYSTEM MIXED` | Neutral tonal chip; Muted Dark on Carbon Elevated or Muted Light on Frost | Exact text plus route icon |
-| `DIRECT SUPPORTED` | Neutral tonal chip | Exact text plus `DIRECT` label; never a success badge |
-| `BIT-PERFECT AVAILABLE` | Moss outline, no filled background | Open-circle availability icon and “AVAILABLE” text |
-| `BIT-PERFECT ACTIVE` | Filled Moss control-state chip | Solid activity dot and “ACTIVE” text |
-| `BIT-PERFECT VERIFIED` | Moss outline/tonal chip shown with exact matrix context | Shield/certificate icon, “VERIFIED” text, and device-matrix link |
-| Recoverable limitation | Warning Amber for the current theme | Warning icon and actionable explanation |
-| Failure / destructive | Error role | Error icon, exact failure text, and recovery action |
+| Body (`ink`, `night-text`) | 15.2 / 16.6 / 15.8 | 15.1 / 13.9 / 14.5 |
+| Secondary (`ink-muted`, `night-muted`) | 6.0 / 6.5 / 6.2 | 7.3 / 6.7 / 7.0 |
+| Moss text and icons (`moss-deep`, `moss-bright`) | 5.2 / 5.7 / 5.4 | 11.4 / 10.6 / 11.0 |
+| Warning (`amber-deep`, `amber-bright`) | 6.2 / 6.8 / 6.4 | 11.2 / 10.4 / 10.8 |
+| Error | 5.6 / 6.1 / 5.8 | 10.9 / 10.0 / 10.5 |
+| Idle radio and checkbox outline (non-text, 3:1 needed) | 3.9 / 4.2 / 4.0 | 5.0 / 4.6 / 4.8 |
 
-`SYSTEM MIXED` never uses Moss. Available, active, and verified may share the brand hue only because their fill/outline, icon, wording, and evidence context remain distinct; color alone never promotes one level into another.
+Labels on filled Moss buttons: 6.0:1 (white on `moss-deep`), 11.4:1 (`night` on `moss-bright`).
 
-**The Signal Budget Rule.** Signal Moss occupies no more than roughly 10% of an ordinary screen. Its rarity creates recognition and makes active state unambiguous.
+- **Moss** (`moss-deep` light, `moss-bright` dark) marks primary actions, the selected tab, the playing row, progress and the ACTIVE and VERIFIED evidence states. `signal-moss` is the mark's own colour and appears only in the logo.
+- **Amber** is a recoverable warning, such as a recent-events warning. It never raises an evidence claim.
+- **Error** is a failure or destructive action only.
+- **Album tint.** Now's background, and an open album in Library, take the cover's dominant hue at fixed lightness and capped chroma (B §2.3), so `ink-muted` keeps at least 5.26:1 at every hue. Text, controls, chips, hairlines, navigation and the mini-player never follow the cover. No cover means plain `paper` or `night`.
+- **No dynamic colour.** Android wallpaper colours never change the mark or the meaning of evidence, warning or error states.
 
-**The Stable Truth Rule.** Android dynamic color is not enabled in the v1.0 baseline. If it is added later, output states must keep fixed semantic roles: brand, warning, error, and proof meanings never inherit an arbitrary wallpaper hue.
+### Evidence states
+
+| State | Label (all languages) | Treatment |
+| --- | --- | --- |
+| System output | `SYSTEM MIXED` | Neutral chip, never Moss |
+| Strict output possible | `BIT-PERFECT AVAILABLE` | Moss outline, open-circle icon |
+| Strict output starting | `BIT-PERFECT REQUESTED` | Moss outline |
+| Strict output on | `BIT-PERFECT ACTIVE` | Filled Moss, solid dot |
+| Verified by a signed record | `BIT-PERFECT VERIFIED` | Moss outline with shield; the record ID and method are always shown |
+| Strict output stopped | `STRICT OUTPUT STOPPED` | Error tone; the localized title says what happened and the body says why |
+
+**The fixed-code rule.** Evidence chips show the same English code in every language, so the app, the website and bug reports use one vocabulary. The title and explanation beside a chip are localized and never repeat the chip.
+
+**The no-promotion rule.** A lossless file is not bit-perfect, an active path is not verified, and Bluetooth is never bit-perfect. Colour alone never moves one state to another.
 
 ## Typography
 
-**Display Font:** Roboto with Noto Sans SC fallback
+- **Titles** use Instrument Serif at weight 400, with the system serif as fallback so Chinese titles use Songti where the phone has it (Android 10 and later; Android 8–9 fall back to the system sans). Serif only from 16 sp up: page titles, group headings, track titles in Now and lists, album names, empty-state titles and big pinned figures.
+- **Body, labels and controls** use Instrument Sans; Chinese uses the system sans.
+- **Data** (times, counts, rates, measured values) uses Instrument Sans with tabular figures, so changing digits keep their width. Monospace is only for literal code: the JSON report preview and cookie names in the policy. Monospace never sets a value with a unit; it spread "96  kHz" apart.
+- **Eyebrows** (small labels such as "Now" in the Now top bar) use 12 sp at weight 500–600 with wide tracking; Chinese keeps its case and spacing.
 
-**Body Font:** Roboto with Noto Sans SC fallback
-**Label/Mono Font:** Roboto Mono for measured technical values only
+**The one-line rule.** Track titles truncate after one line in lists; Now and track details show the full title.
 
-**Character:** One humanist system family keeps the product immediate and native. Weight, size, spacing, and alignment create hierarchy; decorative display fonts are prohibited. Monospace is reserved for data whose alignment or provenance matters.
+## Elevation and surfaces
 
-### Hierarchy
+Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hairline border; rows inside are separated by inset hairlines. Shadows appear only on surfaces that physically float: the mini-player (6 dp, warm), menus, dialogs and bottom sheets.
 
-- **Display** (600, 32sp/38sp): Full-player track title and exceptional empty-state headlines; maximum two lines.
-- **Headline** (600, 28sp/34sp): Destination titles such as Library and Playback Chain.
-- **Title** (600, 20sp/26sp): Section headings, current track title in compact surfaces, and sheet titles.
-- **Body** (400, 16sp/24sp): Explanations, permission copy, and readable metadata; prose stays below 70 characters per line where width permits.
-- **Action** (600, 14sp/20sp): Primary and secondary button labels.
-- **Label** (600, 12sp/16sp): Navigation labels, chips, and short state text; sentence case is the default.
-- **Data** (500, 12sp/18sp): Sample rate, bit depth, buffer values, timestamps, and confidence annotations inside detail surfaces only.
-
-**The One-Family Rule.** UI labels, buttons, track metadata, and navigation use the same sans-serif family. Monospace never leaks into the ordinary library or primary controls.
-
-**The Unbroken Title Rule.** Song titles and artist names may truncate after one line in lists, but the full player and detail sheet provide a readable expanded form without horizontal scrolling.
-
-## Elevation
-
-The system is flat by default and builds depth through tonal layers, artwork-derived light, and small state transitions. Shadows appear only where a surface physically detaches: the persistent mini-player, an expanded player sheet, a menu, or a bottom sheet. A resting track row has no outline and no shadow.
-
-Translucency is purposeful. The full player may use a protected, low-frequency artwork blur behind an opaque contrast scrim; bottom sheets may use platform blur on capable devices. Every translucent surface has an opaque Carbon Elevated or Frost Surface fallback. Blur never reduces text contrast and never becomes a grid of glass cards.
-
-### Shadow Vocabulary
-
-- **Ambient Low:** A compact soft shadow for menus and the mini-player; never paired with a decorative border.
-- **Player Lift:** A wider low-opacity shadow reserved for the expanded player and bottom sheets. On Now it is one 20 dp ambient/spot lift between Canvas and Dock, never a divider, border, glow, or second shadow.
-- **Focus Halo:** A moss-tinted focus indication around keyboard- or accessibility-focused controls, paired with a shape/state change where color alone is insufficient.
-
-**The No-Line Rule.** Separate list items with rhythm, alignment, and surface tone. Hard dividers are limited to dense technical tables where row tracking genuinely requires them.
-
-**The Opaque Fallback Rule.** If blur, transparency, performance, or contrast cannot be guaranteed, render a fully opaque semantic surface without changing layout or affordance.
+**The no-near-white-block rule.** Never place near-white fills inside a paper card or on paper to separate rows; use hairlines. A row's state shows in its label colour, not in a filled block.
 
 ## Components
 
 ### Buttons
 
-- **Shape:** Confident rounded rectangle (12dp), never a bloated capsule unless the control contains only an icon.
-- **Primary:** Deep moss with white content in light mode; bright moss with dark content in dark mode. Minimum height is 48dp.
-- **Focus / Pressed:** A visible halo plus a subtle tonal shift; pressed feedback completes within 150ms.
-- **Secondary / Ghost:** Tonal surface or transparent background with readable ink. Destructive actions use Error only after clear confirmation.
+- Primary: filled Moss, 48 dp minimum height, fully rounded. One primary action per screen.
+- Secondary: outlined or text buttons in Moss or ink. Destructive actions use Error and confirm first.
 
-### Status Chips
+### Lists and rows
 
-- **Style:** Compact pill reserved for short factual state such as `SYSTEM MIXED`; no promotional tags.
-- **State:** Apply the Evidence States table exactly. Text and icon/shape jointly communicate status; tapping opens an explanation or the corresponding Chain evidence.
+- Track rows: 48 dp cover, one-line serif title, one-line "artist · album", play indicator on the current track, and a 48 dp overflow button. Rows are ruled by a bottom hairline.
+- Settings rows: 56 dp, or 64 dp with a description. A value (version, On/Off) sits left of the chevron; above 130 % text it moves under the title so the title never squeezes into single letters.
+- Album detail rows: track number, title, duration and a 48 dp overflow button in a 48 dp row.
 
-### Track Rows
+### Library
 
-- **Structure:** 48dp artwork, one-line title, one-line artist, playback indicator, and overflow action inside a 72dp row.
-- **Disclosure:** Duration, album, format, sample rate, file location, and telemetry are excluded from the default row.
-- **State:** The active row uses a moss title or leading indicator, not a full saturated background.
-
-### Library Navigation and Ordering
-
-Implementation candidate, 2026-09-07 (device review pending):
-
-- The right-edge A-Z/# jump index is enabled by default only in unfiltered All Songs sorted by title. Its visibility preference persists; Favorites, playlists and other collection interiors never show it. It shares the list's normalized title/pinyin keys, with unclassified entries in the final # group, and briefly identifies the selected letter.
-- Reserve space for the index without covering row overflow actions or system gestures. When a dense rail is unsuitable for narrow windows, large text or TalkBack, provide a visible letter picker with 48dp actions. Missing groups are unavailable, and the empty library has no index.
-- Favorites and custom playlists expose an explicit Edit Order action with drag handles and accessible Move Up/Move Down actions. Normal row taps still play music. Reordering is available in the complete custom-order view; search and automatic sorting must not silently rewrite saved order or the active playback queue.
+- Text tabs (Songs, Albums, Artists, Folders, Genres, Playlists) scroll horizontally; the selected tab is ink at weight 600 with a Moss underline.
+- Header actions: search, sort, Favorites (heart) and a menu for adding folders and rescanning.
+- **A–Z index:** a 24 dp strip along the right edge, 11 dp letters, missing letters at 25 %, the selected letter in Moss. Dragging shows a 56 dp letter bubble beside the finger that takes no layout space. Windows under 420 dp tall, text above 120 % and TalkBack get an "A–Z" button that opens a letter picker with 48 dp rows instead. Shown only in unfiltered Songs sorted by title.
+- Favorites and playlists show an Edit order action only when there is something to reorder (two or more songs). Reordering uses a 48 dp drag handle and Move up / Move down accessibility actions.
+- Until the catalog has been read once, the library shows loading rows, never the empty state.
 
 ### Mini-player
 
-- **Structure:** Artwork, title/artist, previous, play/pause, and next. The entire non-button surface opens Now.
-- **Placement:** It floats as one 72dp tonal card above compact navigation with a 4dp visual gap; the Library canvas and navigation background remain continuous behind it. It must never reserve or paint a full-width lower white slab.
-- **Material:** One elevated tonal surface with optional low-intensity artwork glow. It never becomes a nested card stack.
-- **Motion:** Expands into Now with a 240ms shared-axis transition. The mini-player and compact navigation recede with the outgoing shell; on return they reveal only after the focused player has materially receded, so two complete player surfaces never ghost over one another. Reduced motion uses an 80ms crossfade.
+- A 72 dp paper-raised card floating 4 dp above the navigation: cover, title, artist, previous, play/pause, next. The non-button area opens Now.
+- Above 150 % text only the title shows; the artist is still read out by TalkBack.
 
-### Full Player
+### Now
 
-- **Structure:** A framed artwork stage anchors the upper field. One purposeful, opaque lower transport dock contains the one-line title, artist/album when space permits, factual route chip, scrubber, and controls; it is not a stack of floating cards.
-- **Control hierarchy:** Previous / play-pause / next form the large centered primary transport group. One Playback Order switch, one explicit Playback Session action, and the circled information action live in the dock's secondary footer, so transport never competes with modes or metadata. The session action is a neutral icon-and-label control that names the destination it will reveal; it never uses the Moss selected treatment of a persistent tab. At narrow widths the same three 48dp actions remain evenly spaced and the label may ellipsize without losing its TalkBack action/state. When extreme text hides the route chip, one 48dp AccountTree action becomes the single Chain path. The mini-player never repeats the route chip.
-- **Playback-order control:** Shuffle, list repeat, and single-track repeat are **not** separate buttons. One familiar 48dp control cycles `Sequential → Shuffle → Repeat all → Repeat one → Sequential`; this normal cycle always writes mutually exclusive Media3 switches. Sequential uses a numbered-list glyph, Shuffle uses the standard shuffle glyph, Repeat all uses the standard repeat glyph, and Repeat one uses repeat-with-`1`. Sequential is muted; the other three modes use Signal Moss. If an external controller supplies a compound shuffle-plus-repeat state, the same one button renders its two-part state accurately and one tap resets it to Sequential rather than hiding a switch. Each transition changes tint and icon/scale over 160ms and exposes the exact mode to TalkBack. After the controller state actually changes, a non-persistent (~1.5s) floating pill in the upper safe area confirms the exact new mode as a polite live region; it must not predict a requested mode before the state arrives or cover the transport dock.
-- **Motion:** Opening Now follows the mini-player's 240ms shared-axis path: the focused surface rises from 25% below its final field after a short handoff, while the compact shell recedes. Returning uses a 180ms inverse path: the focused surface moves down by 25% and scales toward the mini-player, then Library, compact navigation, and the mini-player reveal in the final 108ms. The retreating player stays above its destination throughout this movement. Chain and About use a separate 240ms horizontal detail path with a 25% foreground displacement and a smaller 8% background displacement; Back reverses this path even when returning to Now. A user-initiated previous/next change moves only artwork and track identity 220ms in the corresponding horizontal direction while the transport dock remains spatially stable. Reduced motion replaces these movements with the 80ms crossfade fallback.
-- **Atmosphere:** Artwork may cast a 3.96% low-frequency reflection behind a stable 82% Nocturne Canvas scrim. The focused surface explicitly supplies fixed light foreground tokens; controls and `SYSTEM MIXED` retain their semantic colors and never sample arbitrary artwork colors. Missing/unreadable artwork has an opaque neutral fallback with no false reflection.
-- **Play/pause artwork state:** The implementation uses 1.00 scale while playing and 0.95 while paused, with one smooth 220ms transition. The change should be noticeable at normal viewing distance without bouncing, looping, shifting the dock or changing layout bounds. Reduced motion disables this scale effect; the control and text still convey state. Device review remains pending.
-- **Scrubber geometry:** The thumb center stays on the track centerline and the played segment ends at the thumb center throughout idle, press and drag states. Endpoint geometry, touch mapping and seek value agree at 0%, intermediate values and 100%, across window sizes and font scales. Keep the 48dp interaction area; resolve component geometry instead of adding device-specific pixel offsets. Capture the reported defect before fixing it.
-- **Focus mode:** Now is a full-height, edge-to-edge Nocturne Graphite listening surface rather than a squeezed destination panel. Top-level navigation yields its space to the focused player (including the wide-window rail). Portrait keeps dark, legible system bars continuous with Canvas and Dock. Phone landscape becomes immersive: status and navigation bars hide with transient-swipe recovery, and their prior visibility and contrast state restore on return or exit. Light system glyphs remain legible whenever bars are visible. Toolbar Back and Android Back return to the originating destination, while the factual route chip—or its compact fallback under extreme text—remains the deliberate path to Chain.
-- **Responsive behavior:** The player is never vertically scrollable. Portrait uses the artwork field above one stable lower dock. Landscape is a separate composition rather than a scaled portrait page: a 43% left focus stage holds artwork or session facts, while a flat 57% right control field holds identity, route, scrubber, transport, and secondary actions. The redundant centered `Now` heading disappears; Back and orientation remain at the upper corners, while the track identity begins one 32dp beat beneath that command band unless extreme text or height requires the compact 12dp budget. Track titles remain one line and may marquee horizontally. Artwork, gaps, and secondary metadata contract as height or font scale decreases, but the scrubber, three primary transport controls, mode controls, session action, Chain path, and information action remain reachable.
-- **Progressive session information:** The explicit Playback Session switch replaces only the upper focused stage with live facts the current player exposes (play state, elapsed/remaining time, and queue position). At extreme text, the stable dock remains the sole progress display and the fixed-height session card contracts to state plus queue rather than clipping or scrolling. The header, backdrop, transport dock, and all playback controls remain spatially stable; the stage uses a contained fade/scale transition, never a horizontal pager or a whole-screen swipe. Android Back first restores the artwork stage. The circled information action opens track metadata; it does not invent codec, sample-rate, PCM, or proof telemetry.
-- **Details:** Overflow opens an inline sheet for track details; Chain remains the authoritative path for route and proof data.
+- **Focus mode.** With a track, Now takes the whole window: the bottom bar and the rail yield, and the top-left collapse button or Android Back returns to where Now was opened. Without a track, Now shows its empty state with the navigation.
+- Top bar: collapse, "Now" with the queue position, the orientation toggle when the phone can rotate, and the queue.
+- Cover up to 280 dp, shrinking to 164 dp while the liner notes are open; under 64 dp it is dropped rather than squeezed. Then the serif title, "artist — album", progress, transport (playback order, previous, play/pause, next, favorite) and the liner notes.
+- **Liner notes:** collapsed to one summary line ("FLAC 24/96 · SYSTEM MIXED"); open, they list 01 Source file, 02 AudioTrack and 03 Route and stability with each value and its confidence, then the evidence chip, its explanation, Output mode and Track information. The step numbers are the liner-notes metaphor of the B design, not section numbering.
+- Landscape is a separate composition: cover or liner notes on the left, identity and controls on the right, system bars hidden.
+- The page never scrolls; only the open liner notes scroll inside their own region.
 
-### Navigation
+### Chain
 
-- **Destinations:** Library, Now, and Settings, each with a familiar icon and persistent text label. Chain remains one deliberate action away from Now and Settings.
-- **Localization:** `Library`, `Now`, and `Settings` are stable semantic IDs, not forced English display strings. English uses those labels; Simplified Chinese uses `曲库`, `正在播放`, and `设置`.
-- **Compact shell:** Compact windows use a 60dp text-labelled navigation bar before the system navigation inset. The label baseline receives a 4dp upward optical correction so compactness does not pin type to the bottom edge, while every destination retains a 48dp minimum touch target. The bar continues the page canvas instead of introducing a second near-white surface; labels remain one line and may ellipsize rather than wrap or clip. Selection uses a restrained 180ms icon emphasis plus the existing tonal/color state; reduced motion keeps only the 80ms crossfade.
-- **Default:** First launch and ordinary cold launch begin in Library. Now without a track explains the single next action: choose a track from Library.
-- **Adaptive:** Compact windows use bottom navigation; medium and expanded windows use a navigation rail while preserving the same order and labels.
-- **Library hierarchy:** Favorites and collection interiors use a short horizontal shared-axis transition to communicate one level of navigation; Back reverses it. Ordinary search, sorting, scans, and list updates remain spatially stable. Reduced motion uses the 80ms crossfade.
+- Summary: observation notice (live, last playback, stale, partial), now playing, the evidence card (chip, localized title, explanation), the five-step path (source file, decoder, app processing, AudioTrack, route) split into "Vesqen's part" and "the system's part", pinned metrics, and the link to the advanced dashboard.
+- Rows show the value and its confidence only. Freshness is the page notice's job; no row shows a ticking age.
+- Advanced dashboard: compact controls (view, refresh rate, customize), metric cards by section, recent events. A card's expanded details show source, method, window and "Updated: Just now / N minutes ago". Recent events are hairline rows in one card; severity is the label colour.
+- Ages never count seconds: under a minute is "Just now", then minutes, hours, days.
 
 ### Settings
 
-- **Information architecture:** Playback output contains the mutually exclusive System and Strict USB modes. Audio proof contains Playback Chain and signed verification records. Application contains version/About. A control appears in only one group, and unfinished preferences are not shown as decorative placeholders.
-- **Composition:** Each group is one quiet tonal surface with flat rows and inset separators. Icons establish scanning rhythm, titles name the action, supporting copy explains consequence or evidence boundary, and a radio or chevron supplies the standard affordance. Avoid one-card-per-setting grids and nested surfaces.
-- **State:** The selected output row receives the scarce Moss emphasis plus a radio state; failures retain explicit Error wording and never silently fall back. Dynamic output details may crossfade without moving unrelated groups.
+Groups in this order: Playback output (System / Strict USB, radio group), Audio proof (Playback chain), Privacy & data (Usage statistics, Export device report), Updates (GitHub builds), Application (About, Privacy policy, Open source licenses), Advanced (Output verification records), then one footer line. Group titles are serif; each group is one paper card. When Strict USB is selected, a status box under the options says what happens next or why it stopped, never the option description again.
 
-### Empty, Loading, and Error States
+### About
 
-- **Loading:** Use content-shaped skeleton rows; avoid a solitary spinner as the main library experience.
-- **Empty:** Explain how to add or rescan local music and present one primary action.
-- **Chain without playback:** Explain that chain evidence appears after playback starts and provide one primary action back to Library.
-- **Error:** State what failed, what remains safe, and the next action. Do not expose raw exceptions to listeners.
+Header, mark, one plain sentence about the app, a facts card (version, developer, license), and "Your data": what stays on the phone, no account, no backup, no move to a new phone, plus the privacy policy row.
 
-## Do's and Don'ts
+### Sheets and dialogs
 
-### Do
+- Queue and track details are bottom sheets that wrap their content. Queue rows play on tap and mark the current track with a Moss dot.
+- Dialogs carry one primary action. The strict-output failure dialog appears only after a user action, never on a cold start.
 
-- **Do** keep Library, Now, and Settings stable across themes and window sizes, with Chain consistently presented as a secondary evidence destination.
-- **Do** keep Signal Moss below roughly 10% of ordinary screen area and reserve it for identity, focus, selection, and positive evidence above neutral playback states.
-- **Do** maintain at least WCAG 2.2 AA contrast, 48dp touch targets, TalkBack labels, scalable text, and reduced-motion behavior.
-- **Do** use soft tonal transitions, restrained artwork light, and platform blur only when they clarify elevation or playback context.
-- **Do** disclose technical detail progressively and preserve evidence confidence labels in Chain and detail surfaces.
-- **Do** use the symmetric Twin Paths V mark inside the Android adaptive-icon safe zone and provide a dedicated monochrome layer.
+### Empty, loading and error states
 
-### Don't
+- Loading uses content-shaped rows, not a lone spinner.
+- Empty states name the situation and one next step. Without music access the library says nothing has been read yet ("No music yet"); with access and no files it says none were found. Never ask for a permission that is already granted.
+- Errors say what failed, what is safe, and what to do; no raw exception text. Titles have no full stop.
 
-- **Don't** build a feed-heavy streaming surface with recommendations, social activity, advertising, or engagement loops.
-- **Don't** imitate Spotify, NetEase Cloud Music, Apple Music, or another recognizable player.
-- **Don't** use neon gaming-audio dashboards, spectrum visualizer spectacle, or dense audiophile telemetry on the default screen.
-- **Don't** use generic glassmorphism, decorative blur, oversized rounded-card grids, purple-gradient dark mode, or animation without a state purpose.
-- **Don't** use music notes, headphones, play triangles, vinyl records, waveforms, or checkmarks as the product mark.
-- **Don't** let Android dynamic color change the Vesqen mark or the semantic meaning of playback, proof, warning, or error states.
-- **Don't** pair a decorative border with a wide soft shadow, use side-stripe accents, gradient text, or card radii above 16dp.
+## Navigation
 
-## 2026-09-07 interaction revision: inline ordering and Audio Proof density
+- Compact windows: a 60 dp bar plus the system inset with Library, Now, Chain and Settings. Labels stay on one line and scale with system text up to 130 %, then stop growing so they are never cut off; every item keeps a 48 dp target.
+- Windows 600 dp and wider use a rail in the same order.
+- Now with a track yields both the bar and the rail. Chain is a tab; opened in context from Settings it shows a back arrow.
+- Cold start opens Library.
 
-- Favorites and custom playlists enter reorder mode in their existing lazy list. Keep artwork and metadata visible; replace overflow with a 24 dp visual handle inside a 48 dp touch target. No separate ordering page, modal sheet, or per-row arrow-button clutter. Edge dragging scrolls continuously; Save persists the draft and Cancel discards it. TalkBack retains explicit move actions.
-- Advanced Chain is an instrument readout, not a stack of promotional cards. Prioritize observed readings before configuration, Debug/Internal-only recording explanations, and event history. A compact toolbar holds view/cadence controls; secondary sampling settings expand inline. Public Release builds omit the diagnostic recorder surface entirely; they do not render a disabled switch or unavailable placeholder.
-- Use flat metric rows with restrained dividers, aligned labels/readings, monospace for data only, and small confidence/source/time annotations. Keep unavailability reasons and provenance readable; visual simplification must not erase evidence boundaries.
-- Events are a chronological log, not cards nested in a card. Preserve the existing light/dark moss palette and scalable text; do not introduce decorative gradients, oversized figures, or blanket entrance animations.
+## Motion
 
-## 2026-09-07: Core evidence and favorite discovery
+- Opening Now: 240 ms shared-axis rise from the mini-player; closing: 180 ms inverse, with the shell revealed in the last 108 ms.
+- Secondary pages (Chain from Settings, About): 240 ms horizontal path; Back reverses it.
+- State changes 180 ms, playback-order mode 160 ms, presses 120 ms. Album tint transitions 800 ms.
+- Reduced motion replaces all movement with an 80 ms crossfade and drops the play/pause cover scale.
 
-- Library exposes a labeled heart + Favorites navigation action in the page header, separate from category tabs. Do not use equal-width All music / Favorites filter blocks: they duplicate the Songs taxonomy and consume list space. The favorites collection has its own title, back action, count, and instructional empty state. Folder and rescan actions live in a header menu. Large text stacks navigation rather than shrinking touch targets.
-- Now exposes a 48 dp favorite toggle in its command band in portrait and landscape, preserving transport width on compact screens. Selection follows catalog state, and track details use the same action.
-- The same command band includes a 48 dp USB output-mode action beside Favorites. It opens a scrollable explanation with the Strict USB bit-perfect switch; its state follows the service, not an optimistic UI flag. The existing route chip still opens Chain. A failed strict request displays its localized reason at app level, including attempts from Library and the mini-player, and offers explicit System output or keeping strict mode. Recovering a failed output by switching to System requires pressing Play again and never implies bit-perfect verification.
-- Chain has one shared core-evidence panel on both summary and advanced surfaces. Pair source facts with explicitly labeled AudioTrack observations, then show route and playback stability. Use the established neutral surface ladder, measured typographic contrast, and Signal Moss for meaningful emphasis, not decorative meters.
-- Chain summary leads with the current output declaration and explanation before measurements. Numbered section headings distinguish source, AudioTrack observation, and route/stability. Readings occupy their own left-aligned line beneath the label in both summary and advanced views; changing digits must not resize the row.
-- Core readings retain confidence and age, reveal provenance on tap, and display unavailable reasons without a second interaction. A source or AudioTrack fact is never labeled final device output. Small widths and large text stack the paired readings.
-- Advanced evidence uses distinct section rhythm and restrained tonal surfaces instead of either nested cards or undifferentiated log rows. Real charts remain opt-in; never draw fake waveform or progress ornamentation.
+## Copy
+
+Vesqen's voice is plain, concrete and calm. It tells people what happened and what they can do, in the words they would use.
+
+- **No slogans or aphorisms.** Describe what the app does ("plays the music stored on this phone"), not what it stands for.
+- **No reflexive contrast frames** ("not X but Y", "不是……而是……"), no chains of negations, no hype words, and no em dashes in sentences.
+- **One idea per sentence; no repeated sentence patterns** across a screen.
+- **Jargon stays in the evidence layers.** Ordinary screens say "bit-perfect output", "the DAC", "the phone"; terms like mixer profile, PCM, Media3 or AudioTrack appear only where they label measured evidence (liner notes, Chain).
+- **Name the real cause.** When strict output stops because the phone offers no bit-perfect path, say so; do not blame the DAC.
+- **Titles have no full stop**; Chinese titles and buttons have no trailing punctuation. Chinese uses full-width punctuation and a space between Chinese and Latin text or numbers ("96 kHz", "Android 14 及以上").
+- **Time:** live values show no age. Where an age matters it is "Just now" or whole minutes and up.
+- **Chinese is written, not translated.** English is first-class too; each language reads naturally on its own.
+- **Never claim more than the evidence.** Follow the evidence-state rules above.
+
+### Terms
+
+| English | 中文 |
+| --- | --- |
+| Library | 曲库 |
+| Now | 正在播放 |
+| Chain | 链路 |
+| Liner notes | 链路注记 |
+| Settings | 设置 |
+| Favorites | 我的喜欢 |
+| Playlists | 播放列表 |
+| Queue | 队列 |
+| System output | 系统输出 |
+| Strict USB output | 严格 USB 输出 |
+| Usage statistics | 使用统计 |
+| Device report | 设备报告 |
+| Open source licenses | 开源许可 |
+
+## Accessibility
+
+- **Touch targets:** 48 dp minimum for every control, including overflow buttons in dense rows and each A–Z picker row.
+- **Labels:** every control has a name TalkBack reads. A checkbox and its label are one toggleable control; icon buttons have content descriptions; state uses state descriptions ("Now playing", "Expanded") rather than colour.
+- **Grouping:** a row reads as one unit (title, subtitle, value); custom actions cover reordering (Move up, Move down) instead of drag-only gestures.
+- **Text scaling:** layouts hold at 100, 130, 150 and 200 % and at 320 dp width. Rules above say what changes: settings values move under titles above 130 %, navigation labels stop at 130 %, the mini-player drops the artist above 150 %, the A–Z strip becomes a picker above 120 %.
+- **Contrast:** see the colour table; disabled controls may drop below 4.5:1, nothing else may.
+- **Motion:** honour the system animation setting (reduced-motion fallbacks above).
+
+## Do and don't
+
+**Do**
+
+- Keep the four tabs stable across themes and window sizes, and let Now take the window while it plays.
+- Keep Moss scarce: actions, selection, the playing item and positive evidence.
+- Rule rows with hairlines inside one paper card.
+- Show evidence with its confidence and keep provenance one tap away.
+- Use the Twin Paths mark inside the adaptive-icon safe zone, with its monochrome layer.
+
+**Don't**
+
+- Don't add feeds, recommendations, social features or ads.
+- Don't imitate a recognisable streaming app.
+- Don't use near-white blocks to separate rows, icons in tinted rounded squares, equal-size card grids, gradient text, side-stripe accents or card radii above 16 dp.
+- Don't show live counters that tick every second.
+- Don't use music notes, headphones, play triangles, vinyl, waveforms or checkmarks as the mark.

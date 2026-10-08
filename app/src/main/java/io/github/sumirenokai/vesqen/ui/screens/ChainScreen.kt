@@ -6,6 +6,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -95,9 +96,9 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -533,7 +534,7 @@ internal fun outputClaimBody(playback: PlaybackSnapshot): String {
                 status.sinkFormat?.displayName ?: stringResource(R.string.settings_format_unknown),
             )
         io.github.sumirenokai.vesqen.playback.UsbOutputPhase.FAILED ->
-            stringResource(R.string.chain_strict_failed_body, strictUsbFailureLabel(requireNotNull(status.failure)))
+            stringResource(R.string.chain_strict_failed_body, strictUsbFailureLabel(requireNotNull(status.failure), status.decisionCode))
     }
 }
 
@@ -1621,7 +1622,8 @@ private fun ChainMetricCard(
             Text(
                 text = value,
                 style = if (numericValue) {
-                    MaterialTheme.typography.titleSmall.copy(fontFamily = FontFamily.Monospace)
+                    // #35: tabular digits keep the width steady; monospace spread "96  kHz" apart.
+                    MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = "tnum")
                 } else {
                     VesqenDataStyle
                 },
@@ -2194,13 +2196,24 @@ private fun ChainCustomizerMetricRow(
             modifier = Modifier.padding(horizontal = VesqenSpacing.xs, vertical = VesqenSpacing.xxs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Checkbox(
-                checked = selected,
-                onCheckedChange = onSelectedChanged,
-                enabled = selectionEnabled,
-                modifier = Modifier.testTag("vesqen.chain.customizer.select.${metricId.value}"),
-            )
-            Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            // #35: the box and its label are one control, so TalkBack names the metric it toggles
+            // and the whole label is a touch target.
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .toggleable(
+                        value = selected,
+                        enabled = selectionEnabled,
+                        role = Role.Checkbox,
+                        onValueChange = onSelectedChanged,
+                    )
+                    .testTag("vesqen.chain.customizer.select.${metricId.value}"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(checked = selected, onCheckedChange = null, enabled = selectionEnabled)
+                Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            }
             IconButton(
                 onClick = { onPinnedChanged(!pinned) },
                 enabled = selected,

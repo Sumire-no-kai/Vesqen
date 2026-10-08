@@ -501,9 +501,14 @@ fun LibraryScreen(
                         modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
                     )
 
+                    // #35: without device access nothing was searched yet, so it does not say "not found".
                     state.tracks.isEmpty() -> VesqenEmptyState(
-                        title = stringResource(R.string.no_local_music),
-                        body = stringResource(R.string.no_local_music_body),
+                        title = stringResource(
+                            if (state.musicAccess == MusicAccess.GRANTED) R.string.no_local_music else R.string.library_no_access_title,
+                        ),
+                        body = stringResource(
+                            if (state.musicAccess == MusicAccess.GRANTED) R.string.no_local_music_body else R.string.library_no_access_body,
+                        ),
                         actionLabel = stringResource(R.string.add_music_folder),
                         onAction = onAddLibraryFolder,
                         modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
@@ -1162,7 +1167,8 @@ private fun AlbumTrackRow(
         )
         IconButton(
             onClick = onMore,
-            modifier = Modifier.size(40.dp).testTag("vesqen.library.track.${track.id}.more"),
+            // #35: 48 dp like every other touch target; the 48 dp album row already fits it.
+            modifier = Modifier.size(48.dp).testTag("vesqen.library.track.${track.id}.more"),
         ) {
             Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.more_track_actions, title))
         }

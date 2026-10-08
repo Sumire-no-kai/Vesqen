@@ -871,6 +871,8 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.about").performScrollToNode(hasTestTag("vesqen.about.data"))
         composeRule.onNodeWithText(context.getString(R.string.about_data_body)).assertIsDisplayed()
 
+        // On a 640 dp phone the header has scrolled away by now; it scrolls with the page.
+        composeRule.onNodeWithTag("vesqen.about").performScrollToNode(hasTestTag("vesqen.about.back"))
         composeRule.onNodeWithTag("vesqen.about.back").performClick()
         composeRule.onNodeWithTag("vesqen.settings").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.nav.settings").assertIsSelected()

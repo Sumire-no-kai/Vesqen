@@ -40,6 +40,12 @@ internal sealed interface UsbOutputDecision {
 }
 
 /** Pure capability and format policy. Platform calls and player mutation stay in the service adapter. */
+/**
+ * #35: Android offered this device no bit-perfect mixer at all. On the phones tested so far the
+ * phone's audio policy, not the DAC, is what lacks the path, so the message names the phone.
+ */
+internal const val NO_BIT_PERFECT_MIXER_CODE = "strict_usb.no_bit_perfect_mixer"
+
 internal class UsbOutputStrategyResolver {
     fun resolve(
         mode: UsbOutputMode,
@@ -95,10 +101,10 @@ internal class UsbOutputStrategyResolver {
             } else {
                 UsbOutputFailure.AUDIO_TRACK_FORMAT_MISMATCH
             },
-            if (audioTrackFormat == null) {
-                "strict_usb.no_matching_mixer_attribute"
-            } else {
-                "strict_usb.audio_track_format_mismatch"
+            when {
+                audioTrackFormat != null -> "strict_usb.audio_track_format_mismatch"
+                bitPerfectProfiles.isEmpty() -> NO_BIT_PERFECT_MIXER_CODE
+                else -> "strict_usb.no_matching_mixer_attribute"
             },
         )
         return UsbOutputDecision.Candidate(
