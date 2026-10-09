@@ -23,6 +23,10 @@ export function querySql(command, value) {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value ?? '')) throw new Error('monthly requires YYYY-MM');
     return `SELECT '${value}' AS month, SUM(first_in_month) AS monthly_active, SUM(requests) AS requests FROM daily_totals WHERE substr(day,1,7)='${value}';`;
   }
+  if (command === 'downloads' && value === undefined)
+    return `SELECT day, release_tag, asset, downloads,
+      downloads - LAG(downloads) OVER (PARTITION BY release_tag, asset ORDER BY day) AS since_previous_snapshot
+      FROM daily_downloads ORDER BY day DESC, release_tag DESC, asset LIMIT 300;`;
   if (command === 'report-counts' && value === undefined)
     return 'SELECT day,count FROM daily_report_counts ORDER BY day DESC LIMIT 30;';
   if (command === 'reports' && value === undefined)
@@ -31,7 +35,7 @@ export function querySql(command, value) {
     return `SELECT id,received_at,expires_at,document FROM reports WHERE id='${value}' AND expires_at > unixepoch()*1000;`;
   if (command === 'delete-report' && UUID.test(value ?? ''))
     return `DELETE FROM reports WHERE id='${value}';`;
-  throw new Error('Use daily YYYY-MM-DD, weekly YYYY-MM-DD (Monday), monthly YYYY-MM, report-counts, reports, report UUID or delete-report UUID');
+  throw new Error('Use daily YYYY-MM-DD, weekly YYYY-MM-DD (Monday), monthly YYYY-MM, downloads, report-counts, reports, report UUID or delete-report UUID');
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

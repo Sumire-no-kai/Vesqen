@@ -79,6 +79,24 @@ response stays below the Android 128 KiB bound. The client independently validat
 and verifies updates. No release workflow, static-file generator or website is
 modified here; the owner must still complete #68's static artifact publication.
 
+## Release download counts
+
+Owner decision (2026-10-08): the hourly trigger reads GitHub's public download
+counters for the release APKs once per UTC day. It sends one unauthenticated
+`GET https://api.github.com/repos/<DOWNLOAD_COUNTS_REPO>/releases?per_page=100`
+with a fixed User-Agent and no user data, and stores
+`(day, release_tag, asset, downloads)` for each `.apk` attachment of a published
+release in `daily_downloads`. Drafts, checksums and the manifest are skipped. Once
+a day is stored it is not fetched again; a failed read (GitHub's unauthenticated
+limit is shared by Cloudflare's addresses) stores nothing and the next hourly run
+retries. Leave `DOWNLOAD_COUNTS_REPO` empty to turn it off.
+
+`downloads` is GitHub's cumulative `download_count`. It counts every fetch of the
+file: browser downloads, in-app updates (#68 points them at the same GitHub file),
+scripts and retries. It is a trend, not a number of people. These rows hold only
+public counters and are not removed by the retention job; delete them by hand if
+they are ever unwanted.
+
 ## Retention and logs
 
 Owner-selected defaults: **reports 7 days, daily aggregates 90 UTC date buckets**.
@@ -150,7 +168,9 @@ not established by local tests.
    `[{ "pattern": "YOUR_USAGE_SUBDOMAIN", "custom_domain": true }]` on your zone.
    Keep `workers_dev` and `preview_urls` false. Turn on **Always Use HTTPS** for the
    domain: the Worker does not reject plain HTTP itself (the app only uses HTTPS).
-   Configure the existing static update directory if ready. Verify all
+   Configure the existing static update directory if ready, and set
+   `DOWNLOAD_COUNTS_REPO` to `Sumire-no-kai/Vesqen` to record daily APK download
+   counts. Verify all
    observability/logging remains off. With the 500-value cap per dimension, a day's
    aggregates stay within a few thousand rows, well inside D1's free tier; reports
    are at most 100 a day of up to 256 KiB, kept 7 days.
@@ -174,6 +194,7 @@ when intentionally querying the owner's live database.
 npm run query -- daily 2026-10-04
 npm run query -- weekly 2026-09-28        # an ISO week, given by its Monday
 npm run query -- monthly 2026-10
+npm run query -- downloads                 # daily APK counters and the change since the previous day
 npm run query -- report-counts
 npm run query -- reports
 npm run query -- report 12345678-1234-1234-1234-123456789abc

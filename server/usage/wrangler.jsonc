@@ -23,6 +23,8 @@
     "REPORT_RETENTION_DAYS": "7",
     "AGGREGATE_RETENTION_DAYS": "90",
     "UPDATE_MANIFEST_BASE_URL": "",
+    // "owner/repo" whose release APK download counts are read once a day; empty turns it off.
+    "DOWNLOAD_COUNTS_REPO": "",
     // #96: "closed" stops an endpoint at once (503, nothing read or stored).
     "USAGE_INGEST": "open",
     "REPORT_INGEST": "open"
