@@ -14,6 +14,9 @@ Google Play upload and the output-verification issuer are outside this workflow.
    `github-apk-signing` job. It aligns and signs the APK, verifies package/version,
    non-debuggable/offline permissions, v2/v3 signatures, the fixed application
    certificate, alignment and SHA-256. It produces a draft Release by default.
+   After the upload it reads the SHA-256 that GitHub computed for each attachment
+   and requires it to match the APK, `SHA256SUMS` and `release-manifest.json` it
+   verified; a mismatch stops the job and leaves the draft for inspection.
 4. Download that draft's APK, record its exact SHA-256, and complete #42 device,
    installation, same-signer upgrade and data-retention checks. Test the signed
    artifact itself; an earlier locally built APK has a different identity.
@@ -23,6 +26,9 @@ Google Play upload and the output-verification issuer are outside this workflow.
    APK SHA-256. This manual action needs no second environment approval. It
    downloads and verifies the existing APK, requires its matching receipt,
    creates/verifies the annotated version tag, and publishes the existing draft.
+   Right before publishing it checks again that GitHub's SHA-256 for each of the
+   three attachments matches the downloaded, verified files, so the hash shown on
+   the release page, `SHA256SUMS`, the manifest and the accepted APK agree.
    It does not rebuild, re-sign or replace attachments.
    Both draft creation and publication require a versionCode higher than every
    already-published release, so an older pending draft cannot become a downgrade.

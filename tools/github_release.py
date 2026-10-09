@@ -187,7 +187,26 @@ def signed_metadata(candidate, commit):
     filename = f"Vesqen-{metadata['versionName']}.apk"
     if sha256(candidate / filename) != metadata.get("apkSha256") or metadata.get("certificateSha256") != CERT_SHA256:
         raise ReleaseError("Signed candidate integrity does not match")
+    if (candidate / "SHA256SUMS").read_text() != f"{metadata['apkSha256']}  {filename}\n":
+        raise ReleaseError("SHA256SUMS does not match the signed APK")
     return metadata
+
+
+def public_files(candidate, metadata):
+    return [candidate / name for name in (f"Vesqen-{metadata['versionName']}.apk", "SHA256SUMS", "release-manifest.json")]
+
+
+def check_asset_digests(releases, tag, files):
+    """GitHub shows the SHA-256 it computed for every attachment; it must match the verified files."""
+    matches = [release for page in releases for release in page if release["tag_name"] == tag]
+    if len(matches) != 1:
+        raise ReleaseError("Expected exactly one release for this version")
+    digests = {asset["name"]: asset.get("digest") for asset in matches[0]["assets"]}
+    if sorted(digests) != sorted(path.name for path in files):
+        raise ReleaseError("Release attachments differ from the verified candidate files")
+    for path in files:
+        if digests[path.name] != f"sha256:{sha256(path)}":
+            raise ReleaseError(f"GitHub's SHA-256 for {path.name} does not match the verified file")
 
 
 def check_published_version_codes(repository, metadata, releases):
@@ -206,7 +225,6 @@ def check_published_version_codes(repository, metadata, releases):
 
 def draft_release(candidate, repository, commit):
     metadata = signed_metadata(candidate, commit)
-    filename = f"Vesqen-{metadata['versionName']}.apk"
     tag = f"v{metadata['versionName']}"
     releases = json.loads(run(["gh", "api", "--paginate", "--slurp", f"repos/{repository}/releases?per_page=100"]))
     if any(release["tag_name"] == tag for page in releases for release in page):
@@ -216,8 +234,13 @@ def draft_release(candidate, repository, commit):
                "--title", f"Vesqen {metadata['versionName']}", "--notes-file", str(candidate / "release-notes.md")]
     if "-" in metadata["versionName"]:
         command.append("--prerelease")
-    command += [str(candidate / name) for name in (filename, "SHA256SUMS", "release-manifest.json")]
-    return run(command)
+    files = public_files(candidate, metadata)
+    command += [str(path) for path in files]
+    output = run(command)
+    # A mismatch leaves the draft in place for inspection; publication checks again.
+    releases = json.loads(run(["gh", "api", "--paginate", "--slurp", f"repos/{repository}/releases?per_page=100"]))
+    check_asset_digests(releases, tag, files)
+    return output
 
 
 def validate_acceptance(record, metadata):
@@ -261,6 +284,8 @@ def publish_release(candidate, repository, commit, acceptance, tools):
     # Other drafts may have been published since this candidate was created.
     releases = json.loads(run(["gh", "api", "--paginate", "--slurp", f"repos/{repository}/releases?per_page=100"]))
     check_published_version_codes(repository, metadata, releases)
+    # Right before publishing: the draft still holds exactly the files verified above.
+    check_asset_digests(releases, tag, public_files(candidate, metadata))
     ref_command = ["gh", "api", f"repos/{repository}/git/ref/tags/{tag}"]
     ref_result = subprocess.run(ref_command, capture_output=True, text=True, check=False)
     if ref_result.returncode == 0:

@@ -21,6 +21,23 @@ def metadata():
             "sourceCommit": COMMIT, "sourceBranch": "release/1.0.0-beta.1", "unsignedApkSha256": "b" * 64}
 
 
+def write_signed_candidate(directory, apk_bytes=b"signed-candidate"):
+    apk = directory / "Vesqen-1.0.0-beta.1.apk"
+    apk.write_bytes(apk_bytes)
+    data = {**metadata(), "apkSha256": release.sha256(apk), "certificateSha256": release.CERT_SHA256}
+    (directory / "SHA256SUMS").write_text(f"{data['apkSha256']}  {apk.name}\n")
+    (directory / "release-manifest.json").write_text(json.dumps(data))
+    return data
+
+
+def listed_release(directory, draft=True, digests=None):
+    """The release as the GitHub API lists it, with the SHA-256 GitHub computed for each attachment."""
+    names = ("Vesqen-1.0.0-beta.1.apk", "SHA256SUMS", "release-manifest.json")
+    digests = digests or {name: f"sha256:{release.sha256(directory / name)}" for name in names}
+    return {"tag_name": "v1.0.0-beta.1", "draft": draft,
+            "assets": [{"name": name, "digest": digest} for name, digest in digests.items()]}
+
+
 class GithubReleaseTest(unittest.TestCase):
     def test_rejects_untrusted_candidate_identity(self):
         for field, value in (("versionName", "../other"), ("versionCode", True), ("versionCode", 0),
@@ -72,15 +89,44 @@ class GithubReleaseTest(unittest.TestCase):
     def test_refuses_existing_release_and_never_uploads_over_it(self):
         with tempfile.TemporaryDirectory() as directory:
             candidate = Path(directory)
-            apk = candidate / "Vesqen-1.0.0-beta.1.apk"
-            apk.write_bytes(b"signed-candidate")
-            data = {**metadata(), "apkSha256": release.sha256(apk), "certificateSha256": release.CERT_SHA256}
-            (candidate / "release-manifest.json").write_text(json.dumps(data))
+            write_signed_candidate(candidate)
             results = [json.dumps([[{"tag_name": "v1.0.0-beta.1", "draft": False}]])]
             with patch.object(release, "run", side_effect=results) as command:
                 with self.assertRaises(release.ReleaseError):
                     release.draft_release(candidate, "Sumire-no-kai/Vesqen", COMMIT)
                 self.assertEqual(1, command.call_count)
+
+    def test_draft_requires_github_digests_to_match_the_signed_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = Path(directory)
+            write_signed_candidate(candidate)
+            (candidate / "release-notes.md").write_text("Notes")
+            good = listed_release(candidate)
+            wrong = {asset["name"]: asset["digest"] for asset in good["assets"]}
+            for case, listed in (
+                    ("match", good),
+                    ("other APK bytes", listed_release(candidate, digests={**wrong, "Vesqen-1.0.0-beta.1.apk": "sha256:" + "0" * 64})),
+                    ("not computed", listed_release(candidate, digests={**wrong, "SHA256SUMS": None})),
+                    ("extra attachment", listed_release(candidate, digests={**wrong, "other.apk": "sha256:" + "0" * 64})),
+                    ("missing attachment", listed_release(candidate, digests={"Vesqen-1.0.0-beta.1.apk": wrong["Vesqen-1.0.0-beta.1.apk"]}))):
+                with self.subTest(case=case):
+                    results = [json.dumps([[]]), "created", json.dumps([[listed]])]
+                    with patch.object(release, "run", side_effect=results) as command:
+                        if case == "match":
+                            self.assertEqual("created", release.draft_release(candidate, "owner/repo", COMMIT))
+                        else:
+                            with self.assertRaises(release.ReleaseError):
+                                release.draft_release(candidate, "owner/repo", COMMIT)
+                        self.assertEqual(3, command.call_count)
+
+    def test_signed_candidate_requires_matching_checksum_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = Path(directory)
+            write_signed_candidate(candidate)
+            release.signed_metadata(candidate, COMMIT)
+            (candidate / "SHA256SUMS").write_text(f"{'0' * 64}  Vesqen-1.0.0-beta.1.apk\n")
+            with self.assertRaises(release.ReleaseError):
+                release.signed_metadata(candidate, COMMIT)
 
     def test_acceptance_is_bound_to_exact_signed_apk(self):
         data = {**metadata(), "apkSha256": "f" * 64, "certificateSha256": release.CERT_SHA256}
@@ -136,21 +182,23 @@ class GithubReleaseTest(unittest.TestCase):
 
     def test_publish_requires_matching_tag_and_never_rebuilds_or_uploads(self):
         reminder = "Device QA and upgrade acceptance must be recorded before publishing."
-        for tag_type, target, body, succeeds in (
-                ("missing", COMMIT, "Accepted release notes", True),
-                ("tag", COMMIT, "Accepted release notes", True),
-                ("tag", "d" * 40, "Accepted release notes", False),
-                ("commit", COMMIT, "Accepted release notes", False),
-                ("tag", COMMIT, "Release notes\n" + reminder, False)):
-            with self.subTest(tag_type=tag_type, target=target), tempfile.TemporaryDirectory() as directory:
+        for tag_type, target, body, github_digests_match, succeeds in (
+                ("missing", COMMIT, "Accepted release notes", True, True),
+                ("tag", COMMIT, "Accepted release notes", True, True),
+                ("tag", COMMIT, "Accepted release notes", False, False),
+                ("tag", "d" * 40, "Accepted release notes", True, False),
+                ("commit", COMMIT, "Accepted release notes", True, False),
+                ("tag", COMMIT, "Release notes\n" + reminder, True, False)):
+            with self.subTest(tag_type=tag_type, target=target, github_digests_match=github_digests_match), \
+                    tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 receipt = root / "docs/releases/1.0.0-beta.1.acceptance.json"
                 receipt.parent.mkdir(parents=True)
                 (root / "docs/evidence.md").write_text("Device QA evidence")
-                apk = root / "Vesqen-1.0.0-beta.1.apk"
-                apk.write_bytes(b"accepted-apk")
-                data = {**metadata(), "apkSha256": release.sha256(apk), "certificateSha256": release.CERT_SHA256}
-                (root / "release-manifest.json").write_text(json.dumps(data))
+                data = write_signed_candidate(root, b"accepted-apk")
+                listed = listed_release(root)
+                if not github_digests_match:
+                    listed["assets"][0]["digest"] = "sha256:" + "0" * 64
                 receipt.write_text(json.dumps({**data, "install": "passed", "sameSignerUpgrade": "passed",
                                                "dataRetention": "passed", "deviceEvidence": "docs/evidence.md"}))
                 verification = (f"Signer #1 certificate SHA-256 digest: {release.CERT_SHA256}\n"
@@ -166,7 +214,7 @@ class GithubReleaseTest(unittest.TestCase):
                         return json.dumps({"isDraft": True, "targetCommitish": COMMIT, "body": body})
                     if "api" in args:
                         if "--paginate" in args:
-                            return "[]"
+                            return json.dumps([[listed]])
                         if "POST" in args:
                             payload = json.loads(kwargs["input_text"])
                             if args[args.index("POST") + 1].endswith("/git/tags"):

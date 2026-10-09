@@ -70,7 +70,8 @@ jobs:
           candidate.mkdir()
           filename = f'Vesqen-{version}.apk'
           release.run(['gh', 'release', 'download', f'v{version}', '--repo', repository,
-                       '--pattern', filename, '--pattern', 'release-manifest.json', '--dir', str(candidate)])
+                       '--pattern', filename, '--pattern', 'SHA256SUMS', '--pattern', 'release-manifest.json',
+                       '--dir', str(candidate)])
           if release.sha256(candidate / filename) != digest:
               raise SystemExit('Downloaded APK does not match the accepted hash')
           metadata = json.loads((candidate / 'release-manifest.json').read_text())
