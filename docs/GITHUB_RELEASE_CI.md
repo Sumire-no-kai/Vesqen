@@ -8,6 +8,10 @@ Google Play upload and the output-verification issuer are outside this workflow.
 1. Push a paired `versionName` change and `versionCode` increase to `master`, with
    release notes in `docs/releases/<versionName>.md`. This automatically starts
    **GitHub APK release**. Ordinary pushes continue through **Android CI**.
+   Before that push, set the repository variable `VESQEN_USAGE_ENDPOINT` to the
+   deployed usage service (`https://HOST/v1/usage`, #70). The release build passes
+   it as `vesqen.usageEndpoint`; left unset, the APK has no usage statistics and no
+   report uploads, and the release notes must not mention them.
 2. Tests, lint, Debug/Release builds and the final privacy-policy guard run without
    signing secrets. The candidate is pinned to the triggering commit.
 3. Review the source commit, checks and workflow revision, then approve the
