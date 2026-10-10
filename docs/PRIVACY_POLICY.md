@@ -1,7 +1,7 @@
 # Vesqen Privacy Policy
 
 - Effective date: September 26, 2026
-- Last updated: October 7, 2026
+- Last updated: October 10, 2026
 
 This policy explains what information the Vesqen Android app handles, where that information stays, what the app sends over the network, and what we receive when you contact us or join a test. It applies to every build of Vesqen we distribute, including Google Play and GitHub Releases, and to the Vesqen website.
 
@@ -13,6 +13,20 @@ This policy explains what information the Vesqen Android app handles, where that
 - Usage statistics carry no install or device ID, and never include your location, your music or what you listen to. In the EU, the European Economic Area, the UK, mainland China and South Korea, Vesqen asks before sending them. Elsewhere they are on by default, and the first screen lets you turn them off.
 - We also receive what you choose to send us, such as a support email, or your email address if you join a test.
 - The Vesqen website has no advertising or tracking cookies. It counts visits with Cloudflare Web Analytics, which uses no cookies, and uses a cookie to remember your language only if you allow it.
+
+## Network requests at a glance
+
+The table lists every network request the GitHub version of Vesqen makes. Playback and your library never use the network. Every request shows your IP address to the server that receives it, because that is how network connections work; our services do not record IP addresses.
+
+| Feature | When it is sent | What it contains | Sent to | How long we keep it | How to turn it off |
+| --- | --- | --- | --- | --- | --- |
+| Usage statistics | When you open Vesqen, at most once a day | App version and distribution channel; Android version, phone maker, model and system build name; whether a USB audio device supports bit-perfect mode; whether a USB audio device was connected in the last 7 days; whether this is the first message today, this week and this month. No ID of any kind | Our statistics and report service on Cloudflare | Daily totals only, for 90 days | Settings → Privacy & data → Usage statistics. In the EU, the European Economic Area, the UK, mainland China and South Korea, nothing is sent unless you agree |
+| Device report upload | Only when you tap Upload | The report you chose and previewed | Our statistics and report service on Cloudflare | 7 days | Don't upload; you can share it or email it instead |
+| Service status file | Before sending statistics or uploading a report, at most every 10 minutes | Nothing about you | The website vesqen.sumirenokai.com, hosted by Cloudflare | Not kept | With usage statistics off, it is read only before a report upload |
+| Update check | When you open Vesqen, at most once a day, or when you tap Check for updates | Nothing about you | The website vesqen.sumirenokai.com, hosted by Cloudflare | Not kept | Settings → Updates → Check automatically |
+| Update download | Only when you tap Download | Nothing about you | GitHub | Not kept; GitHub's privacy statement applies | Don't download |
+
+When usage statistics are on, the latest version information may arrive with the statistics reply, and then Vesqen does not make a separate update check. Vesqen installed from Google Play does not check GitHub for updates.
 
 ## Who we are
 
