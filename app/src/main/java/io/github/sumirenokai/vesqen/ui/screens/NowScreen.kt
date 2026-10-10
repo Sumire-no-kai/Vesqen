@@ -139,11 +139,12 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenDataStyle
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
+import io.github.sumirenokai.vesqen.ui.theme.serif
 import java.util.Locale
 import kotlinx.coroutines.delay
 
 private val PaperEasing = CubicBezierEasing(.22f, 1f, .36f, 1f)
-private const val COVER_TARGET_DP = 280
+private const val COVER_MAX_DP = 360
 
 /** Liner-note rows reuse the Chain core metrics, observed only while the notes are open. */
 private val NotesMetricIds = setOf(
@@ -223,9 +224,10 @@ internal fun nowTrackAnimationIdentity(
 
 /**
  * Portrait sizing for Now. The page never scrolls (PRD F3): the cover takes what is left after
- * identity, progress, transport and the liner-notes header, up to 280 dp, and shrinks to at most
- * 164 dp while the notes are open (B spec §4.2). A cover under 64 dp is dropped rather than
- * squeezed. Compact mode is for short windows and very large text.
+ * identity, progress, transport and the liner-notes header, up to the content width and at most
+ * 360 dp, and shrinks to at most 164 dp while the notes are open (B spec §4.2). A cover under 64 dp
+ * is dropped rather than squeezed. Compact mode is for short windows and very large text. Height
+ * the cover cannot use is shared above and below it, so the controls sit at the bottom.
  */
 internal data class NowPortraitLayout(
     val artwork: Dp,
@@ -233,14 +235,14 @@ internal data class NowPortraitLayout(
     val compact: Boolean,
 )
 
-internal fun nowPortraitLayout(height: Dp, fontScale: Float): NowPortraitLayout {
+internal fun nowPortraitLayout(height: Dp, width: Dp, fontScale: Float): NowPortraitLayout {
     val roomy = 236f + 78f * fontScale + maxOf(56f, 46f * fontScale)
     val compact = height.value < roomy + 64f
     val fixed = if (compact) 164f + 43f * fontScale + maxOf(48f, 40f * fontScale) else roomy
     val available = height.value - fixed
     // Budget the three evidence rows and the claim chip; the rest of the open notes scrolls.
     val notesContent = 3 * maxOf(42f, 38f * fontScale) + 60f * fontScale
-    val artwork = if (available >= 64f) available.coerceAtMost(280f) else 0f
+    val artwork = if (available >= 64f) minOf(available, width.value, COVER_MAX_DP.toFloat()) else 0f
     val notesArtwork = (available - notesContent).let { room -> if (room >= 96f) room.coerceAtMost(164f) else 0f }
     return NowPortraitLayout(artwork.dp, notesArtwork.dp, compact)
 }
@@ -484,7 +486,7 @@ private fun NowPortraitPage(
                 .clipToBounds()
                 .padding(horizontal = VesqenSpacing.lg),
         ) {
-            val layout = nowPortraitLayout(maxHeight, LocalDensity.current.fontScale)
+            val layout = nowPortraitLayout(maxHeight, maxWidth, LocalDensity.current.fontScale)
             val artworkSize by animateDpAsState(
                 targetValue = if (notesOpen) layout.notesArtwork else layout.artwork,
                 animationSpec = tween(motionPolicy.notesExpandMillis, easing = PaperEasing),
@@ -495,6 +497,9 @@ private fun NowPortraitPage(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(Modifier.height(VesqenSpacing.xs))
+                // Tall phones have height the cover cannot use; share it around the cover so the
+                // controls and the liner notes sit at the bottom instead of leaving a gap there.
+                Spacer(Modifier.weight(1f))
                 if (artworkSize > 0.dp) {
                     NowCover(
                         presentation = presentation,
@@ -503,6 +508,7 @@ private fun NowPortraitPage(
                         motionPolicy = motionPolicy,
                     )
                 }
+                Spacer(Modifier.weight(1f))
                 NowTrackIdentity(
                     presentation = presentation,
                     isControllerReady = snapshot.isControllerReady,
@@ -569,7 +575,7 @@ private fun NowLandscapePage(
             } else {
                 NowCover(
                     presentation = presentation,
-                    size = minOf(maxWidth, maxHeight, COVER_TARGET_DP.dp),
+                    size = minOf(maxWidth, maxHeight, COVER_MAX_DP.dp),
                     isPlaying = snapshot.isPlaying,
                     motionPolicy = motionPolicy,
                 )
@@ -722,7 +728,7 @@ private fun NowCover(
         ) {
             AlbumArtwork(
                 track = cover.artworkTrack,
-                targetSize = COVER_TARGET_DP.dp,
+                targetSize = COVER_MAX_DP.dp,
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag("vesqen.now.artwork"),
@@ -760,7 +766,7 @@ private fun NowTrackIdentity(
         ) {
             Text(
                 text = identity.title.ifBlank { stringResource(R.string.unknown_title) },
-                style = if (compact) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.displayLarge,
+                style = if (compact) MaterialTheme.typography.headlineSmall.serif() else MaterialTheme.typography.displayLarge,
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Clip,

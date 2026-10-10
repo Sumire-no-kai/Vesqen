@@ -39,6 +39,7 @@ import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
 import io.github.sumirenokai.vesqen.ui.formatDuration
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
+import io.github.sumirenokai.vesqen.ui.theme.serif
 
 /**
  * B · Paper & Sound track details: a fixed header, then the title, Play and Favorite, queue and
@@ -106,7 +107,7 @@ fun TrackDetailsSheet(
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         text = track.title.ifBlank { stringResource(R.string.unknown_title) },
-                        style = MaterialTheme.typography.headlineMedium,
+                        style = MaterialTheme.typography.headlineMedium.serif(),
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                     )

@@ -10,28 +10,38 @@ import org.junit.Test
 
 class NowLayoutTest {
     @Test
-    fun tallPhoneShowsTheFullCoverAndTheShrunkCoverWithNotes() {
-        val layout = nowPortraitLayout(700.dp, 1f)
+    fun tallPhoneShowsACoverAsWideAsTheContentAndTheShrunkCoverWithNotes() {
+        // A 360 dp phone with 24 dp side margins has 312 dp of content width.
+        val layout = nowPortraitLayout(700.dp, 312.dp, 1f)
         assertFalse(layout.compact)
-        assertEquals(280.dp, layout.artwork)
+        assertEquals(312.dp, layout.artwork)
         assertTrue(layout.notesArtwork in 96.dp..164.dp)
     }
 
     @Test
     fun coverNeverExceedsTheSpecifiedSizes() {
-        val layout = nowPortraitLayout(2_000.dp, 1f)
-        assertEquals(280.dp, layout.artwork)
+        val layout = nowPortraitLayout(2_000.dp, 600.dp, 1f)
+        assertEquals(360.dp, layout.artwork)
         assertEquals(164.dp, layout.notesArtwork)
     }
 
     @Test
+    fun coverFollowsWhicheverOfHeightAndWidthIsTighter() {
+        // A short phone: the height budget limits the cover below the content width.
+        val short = nowPortraitLayout(560.dp, 312.dp, 1f)
+        assertTrue(short.artwork < 312.dp)
+        // A narrow phone: the content width limits the cover below the height budget.
+        assertEquals(272.dp, nowPortraitLayout(900.dp, 272.dp, 1f).artwork)
+    }
+
+    @Test
     fun shortWindowsAndHugeTextDropTheCoverInsteadOfOverflowing() {
-        val tiny = nowPortraitLayout(300.dp, 2f)
+        val tiny = nowPortraitLayout(300.dp, 272.dp, 2f)
         assertTrue(tiny.compact)
         assertEquals(0.dp, tiny.artwork)
         assertEquals(0.dp, tiny.notesArtwork)
         // Large text still keeps a real cover when the compact layout leaves room for one.
-        val largeText = nowPortraitLayout(480.dp, 2f)
+        val largeText = nowPortraitLayout(480.dp, 272.dp, 2f)
         assertTrue(largeText.compact)
         assertTrue(largeText.artwork >= 64.dp)
     }

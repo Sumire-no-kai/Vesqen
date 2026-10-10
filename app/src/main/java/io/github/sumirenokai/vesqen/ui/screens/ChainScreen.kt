@@ -162,6 +162,7 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenDataStyle
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
+import io.github.sumirenokai.vesqen.ui.theme.serif
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
@@ -390,7 +391,7 @@ private fun ChainHeader(
             }
             Text(
                 text = stringResource(if (showAdvanced) R.string.chain_advanced_title else R.string.destination_chain),
-                style = if (compactTitle) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.displayMedium,
+                style = if (compactTitle) MaterialTheme.typography.headlineSmall.serif() else MaterialTheme.typography.displayMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier

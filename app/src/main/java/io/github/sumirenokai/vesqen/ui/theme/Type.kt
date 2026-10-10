@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
@@ -55,7 +56,7 @@ val VesqenDataStyle = TextStyle(
  * fallback family for a custom font, so Chinese titles there use the system sans.
  */
 @Composable
-private fun rememberTitleSerif(): FontFamily {
+internal fun rememberTitleSerif(): FontFamily {
     val resources = LocalContext.current.resources
     return remember(resources) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -74,10 +75,20 @@ private fun rememberTitleSerif(): FontFamily {
     }
 }
 
-// Serif only at 16 sp and above, one weight (400); body, labels and data stay sans (B spec §3).
+/** The title serif, provided by VesqenTheme. Read it through [serif]. */
+internal val LocalVesqenSerif = staticCompositionLocalOf<FontFamily> { InstrumentSerif }
+
+/**
+ * Serif is only for page titles and names: tracks, albums, artists and playlists (owner decision,
+ * 2026-10-10). Group headings, dialogs, buttons, status titles and numbers stay sans, so a card
+ * never mixes a Songti heading with sans rows.
+ */
 @Composable
-internal fun rememberVesqenTypography(): Typography {
-    val serif = rememberTitleSerif()
+fun TextStyle.serif(): TextStyle = copy(fontFamily = LocalVesqenSerif.current, fontWeight = FontWeight.Normal)
+
+// The display styles are the serif page titles and big names; headline and title styles are sans.
+@Composable
+internal fun rememberVesqenTypography(serif: FontFamily): Typography {
     return remember(serif) {
         fun title(size: Int, lineHeight: Int) = TextStyle(
             fontFamily = serif,
@@ -95,11 +106,11 @@ internal fun rememberVesqenTypography(): Typography {
             displayLarge = title(34, 38),
             displayMedium = title(32, 38),
             displaySmall = title(28, 31),
-            headlineLarge = title(26, 30),
-            headlineMedium = title(22, 28),
-            headlineSmall = title(21, 25),
-            titleLarge = title(19, 24),
-            titleMedium = title(17, 22),
+            headlineLarge = sans(26, 30, FontWeight.Medium),
+            headlineMedium = sans(22, 28, FontWeight.Medium),
+            headlineSmall = sans(21, 25, FontWeight.Medium),
+            titleLarge = sans(19, 24, FontWeight.Medium),
+            titleMedium = sans(17, 22, FontWeight.Medium),
             titleSmall = sans(14, 20, FontWeight.SemiBold),
             bodyLarge = sans(16, 24),
             bodyMedium = sans(15, 23),

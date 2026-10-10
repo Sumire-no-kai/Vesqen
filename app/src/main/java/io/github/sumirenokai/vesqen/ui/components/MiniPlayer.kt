@@ -5,6 +5,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.sp
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
+import io.github.sumirenokai.vesqen.ui.theme.serif
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -96,7 +97,7 @@ fun MiniPlayer(
                 ) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, lineHeight = 21.sp),
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, lineHeight = 21.sp).serif(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
