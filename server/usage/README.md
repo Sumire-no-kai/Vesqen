@@ -180,7 +180,9 @@ not established by local tests.
    Verify the custom domain, TLS, D1 binding and scheduled trigger. Perform a
    synthetic ping/report acceptance test, expiry test and endpoint/limit checks.
 8. Configure the Android build's `vesqen.usageEndpoint` to
-   `https://YOUR_USAGE_SUBDOMAIN/v1/usage`. A future #69 uploader posts its exact
+   `https://YOUR_USAGE_SUBDOMAIN/v1/usage`: for GitHub releases, set the repository
+   variable `VESQEN_USAGE_ENDPOINT` (Settings → Secrets and variables → Actions →
+   Variables), which the release workflow passes to Gradle. A future #69 uploader posts its exact
    previewed bytes to `/v1/reports`. No client secret or new public identifier is
    needed or useful for an open-source anonymous endpoint.
 
