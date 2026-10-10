@@ -28,7 +28,12 @@ typography:
   title:
     fontFamily: "Instrument Serif, system serif (Songti where present)"
     fontWeight: 400
-    sizes: "34/38, 32/38, 28/31, 26/30, 22/28, 21/25, 19/24, 17/22 sp"
+    sizes: "34/38, 32/38, 28/31 sp; names in lists and sheets 22/28, 21/25, 17/22 sp"
+    use: "page titles and names of music only"
+  heading:
+    fontFamily: "Instrument Sans, system sans for Chinese"
+    fontWeight: 500
+    sizes: "26/30, 22/28, 21/25, 19/24, 17/22 sp"
   body:
     fontFamily: "Instrument Sans, system sans for Chinese"
     sizes: "16/24, 15/23, 13/19 sp"
@@ -136,7 +141,8 @@ Labels on filled Moss buttons: 6.0:1 (white on `moss-deep`), 11.4:1 (`night` on 
 
 ## Typography
 
-- **Titles** use Instrument Serif at weight 400, with the system serif as fallback so Chinese titles use Songti where the phone has it (Android 10 and later; Android 8–9 fall back to the system sans). Serif only from 16 sp up: page titles, group headings, track titles in Now and lists, album names, empty-state titles and big pinned figures.
+- **Page titles and names** use Instrument Serif at weight 400, with the system serif as fallback so Chinese uses Songti where the phone has it (Android 10 and later; Android 8–9 fall back to the system sans). Serif is only for page titles ("Library", "Chain", "Settings" and the pages opened from them) and for names of music: track titles in Now, lists, the mini player, track details and the Chain summary, and album, artist and playlist names. Code marks each of these with `serif()`.
+- **Headings that are not names** use Instrument Sans at weight 500: Settings group titles, sheet and dialog titles, Chain section and status titles, empty-state titles. Owner decision, 2026-10-10: a card never pairs a Songti heading with sans rows.
 - **Body, labels and controls** use Instrument Sans; Chinese uses the system sans.
 - **Data** (times, counts, rates, measured values) uses Instrument Sans with tabular figures, so changing digits keep their width. Monospace is only for literal code: the JSON report preview and cookie names in the policy. Monospace never sets a value with a unit; it spread "96  kHz" apart.
 - **Eyebrows** (small labels such as "Now" in the Now top bar) use 12 sp at weight 500–600 with wide tracking; Chinese keeps its case and spacing.
@@ -179,7 +185,7 @@ Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hai
 
 - **Focus mode.** With a track, Now takes the whole window: the bottom bar and the rail yield, and the top-left collapse button or Android Back returns to where Now was opened. Without a track, Now shows its empty state with the navigation.
 - Top bar: collapse, "Now" with the queue position, the orientation toggle when the phone can rotate, and the queue.
-- Cover up to 280 dp, shrinking to 164 dp while the liner notes are open; under 64 dp it is dropped rather than squeezed. Then the serif title, "artist — album", progress, transport (playback order, previous, play/pause, next, favorite) and the liner notes.
+- Cover as wide as the content, up to 360 dp, shrinking to 164 dp while the liner notes are open; under 64 dp it is dropped rather than squeezed. Then the serif title, "artist — album", progress, transport (playback order, previous, play/pause, next, favorite) and the liner notes. Height the cover cannot use is shared above and below the cover, so the transport and the liner notes sit at the bottom on tall phones.
 - **Liner notes:** collapsed to one summary line ("FLAC 24/96 · SYSTEM MIXED"); open, they list 01 Source file, 02 AudioTrack and 03 Route and stability with each value and its confidence, then the evidence chip, its explanation, Output mode and Track information. The step numbers are the liner-notes metaphor of the B design, not section numbering.
 - Landscape is a separate composition: cover or liner notes on the left, identity and controls on the right, system bars hidden.
 - The page never scrolls; only the open liner notes scroll inside their own region.
@@ -193,7 +199,7 @@ Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hai
 
 ### Settings
 
-Groups in this order: Playback output (System / Strict USB, radio group), Audio proof (Playback chain), Privacy & data (Usage statistics, Export device report), Updates (GitHub builds), Application (About, Privacy policy, Open source licenses), Advanced (Output verification records), then one footer line. Group titles are serif; each group is one paper card. When Strict USB is selected, a status box under the options says what happens next or why it stopped, never the option description again.
+Groups in this order: Playback output (System / Strict USB, radio group), Audio proof (Playback chain), Privacy & data (Usage statistics, Export device report), Updates (GitHub builds), Application (About, Privacy policy, Open source licenses), Advanced (Output verification records), then one footer line. Group titles are sans; each group is one paper card. When Strict USB is selected, a status box under the options says what happens next or why it stopped, never the option description again.
 
 ### About
 

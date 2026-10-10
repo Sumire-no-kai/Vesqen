@@ -65,6 +65,7 @@ import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
+import io.github.sumirenokai.vesqen.ui.theme.serif
 import io.github.sumirenokai.vesqen.updates.AppUpdater
 import io.github.sumirenokai.vesqen.usage.UsageStatistics
 import io.github.sumirenokai.vesqen.verification.OutputVerificationImportFailure
@@ -391,7 +392,7 @@ private fun SettingsTitle() {
         ) {
             Text(
                 text = stringResource(R.string.destination_settings),
-                style = if (compact) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.displayMedium,
+                style = if (compact) MaterialTheme.typography.headlineSmall.serif() else MaterialTheme.typography.displayMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
@@ -418,7 +419,7 @@ internal fun SettingsDetailHeader(title: String, backTag: String, onBack: () -> 
         Spacer(Modifier.width(VesqenSpacing.xs))
         Text(
             text = title,
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineSmall.serif(),
             maxLines = 2,
             modifier = Modifier.semantics { heading() },
         )

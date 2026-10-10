@@ -93,12 +93,14 @@ fun VesqenTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
+    val serif = rememberTitleSerif()
     CompositionLocalProvider(
         LocalVesqenColors provides if (darkTheme) DarkExtendedColors else LightExtendedColors,
+        LocalVesqenSerif provides serif,
     ) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,
-            typography = rememberVesqenTypography(),
+            typography = rememberVesqenTypography(serif),
             content = content,
         )
     }

@@ -95,9 +95,11 @@ import io.github.sumirenokai.vesqen.ui.chain.telemetryMetricLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetrySnapshotMaxAgeMs
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
+import io.github.sumirenokai.vesqen.ui.theme.VesqenDataStyle
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
+import io.github.sumirenokai.vesqen.ui.theme.serif
 
 /** The five stations of B's "current playback path" (spec §5), in signal order. */
 internal enum class ChainStation(@StringRes val label: Int, val tag: String) {
@@ -238,7 +240,7 @@ internal fun ChainNowPlaying(playback: PlaybackSnapshot) {
         )
         Text(
             text = playback.title.ifBlank { stringResource(R.string.unknown_title) },
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineSmall.serif(),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.testTag("vesqen.chain.current-source"),
@@ -670,8 +672,11 @@ private fun ChainPinnedCard(
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             BasicText(
                 text = if (idle || evidence == null) "—" else reading,
+                // A measured value is data, so it is sans like every other number (B spec §3).
                 style = MaterialTheme.typography.displayLarge.copy(
                     color = onSurface,
+                    fontFamily = VesqenDataStyle.fontFamily,
+                    fontWeight = VesqenDataStyle.fontWeight,
                     fontFeatureSettings = "tnum",
                     lineHeight = PinnedValueLineHeight.em,
                 ),

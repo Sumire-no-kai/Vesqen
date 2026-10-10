@@ -141,6 +141,7 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
+import io.github.sumirenokai.vesqen.ui.theme.serif
 
 private val LibraryHierarchyEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
@@ -942,7 +943,7 @@ private fun AlbumShelfItem(album: LibraryCollection, onClick: () -> Unit) {
         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
                 text = album.title.ifBlank { stringResource(R.string.unknown_album) },
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleMedium.serif(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1010,7 +1011,7 @@ private fun CollectionRow(
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.headlineSmall.serif(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1201,7 +1202,7 @@ private fun CollectionTrackList(
             }
             Text(
                 text = collection.title.ifBlank { stringResource(R.string.unknown_title) },
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineMedium.serif(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
@@ -1367,7 +1368,7 @@ private fun LibraryHeader(
                 modifier = Modifier
                     .weight(1f)
                     .testTag(if (favoritesOnly) "vesqen.library.title.favorites" else "vesqen.library.title.root"),
-                style = if (compactTitle) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.displayMedium,
+                style = if (compactTitle) MaterialTheme.typography.headlineSmall.serif() else MaterialTheme.typography.displayMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
