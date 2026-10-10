@@ -138,7 +138,7 @@
 | 链路注记卡标题 | Instrument Serif Italic | — | 26 px |
 | 正文 | Instrument Sans 400 | 黑体 | 官网 19 px / 1.6；卡片 15 px / 1.55；元信息 13 px |
 | 眉题、标签 | Instrument Sans 500，大写 | — | 12–13 px，字距 0.12–0.16em |
-| App 页面标题 | — | 宋体 400 | 32 px（"曲库""链路"） |
+| App 页面标题 | Noto Serif SC 600（打包子集） | Noto Serif SC 600（打包子集） | 32 px（"曲库""链路"）；窄屏和设置里打开的页面 21 px |
 | App 歌名 | Instrument Serif | 宋体 400 | 34 px / 1.12 |
 | App 专辑名 | Instrument Serif | 宋体 400 | 详情 28 px / 1.1；书架 17 px / 1.15；列表 21 px / 1.15 |
 | App 小标题 | Instrument Sans 500 | 黑体 500 | 17–22 px（"链路注记""当前播放路径""置顶指标"、输出声明标题、设置分组标题） |
@@ -147,20 +147,22 @@
 | App 数字 | Instrument Sans 500，等宽数字 | — | 置顶指标 34 px |
 | 时间与编号 | Instrument Sans | — | 等宽数字（tabular-nums） |
 
-规则：宋体只用于 16 px 以上的标题，只用 400 一个字重；正文、标签和数据一律黑体。13 px 的宋体横笔太细，在手机上发虚，见 `B-Fonts.dc.html` 的小字对比。
+规则：宋体只用于 16 px 以上的标题；名字只用 400，页面标题用打包的 600；正文、标签和数据一律黑体。13 px 的宋体横笔太细，在手机上发虚，见 `B-Fonts.dc.html` 的小字对比。
 
-**2026-09-25 决定：App 不打包中文字体。中文标题优先用手机自带的宋体，没有就自动回落到系统黑体。**
+**2026-09-25 决定：App 不打包中文字体。中文标题优先用手机自带的宋体，没有就自动回落到系统黑体。**（2026-10-10 起页面标题例外，见下文。）
 
 **2026-10-10 所有者决定：App 里的宋体（衬线）只用于页面标题和音乐的名字（歌名、专辑名、艺术家名、歌单名）。小标题、对话框和弹层标题、状态标题、空状态标题和数字一律用黑体，避免同一张卡片里宋体标题配黑体选项。**
 
-- 原生 Android（AOSP）的 `fonts.xml` 把 `NotoSerifCJK-Regular.ttc`（思源宋体）登记为简体中文的 serif 回落字体，只有 400 一个字重，所以 B 不做粗宋。
+**2026-10-10 所有者决定：页面标题加粗。App 打包 Noto Serif SC SemiBold 的子集，只含可打印 ASCII 和 `tools/title_font_strings.txt` 所列页面标题用到的汉字（`tools/subset_title_font.py` 生成，约 33 KB），中英文页面标题都用它，所有 Android 版本显示一致。这一条只改页面标题；名字仍用 Instrument Serif 加系统宋体回落。新增或改名页面标题时，把字符串加进列表并重新生成字体，`TitleFontCoverageTest` 会检查缺字。**
+
+- 原生 Android（AOSP）的 `fonts.xml` 把 `NotoSerifCJK-Regular.ttc`（思源宋体）登记为简体中文的 serif 回落字体，只有 400 一个字重，所以名字不做粗宋；页面标题的粗宋来自上面的打包子集。
 - 国产 ROM 常常替换系统字体，是否保留宋体要逐台确认。2026-10-03 只读检查：iQOO V2171A（Android 15）带 `NotoSerifCJK-Regular.ttc`，并在系统字体配置里登记为 serif 回落，中文标题会用宋体；Honor STF-AL00（Android 9）也带这个文件，但 Android 9 不能给自定义字体指定回落，中文标题按下一条显示为黑体。
 - 实现：Android 10（API 29）起，用 `Typeface.CustomFallbackBuilder` 以 Instrument Serif 为主字体，`setSystemFallback("serif")` 作系统回落；汉字会自动落到系统宋体，系统没有宋体时落到默认中文字体。Android 8–9 的自定义字体不能指定回落族，中文会显示为系统黑体；如果需要，可以把中文片段单独设成 `FontFamily.Serif`。
 - 需要按"有没有宋体"微调样式时，Android 10 起可以用 `SystemFonts.getAvailableFonts()` 检查。
 - 设计必须在两种结果下都成立。两种效果并排见 `B-Fonts.dc.html`。
 - 官网照旧用 `next/font` 自托管思源宋体，按 unicode-range 切片、按需加载，成本很小。
 
-App 只打包 Instrument Serif（Regular、Italic）和 Instrument Sans，都使用 SIL OFL 1.1 授权，文件很小。
+App 打包 Instrument Serif（Regular、Italic）、Instrument Sans 和页面标题用的 Noto Serif SC SemiBold 子集，都使用 SIL OFL 1.1 授权，文件很小。
 
 ### 中文官网的排版
 
@@ -329,7 +331,7 @@ App 中文：
 - 浅色角色：`background` = `paper`，`surface` = `paper-raised`，`onSurface` = `ink`，`onSurfaceVariant` = `ink-muted`，`primary` = `moss-deep`，`onPrimary` = 白，`outlineVariant` = `hairline`。深色对应 `night`、`night-raised`、`night-text`、`night-muted`、`moss-bright`、`night`（作 onPrimary）。
 - 染色：`animateColorAsState(target, tween(800, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)))`。
 - 封面缩放：`animateDpAsState(if (notesOpen) 164.dp else 280.dp, tween(550, …))`。
-- 字体见 §3：`res/font` 只放 Instrument Serif 和 Instrument Sans，中文走系统回落。
+- 字体见 §3：`res/font` 放 Instrument Serif、Instrument Sans 和页面标题子集 `title_serif_semibold.otf`；名字里的中文走系统回落。
 - 动画需要遵守系统的动画缩放和"移除动画"设置。
 
 **官网**

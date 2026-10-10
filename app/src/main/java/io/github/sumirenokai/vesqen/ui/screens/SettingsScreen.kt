@@ -64,8 +64,8 @@ import io.github.sumirenokai.vesqen.ui.components.PaperDivider
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
+import io.github.sumirenokai.vesqen.ui.theme.pageTitle
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
-import io.github.sumirenokai.vesqen.ui.theme.serif
 import io.github.sumirenokai.vesqen.updates.AppUpdater
 import io.github.sumirenokai.vesqen.usage.UsageStatistics
 import io.github.sumirenokai.vesqen.verification.OutputVerificationImportFailure
@@ -392,7 +392,7 @@ private fun SettingsTitle() {
         ) {
             Text(
                 text = stringResource(R.string.destination_settings),
-                style = if (compact) MaterialTheme.typography.headlineSmall.serif() else MaterialTheme.typography.displayMedium,
+                style = (if (compact) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.displayMedium).pageTitle(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
@@ -403,7 +403,7 @@ private fun SettingsTitle() {
     }
 }
 
-/** Header for pages opened from Settings: back arrow and a serif title. */
+/** Header for pages opened from Settings: back arrow and a page title. */
 @Composable
 internal fun SettingsDetailHeader(title: String, backTag: String, onBack: () -> Unit) {
     Row(
@@ -419,7 +419,7 @@ internal fun SettingsDetailHeader(title: String, backTag: String, onBack: () -> 
         Spacer(Modifier.width(VesqenSpacing.xs))
         Text(
             text = title,
-            style = MaterialTheme.typography.headlineSmall.serif(),
+            style = MaterialTheme.typography.headlineSmall.pageTitle(),
             maxLines = 2,
             modifier = Modifier.semantics { heading() },
         )

@@ -1500,6 +1500,22 @@
         }
       ],
       "notices": []
+    },
+    {
+      "id": "font:NotoSerifSC",
+      "name": "Noto Serif SC",
+      "version": "2.003",
+      "files": {
+        "title_serif_semibold.otf": "54c30313f5d1344df5098c88dffcc9ce3f22abde5118c005d8cab9ea8b9dcd39"
+      },
+      "licenses": [
+        {
+          "name": "OFL-1.1",
+          "file": "NotoSerifSC-OFL.txt",
+          "source": "https://github.com/notofonts/noto-cjk"
+        }
+      ],
+      "notices": []
     }
   ]
 }

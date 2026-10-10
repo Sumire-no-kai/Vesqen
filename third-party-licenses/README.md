@@ -63,12 +63,20 @@ Services plugin and changes no signing/release workflow.
   other stdlib derivations it lists (GWT, Guava) are Apache-2.0.
 - Instrument Sans and Instrument Serif retain the existing unmodified OFL texts
   in `app/src/main/assets/licenses/fonts`, including their copyright statements.
-  Version `1.000` comes from each bundled TTF's name table (name ID 5); all three
-  font binaries are pinned by SHA-256. Both font-directory and font-license-file
+  Version `1.000` comes from each bundled TTF's name table (name ID 5). All font
+  binaries are pinned by SHA-256. Both font-directory and font-license-file
   membership are checked, so a new or removed font cannot bypass review.
+- Noto Serif SC ships only as `title_serif_semibold.otf`, a subset of
+  `Serif/SubsetOTF/SC/NotoSerifSC-SemiBold.otf` (version `2.003`, name ID 5) cut
+  by `tools/subset_title_font.py` to printable ASCII and the page-title strings in
+  `tools/title_font_strings.txt`; the script names the pinned upstream commit and
+  source hash, and the catalog pins the subset's hash. The upstream `Serif/LICENSE`
+  has no copyright line, so `NotoSerifSC-OFL.txt` puts the font's copyright and
+  trademark records (name IDs 0 and 7) above the unmodified license text. The font
+  has no Reserved Font Name, so the subset keeps its name.
 
 The initial reviewed union is 96 Maven components and two font families. Release
-contains 89 unique Maven components plus two fonts; Debug adds four tooling
+contains 89 unique Maven components plus three fonts; Debug adds four tooling
 components, and DeviceTest adds seven. Repeated Gradle artifact selections of the
 same file (currently androidx.core:core) are one component, not duplicate licenses.
 
