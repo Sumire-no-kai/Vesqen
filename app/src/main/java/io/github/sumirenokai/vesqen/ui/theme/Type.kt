@@ -81,12 +81,28 @@ internal val LocalVesqenSerif = staticCompositionLocalOf<FontFamily> { Instrumen
 /**
  * Serif is only for page titles and names: tracks, albums, artists and playlists (owner decision,
  * 2026-10-10). Group headings, dialogs, buttons, status titles and numbers stay sans, so a card
- * never mixes a Songti heading with sans rows.
+ * never mixes a Songti heading with sans rows. Names use this regular serif; page titles use
+ * [pageTitle].
  */
 @Composable
 fun TextStyle.serif(): TextStyle = copy(fontFamily = LocalVesqenSerif.current, fontWeight = FontWeight.Normal)
 
-// The display styles are the serif page titles and big names; headline and title styles are sans.
+/**
+ * Noto Serif SC SemiBold cut down to printable ASCII and the characters of the page titles listed
+ * in tools/title_font_strings.txt (tools/subset_title_font.py). Other characters fall back to the
+ * system font.
+ */
+private val TitleSerifSemiBold = FontFamily(Font(R.font.title_serif_semibold, FontWeight.SemiBold))
+
+/**
+ * Page titles (Library, Chain, Settings and the pages opened from them) are semibold serif in both
+ * languages, so they read as titles above the regular serif names (owner decision, 2026-10-10).
+ * Keeps the caller's size.
+ */
+fun TextStyle.pageTitle(): TextStyle = copy(fontFamily = TitleSerifSemiBold, fontWeight = FontWeight.SemiBold)
+
+// The display styles are the serif big names and, through [pageTitle], page titles; headline and
+// title styles are sans.
 @Composable
 internal fun rememberVesqenTypography(serif: FontFamily): Typography {
     return remember(serif) {

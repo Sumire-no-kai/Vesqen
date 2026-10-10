@@ -140,6 +140,7 @@ import io.github.sumirenokai.vesqen.ui.components.VesqenEmptyState
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
+import io.github.sumirenokai.vesqen.ui.theme.pageTitle
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.serif
 
@@ -1368,7 +1369,7 @@ private fun LibraryHeader(
                 modifier = Modifier
                     .weight(1f)
                     .testTag(if (favoritesOnly) "vesqen.library.title.favorites" else "vesqen.library.title.root"),
-                style = if (compactTitle) MaterialTheme.typography.headlineSmall.serif() else MaterialTheme.typography.displayMedium,
+                style = (if (compactTitle) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.displayMedium).pageTitle(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

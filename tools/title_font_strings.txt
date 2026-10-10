@@ -1,0 +1,13 @@
+# String resources shown as page titles. tools/subset_title_font.py keeps every character they use
+# (plus printable ASCII) in app/src/main/res/font/title_serif_semibold.otf, and TitleFontCoverageTest
+# fails when a title uses a character the font lacks. Add a key here when a new page title appears.
+destination_library
+library_favorites
+destination_settings
+destination_chain
+chain_advanced_title
+usage_title
+privacy_policy_title
+settings_about
+licenses_title
+report_title
