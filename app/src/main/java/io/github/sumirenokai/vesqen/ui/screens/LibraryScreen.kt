@@ -1133,7 +1133,6 @@ private fun AlbumTrackRow(
     val title = track.title.ifBlank { stringResource(R.string.unknown_title) }
     val subtitle = remember(track.artist, track.album) { track.displaySubtitle() }
         .ifBlank { stringResource(R.string.unknown_artist) }
-    val accessibilityLabel = stringResource(R.string.track_row_description, title, subtitle)
     val hairline = LocalVesqenColors.current.hairline
     Row(
         modifier = modifier
@@ -1141,7 +1140,6 @@ private fun AlbumTrackRow(
             .heightIn(min = 48.dp)
             .drawBehind { drawLine(hairline, Offset(0f, .5.dp.toPx()), Offset(size.width, .5.dp.toPx()), 1.dp.toPx()) }
             .testTag("vesqen.library.track.${track.id}")
-            .semantics { contentDescription = accessibilityLabel }
             .clickable(onClick = onPlay)
             .padding(start = VesqenSpacing.xxs),
         verticalAlignment = Alignment.CenterVertically,

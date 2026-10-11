@@ -240,11 +240,10 @@
     <string name="library_load_failed_body">请重新扫描。曲库里的内容没有被改动。</string>
     <string name="library_load_failed_playback_continues">请重新扫描。当前播放可以继续。</string>
     <string name="library_change_save_failed">无法保存这项曲库修改；已有音乐和元数据均已保留。</string>
-    <string name="output_status_description">输出声明：%1$s</string>
+    <string name="output_status_label">输出声明</string>
     <string name="open_playback_chain">查看播放链路</string>
     <string name="playing">正在播放</string>
     <string name="paused">已暂停</string>
-    <string name="track_row_description">%1$s，%2$s</string>
     <string name="more_track_actions">%1$s 的更多操作</string>
     <string name="track_details">曲目详情</string>
     <string name="track_information">曲目信息</string>
