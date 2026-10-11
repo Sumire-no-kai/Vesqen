@@ -1074,14 +1074,17 @@ private fun PlaybackProgress(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp)
-                .testTag("vesqen.now.progress")
-                .semantics(mergeDescendants = true) {
-                    contentDescription = progressContentDescription
-                    stateDescription = positionLabel
-                },
+                .testTag("vesqen.now.progress"),
         ) {
             Slider(
-                modifier = Modifier.fillMaxSize(),
+                // On the slider itself: as a wrapper, the label went to a separate node and TalkBack
+                // read "progress" without the position (Honor, Android 9).
+                modifier = Modifier
+                    .fillMaxSize()
+                    .semantics {
+                        contentDescription = progressContentDescription
+                        stateDescription = positionLabel
+                    },
                 value = seekPosition.coerceIn(0f, snapshot.durationMs.toFloat()),
                 onValueChange = {
                     isSeeking = true
