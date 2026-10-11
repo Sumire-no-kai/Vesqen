@@ -116,6 +116,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -1085,7 +1086,7 @@ private fun AlbumPage(
                 horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs)) {
-                    Text(title, style = MaterialTheme.typography.displaySmall, modifier = Modifier.testTag("vesqen.library.album.title"))
+                    Text(title, style = MaterialTheme.typography.displaySmall, modifier = Modifier.testTag("vesqen.library.album.title").semantics { heading() })
                     Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 FilledIconButton(
@@ -1134,7 +1135,6 @@ private fun AlbumTrackRow(
     val title = track.title.ifBlank { stringResource(R.string.unknown_title) }
     val subtitle = remember(track.artist, track.album) { track.displaySubtitle() }
         .ifBlank { stringResource(R.string.unknown_artist) }
-    val accessibilityLabel = stringResource(R.string.track_row_description, title, subtitle)
     val hairline = LocalVesqenColors.current.hairline
     Row(
         modifier = modifier
@@ -1142,7 +1142,6 @@ private fun AlbumTrackRow(
             .heightIn(min = 48.dp)
             .drawBehind { drawLine(hairline, Offset(0f, .5.dp.toPx()), Offset(size.width, .5.dp.toPx()), 1.dp.toPx()) }
             .testTag("vesqen.library.track.${track.id}")
-            .semantics { contentDescription = accessibilityLabel }
             .clickable(onClick = onPlay)
             .padding(start = VesqenSpacing.xxs),
         verticalAlignment = Alignment.CenterVertically,
@@ -1206,7 +1205,7 @@ private fun CollectionTrackList(
                 style = MaterialTheme.typography.headlineMedium.serif(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).semantics { heading() },
             )
             onEditPlaylist?.let { edit ->
                 IconButton(onClick = edit) {

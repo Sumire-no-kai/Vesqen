@@ -21,8 +21,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
@@ -43,13 +41,12 @@ fun TrackRow(
     val title = track.title.ifBlank { stringResource(R.string.unknown_title) }
     val subtitle = androidx.compose.runtime.remember(track.artist, track.album) { track.displaySubtitle() }
         .ifBlank { stringResource(R.string.unknown_artist) }
-    val accessibilityLabel = stringResource(R.string.track_row_description, title, subtitle)
     Row(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 72.dp)
             .testTag("vesqen.library.track.${track.id}")
-            .semantics { contentDescription = accessibilityLabel }
+            // TalkBack reads the merged title and subtitle; a row description on top would repeat them.
             .clickable(enabled = enabled, onClick = onPlay),
         verticalAlignment = Alignment.CenterVertically,
     ) {

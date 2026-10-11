@@ -97,7 +97,7 @@ fun OutputStatusChip(
     onClick: (() -> Unit)? = null,
 ) {
     val label = outputDeclarationLabel(declaration)
-    val description = stringResource(R.string.output_status_description, label)
+    val description = stringResource(R.string.output_status_label)
     val openChainLabel = if (onClick == null) null else stringResource(R.string.open_playback_chain)
     val touchTarget = if (onClick == null) {
         Modifier
@@ -146,8 +146,10 @@ fun OutputStatusChip(
     Box(
         modifier = modifier
             .then(touchTarget)
-            .semantics {
-                contentDescription = if (openChainLabel == null) description else "$description. $openChainLabel"
+            // One stop that reads the field name, then the visible label, then the click label. The
+            // description names the field only, because the merged text already says the declaration.
+            .semantics(mergeDescendants = true) {
+                contentDescription = description
                 if (onClick != null) role = Role.Button
             },
         contentAlignment = Alignment.Center,

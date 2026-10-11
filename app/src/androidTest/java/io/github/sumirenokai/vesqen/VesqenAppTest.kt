@@ -35,6 +35,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.text.TextLayoutResult
@@ -1123,10 +1124,11 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.orientation-toggle").assertIsDisplayed()
         openLinerNotes()
         composeRule.onNodeWithTag("vesqen.now.info").performScrollTo().assertIsDisplayed()
-        val outputDescription = "${context.getString(R.string.output_status_description, context.getString(R.string.system_mixed))}. " +
-            context.getString(R.string.open_playback_chain)
         composeRule.onNodeWithTag("vesqen.now.open-chain").performScrollTo()
-        composeRule.onNodeWithContentDescription(outputDescription).assertIsDisplayed()
+        composeRule.onNode(
+            hasContentDescription(context.getString(R.string.output_status_label)) and
+                hasText(context.getString(R.string.system_mixed)),
+        ).assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.open-chain").performClick()
 
         composeRule.onNodeWithTag("vesqen.chain").assertIsDisplayed()
