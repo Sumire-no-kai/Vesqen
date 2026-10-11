@@ -1367,7 +1367,8 @@ private fun LibraryHeader(
                 stringResource(if (favoritesOnly) R.string.library_favorites else R.string.destination_library),
                 modifier = Modifier
                     .weight(1f)
-                    .testTag(if (favoritesOnly) "vesqen.library.title.favorites" else "vesqen.library.title.root"),
+                    .testTag(if (favoritesOnly) "vesqen.library.title.favorites" else "vesqen.library.title.root")
+                    .semantics { heading() },
                 style = (if (compactTitle) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.displayMedium).pageTitle(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
