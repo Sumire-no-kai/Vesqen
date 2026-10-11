@@ -247,6 +247,7 @@
     <string name="library_change_save_failed">Could not save that library change. Existing music and metadata were kept.</string>
     <string name="output_status_label">Output declaration</string>
     <string name="open_playback_chain">Open playback chain</string>
+    <string name="open_now_playing">open Now</string>
     <string name="playing">Playing</string>
     <string name="paused">Paused</string>
     <string name="more_track_actions">More actions for %1$s</string>

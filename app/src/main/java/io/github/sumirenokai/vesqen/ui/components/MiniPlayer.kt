@@ -64,6 +64,7 @@ fun MiniPlayer(
     // #35: above 150 % text the two lines no longer fit the fixed 72 dp card. The title stays and
     // the artist is still read out with it.
     val titleOnly = LocalDensity.current.fontScale > 1.5f
+    val openNowLabel = stringResource(R.string.open_now_playing)
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -85,8 +86,7 @@ fun MiniPlayer(
                     .weight(1f)
                     .heightIn(min = 56.dp)
                     .testTag("vesqen.mini-player.open-now")
-                    .clickable(onClick = onOpenNow)
-                    .then(if (titleOnly) Modifier.semantics { contentDescription = "$title, $artist" } else Modifier),
+                    .clickable(onClickLabel = openNowLabel, onClick = onOpenNow),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AlbumArtwork(track = currentTrack, targetSize = 44.dp, modifier = Modifier.size(44.dp))
@@ -100,6 +100,8 @@ fun MiniPlayer(
                         style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, lineHeight = 21.sp).serif(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        // On the title itself, so TalkBack reads "title, artist" once instead of the title twice.
+                        modifier = if (titleOnly) Modifier.semantics { contentDescription = "$title, $artist" } else Modifier,
                     )
                     if (!titleOnly) Text(
                         text = artist,

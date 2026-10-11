@@ -242,6 +242,7 @@
     <string name="library_change_save_failed">无法保存这项曲库修改；已有音乐和元数据均已保留。</string>
     <string name="output_status_label">输出声明</string>
     <string name="open_playback_chain">查看播放链路</string>
+    <string name="open_now_playing">打开正在播放</string>
     <string name="playing">正在播放</string>
     <string name="paused">已暂停</string>
     <string name="more_track_actions">%1$s 的更多操作</string>

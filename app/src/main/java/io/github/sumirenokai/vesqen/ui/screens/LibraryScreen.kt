@@ -116,6 +116,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -1084,7 +1085,7 @@ private fun AlbumPage(
                 horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs)) {
-                    Text(title, style = MaterialTheme.typography.displaySmall, modifier = Modifier.testTag("vesqen.library.album.title"))
+                    Text(title, style = MaterialTheme.typography.displaySmall, modifier = Modifier.testTag("vesqen.library.album.title").semantics { heading() })
                     Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 FilledIconButton(
@@ -1203,7 +1204,7 @@ private fun CollectionTrackList(
                 style = MaterialTheme.typography.headlineMedium.serif(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).semantics { heading() },
             )
             onEditPlaylist?.let { edit ->
                 IconButton(onClick = edit) {
