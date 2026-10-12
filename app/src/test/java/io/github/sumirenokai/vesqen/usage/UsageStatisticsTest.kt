@@ -198,6 +198,26 @@ class UsageStatisticsTest {
         assertEquals(Triple(0, 0, 0), run(switch(ServiceState.ENABLED), ready.copy(enabled = false, consent = UsageConsent.DECLINED)))
     }
 
+    @Test fun turningStatisticsOffWhileTheSwitchIsReadSendsNothing() = runBlocking {
+        val switchFile = CompletableDeferred<ServiceStatus?>()
+        var sends = 0
+        var standalone = 0
+        val engine = DefaultUsageStatistics(CoroutineScope(coroutineContext + Dispatchers.Unconfined), MemoryStore(ready),
+            { UsageRegionPolicy.DEFAULT_ENABLED }, true, { true }, { facts }, UsageTransport { sends++; null }, {},
+            { standalone++ }, { USAGE_DAY_MS * 10 }, ServiceSwitchGate(object : ServiceSwitchSource {
+                override suspend fun read() = switchFile.await()
+            }, MemorySwitchStore(), 12))
+        assertTrue(engine.onForeground())
+        // The ping waits for the switch file; meanwhile the person turns statistics off.
+        engine.setEnabled(false)
+        assertFalse(engine.snapshot.value.enabled)
+        switchFile.complete(switch(ServiceState.ENABLED))
+        yield()
+        assertEquals(0, sends)
+        // Nothing was sent, so the updater checks on its own, as it does when statistics are off.
+        assertEquals(1, standalone)
+    }
+
     @Test fun aRetiredPingLeavesTheUiAndIsNotAttemptedAgain() = runBlocking {
         var now = USAGE_DAY_MS * 10
         val source = CountingSource(switch(ServiceState.RETIRED))

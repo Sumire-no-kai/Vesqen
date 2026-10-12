@@ -92,10 +92,13 @@ internal class DefaultUsageStatistics(
                     store.write(reserved); preferences = reserved
                     prepared
                 } }
-                if (ping != null && mutable.value.enabled && mutable.value.status == UsageSettingsStatus.READY) {
+                if (ping != null && sendingAllowed()) {
                     // The switch can only stop the ping. Paused, retired or unreadable: nothing is sent,
-                    // and the updater checks on its own as it does when statistics are off.
-                    if (serviceSwitch != null && serviceSwitch.check(ReportService.USAGE_PINGS).also { refreshService() } != ServiceState.ENABLED) {
+                    // and the updater checks on its own as it does when statistics are off. Reading the
+                    // file takes time, so the person may turn statistics off meanwhile; ask again.
+                    val switchOpen = serviceSwitch == null ||
+                        serviceSwitch.check(ReportService.USAGE_PINGS).also { refreshService() } == ServiceState.ENABLED
+                    if (!switchOpen || !sendingAllowed()) {
                         missingUpdate()
                         return@launch
                     }
@@ -121,6 +124,8 @@ internal class DefaultUsageStatistics(
             store.write(next); preferences = next
         } } }
     }
+
+    private fun sendingAllowed() = mutable.value.enabled && mutable.value.status == UsageSettingsStatus.READY
 
     private fun publish(policy: UsageRegionPolicy) {
         val saved = requireNotNull(preferences)
