@@ -37,8 +37,10 @@ internal class DefaultUsageStatistics(
         val policy = region()
         val loaded = store.read() ?: UsagePreferences(enabled = policy == UsageRegionPolicy.DEFAULT_ENABLED)
         val saved = if (loaded.consent == UsageConsent.UNDECIDED) loaded.copy(introductionCompleted = false) else loaded
-        // Entering a consent region cannot carry a default-on choice across the boundary.
-        val next = if (policy != UsageRegionPolicy.DEFAULT_ENABLED && saved.consent == UsageConsent.DEFAULT_ENABLED)
+        // Entering a consent region cannot carry a default-on choice across the boundary, and an
+        // undecided person there is never shown as sending.
+        val next = if (policy != UsageRegionPolicy.DEFAULT_ENABLED &&
+            (saved.consent == UsageConsent.DEFAULT_ENABLED || saved.consent == UsageConsent.UNDECIDED))
             saved.copy(enabled = false, consent = UsageConsent.UNDECIDED, introductionCompleted = false) else saved
         store.write(next)
         preferences = next

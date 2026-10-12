@@ -49,10 +49,12 @@ internal class GitHubAppUpdater(
     private val apk = File(directory, "update.apk")
     private val partial = File(directory, "update.part")
 
-    private fun runOperation(reportFailures: Boolean = true, block: suspend () -> Unit) {
-        // Acquire before dispatch, so repeated taps cannot queue duplicate work.
-        if (!operation.tryLock()) return
+    private fun runOperation(reportFailures: Boolean = true, waitIfBusy: Boolean = false, block: suspend () -> Unit) {
+        // Taps acquire before dispatch, so repeats cannot queue duplicate work. Background hand-offs
+        // (a relayed manifest, the check handed back by #70) wait instead of being dropped.
+        if (!waitIfBusy && !operation.tryLock()) return
         scope.launch {
+            if (waitIfBusy) operation.lock()
             try {
                 if (!initialized) { delete(partial); delete(apk); initialized = true }
                 block()
@@ -77,13 +79,13 @@ internal class GitHubAppUpdater(
     }
 
     /** #70 may claim the daily request and supply its response through acceptUsageResponse. */
-    fun onForeground(usageRequestExpected: Boolean = false) = runOperation(reportFailures = false) {
+    fun onForeground(usageRequestExpected: Boolean = false) = runOperation(reportFailures = false, waitIfBusy = true) {
         val ready = snapshot.value.state as? UpdateState.ReadyToInstall
         if (ready != null) { state(ready.copy(requiresInstallPermission = !installer.canInstall())); return@runOperation }
         if (!usageRequestExpected && automaticCheckDue(clock(), preferences.read()) && !isInstalling()) check(automatic = true)
     }
 
-    fun acceptUsageResponse(manifest: String) = runOperation(reportFailures = false) {
+    fun acceptUsageResponse(manifest: String) = runOperation(reportFailures = false, waitIfBusy = true) {
         if (snapshot.value.installationSource == UpdateInstallationSource.GOOGLE_PLAY || !preferences.read().automatic || isInstalling() || snapshot.value.state is UpdateState.ReadyToInstall) return@runOperation
         updatePreferences { it.copy(lastAutomaticAttempt = clock()) }
         accept(parse(manifest, snapshot.value.channel), automatic = true)
@@ -98,6 +100,8 @@ internal class GitHubAppUpdater(
         if (!automatic) state(UpdateState.Checking)
         val text = try { transport.manifest(endpoint) }
             catch (failure: IOException) { throw UpdateOperationException(UpdateFailure.NETWORK_UNAVAILABLE, failure) }
+            // OEM per-app firewalls surface as SecurityException from DNS, not IOException.
+            catch (failure: SecurityException) { throw UpdateOperationException(UpdateFailure.NETWORK_UNAVAILABLE, failure) }
         accept(parse(text, snapshot.value.channel), automatic)
     }
 
@@ -142,6 +146,11 @@ internal class GitHubAppUpdater(
         } ?: return@runOperation
         if (release.minimumAndroidApi > androidApi) return@runOperation
         if (!directory.isDirectory && !directory.mkdirs()) throw UpdateOperationException(UpdateFailure.STORAGE_UNAVAILABLE)
+        // A cancelled system confirmation keeps the file: check it again instead of downloading it again.
+        if (apk.exists()) {
+            val reusable = try { verify(apk, release); true } catch (_: UpdateOperationException) { false }
+            if (reusable) { state(UpdateState.ReadyToInstall(release, !installer.canInstall())); return@runOperation }
+        }
         delete(apk)
         var lastFailure = UpdateFailure.DOWNLOAD_FAILED
         for (url in release.apkUrls) {
@@ -158,6 +167,7 @@ internal class GitHubAppUpdater(
                 lastFailure = failure.reason
                 if (failure.reason in setOf(UpdateFailure.INSUFFICIENT_STORAGE, UpdateFailure.STORAGE_UNAVAILABLE)) throw failure
             } catch (_: IOException) { lastFailure = UpdateFailure.DOWNLOAD_FAILED }
+            catch (_: SecurityException) { lastFailure = UpdateFailure.DOWNLOAD_FAILED }
             finally { delete(partial) }
         }
         state(UpdateState.Failed(lastFailure, release))
@@ -178,11 +188,11 @@ internal class GitHubAppUpdater(
         val ready = snapshot.value.state as? UpdateState.ReadyToInstall ?: return@runOperation
         if (!installer.canInstall()) { installer.requestPermission(); return@runOperation }
         state(UpdateState.Verifying(ready.release))
-        try {
-            verify(apk, ready.release)
-            state(UpdateState.Installing(ready.release))
-            installer.install(apk, ready.release)
-        } finally { delete(apk) }
+        try { verify(apk, ready.release) } catch (failure: UpdateOperationException) { delete(apk); throw failure }
+        state(UpdateState.Installing(ready.release))
+        // The verified file stays until the next app start, so a cancelled confirmation can retry
+        // without a second download; the first operation of every process removes it.
+        installer.install(apk, ready.release)
     }
 
     fun installationResult(release: UpdateRelease, failure: UpdateFailure?) {

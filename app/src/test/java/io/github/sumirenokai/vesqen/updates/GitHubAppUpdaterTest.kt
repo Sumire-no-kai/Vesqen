@@ -46,15 +46,19 @@ class GitHubAppUpdaterTest {
         var failedMirror: String? = null
         var gate: CompletableDeferred<Unit>? = null
         var corruptMirror: String? = null
+        var firewalled = false
+        var firewalledMirror: String? = null
         override suspend fun manifest(url: String): String {
             checks++
             gate?.await()
             if (offline) throw IOException("private endpoint must not reach state")
+            if (firewalled) throw SecurityException("Permission denied (missing INTERNET permission?)")
             manifestFailure?.let { throw UpdateOperationException(it) }
             return "manifest"
         }
         override suspend fun download(url: String, target: File, progress: (Long, Long?) -> Unit) {
             urls += url
+            if (url == firewalledMirror) throw SecurityException("Permission denied")
             target.writeBytes(if (url == corruptMirror) byteArrayOf(1) else bytes)
             if (url == failedMirror) throw IOException("network down")
             progress(bytes.size.toLong(), bytes.size.toLong())
@@ -253,6 +257,49 @@ class GitHubAppUpdaterTest {
         assertTrue(updater.snapshot.value.state is UpdateState.Installing)
         updater.installationResult(release, UpdateFailure.INSTALL_CANCELLED)
         assertEquals(UpdateState.Failed(UpdateFailure.INSTALL_CANCELLED, release), updater.snapshot.value.state)
+    }
+
+    @Test fun anOemFirewallIsANetworkFailureNotACrash() {
+        transport.firewalled = true
+        val updater = updater()
+        updater.onForeground()
+        assertEquals(UpdateState.Idle, updater.snapshot.value.state)
+        updater.checkNow()
+        assertEquals(UpdateState.Failed(UpdateFailure.NETWORK_UNAVAILABLE, null), updater.snapshot.value.state)
+        transport.firewalled = false
+        transport.firewalledMirror = release.apkUrls[0]
+        updater.checkNow(); updater.downloadUpdate()
+        assertEquals(release.apkUrls, transport.urls)
+        assertTrue(updater.snapshot.value.state is UpdateState.ReadyToInstall)
+    }
+
+    @Test fun aCancelledConfirmationRetriesWithoutDownloadingAgain() {
+        val updater = updater()
+        updater.checkNow(); updater.downloadUpdate(); updater.installUpdate()
+        assertEquals(1, transport.urls.size)
+        updater.installationResult(release, UpdateFailure.INSTALL_CANCELLED)
+        updater.downloadUpdate()
+        assertEquals(1, transport.urls.size)
+        assertTrue(updater.snapshot.value.state is UpdateState.ReadyToInstall)
+        updater.installUpdate()
+        assertEquals(2, installer.installs)
+        // A file changed in the meantime is never reused: it is downloaded again.
+        updater.installationResult(release, UpdateFailure.INSTALL_CANCELLED)
+        File(directory, "update.apk").writeText("modified")
+        updater.downloadUpdate()
+        assertEquals(2, transport.urls.size)
+        assertTrue(updater.snapshot.value.state is UpdateState.ReadyToInstall)
+    }
+
+    @Test fun aRelayedManifestWaitsForABusyOperationInsteadOfBeingDropped() = runBlocking {
+        transport.gate = CompletableDeferred()
+        val updater = updater()
+        updater.checkNow()
+        updater.acceptUsageResponse("manifest")
+        assertNull(store.value.lastAutomaticAttempt)
+        transport.gate!!.complete(Unit)
+        assertEquals(time, store.value.lastAutomaticAttempt)
+        assertEquals(1, transport.checks)
     }
 
     @Test fun oldVersionsUnsupportedApiAndPlayInstallCannotDownload() {

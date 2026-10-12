@@ -34,6 +34,8 @@ class GitHubUpdateRuntime(application: Application, scope: CoroutineScope) {
     fun acceptUsageResponse(manifest: String) = engine.acceptUsageResponse(manifest)
     /** The usage ping succeeded without update data (e.g. relay not configured): check directly. */
     fun checkWithoutUsageResponse() = engine.onForeground(usageRequestExpected = false)
+    /** The system install result arrived but could not be recorded (storage or a damaged record). */
+    internal fun reportInstallFailure(reason: UpdateFailure) = engine.initializationFailure(reason)
 
     init {
         installer.onResult = engine::installationResult

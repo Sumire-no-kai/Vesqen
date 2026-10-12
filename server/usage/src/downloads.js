@@ -19,8 +19,10 @@ export async function snapshotDownloads(env, now, fetcher = fetch) {
   if (stored.results.length) return;
   const response = await fetcher(`https://api.github.com/repos/${repository}/releases?per_page=100`, {
     redirect:'manual', signal:AbortSignal.timeout(10000),
-    // GitHub rejects API requests without a User-Agent.
-    headers:{Accept:'application/vnd.github+json','User-Agent':'vesqen-usage-worker','X-GitHub-Api-Version':'2022-11-28'},
+    // GitHub rejects API requests without a User-Agent. Cloudflare's shared egress addresses use up
+    // the anonymous per-address limit, so an optional read-only GITHUB_TOKEN secret gets its own.
+    headers:{Accept:'application/vnd.github+json','User-Agent':'vesqen-usage-worker','X-GitHub-Api-Version':'2022-11-28',
+      ...(env.GITHUB_TOKEN ? {Authorization:`Bearer ${env.GITHUB_TOKEN}`} : {})},
   });
   if (response.status !== 200) throw new Error('download_counts_unavailable');
   const releases = JSON.parse(await readBoundedText(response.body, 4000000, 10000));

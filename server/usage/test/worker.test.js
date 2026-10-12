@@ -140,6 +140,8 @@ test('a closed endpoint answers 503 before rate limiting and reads or stores not
 test('an unknown ingest value closes the endpoint instead of opening it',async t=>{
   const env=environment();t.after(()=>env.DB.close());
   env.USAGE_INGEST='paused';
-  assert.equal((await handle(request(ping(),'/v1/usage'),env,now)).status,503);
+  const closed=await handle(request(ping(),'/v1/usage'),env,now);
+  assert.equal(closed.status,503);
+  assert.deepEqual(await closed.json(),{error:'SERVICE_PAUSED'});
   assert.equal(env.DB.rows('SELECT * FROM daily_totals').length,0);
 });

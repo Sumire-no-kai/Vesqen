@@ -134,7 +134,14 @@ internal class AndroidUpdateInstaller(private val context: Context) : UpdateInst
 
 /** An explicit, non-exported system-install callback; it contains no app dialog or user copy. */
 class UpdateInstallActivity : Activity() {
-    private val installer get() = (application as io.github.sumirenokai.vesqen.VesqenApplication).updateRuntime.installer
+    private val runtime get() = (application as io.github.sumirenokai.vesqen.VesqenApplication).updateRuntime
+    private val installer get() = runtime.installer
+
+    /** Storage or a damaged install record must not crash this callback; the failure is shown instead. */
+    private fun complete(failure: UpdateFailure?) {
+        try { installer.finish(failure) }
+        catch (problem: UpdateOperationException) { runtime.reportInstallFailure(problem.reason) }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -144,16 +151,16 @@ class UpdateInstallActivity : Activity() {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 @Suppress("DEPRECATION")
                 val confirmation = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
-                if (confirmation == null) { installer.finish(UpdateFailure.INSTALL_FAILED); finish() }
+                if (confirmation == null) { complete(UpdateFailure.INSTALL_FAILED); finish() }
                 else {
                     @Suppress("DEPRECATION")
                     startActivityForResult(confirmation, 1)
                 }
             }
-            PackageInstaller.STATUS_SUCCESS -> { installer.finish(null); finish() }
-            PackageInstaller.STATUS_FAILURE_ABORTED -> { installer.finish(UpdateFailure.INSTALL_CANCELLED); finish() }
-            PackageInstaller.STATUS_FAILURE_STORAGE -> { installer.finish(UpdateFailure.INSUFFICIENT_STORAGE); finish() }
-            else -> { installer.finish(UpdateFailure.INSTALL_FAILED); finish() }
+            PackageInstaller.STATUS_SUCCESS -> { complete(null); finish() }
+            PackageInstaller.STATUS_FAILURE_ABORTED -> { complete(UpdateFailure.INSTALL_CANCELLED); finish() }
+            PackageInstaller.STATUS_FAILURE_STORAGE -> { complete(UpdateFailure.INSUFFICIENT_STORAGE); finish() }
+            else -> { complete(UpdateFailure.INSTALL_FAILED); finish() }
         }
     }
 
@@ -161,7 +168,7 @@ class UpdateInstallActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == 1 && resultCode == RESULT_CANCELED && installer.accepts(intent))
-            installer.finish(UpdateFailure.INSTALL_CANCELLED)
+            complete(UpdateFailure.INSTALL_CANCELLED)
         finish()
     }
 }
