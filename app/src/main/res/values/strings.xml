@@ -168,6 +168,7 @@
     <string name="report_size">Size: %1$s</string>
     <string name="report_share">Share</string>
     <string name="report_email">Email</string>
+    <string name="report_email_note">Email opens your mail app, addressed to vesqen@sumirenokai.com, with the report attached.</string>
     <string name="report_upload">Upload</string>
     <string name="report_start_over">Start over</string>
     <string name="report_sending">Sending…</string>

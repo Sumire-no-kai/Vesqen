@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.usage
 
+import io.github.sumirenokai.vesqen.service.servicePaused
 import io.github.sumirenokai.vesqen.updates.UpdateChannel
 import io.github.sumirenokai.vesqen.updates.defaultUpdateChannel
 import java.io.ByteArrayOutputStream
@@ -32,6 +33,9 @@ internal class HttpsUsageTransport(
             connection.setRequestProperty("User-Agent", "Vesqen-Usage")
             connection.outputStream.use { it.write(bytes) }
             if (connection.responseCode == 204) return null
+            // Closed by the owner (#96): nothing was counted. Null hands the day's update check back
+            // to the updater, as a paused switch file does, instead of skipping it like a failure.
+            if (connection.servicePaused()) return null
             if (connection.responseCode != 200) throw IOException("Usage request rejected")
             val output = ByteArrayOutputStream()
             connection.inputStream.use { input ->

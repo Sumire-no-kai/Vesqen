@@ -165,6 +165,7 @@
     <string name="report_size">大小：%1$s</string>
     <string name="report_share">分享</string>
     <string name="report_email">发邮件</string>
+    <string name="report_email_note">“发邮件”会打开邮件 App，收件人是 vesqen@sumirenokai.com，报告作为附件。</string>
     <string name="report_upload">上传</string>
     <string name="report_start_over">重新选择</string>
     <string name="report_sending">正在发送…</string>

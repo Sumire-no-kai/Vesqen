@@ -6,7 +6,6 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -255,29 +254,37 @@ private fun ReportResult(state: DeviceReportState) {
 @Composable
 private fun ReportActions(state: DeviceReportState, uploadAvailable: Boolean, deviceReporter: DeviceReporter) {
     val idle = state !is DeviceReportState.Sending
-    // One row, so the bar stays short; it wraps at large text sizes.
-    FlowRow(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.sm),
-        horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
-        verticalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
+    Column(
+        modifier = Modifier.padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.sm),
+        verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xs),
     ) {
-        if (uploadAvailable) {
-            Button(
-                onClick = { deviceReporter.send(DeviceReportDelivery.UPLOAD) },
+        // One row of equal buttons keeps the bar short and even.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.sm)) {
+            val button = Modifier.weight(1f).heightIn(min = 48.dp)
+            if (uploadAvailable) {
+                Button(
+                    onClick = { deviceReporter.send(DeviceReportDelivery.UPLOAD) },
+                    enabled = idle,
+                    modifier = button.testTag("vesqen.report.upload"),
+                ) { Text(stringResource(R.string.report_upload)) }
+            }
+            OutlinedButton(
+                onClick = { deviceReporter.send(DeviceReportDelivery.SHARE) },
                 enabled = idle,
-                modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.report.upload"),
-            ) { Text(stringResource(R.string.report_upload)) }
+                modifier = button.testTag("vesqen.report.share"),
+            ) { Text(stringResource(R.string.report_share)) }
+            OutlinedButton(
+                onClick = { deviceReporter.send(DeviceReportDelivery.EMAIL) },
+                enabled = idle,
+                modifier = button.testTag("vesqen.report.email"),
+            ) { Text(stringResource(R.string.report_email)) }
         }
-        OutlinedButton(
-            onClick = { deviceReporter.send(DeviceReportDelivery.SHARE) },
-            enabled = idle,
-            modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.report.share"),
-        ) { Text(stringResource(R.string.report_share)) }
-        OutlinedButton(
-            onClick = { deviceReporter.send(DeviceReportDelivery.EMAIL) },
-            enabled = idle,
-            modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.report.email"),
-        ) { Text(stringResource(R.string.report_email)) }
+        // The Email button addresses the developer; say so before anyone taps it.
+        Text(
+            text = stringResource(R.string.report_email_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

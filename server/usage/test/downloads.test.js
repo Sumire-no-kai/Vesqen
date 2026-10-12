@@ -28,6 +28,14 @@ test('download counts are off until a repository is configured',async t=>{
   assert.equal(requests.length,0);
 });
 
+test('an optional read-only token is sent only when configured',async t=>{
+  const env={...environment(),DOWNLOAD_COUNTS_REPO:'Sumire-no-kai/Vesqen',GITHUB_TOKEN:'github_pat_example'};t.after(()=>env.DB.close());
+  const {requests,fetcher}=github();
+  await snapshotDownloads(env,now,fetcher);
+  assert.equal(requests[0].init.headers.Authorization,'Bearer github_pat_example');
+  assert.equal(env.DB.rows('SELECT * FROM daily_downloads').length,2);
+});
+
 test('one snapshot per UTC day keeps only published APK counters',async t=>{
   const env={...environment(),DOWNLOAD_COUNTS_REPO:'Sumire-no-kai/Vesqen'};t.after(()=>env.DB.close());
   const {requests,fetcher}=github();

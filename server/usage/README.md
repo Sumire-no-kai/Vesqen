@@ -55,7 +55,7 @@ The owner can stop either endpoint at once without touching the app:
 - `USAGE_INGEST` and `REPORT_INGEST` (Worker variables, default `open`). Set one to `closed`
   in the Cloudflare dashboard or with `wrangler`, and that endpoint answers `503
   {"error":"SERVICE_PAUSED"}` before rate limiting and before reading the body; nothing is
-  stored. Any value other than `open` or `closed` also closes the endpoint.
+  stored. Any value other than `open` or `closed` also closes the endpoint, with the same `SERVICE_PAUSED` answer.
 - This stops collection, including from old or forged clients. To make current apps stop
   sending at all, change `service/status.json` on the website as well (#96): apps read it
   right before each ping or upload and send nothing unless the matching entry is `enabled`.
@@ -90,6 +90,12 @@ release in `daily_downloads`. Drafts, checksums and the manifest are skipped. On
 a day is stored it is not fetched again; a failed read (GitHub's unauthenticated
 limit is shared by Cloudflare's addresses) stores nothing and the next hourly run
 retries. Leave `DOWNLOAD_COUNTS_REPO` empty to turn it off.
+
+In production the anonymous limit is usually already used up by other Cloudflare customers
+(2026-10-12: every hourly read got 4xx). Give the Worker its own limit with a fine-grained
+GitHub token that has read-only access to public repositories and no other permission:
+`npx wrangler secret put GITHUB_TOKEN --config wrangler.local.jsonc`. The token is sent only to
+`api.github.com`; rotate it when it expires.
 
 `downloads` is GitHub's cumulative `download_count`. It counts every fetch of the
 file: browser downloads, in-app updates (#68 points them at the same GitHub file),

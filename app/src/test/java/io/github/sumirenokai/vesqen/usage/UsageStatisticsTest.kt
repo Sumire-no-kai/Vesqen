@@ -218,6 +218,20 @@ class UsageStatisticsTest {
         assertEquals(1, standalone)
     }
 
+    @Test fun anUndecidedPersonInAConsentRegionIsNeverShownAsSending() = runBlocking {
+        // Saved in a default-on region before the introduction was answered, then opened in the EU.
+        val store = MemoryStore(UsagePreferences(enabled = true, consent = UsageConsent.UNDECIDED, introductionCompleted = false))
+        val engine = engine(store, region = { UsageRegionPolicy.EXPLICIT_CONSENT })
+        yield()
+        assertFalse(engine.snapshot.value.enabled)
+        assertTrue(engine.snapshot.value.introductionRequired)
+        assertFalse(store.value!!.enabled)
+        // A default-on region keeps the default until the person answers.
+        val defaultOn = engine(MemoryStore(UsagePreferences(enabled = true, consent = UsageConsent.UNDECIDED, introductionCompleted = false)))
+        yield()
+        assertTrue(defaultOn.snapshot.value.enabled)
+    }
+
     @Test fun aRetiredPingLeavesTheUiAndIsNotAttemptedAgain() = runBlocking {
         var now = USAGE_DAY_MS * 10
         val source = CountingSource(switch(ServiceState.RETIRED))
