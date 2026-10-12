@@ -71,7 +71,7 @@ You need JDK 25 and Android SDK Platform 36. The Gradle wrapper provides Gradle 
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-On Windows, use `.\gradlew.bat` instead. Debug APKs are written to `app/build/outputs/apk/debug/`.
+On Windows, use `.\gradlew.bat` instead. Debug APKs are written to `app/build/outputs/apk/github/debug/` and `app/build/outputs/apk/play/debug/`, one per build flavor (see [versioning](docs/VERSIONING.md#build-flavors-and-channels)).
 
 For previews and scrolling checks, use the Profile build. It isn't debuggable, it uses Release's R8 optimization, and it is signed with the local debug key:
 

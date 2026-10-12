@@ -134,7 +134,7 @@ internal class AndroidUpdateInstaller(private val context: Context) : UpdateInst
 
 /** An explicit, non-exported system-install callback; it contains no app dialog or user copy. */
 class UpdateInstallActivity : Activity() {
-    private val runtime get() = (application as io.github.sumirenokai.vesqen.VesqenApplication).updateRuntime
+    private val runtime get() = (application as io.github.sumirenokai.vesqen.VesqenApplication).updateRuntime as GitHubUpdateRuntime
     private val installer get() = runtime.installer
 
     /** Storage or a damaged install record must not crash this callback; the failure is shown instead. */

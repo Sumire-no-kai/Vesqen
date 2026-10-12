@@ -98,7 +98,7 @@ def inspect_apk(apk, tools, metadata):
 
 def prepare(source, output, commit, branch, tools):
     version = properties((source / "version.properties").read_text())
-    apk = source / "app/build/outputs/apk/release/app-release-unsigned.apk"
+    apk = source / "app/build/outputs/apk/github/release/app-github-release-unsigned.apk"
     metadata = validate_metadata({
         "applicationId": APP_ID,
         "versionName": version["versionName"],

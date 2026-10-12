@@ -15,6 +15,17 @@ For every build distributed through GitHub Releases, Google Play, or another pub
 - create the matching annotated Git tag `v<versionName>` only for the reviewed release commit;
 - record the artifact hash and signing identity against that tag.
 
+## Build flavors and channels
+
+One version is built as two product flavors (#47). Both carry the same `versionName` and `versionCode` and are signed with the same application signing identity, so either can be installed over the other and keep its data.
+
+| Flavor | Channel | Artifact | Updates |
+| --- | --- | --- | --- |
+| `github` | GitHub Releases and the website | `assembleGithubRelease` APK, signed by the release workflow | Built-in updater (`REQUEST_INSTALL_PACKAGES`) |
+| `play` | Google Play | `bundlePlayRelease` AAB, signed locally with the Play upload key | Google Play only; `checkPlayReleasePermissions` rejects any permission outside the Play allowlist |
+
+Both flavors send the same usage statistics and device report uploads; the usage message's `channel` field tells them apart. The GitHub release workflow builds both from the same commit and keeps the unsigned AAB as the `unsigned-play-bundle` artifact.
+
 The long-lived application certificate, replaceable Play upload certificate,
 local and approved CI custody boundaries, and per-release signing ledger are defined in
 [`RELEASE_SIGNING.md`](RELEASE_SIGNING.md). Signing passwords and private keys

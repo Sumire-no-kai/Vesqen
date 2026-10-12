@@ -20,9 +20,6 @@ internal fun automaticCheckDue(now: Long, preferences: UpdatePreferences): Boole
     preferences.automatic && listOfNotNull(preferences.lastSuccess, preferences.lastAutomaticAttempt)
         .all { now > it && now - it > UPDATE_CHECK_INTERVAL_MS }
 
-internal fun defaultUpdateChannel(versionName: String): UpdateChannel =
-    if ('-' in versionName) UpdateChannel.BETA else UpdateChannel.STABLE
-
 internal fun isHttpsDownloadUrl(value: String): Boolean = try {
     val uri = URI(value)
     uri.scheme == "https" && !uri.host.isNullOrBlank() && uri.rawUserInfo == null && uri.rawFragment == null

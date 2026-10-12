@@ -71,7 +71,7 @@ Vesqen 是一款 Android 离线音乐播放器，播放你手机里的音乐，�
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-Windows 上改用 `.\gradlew.bat`。Debug 安装包在 `app/build/outputs/apk/debug/`。
+Windows 上改用 `.\gradlew.bat`。Debug 安装包按构建变体分别在 `app/build/outputs/apk/github/debug/` 和 `app/build/outputs/apk/play/debug/`（见[版本管理](docs/VERSIONING.md#build-flavors-and-channels)）。
 
 日常预览和滑动性能检查用 Profile 构建：它不可调试，使用和 Release 相同的 R8 优化，并用本机的调试密钥签名。
 

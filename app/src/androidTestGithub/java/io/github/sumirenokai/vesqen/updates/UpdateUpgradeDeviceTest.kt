@@ -39,7 +39,7 @@ class UpdateUpgradeDeviceTest {
         val candidate = File(directory, "next.apk")
         val stateFile = File(directory, "state.txt")
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        val installer = app.updateRuntime.installer
+        val installer = (app.updateRuntime as GitHubUpdateRuntime).installer
         val identity = installer.installedIdentity()
         val next = installer.archiveIdentity(candidate)
         File(directory, "identity.txt").writeText("installed=$identity\narchive=$next")
