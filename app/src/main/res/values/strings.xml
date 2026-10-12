@@ -139,7 +139,7 @@
     <string name="usage_field_bit_perfect">Whether a connected USB audio device offers the official bit-perfect path</string>
     <string name="usage_field_recent_usb">Whether a USB audio device was connected in the last 7 days</string>
     <string name="usage_field_first">Whether this is the first time today, this week and this month</string>
-    <string name="usage_not_sent">They never include a device or install ID, your location, your music or what you listen to. The server keeps no IP addresses, only daily totals, for 90 days.</string>
+    <string name="usage_not_sent">They never include a device or install ID, your location, your music or what you listen to. We keep only daily totals, for 90 days, and no IP addresses. Cloudflare, which hosts the service, keeps a sample of request records for up to 31 days; the privacy policy has the details.</string>
     <string name="usage_turn_off">You can turn this off in Settings at any time.</string>
     <string name="usage_switch">Send usage statistics</string>
     <string name="usage_continue">Continue</string>

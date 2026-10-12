@@ -810,15 +810,14 @@ class VesqenAppTest {
         val artifact = DeviceReportArtifact(text.toByteArray(Charsets.UTF_8))
         composeRule.runOnIdle { reporter.emit(DeviceReportState.Preview(artifact)) }
         composeRule.onNodeWithTag("vesqen.report.preview.0").assertTextEquals(text)
-        composeRule.onNodeWithTag("vesqen.report").performScrollToNode(hasTestTag("vesqen.report.upload"))
-        composeRule.onNodeWithTag("vesqen.report.upload").performClick()
+        // The send buttons sit below the preview, so no scrolling is needed (#35).
+        composeRule.onNodeWithTag("vesqen.report.upload").assertIsDisplayed().performClick()
         composeRule.runOnIdle {
             assertEquals(DeviceReportState.Sending(artifact, DeviceReportDelivery.UPLOAD), reporter.snapshot.value.state)
         }
         val receipt = "00000000-0000-4000-8000-000000000000"
         composeRule.runOnIdle { reporter.emit(DeviceReportState.Sent(artifact, DeviceReportDelivery.UPLOAD, receipt)) }
-        composeRule.onNodeWithTag("vesqen.report").performScrollToNode(hasTestTag("vesqen.report.receipt"))
-        composeRule.onNodeWithTag("vesqen.report.receipt").assertTextEquals(context.getString(R.string.report_receipt, receipt))
+        composeRule.onNodeWithTag("vesqen.report.receipt").assertIsDisplayed().assertTextEquals(context.getString(R.string.report_receipt, receipt))
         // System Back from a preview returns to the choices instead of leaving the page.
         composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
         composeRule.runOnIdle { assertEquals(DeviceReportState.Editing, reporter.snapshot.value.state) }
@@ -830,16 +829,14 @@ class VesqenAppTest {
         val reporter = FakeDeviceReporter()
         render(grantedState(), deviceReporter = reporter, reportUploadAvailable = false)
         openDeviceReport()
-        val artifact = DeviceReportArtifact("{\"schemaVersion\":1}\n".toByteArray(Charsets.UTF_8))
+        // As long as a real report with every section; the buttons must still show without scrolling.
+        val artifact = DeviceReportArtifact(("{\"schemaVersion\":1,\"x\":\"" + "a".repeat(45_000) + "\"}\n").toByteArray(Charsets.UTF_8))
         composeRule.runOnIdle { reporter.emit(DeviceReportState.Preview(artifact)) }
-        composeRule.onNodeWithTag("vesqen.report").performScrollToNode(hasTestTag("vesqen.report.share"))
         composeRule.onAllNodesWithTag("vesqen.report.upload").assertCountEquals(0)
-        composeRule.onNodeWithTag("vesqen.report.share").performClick()
+        composeRule.onNodeWithTag("vesqen.report.share").assertIsDisplayed().performClick()
         composeRule.runOnIdle { reporter.emit(DeviceReportState.Failed(DeviceReportFailure.NO_SHARE_APPLICATION, artifact)) }
-        composeRule.onNodeWithTag("vesqen.report").performScrollToNode(hasTestTag("vesqen.report.failure"))
-        composeRule.onNodeWithTag("vesqen.report.failure").assertTextEquals(context.getString(R.string.report_failure_no_app))
+        composeRule.onNodeWithTag("vesqen.report.failure").assertIsDisplayed().assertTextEquals(context.getString(R.string.report_failure_no_app))
         composeRule.runOnIdle { reporter.emit(DeviceReportState.Sent(artifact, DeviceReportDelivery.EMAIL)) }
-        composeRule.onNodeWithTag("vesqen.report").performScrollToNode(hasTestTag("vesqen.report.shared"))
         composeRule.onNodeWithTag("vesqen.report.shared").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.report").performScrollToNode(hasTestTag("vesqen.report.start-over"))
         composeRule.onNodeWithTag("vesqen.report.start-over").performClick()

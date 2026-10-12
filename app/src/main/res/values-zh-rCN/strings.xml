@@ -136,7 +136,7 @@
     <string name="usage_field_bit_perfect">连着的 USB 音频设备是否开放官方 bit-perfect 通道</string>
     <string name="usage_field_recent_usb">最近 7 天里是否连接过 USB 音频设备</string>
     <string name="usage_field_first">今天、本周、本月是不是第一次发送</string>
-    <string name="usage_not_sent">不发送设备 ID、安装 ID、位置、音乐或收听记录。服务器不保存 IP 地址，只保存按天汇总的计数，保留 90 天。</string>
+    <string name="usage_not_sent">不发送设备 ID、安装 ID、位置、音乐或收听记录。我们只保存按天汇总的计数，保留 90 天，不保存 IP 地址。托管这项服务的 Cloudflare 会保留部分请求记录，最多 31 天，详见隐私政策。</string>
     <string name="usage_turn_off">随时可以在设置里关闭。</string>
     <string name="usage_switch">发送使用统计</string>
     <string name="usage_continue">继续</string>

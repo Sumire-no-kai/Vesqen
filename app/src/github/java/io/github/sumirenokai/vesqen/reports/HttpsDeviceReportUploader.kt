@@ -47,7 +47,12 @@ internal class HttpsDeviceReportUploader(
                 connection.setRequestProperty("User-Agent", "Vesqen-Device-Report")
                 ensureActive()
                 connection.outputStream.use { it.write(bytes) }
-                if (connection.responseCode != HttpURLConnection.HTTP_CREATED) return@withContext failed()
+                when (connection.responseCode) {
+                    HttpURLConnection.HTTP_CREATED -> Unit
+                    // The owner closed uploads on the Worker (#96): the same message as a paused switch file.
+                    HttpURLConnection.HTTP_UNAVAILABLE -> return@withContext if (pausedByServer(connection)) paused() else failed()
+                    else -> return@withContext failed()
+                }
                 val response = ByteArrayOutputStream()
                 connection.inputStream.use { input ->
                     val buffer = ByteArray(1_024)
@@ -68,13 +73,32 @@ internal class HttpsDeviceReportUploader(
     }
 
     private fun failed() = DeviceReportUploadResult.Failed(DeviceReportFailure.UPLOAD_FAILED)
+    private fun paused() = DeviceReportUploadResult.Failed(DeviceReportFailure.UPLOAD_PAUSED)
+
+    /** Only the Worker's exact answer counts; any other 503, such as a Cloudflare error page, stays a failure. */
+    private fun pausedByServer(connection: HttpURLConnection): Boolean {
+        val body = connection.errorStream?.use { input ->
+            val buffer = ByteArray(MAX_PAUSED_BYTES + 1)
+            var total = 0
+            while (total < buffer.size) {
+                val count = input.read(buffer, total, buffer.size - total)
+                if (count < 0) break
+                total += count
+            }
+            if (total > MAX_PAUSED_BYTES) return false
+            String(buffer, 0, total, Charsets.UTF_8)
+        } ?: return false
+        return SERVICE_PAUSED.matches(body)
+    }
 
     companion object {
         internal const val MAX_REPORT_BYTES = 256 * 1_024
         private const val MAX_RECEIPT_BYTES = 4 * 1_024
+        private const val MAX_PAUSED_BYTES = 256
         // The Worker returns exactly {reportId: crypto.randomUUID()}. Accept only that JSON shape,
         // avoiding arbitrary server text in the UI, duplicate fields and an extra JSON dependency.
         // Android's ICU regex rejects an unescaped "}" that the desktop JVM accepts: escape both braces.
+        private val SERVICE_PAUSED = Regex("""[ \t\r\n]*\{[ \t\r\n]*"error"[ \t\r\n]*:[ \t\r\n]*"SERVICE_PAUSED"[ \t\r\n]*\}[ \t\r\n]*""")
         private val RECEIPT = Regex("""[ \t\r\n]*\{[ \t\r\n]*"reportId"[ \t\r\n]*:[ \t\r\n]*"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"[ \t\r\n]*\}[ \t\r\n]*""")
 
         internal fun reportEndpoint(configured: String): URL? = try {

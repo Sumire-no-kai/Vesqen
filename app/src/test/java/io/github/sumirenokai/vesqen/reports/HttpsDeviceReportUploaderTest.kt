@@ -150,7 +150,23 @@ class HttpsDeviceReportUploaderTest {
         assertEquals(DeviceReportUploadResult.Uploaded(id), HttpsDeviceReportUploader(endpoint, switch(ServiceState.ENABLED)) { Connection() }.upload(artifact()))
     }
 
-    private class Connection(private val status: Int = 201, private val body: String = receipt) : HttpURLConnection(URL(endpoint)) {
+    @Test fun `a Worker closed by the owner reads as paused and other 503s stay failures`() = runBlocking {
+        val paused = DeviceReportUploadResult.Failed(DeviceReportFailure.UPLOAD_PAUSED)
+        listOf("{\"error\":\"SERVICE_PAUSED\"}", " { \"error\" : \"SERVICE_PAUSED\" }\n").forEach { body ->
+            assertEquals(body, paused, HttpsDeviceReportUploader(endpoint, enabled) { Connection(503, error = body) }.upload(artifact()))
+        }
+        listOf(null, "", "<html>Error 1102</html>", "{\"error\":\"RATE_LIMITED\"}", "{\"error\":\"SERVICE_PAUSED\"}" + " ".repeat(300)).forEach { body ->
+            val connection = Connection(503, error = body)
+            assertEquals(body.toString().take(40), failed, HttpsDeviceReportUploader(endpoint, enabled) { connection }.upload(artifact()))
+            assertTrue(connection.disconnected)
+        }
+    }
+
+    private class Connection(
+        private val status: Int = 201,
+        private val body: String = receipt,
+        private val error: String? = null,
+    ) : HttpURLConnection(URL(endpoint)) {
         val sent = ByteArrayOutputStream()
         val length get() = fixedContentLength
         var disconnected = false
@@ -162,6 +178,7 @@ class HttpsDeviceReportUploaderTest {
         override fun getOutputStream(): OutputStream { writeFailure?.let { throw it }; return sent }
         override fun getInputStream(): InputStream { readFailure?.let { throw it }; return ByteArrayInputStream(body.toByteArray()) }
         override fun getResponseCode() = status
+        override fun getErrorStream(): InputStream? = error?.let { ByteArrayInputStream(it.toByteArray()) }
     }
 
     companion object {

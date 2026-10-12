@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -71,45 +72,62 @@ fun DeviceReportScreen(
     // Back from a preview returns to the choices instead of leaving with an unsent report.
     BackHandler(enabled = report != null) { deviceReporter.discard() }
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 720.dp)
-                .testTag("vesqen.report"),
-            contentPadding = PaddingValues(bottom = VesqenSpacing.xl),
-        ) {
-            item {
-                SettingsDetailHeader(
-                    title = stringResource(R.string.report_title),
-                    backTag = "vesqen.report.back",
-                    onBack = if (report != null) deviceReporter::discard else onBack,
-                )
-            }
-            if (report == null) {
-                item { ReportText(stringResource(R.string.report_intro)) }
-                item { ReportOptions(snapshot.options, enabled = state !is DeviceReportState.Generating, onChange = deviceReporter::setOptions) }
-                item { ReportText(stringResource(R.string.report_never), muted = true) }
-                if (state is DeviceReportState.Failed) item { ReportStatus(stringResource(reportFailureLabel(state.reason)), "vesqen.report.failure") }
+        Column(Modifier.fillMaxHeight().fillMaxWidth().widthIn(max = 720.dp)) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .testTag("vesqen.report"),
+                contentPadding = PaddingValues(bottom = VesqenSpacing.xl),
+            ) {
                 item {
-                    Column(Modifier.padding(horizontal = VesqenSpacing.lg), verticalArrangement = Arrangement.spacedBy(VesqenSpacing.sm)) {
-                        if (state is DeviceReportState.Generating) {
-                            LinearProgressIndicator(Modifier.fillMaxWidth().testTag("vesqen.report.progress"))
-                            Text(stringResource(R.string.report_generating), style = MaterialTheme.typography.bodySmall)
+                    SettingsDetailHeader(
+                        title = stringResource(R.string.report_title),
+                        backTag = "vesqen.report.back",
+                        onBack = if (report != null) deviceReporter::discard else onBack,
+                    )
+                }
+                if (report == null) {
+                    item { ReportText(stringResource(R.string.report_intro)) }
+                    item { ReportOptions(snapshot.options, enabled = state !is DeviceReportState.Generating, onChange = deviceReporter::setOptions) }
+                    item { ReportText(stringResource(R.string.report_never), muted = true) }
+                    if (state is DeviceReportState.Failed) item { ReportStatus(stringResource(reportFailureLabel(state.reason)), "vesqen.report.failure") }
+                    item {
+                        Column(Modifier.padding(horizontal = VesqenSpacing.lg), verticalArrangement = Arrangement.spacedBy(VesqenSpacing.sm)) {
+                            if (state is DeviceReportState.Generating) {
+                                LinearProgressIndicator(Modifier.fillMaxWidth().testTag("vesqen.report.progress"))
+                                Text(stringResource(R.string.report_generating), style = MaterialTheme.typography.bodySmall)
+                            }
+                            Button(
+                                onClick = deviceReporter::generate,
+                                enabled = state !is DeviceReportState.Generating,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 52.dp)
+                                    .testTag("vesqen.report.create"),
+                            ) { Text(stringResource(R.string.report_create)) }
                         }
-                        Button(
-                            onClick = deviceReporter::generate,
-                            enabled = state !is DeviceReportState.Generating,
+                    }
+                } else {
+                    reportPreview(report)
+                    item {
+                        TextButton(
+                            onClick = deviceReporter::discard,
+                            enabled = state !is DeviceReportState.Sending,
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 52.dp)
-                                .testTag("vesqen.report.create"),
-                        ) { Text(stringResource(R.string.report_create)) }
+                                .padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.sm)
+                                .heightIn(min = 48.dp)
+                                .testTag("vesqen.report.start-over"),
+                        ) { Text(stringResource(R.string.report_start_over)) }
                     }
                 }
-            } else {
-                reportPreview(report)
-                item { ReportResult(state) }
-                item { ReportActions(state, uploadAvailable, deviceReporter) }
+            }
+            // #35: the result and the send buttons stay below the preview. A 45 kB report used to need
+            // about 20 swipes before Upload appeared.
+            if (report != null) {
+                PaperDivider()
+                ReportResult(state)
+                ReportActions(state, uploadAvailable, deviceReporter)
             }
         }
     }
@@ -237,31 +255,29 @@ private fun ReportResult(state: DeviceReportState) {
 @Composable
 private fun ReportActions(state: DeviceReportState, uploadAvailable: Boolean, deviceReporter: DeviceReporter) {
     val idle = state !is DeviceReportState.Sending
-    Column(Modifier.padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.sm), verticalArrangement = Arrangement.spacedBy(VesqenSpacing.sm)) {
+    // One row, so the bar stays short; it wraps at large text sizes.
+    FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
+        verticalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
+    ) {
         if (uploadAvailable) {
             Button(
                 onClick = { deviceReporter.send(DeviceReportDelivery.UPLOAD) },
                 enabled = idle,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("vesqen.report.upload"),
+                modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.report.upload"),
             ) { Text(stringResource(R.string.report_upload)) }
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.sm)) {
-            OutlinedButton(
-                onClick = { deviceReporter.send(DeviceReportDelivery.SHARE) },
-                enabled = idle,
-                modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.report.share"),
-            ) { Text(stringResource(R.string.report_share)) }
-            OutlinedButton(
-                onClick = { deviceReporter.send(DeviceReportDelivery.EMAIL) },
-                enabled = idle,
-                modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.report.email"),
-            ) { Text(stringResource(R.string.report_email)) }
-        }
-        TextButton(
-            onClick = deviceReporter::discard,
+        OutlinedButton(
+            onClick = { deviceReporter.send(DeviceReportDelivery.SHARE) },
             enabled = idle,
-            modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.report.start-over"),
-        ) { Text(stringResource(R.string.report_start_over)) }
+            modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.report.share"),
+        ) { Text(stringResource(R.string.report_share)) }
+        OutlinedButton(
+            onClick = { deviceReporter.send(DeviceReportDelivery.EMAIL) },
+            enabled = idle,
+            modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.report.email"),
+        ) { Text(stringResource(R.string.report_email)) }
     }
 }
 
