@@ -176,3 +176,13 @@
 - 结束时三个采样阶段都确认没有观察者残留（`activeObservationCount` 回到 0），采样频率也随观察者结束而停止。
 - 诊断录制在上限之内：最多 1800 条快照、4096 个事件，实际 1672 条快照、60 个事件，丢弃 0、事件序号缺口 0。导出的报告通过了私有内容检查（不含 `VESQEN_QA_PRIVATE`、`file://` 和缓存路径）。
 - 观察：录制期间内存随保存的快照一起增长（5 分钟 208 MB，30 分钟 231 MB），在快照上限内有界。30 分钟录制导出的 JSON 约 50 MB，作为邮件附件偏大，以后可以考虑压缩格式。
+
+### 2026-10-12 · beta.2 CI 签名 APK 从 beta.1 升级
+
+- 候选：[GitHub APK release #38213613584](https://github.com/Sumire-no-kai/Vesqen/actions/runs/38213613584)，源码和工作流都是 `master` 的 `76781ec82e3605891e0af20d08500005756d9a07`，所有者批准签名后生成草稿 `v1.0.0-beta.2`。`Vesqen-1.0.0-beta.2.apk` 的 SHA-256 为 `36954f80d0bfa94fe1bddd00fe43700d875affa36a1e8ba54c25ecc6908e70a0`（未签名包 `02c8e784…ef12`）。同一次运行产出的未签名 Play 版 AAB（`unsigned-play-bundle`）SHA-256 为 `b89f24e63f8891cc2bf697c68fd4f8fb03c1d6e3b7ec3672ac9526e865043521`。
+- 本机复核草稿附件：`SHA256SUMS` 和 `release-manifest.json` 一致；apksigner 只有一个签名者，证书 SHA-256 为 `743e96fc…6293`，v2、v3 验证通过；aapt 显示 1.0.0-beta.2 / 11，带 `INTERNET` 和 `REQUEST_INSTALL_PACKAGES`（GitHub 版）。Play 版 AAB 的 Manifest 里没有 `REQUEST_INSTALL_PACKAGES` 和更新安装界面。两个构建都配置了线上统计地址。
+- Honor STF-AL00 / Android 9：设备上原有 10-01 安装的正式 beta.1（base.apk 哈希 `5670977b…b396`）。升级前收藏 1 首（05. 前前前世），播放到 3:09 后暂停，输出模式为系统输出。用 `adb install -r` 安装草稿 APK：versionCode 10 → 11，firstInstallTime 仍是 2026-10-01 12:18:56，设备上 base.apk 哈希为 `36954f80…e70a0`。首次打开显示使用统计说明（征求同意的地区），选了"不发送"，避免验收数据进入线上统计。新界面下曲库完整，收藏 1 首保留，队列（第 93 / 106 首）和进度 3:09 保留，`<unknown>` 显示为"未知艺术家"（#32）。从 3:09 继续播放到 3:18，前台服务正常，暂停正常；链路页、设置里的"更新"组和"使用统计：关"都正常。
+- iQOO V2171A / Android 15：设备上原来没有正式包，先安装 GitHub 上公开的 beta.1（哈希 `5670977b…b396`），授予音乐和通知权限，扫描出 112 首（与 MediaStore 中 `is_music=1` 的数量一致）。播放"ありがとう、神様"并收藏，暂停在 0:18。安装草稿 APK 时，vivo 安全守护只提示"外部来源应用"。升级成功：versionCode 10 → 11，firstInstallTime 不变（18:42:41），base.apk 哈希为 `36954f80…e70a0`，两项运行时权限保留。同样选"不发送"。收藏 1 首、队列（第 97 / 112 首）和进度 0:18 保留，不需要重新扫描；继续播放、前台服务、媒体键暂停正常，链路页显示源文件 FLAC 192 kHz。
+- 两台手机在升级之后都没有崩溃记录；唯一一次进程退出是安装更新本身（`PACKAGE UPDATED`）。
+- 没有覆盖：官网的 `updates/beta.json` 要在发布后才上线，所以这次没有验证应用内检查更新能否拿到线上版本文件。应用内的下载、核对、安装流程已在 #68 中用本地文件验证（2026-10-10），发布后再补查一次"检查更新"。#72 蓝牙和扬声器各播一首仍未做。
+- 结论：安装、versionCode 增大的同签名升级和数据保留通过，覆盖 Android 9 和 15。
