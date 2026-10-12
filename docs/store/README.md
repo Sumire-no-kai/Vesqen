@@ -1,12 +1,13 @@
 # Play 商店图片
 
-[Google Play 上架材料](../PLAY_LISTING.md) 用到的图片。源文件在 `src/`，改完后按下面的命令重新导出，再把 PNG 一起提交。
+[Google Play 上架材料](../PLAY_LISTING.md) 用到的图片。图标和置顶大图的源文件在 `src/`，改完后按下面的命令重新导出，再把 PNG 一起提交。截图没有源文件，拍法见上架材料第 6 节。
 
 | 文件 | 源文件 | 规格 |
 | --- | --- | --- |
 | `icon-512.png` | `src/icon-512.html` | 512 × 512，32 位 PNG，和启动图标同一图案 |
 | `feature-graphic-en.png` | `src/feature-graphic.html#en` | 1024 × 500，24 位 PNG |
 | `feature-graphic-zh.png` | `src/feature-graphic.html#zh` | 1024 × 500，24 位 PNG |
+| `screenshots/en/`、`screenshots/zh/` | 模拟器截图 | 各 6 张，1080 × 2400，24 位 PNG，文件名就是上传顺序 |
 
 导出（macOS，用本机的 Chrome；置顶大图的字体从 Google Fonts 在线加载，需要联网）：
 
@@ -19,3 +20,5 @@ for lang in en zh; do "$C" --headless=new --disable-gpu --hide-scrollbars --forc
 ```
 
 Chrome 导出的全不透明 PNG 不带透明通道，Play 要求图标是 32 位 PNG，所以第二行用 Pillow 补上（像素不变）。
+
+Chrome 154 写完 PNG 后有时不会自己退出，看到文件已经生成，按 Ctrl+C 结束就行。
