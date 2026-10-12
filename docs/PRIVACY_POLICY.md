@@ -85,7 +85,7 @@ Only reading your music is essential. If you refuse notifications or folder acce
 ## Update checks
 
 - **Checking.** The GitHub version of Vesqen can check for new versions. It checks automatically at most once a day when you open the app, and whenever you tap Check for updates. A check reads a version file from our website, vesqen.sumirenokai.com, which Cloudflare hosts. When usage statistics are on, the version information can arrive with the statistics reply instead. A check carries no identifiers, only what every web request carries, such as your IP address. You can turn automatic checks off in Settings → Updates → Check automatically.
-- **Downloading.** Vesqen downloads an update only when you tap Download. The file comes from GitHub, and GitHub's privacy statement applies to that download. Before installing, Vesqen checks the file's SHA-256 and signing certificate, and Android asks you to confirm. The downloaded file is deleted once it is handed to Android's installer, or if the update fails.
+- **Downloading.** Vesqen downloads an update only when you tap Download. The file comes from GitHub, and GitHub's privacy statement applies to that download. Before installing, Vesqen checks the file's SHA-256 and signing certificate, and Android asks you to confirm. If the file fails these checks, Vesqen deletes it. A file that passed them stays in Vesqen's private storage until the next time you open the app, so a cancelled installation can be retried without downloading it again.
 - **Other stores.** The version from Google Play has no update check of its own, because Google Play updates it. If another app, such as an F-Droid client, manages the GitHub version's updates, automatic checks start turned off.
 
 ## Information we receive
