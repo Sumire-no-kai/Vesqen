@@ -11,7 +11,7 @@ Vesqen 是一款 Android 离线音乐播放器，播放你手机里的音乐，�
 
 [官网](https://vesqen.sumirenokai.com/zh/) · [隐私政策](https://vesqen.sumirenokai.com/zh/privacy/) · [支持](https://vesqen.sumirenokai.com/zh/support/)
 
-> **当前状态：** 第一个公开测试版 `1.0.0-beta.1` 已在 [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0-beta.1) 发布，暂时还没有上架 Google Play。依赖严格 USB 输出之前，请先看[已知限制](#已知限制)。
+> **当前状态：** 第二个公开测试版 `1.0.0-beta.2` 已在 [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0-beta.2) 发布。Google Play 版正在准备封闭测试，[欢迎报名](#下载)。依赖严格 USB 输出之前，请先看[已知限制](#已知限制)。
 
 ## 功能
 
@@ -40,12 +40,12 @@ Vesqen 是一款 Android 离线音乐播放器，播放你手机里的音乐，�
 - **GitHub Releases**：每个[版本](https://github.com/Sumire-no-kai/Vesqen/releases)都附有签名的 APK 和它的 SHA-256。应用签名证书的 SHA-256 为
   `74:3E:96:FC:B7:1D:C5:81:88:49:68:19:A0:01:A2:7C:D8:8D:90:91:62:C5:AE:92:9C:87:BF:A2:9A:B8:62:93`，
   可以用 `apksigner verify --print-certs` 核对。GitHub 和 Google Play 的版本使用同一把签名密钥，从任一渠道更新都会保留你的曲库。
-- **Google Play**：先做封闭测试，测试结束后再正式上架。
+- **Google Play**：先做封闭测试，测试结束后再正式上架。想参加测试的话，把你在 Google Play 上用的 Google 账号邮箱发到 vesqen@sumirenokai.com，测试版需要连续保留 14 天。Play 版由 Google Play 负责更新，GitHub 版由应用自己更新。
 - **系统要求**：Android 8.0 及以上。严格 USB 输出需要 Android 14 及以上和兼容的 USB DAC。
 
 ## 隐私
 
-播放和曲库从不使用网络，曲库、歌单和播放次数都保存在应用的私有存储里，只在你的手机上。从 1.0.0-beta.2 起，应用会在三件事上使用网络，每一项都可以关闭：每天最多一次、不带任何 ID 的使用统计（在欧盟、欧洲经济区、英国、中国大陆和韩国，只有你同意才发送），你自己选择上传的设备报告，以及检查更新。[隐私政策](https://vesqen.sumirenokai.com/zh/privacy/)（[English](https://vesqen.sumirenokai.com/privacy/)）写明了每一项发送什么、保留多久，在应用的“设置 → 隐私政策”里也能看到。
+播放和曲库从不使用网络，曲库、歌单和播放次数都保存在应用的私有存储里，只在你的手机上。从 1.0.0-beta.2 起，应用会在三件事上使用网络，每一项都可以关闭：每天最多一次、不带任何 ID 的使用统计（在欧盟、欧洲经济区、英国、中国大陆和韩国，只有你同意才发送），你自己选择上传的设备报告，以及 GitHub 版的检查更新。[隐私政策](https://vesqen.sumirenokai.com/zh/privacy/)（[English](https://vesqen.sumirenokai.com/privacy/)）写明了每一项发送什么、保留多久，在应用的“设置 → 隐私政策”里也能看到。
 
 ## 已知限制
 
@@ -62,6 +62,7 @@ Vesqen 是一款 Android 离线音乐播放器，播放你手机里的音乐，�
 - **问题和疑问**：发邮件到 vesqen@sumirenokai.com，中文或英文都可以。
 - **错误报告和建议**：[新建 issue](https://github.com/Sumire-no-kai/Vesqen/issues/new/choose)，请写上 App 版本、手机型号、Android 版本、DAC 或耳机、文件格式。如果是输出问题，最好附一张链路页的截图。不需要打开任何日志功能。
 - **安全问题**：按 [SECURITY.md](SECURITY.md) 的方式私下报告，请不要公开发帖。
+- **支持开发**：如果 Vesqen 对你有用，可以[请我们喝杯咖啡](https://buymeacoffee.com/edward_lee)。这是自愿的赞助，不会解锁任何功能。
 
 ## 从源码构建
 

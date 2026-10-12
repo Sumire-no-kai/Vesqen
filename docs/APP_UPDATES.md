@@ -46,9 +46,10 @@ stable version. Version comparison happens locally by `versionCode`. Only Debug 
 `-Pvesqen.updateManifestBaseUrl=https://.../`; Release and Profile retain the fixed origin.
 No app version, device identity or analytics payload is added to a standalone request.
 
-For #70, set `GitHubUpdateRuntime.usageRequestExpected` before the first activity starts when
-its daily statistics request will carry the channel manifest. Feed the response to
-`acceptUsageResponse()`; it passes through the same parser and local comparison without a
+`VesqenApplication` owns the foreground hook for both builds (#117): when `MainActivity` comes to
+the foreground it runs #70's daily statistics request first and passes whether that request will
+carry the channel manifest to `UpdateRuntime.onForeground(usageRequestExpected)`. The Play build
+has no `UpdateRuntime`. Feed the response to `acceptUsageResponse()`; it passes through the same parser and local comparison without a
 separate GET. A failed statistics request must not silently enable an extra updater request.
 A successful one that carries no manifest calls `checkWithoutUsageResponse()`, which runs the
 ordinary automatic check, so a server without the relay cannot stop automatic updates.
