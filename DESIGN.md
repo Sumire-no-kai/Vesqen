@@ -25,11 +25,15 @@ colors:
   error-dark: "#FFB4AB"
   signal-moss: "#9FBF4B"
 typography:
+  page-title:
+    fontFamily: "Noto Serif SC SemiBold, bundled subset (page-title characters and printable ASCII)"
+    fontWeight: 600
+    sizes: "32/38 sp; compact and pages opened from Settings 21/25 sp; privacy policy 26/30 sp"
   title:
     fontFamily: "Instrument Serif, system serif (Songti where present)"
     fontWeight: 400
-    sizes: "34/38, 32/38, 28/31 sp; names in lists and sheets 22/28, 21/25, 17/22 sp"
-    use: "page titles and names of music only"
+    sizes: "34/38, 28/31 sp; names in lists and sheets 22/28, 21/25, 17/22 sp"
+    use: "names of music only"
   heading:
     fontFamily: "Instrument Sans, system sans for Chinese"
     fontWeight: 500
@@ -141,7 +145,8 @@ Labels on filled Moss buttons: 6.0:1 (white on `moss-deep`), 11.4:1 (`night` on 
 
 ## Typography
 
-- **Page titles and names** use Instrument Serif at weight 400, with the system serif as fallback so Chinese uses Songti where the phone has it (Android 10 and later; Android 8–9 fall back to the system sans). Serif is only for page titles ("Library", "Chain", "Settings" and the pages opened from them) and for names of music: track titles in Now, lists, the mini player, track details and the Chain summary, and album, artist and playlist names. Code marks each of these with `serif()`.
+- **Page titles** ("Library", "Chain", "Settings" and the pages opened from them) use a bundled Noto Serif SC SemiBold in both languages, so they read as titles above the names. The font is cut down to printable ASCII and the characters of the titles listed in `tools/title_font_strings.txt` (`tools/subset_title_font.py`, about 33 KB), so it looks the same on every Android version and phone. Code marks these with `pageTitle()`. Owner decision, 2026-10-10.
+- **Names of music** use Instrument Serif at weight 400, with the system serif as fallback so Chinese uses Songti where the phone has it (Android 10 and later; Android 8–9 fall back to the system sans): track titles in Now, lists, the mini player, track details and the Chain summary, and album, artist and playlist names. Code marks each of these with `serif()`.
 - **Headings that are not names** use Instrument Sans at weight 500: Settings group titles, sheet and dialog titles, Chain section and status titles, empty-state titles. Owner decision, 2026-10-10: a card never pairs a Songti heading with sans rows.
 - **Body, labels and controls** use Instrument Sans; Chinese uses the system sans.
 - **Data** (times, counts, rates, measured values) uses Instrument Sans with tabular figures, so changing digits keep their width. Monospace is only for literal code: the JSON report preview and cookie names in the policy. Monospace never sets a value with a unit; it spread "96  kHz" apart.

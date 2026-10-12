@@ -37,6 +37,7 @@ import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.service.ServiceState
 import io.github.sumirenokai.vesqen.ui.components.PaperCard
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
+import io.github.sumirenokai.vesqen.ui.theme.pageTitle
 import io.github.sumirenokai.vesqen.usage.UsageRegionPolicy
 import io.github.sumirenokai.vesqen.usage.UsageSettingsStatus
 import io.github.sumirenokai.vesqen.usage.UsageStatistics
@@ -109,7 +110,7 @@ fun UsageIntroductionScreen(usageStatistics: UsageStatistics, modifier: Modifier
             ) {
                 Text(
                     text = stringResource(R.string.usage_title),
-                    style = MaterialTheme.typography.displayMedium,
+                    style = MaterialTheme.typography.displayMedium.pageTitle(),
                     modifier = Modifier.semantics { heading() },
                 )
                 UsageExplanation()

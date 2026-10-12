@@ -48,7 +48,7 @@ class ThirdPartyLicensesTest {
         val entries = loadGenerated(File(requireNotNull(System.getProperty("licenses.generatedFile"))))
         assertEquals(entries.size, entries.map { it.id }.distinct().size)
         assertTrue(entries.all { it.licenses.all { text -> text.text.isNotBlank() } })
-        assertEquals(setOf("font:InstrumentSans", "font:InstrumentSerif"),
+        assertEquals(setOf("font:InstrumentSans", "font:InstrumentSerif", "font:NotoSerifSC"),
             entries.filter { it.id.startsWith("font:") }.map { it.id }.toSet())
         assertTrue(entries.filter { it.id.startsWith("font:") }.all {
             it.version.isNotBlank() && it.licenses.single().name == "OFL-1.1"

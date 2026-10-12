@@ -58,7 +58,7 @@ import io.github.sumirenokai.vesqen.ui.privacy.PolicySpan
 import io.github.sumirenokai.vesqen.ui.privacy.withoutDocumentTitle
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
-import io.github.sumirenokai.vesqen.ui.theme.serif
+import io.github.sumirenokai.vesqen.ui.theme.pageTitle
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -144,7 +144,7 @@ private fun PrivacyPolicyHeader(onBack: () -> Unit) {
         Spacer(Modifier.width(VesqenSpacing.xs))
         Text(
             text = stringResource(R.string.privacy_policy_title),
-            style = MaterialTheme.typography.headlineLarge.serif(),
+            style = MaterialTheme.typography.headlineLarge.pageTitle(),
             modifier = Modifier.semantics { heading() },
         )
     }
