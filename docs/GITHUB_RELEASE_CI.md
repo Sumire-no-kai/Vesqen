@@ -13,7 +13,10 @@ Google Play upload and the output-verification issuer are outside this workflow.
    it as `vesqen.usageEndpoint`; left unset, the APK has no usage statistics and no
    report uploads, and the release notes must not mention them.
 2. Tests, lint, Debug/Release builds and the final privacy-policy guard run without
-   signing secrets. The candidate is pinned to the triggering commit.
+   signing secrets. The candidate is pinned to the triggering commit. The APK is the
+   `github` flavor. The same run builds the `play` flavor's AAB from that commit and
+   keeps it unsigned as the `unsigned-play-bundle` artifact for 30 days; the Play
+   upload key never enters CI, so the owner signs that file locally.
 3. Review the source commit, checks and workflow revision, then approve the
    `github-apk-signing` job. It aligns and signs the APK, verifies package/version,
    non-debuggable/offline permissions, v2/v3 signatures, the fixed application

@@ -1,6 +1,8 @@
 package io.github.sumirenokai.vesqen
 
+import android.app.Activity
 import android.app.Application
+import android.os.Bundle
 import io.github.sumirenokai.vesqen.diagnostics.AndroidDiagnosticRecordingStore
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryRecorder
@@ -19,10 +21,11 @@ class VesqenApplication : Application() {
     private val applicationJob = SupervisorJob()
     private val applicationScope = CoroutineScope(applicationJob + Dispatchers.Default)
 
+    /** Null in the Play build, which Google Play updates. */
     internal val updateRuntime by lazy {
-        io.github.sumirenokai.vesqen.updates.GitHubUpdateRuntime(this, applicationScope)
+        io.github.sumirenokai.vesqen.updates.createUpdateRuntime(this, applicationScope)
     }
-    val appUpdater: io.github.sumirenokai.vesqen.updates.AppUpdater get() = updateRuntime.updater
+    val appUpdater: io.github.sumirenokai.vesqen.updates.AppUpdater? get() = updateRuntime?.updater
 
     /** #96: one switch reader shared by usage pings and report uploads, so one reading serves both. */
     internal val serviceSwitch by lazy {
@@ -37,8 +40,8 @@ class VesqenApplication : Application() {
 
     private val usageRuntime by lazy {
         io.github.sumirenokai.vesqen.usage.AndroidUsageRuntime(
-            this, applicationScope, updateRuntime::acceptUsageResponse, updateRuntime::checkWithoutUsageResponse,
-            serviceSwitch,
+            this, applicationScope, { manifest -> updateRuntime?.acceptUsageResponse(manifest) },
+            { updateRuntime?.checkWithoutUsageResponse() }, serviceSwitch,
         )
     }
     val usageStatistics: io.github.sumirenokai.vesqen.usage.UsageStatistics get() = usageRuntime.statistics
@@ -95,11 +98,33 @@ class VesqenApplication : Application() {
     internal val diagnosticRecorderOrNull: DiagnosticRecorder?
         get() = developerDiagnosticRecorder
 
+    /** Both builds: the daily usage ping first, then the GitHub build's update check, which its reply may answer. */
+    private val foregroundHook = object : ActivityLifecycleCallbacks {
+        private var started = 0
+        override fun onActivityStarted(activity: Activity) {
+            if (activity is MainActivity && started++ == 0) applicationScope.launch {
+                val manifestRelayed = usageRuntime.onForeground()
+                updateRuntime?.onForeground(usageRequestExpected = manifestRelayed)
+            }
+        }
+        override fun onActivityStopped(activity: Activity) {
+            if (activity is MainActivity) started--
+        }
+        override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
+        override fun onActivityResumed(activity: Activity) = Unit
+        override fun onActivityPaused(activity: Activity) = Unit
+        override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
+        override fun onActivityDestroyed(activity: Activity) = Unit
+    }
+
     override fun onCreate() {
         super.onCreate()
         deviceReportRuntime
         developerDiagnosticRecorder
-        updateRuntime.usageRequestExpected = usageRuntime::onForeground
+        // The updater restores an interrupted installation; usage starts recording USB connections.
+        updateRuntime
+        usageRuntime
+        registerActivityLifecycleCallbacks(foregroundHook)
         applicationScope.launch { outputVerificationRepository.load() }
     }
 

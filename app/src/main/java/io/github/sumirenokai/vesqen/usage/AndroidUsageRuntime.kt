@@ -31,7 +31,7 @@ internal class AndroidUsageRuntime(
         CoroutineScope(scope.coroutineContext + Dispatchers.IO), AndroidUsagePreferences(application),
         region = { usageRegion(application) }, endpointConfigured = BuildConfig.USAGE_ENDPOINT.isNotBlank(),
         online = { online(application) }, facts = {
-            UsageFacts(BuildConfig.VERSION_NAME, "github", usageText(Build.VERSION.RELEASE), usageText(Build.MANUFACTURER),
+            UsageFacts(BuildConfig.VERSION_NAME, BuildConfig.DISTRIBUTION, usageText(Build.VERSION.RELEASE), usageText(Build.MANUFACTURER),
                 usageText(Build.MODEL), usageText(Build.DISPLAY), bitPerfectMixer(audio))
         }, transport = HttpsUsageTransport(BuildConfig.USAGE_ENDPOINT), acceptUpdate = acceptUpdate,
         missingUpdate = missingUpdate, serviceSwitch = serviceSwitch,

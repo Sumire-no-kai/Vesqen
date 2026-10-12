@@ -1,3 +1,4 @@
+import com.android.build.api.artifact.SingleArtifact
 import io.github.sumirenokai.vesqen.build.GenerateThirdPartyLicenses
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import java.io.File
@@ -23,7 +24,7 @@ require(vesqenVersionName.matches(Regex("(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9
 }
 require(vesqenVersionCode > 0) { "versionCode must be positive" }
 
-// All current artifacts are GitHub artifacts; #47 will turn this directory into a flavor.
+// Only the GitHub flavor has an updater that reads this.
 val debugUpdateEndpoint = providers.gradleProperty("vesqen.updateManifestBaseUrl")
     .orElse("https://vesqen.sumirenokai.com/updates/").get()
 require(debugUpdateEndpoint.matches(Regex("https://[A-Za-z0-9._~:/%-]+/"))) {
@@ -55,6 +56,21 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = "@string/app_name"
+    }
+
+    // #47: one app in two channels, both signed with the application signing key so either can
+    // replace the other. Only the GitHub flavor carries the self-updater and its install permission.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("github") {
+            dimension = "distribution"
+            isDefault = true
+            buildConfigField("String", "DISTRIBUTION", "\"github\"")
+        }
+        create("play") {
+            dimension = "distribution"
+            buildConfigField("String", "DISTRIBUTION", "\"play\"")
+        }
     }
 
     buildTypes {
@@ -94,14 +110,12 @@ android {
         buildConfig = true
         compose = true
     }
-    sourceSets.getByName("main").kotlin.directories.add("src/github/java")
-    buildTypes.forEach { sourceSets.getByName(it.name).manifest.srcFile("src/github/AndroidManifest.xml") }
 }
 
 val checkNoUncontrolledProductionLogs by tasks.registering {
     group = "verification"
     description = "Reject uncontrolled logcat and console writes from production sources."
-    val productionSources = files(fileTree("src/main"), fileTree("src/github")).asFileTree.matching {
+    val productionSources = files(fileTree("src/main"), fileTree("src/github"), fileTree("src/play")).asFileTree.matching {
         include("**/*.kt", "**/*.java")
     }
     inputs.files(productionSources)
@@ -202,10 +216,44 @@ val checkPrivacyPolicyFinal by tasks.registering(CheckPrivacyPolicyFinalTask::cl
     )
 }
 
-// Every Release artifact requires the same finalized privacy policy.
-tasks.matching { it.name in setOf("bundleRelease", "assembleRelease", "packageRelease") }.configureEach {
+// Every Release artifact of either flavor requires the same finalized privacy policy.
+val releasePackagingTask = Regex("(bundle|assemble|package)(Github|Play)?Release")
+tasks.matching { releasePackagingTask.matches(it.name) }.configureEach {
     dependsOn(checkPrivacyPolicyFinal)
 }
+
+/** Fails a Play Release whose merged manifest requests a permission outside the Play allowlist. */
+abstract class CheckPlayPermissionsTask : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val mergedManifest: RegularFileProperty
+
+    @get:Input
+    abstract val allowedPermissions: SetProperty<String>
+
+    @TaskAction
+    fun verifyPermissions() {
+        val requested = Regex("""<uses-permission(?:-sdk-23)?\s[^>]*android:name="([^"]+)"""")
+            .findAll(mergedManifest.get().asFile.readText()).map { it.groupValues[1] }.toSet()
+        val unexpected = requested - allowedPermissions.get()
+        check(unexpected.isEmpty()) {
+            "The Play build requests permissions outside its allowlist: ${unexpected.sorted().joinToString()}"
+        }
+    }
+}
+
+// Google Play rejects REQUEST_INSTALL_PACKAGES for a music player, and its policy forbids self-updates.
+val playPermissions = setOf(
+    "android.permission.READ_MEDIA_AUDIO",
+    "android.permission.READ_EXTERNAL_STORAGE",
+    "android.permission.POST_NOTIFICATIONS",
+    "android.permission.FOREGROUND_SERVICE",
+    "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+    "android.permission.WAKE_LOCK",
+    "android.permission.MODIFY_AUDIO_SETTINGS",
+    "android.permission.INTERNET",
+    "android.permission.ACCESS_NETWORK_STATE",
+)
 
 val checkThirdPartyLicenses by tasks.registering {
     group = "verification"
@@ -216,6 +264,19 @@ tasks.named("check") { dependsOn(checkThirdPartyLicenses) }
 androidComponents {
     beforeVariants(selector().withBuildType("debug")) {
         it.hostTests[com.android.build.api.variant.HostTestBuilder.UNIT_TEST_TYPE]?.enable = true
+    }
+    onVariants(selector().withFlavor("distribution" to "play").withBuildType("release")) { variant ->
+        val variantName = variant.name.replaceFirstChar(Char::uppercaseChar)
+        val checkPermissions = tasks.register<CheckPlayPermissionsTask>("check${variantName}Permissions") {
+            mergedManifest.set(variant.artifacts.get(SingleArtifact.MERGED_MANIFEST))
+            allowedPermissions.set(variant.applicationId.map { id ->
+                playPermissions + "$id.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+            })
+        }
+        tasks.named("check") { dependsOn(checkPermissions) }
+        tasks.matching { it.name == "bundle$variantName" || it.name == "assemble$variantName" }.configureEach {
+            dependsOn(checkPermissions)
+        }
     }
     onVariants { variant ->
         val runtimeArtifacts = variant.runtimeConfiguration.incoming.artifacts
@@ -260,6 +321,18 @@ androidComponents {
             packagePrivacyPolicy,
             PackagePrivacyPolicyTask::outputDirectory,
         )
+    }
+}
+
+// The documented build-type commands keep covering both flavors (#47).
+mapOf(
+    "testDebugUnitTest" to listOf("testGithubDebugUnitTest", "testPlayDebugUnitTest"),
+    "lintDebug" to listOf("lintGithubDebug", "lintPlayDebug"),
+    "assembleDeviceTestAndroidTest" to listOf("assembleGithubDeviceTestAndroidTest", "assemblePlayDeviceTestAndroidTest"),
+).forEach { (name, flavorTasks) ->
+    tasks.register(name) {
+        description = "Runs ${flavorTasks.joinToString(" and ")}."
+        dependsOn(flavorTasks)
     }
 }
 

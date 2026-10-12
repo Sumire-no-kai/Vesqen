@@ -40,5 +40,5 @@ jobs:
       - name: Assemble Profile
         run: ./gradlew assembleProfile --no-daemon
 
-      - name: Assemble Release
-        run: ./gradlew assembleRelease --no-daemon
+      - name: Assemble Release and the Play bundle
+        run: ./gradlew assembleRelease bundlePlayRelease --no-daemon

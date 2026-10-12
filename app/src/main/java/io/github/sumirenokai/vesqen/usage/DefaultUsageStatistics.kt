@@ -64,7 +64,7 @@ internal class DefaultUsageStatistics(
         } } }
     }
 
-    /** Called through the updater's foreground hook. True suppresses its duplicate manifest GET. */
+    /** Called from the app's foreground hook. True suppresses the updater's duplicate manifest GET. */
     suspend fun onForeground(): Boolean {
         initialization.join()
         // A report upload may have read the switch since; show its current word on usage too.

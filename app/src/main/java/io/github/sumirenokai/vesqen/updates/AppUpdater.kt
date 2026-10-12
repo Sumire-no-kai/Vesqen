@@ -14,6 +14,10 @@ interface AppUpdater {
 }
 
 enum class UpdateChannel { STABLE, BETA }
+
+internal fun defaultUpdateChannel(versionName: String): UpdateChannel =
+    if ('-' in versionName) UpdateChannel.BETA else UpdateChannel.STABLE
+
 enum class UpdateLanguage { ENGLISH, SIMPLIFIED_CHINESE }
 enum class UpdateInstallationSource { DIRECT, GOOGLE_PLAY, OTHER_UPDATER, UNKNOWN }
 

@@ -1,20 +1,20 @@
 package io.github.sumirenokai.vesqen.updates
 
-import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
-import android.os.Bundle
 import android.os.storage.StorageManager
 import io.github.sumirenokai.vesqen.BuildConfig
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
-/** Distribution composition root. Move this source set to the GitHub flavor when #47 lands. */
-class GitHubUpdateRuntime(application: Application, scope: CoroutineScope) {
+internal fun createUpdateRuntime(application: Application, scope: CoroutineScope): UpdateRuntime? =
+    GitHubUpdateRuntime(application, scope)
+
+/** The GitHub flavor's update composition root. */
+class GitHubUpdateRuntime(application: Application, scope: CoroutineScope) : UpdateRuntime {
     internal val installer = AndroidUpdateInstaller(application)
     private val source = installationSource(application)
     private val directory = File(application.noBackupFilesDir, "updates")
@@ -27,13 +27,11 @@ class GitHubUpdateRuntime(application: Application, scope: CoroutineScope) {
         androidApi = Build.VERSION.SDK_INT, directory = directory,
         endpoint = BuildConfig.UPDATE_MANIFEST_BASE_URL + defaultUpdateChannel(BuildConfig.VERSION_NAME).name.lowercase() + ".json",
         channel = defaultUpdateChannel(BuildConfig.VERSION_NAME), source = source.first, installerPackage = source.second)
-    val updater: AppUpdater get() = engine
+    override val updater: AppUpdater get() = engine
 
-    /** #70 sets this when its daily request will provide the manifest; no separate GET then. */
-    var usageRequestExpected: suspend () -> Boolean = { false }
-    fun acceptUsageResponse(manifest: String) = engine.acceptUsageResponse(manifest)
-    /** The usage ping succeeded without update data (e.g. relay not configured): check directly. */
-    fun checkWithoutUsageResponse() = engine.onForeground(usageRequestExpected = false)
+    override fun onForeground(usageRequestExpected: Boolean) = engine.onForeground(usageRequestExpected)
+    override fun acceptUsageResponse(manifest: String) = engine.acceptUsageResponse(manifest)
+    override fun checkWithoutUsageResponse() = engine.onForeground(usageRequestExpected = false)
     /** The system install result arrived but could not be recorded (storage or a damaged record). */
     internal fun reportInstallFailure(reason: UpdateFailure) = engine.initializationFailure(reason)
 
@@ -46,21 +44,6 @@ class GitHubUpdateRuntime(application: Application, scope: CoroutineScope) {
                     else UpdateFailure.INSTALL_FAILED)
             }
         } catch (failure: UpdateOperationException) { engine.initializationFailure(failure.reason) }
-        application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
-            private var started = 0
-            override fun onActivityStarted(activity: Activity) {
-                if (activity is UpdateInstallActivity) return
-                if (started++ == 0) scope.launch { engine.onForeground(usageRequestExpected()) }
-            }
-            override fun onActivityStopped(activity: Activity) {
-                if (activity !is UpdateInstallActivity) started--
-            }
-            override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
-            override fun onActivityResumed(activity: Activity) = Unit
-            override fun onActivityPaused(activity: Activity) = Unit
-            override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
-            override fun onActivityDestroyed(activity: Activity) = Unit
-        })
     }
 }
 

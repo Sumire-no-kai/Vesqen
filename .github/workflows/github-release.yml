@@ -128,7 +128,7 @@ jobs:
         run: |
           python3 -m unittest discover -s ../control/tools/tests -p 'test_github_release.py' -v
           python3 -m unittest discover -s tools/tests -v
-          ./gradlew :app:checkPrivacyPolicyFinal :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDeviceTest :app:assembleDeviceTestAndroidTest :app:assembleRelease \
+          ./gradlew :app:checkPrivacyPolicyFinal :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDeviceTest :app:assembleDeviceTestAndroidTest :app:assembleGithubRelease :app:bundlePlayRelease \
             -Pvesqen.usageEndpoint="$VESQEN_USAGE_ENDPOINT" --no-daemon
       - name: Prepare unsigned candidate and source record
         env:
@@ -147,6 +147,14 @@ jobs:
             unsigned/release-notes.md
           if-no-files-found: error
           retention-days: 7
+      # #47: the same commit's Play bundle. The upload key stays outside CI, so the owner signs it locally.
+      - name: Keep the unsigned Play bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned-play-bundle
+          path: source/app/build/outputs/bundle/playRelease/app-play-release.aab
+          if-no-files-found: error
+          retention-days: 30
 
   sign:
     needs: [select, build]

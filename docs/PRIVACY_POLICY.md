@@ -9,14 +9,14 @@ This policy explains what information the Vesqen Android app handles, where that
 
 - Vesqen plays music stored on your device. It has no account, advertising or tracking, and it contains no third-party analytics or crash-reporting software.
 - Playback and your library never use the network. Your library, favorites, playlists and play history stay in the app's private storage on your device, and we never receive them.
-- From version 1.0.0-beta.2, the GitHub version of Vesqen uses the network for three things: a usage statistics message at most once a day, device reports that you choose to upload, and update checks. Each is described below, and you can turn each of them off.
+- From version 1.0.0-beta.2, Vesqen uses the network for a usage statistics message at most once a day and for device reports that you choose to upload. The GitHub version also checks for updates. Each is described below, and you can turn each of them off.
 - Usage statistics carry no install or device ID, and never include your location, your music or what you listen to. In the EU, the European Economic Area, the UK, mainland China and South Korea, Vesqen asks before sending them. Elsewhere they are on by default, and the first screen lets you turn them off.
 - We also receive what you choose to send us, such as a support email, or your email address if you join a test.
 - The Vesqen website has no advertising or tracking cookies. It counts visits with Cloudflare Web Analytics, which uses no cookies, and uses a cookie to remember your language only if you allow it.
 
 ## Network requests at a glance
 
-The table lists every network request the GitHub version of Vesqen makes. Playback and your library never use the network. Every request shows your IP address to the server that receives it, because that is how network connections work. Our services do not store IP addresses, but Cloudflare, which runs them, keeps a sample of request records that we can see for up to 31 days, as described under "Cloudflare request records" below.
+The table lists every network request Vesqen makes. The version from Google Play makes all of them except the update check and update download, because Google Play updates it. Playback and your library never use the network. Every request shows your IP address to the server that receives it, because that is how network connections work. Our services do not store IP addresses, but Cloudflare, which runs them, keeps a sample of request records that we can see for up to 31 days, as described under "Cloudflare request records" below.
 
 | Feature | When it is sent | What it contains | Sent to | How long we keep it | How to turn it off |
 | --- | --- | --- | --- | --- | --- |
@@ -26,7 +26,7 @@ The table lists every network request the GitHub version of Vesqen makes. Playba
 | Update check | When you open Vesqen, at most once a day, or when you tap Check for updates | Nothing about you | The website vesqen.sumirenokai.com, hosted by Cloudflare | Not kept | Settings → Updates → Check automatically |
 | Update download | Only when you tap Download | Nothing about you | GitHub | Not kept; GitHub's privacy statement applies | Don't download |
 
-When usage statistics are on, the latest version information may arrive with the statistics reply, and then Vesqen does not make a separate update check. Vesqen installed from Google Play does not check GitHub for updates.
+When usage statistics are on, the latest version information may arrive with the statistics reply, and then the GitHub version does not make a separate update check. The version from Google Play does not use this information.
 
 ## Who we are
 
@@ -54,9 +54,9 @@ Vesqen never modifies or deletes your music files.
 | Notifications (`POST_NOTIFICATIONS`) | To show playback controls while music is playing. |
 | Foreground service for media playback, and wake lock | To keep playing when the screen is off or Vesqen is in the background. |
 | Modify audio settings (`MODIFY_AUDIO_SETTINGS`) | To request Android's bit-perfect USB output mode when you turn on strict USB output. |
-| Internet (`INTERNET`) | For usage statistics, device report uploads and update checks, described below. Playback and your library never use it. |
+| Internet (`INTERNET`) | For usage statistics, device report uploads and, in the GitHub version, update checks, described below. Playback and your library never use it. |
 | Network state (`ACCESS_NETWORK_STATE`) | To check that a working connection exists before sending usage statistics. Google's Media3 playback library, which Vesqen uses, also declares it. |
-| Install apps (`REQUEST_INSTALL_PACKAGES`) | To install an update you downloaded in Vesqen. Android asks you to confirm every installation. |
+| Install apps (`REQUEST_INSTALL_PACKAGES`) | Only in the GitHub version, to install an update you downloaded in Vesqen. Android asks you to confirm every installation. |
 | USB host (optional hardware feature) | To recognize USB audio devices. Vesqen still installs on phones without USB host support. |
 
 Only reading your music is essential. If you refuse notifications or folder access, Vesqen still plays the music it can read. Vesqen does not request location, contacts, phone, camera, microphone or Bluetooth permissions.
@@ -65,14 +65,14 @@ Only reading your music is essential. If you refuse notifications or folder acce
 
 - **Android media controls.** While music plays, Vesqen gives Android the current track's title, artist, album, artwork and playback position for the notification and lock-screen controls. Android may pass this to devices and services you connect or authorize, such as Bluetooth car audio, watches or voice assistants. Only Android's system components, and apps you have allowed to read notifications or control media (such as a smartwatch app), can connect to Vesqen's playback session. Other apps on your phone cannot.
 - **Moving to a new phone.** Vesqen does not move its data to a new phone. Your library, favorites, playlists, play counts and last-played times, queue, settings and output verification records stay only on your old phone. On the new phone, you need to allow Vesqen to read your audio files again, or add your music folders again. Vesqen turns off Android cloud backup, so this data is not backed up to Google Drive, and it asks Android not to copy this data during device-to-device transfer. Some phone makers' transfer tools may not follow this request and may still copy the app's data to the new phone.
-- **Network features.** The app uses the network only for usage statistics, device report uploads and update checks, including the status file and downloads that belong to them. The next three sections describe them.
+- **Network features.** The app uses the network only for usage statistics, device report uploads and, in the GitHub version, update checks, including the status file and downloads that belong to them. The next three sections describe them.
 
 ## Usage statistics
 
 - **What is sent.** At most once a day, when you open Vesqen, it sends one message with: the app version and the distribution channel; the Android version, phone manufacturer, model and system build name; whether a connected USB audio device offers Android's bit-perfect mode, when Android can tell; whether a USB audio device was connected in the last 7 days; and whether this is the first message today, this week and this month.
 - **What is never sent.** No install or device ID, no account, no location or country, and nothing about your music, file names or what you listen to.
 - **What stays on your phone.** Vesqen remembers when it last sent statistics and when it last saw a USB audio device. It needs these times to send at most once a day and to fill in the fields above.
-- **Where it goes.** The message goes to our statistics service, which runs on Cloudflare. The service adds the message to daily totals and does not keep the message itself. It does not store IP addresses. Cloudflare handles your IP address to deliver the request and to protect the service, as our service provider, and keeps the request records described under "Cloudflare request records". The reply can include the latest version information, which Vesqen uses for update checks.
+- **Where it goes.** The message goes to our statistics service, which runs on Cloudflare. The service adds the message to daily totals and does not keep the message itself. It does not store IP addresses. Cloudflare handles your IP address to deliver the request and to protect the service, as our service provider, and keeps the request records described under "Cloudflare request records". The reply can include the latest version information, which the GitHub version uses for update checks.
 - **Your choice.** In the EU, the European Economic Area, the UK, mainland China and South Korea, and whenever Vesqen cannot read a country, it asks first, with neither answer selected, and sends nothing unless you agree. Elsewhere statistics are on by default: the first screen explains them and has the switch, and nothing is sent before you leave that screen. You can turn statistics off at any time in Settings → Privacy & data → Usage statistics, and Vesqen stops sending at once. Statistics already sent are part of daily totals that are not linked to you, so they cannot be removed one by one.
 - **Pausing.** Right before it sends statistics or uploads a report, Vesqen reads a small status file on our website to check whether we have paused the service, at most once every 10 minutes. With statistics off, it reads the file only when you upload a report. The request carries nothing about you beyond what every web request carries, such as your IP address.
 
@@ -86,7 +86,7 @@ Only reading your music is essential. If you refuse notifications or folder acce
 
 - **Checking.** The GitHub version of Vesqen can check for new versions. It checks automatically at most once a day when you open the app, and whenever you tap Check for updates. A check reads a version file from our website, vesqen.sumirenokai.com, which Cloudflare hosts. When usage statistics are on, the version information can arrive with the statistics reply instead. A check carries no identifiers, only what every web request carries, such as your IP address. You can turn automatic checks off in Settings → Updates → Check automatically.
 - **Downloading.** Vesqen downloads an update only when you tap Download. The file comes from GitHub, and GitHub's privacy statement applies to that download. Before installing, Vesqen checks the file's SHA-256 and signing certificate, and Android asks you to confirm. The downloaded file is deleted once it is handed to Android's installer, or if the update fails.
-- **Other stores.** If Google Play installed Vesqen, it does not check GitHub for updates. If another app, such as an F-Droid client, manages Vesqen's updates, automatic checks start turned off.
+- **Other stores.** The version from Google Play has no update check of its own, because Google Play updates it. If another app, such as an F-Droid client, manages the GitHub version's updates, automatic checks start turned off.
 
 ## Information we receive
 
@@ -156,7 +156,7 @@ Vesqen is not directed at children, and we do not knowingly collect personal inf
 
 ## Your choices and rights
 
-- **In the app.** You control everything Vesqen stores on your device, as described above. You can turn usage statistics off in Settings → Privacy & data → Usage statistics, and automatic update checks off in Settings → Updates. Uploading a report is always your choice.
+- **In the app.** You control everything Vesqen stores on your device, as described above. You can turn usage statistics off in Settings → Privacy & data → Usage statistics, and, in the GitHub version, automatic update checks off in Settings → Updates. Uploading a report is always your choice.
 - **Your rights.** You can ask us to confirm whether we hold information about you, to access, copy, correct or delete it, to explain how we use it and who we share it with, to restrict or object to that use, or to withdraw consent. Email vesqen@sumirenokai.com. We reply within 15 working days.
 - **Complaints.** You can complain to us at the same address. We acknowledge a complaint within 30 days and tell you what we did about it. You can also complain to the data protection authority where you live, such as the Information Commissioner's Office in the UK or the ANPD in Brazil.
 - **Legal bases.** Where EU or UK data protection law applies, we rely on your consent for usage statistics, the language cookie and the reports you upload. In mainland China and South Korea, usage statistics also rely on your consent. Where Brazilian law applies to statistics, we rely on our legitimate interest in learning which phones and Android versions Vesqen runs on, and you can object at any time by turning statistics off. For update checks, answering you, running tests, and keeping the website and our service available and secure, we rely on our legitimate interests in those things.
