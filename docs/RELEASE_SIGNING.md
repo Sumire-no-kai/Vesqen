@@ -232,6 +232,28 @@ identity. After import, the Play app-signing certificate must exactly match the
 application certificate recorded above, while the registered upload
 certificate must exactly match the separate upload certificate.
 
+## Google Play enrollment and upload
+
+Play App Signing must receive the existing application signing `v1` key before the first release is uploaded, so Play-delivered APKs keep the same signer as GitHub APKs. The owner runs every command that opens a private key and types the password at the prompt; no password goes on a command line, into a file, or through an assistant.
+
+1. **Import the app signing key.** In Play Console open *Protected with Play → Play Store distribution → Play app signing*, choose to use an existing key exported from a Java keystore, and download `pepk.jar` and the encryption public key it offers. Run the command the page shows, replacing only the keystore path and alias, for example:
+
+   ```bash
+   java -jar pepk.jar --keystore="$HOME/Library/Application Support/Vesqen/keys/vesqen-app-signing-v1.p12" --alias=vesqen-app-signing-v1 --output=vesqen-app-signing-v1-encrypted.zip --include-cert --rsa-aes-encryption --encryption-key-path=encryption_public_key.pem
+   ```
+
+   Upload the encrypted ZIP, then delete it. It can only be decrypted by Google, but it should not linger.
+2. **Register the upload certificate.** Upload the public [`release-keys/vesqen-play-upload-v1-cert.pem`](release-keys/vesqen-play-upload-v1-cert.pem) as the upload key certificate.
+3. **Reconcile.** Play Console must show the application certificate SHA-256 `74:3E:96:FC:…:62:93` and the upload certificate SHA-256 `6A:78:82:9F:…:31:5B` recorded above. Stop if either differs.
+4. **Sign the bundle.** Download the `unsigned-play-bundle` artifact from the release run, check its SHA-256 against the run, and sign it with the upload key:
+
+   ```bash
+   jarsigner -keystore "$HOME/Library/Application Support/Vesqen/keys/vesqen-play-upload-v1.p12" -storetype PKCS12 -sigalg SHA256withRSA -digestalg SHA-256 -signedjar Vesqen-<version>-play.aab app-play-release.aab vesqen-play-upload-v1
+   keytool -printcert -jarfile Vesqen-<version>-play.aab | grep SHA256
+   ```
+
+   The printed SHA-256 must equal the upload certificate. Upload that AAB to the closed testing track and record its SHA-256 in the per-release record.
+
 ## Per-release record
 
 Every public/test-channel release must record, without secrets:
