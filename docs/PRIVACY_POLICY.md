@@ -1,7 +1,7 @@
 # Vesqen Privacy Policy
 
 - Effective date: September 26, 2026
-- Last updated: October 10, 2026
+- Last updated: October 12, 2026
 
 This policy explains what information the Vesqen Android app handles, where that information stays, what the app sends over the network, and what we receive when you contact us or join a test. It applies to every build of Vesqen we distribute, including Google Play and GitHub Releases, and to the Vesqen website.
 
@@ -16,7 +16,7 @@ This policy explains what information the Vesqen Android app handles, where that
 
 ## Network requests at a glance
 
-The table lists every network request the GitHub version of Vesqen makes. Playback and your library never use the network. Every request shows your IP address to the server that receives it, because that is how network connections work; our services do not record IP addresses.
+The table lists every network request the GitHub version of Vesqen makes. Playback and your library never use the network. Every request shows your IP address to the server that receives it, because that is how network connections work. Our services do not store IP addresses, but Cloudflare, which runs them, keeps a sample of request records that we can see for up to 31 days, as described under "Cloudflare request records" below.
 
 | Feature | When it is sent | What it contains | Sent to | How long we keep it | How to turn it off |
 | --- | --- | --- | --- | --- | --- |
@@ -72,7 +72,7 @@ Only reading your music is essential. If you refuse notifications or folder acce
 - **What is sent.** At most once a day, when you open Vesqen, it sends one message with: the app version and the distribution channel; the Android version, phone manufacturer, model and system build name; whether a connected USB audio device offers Android's bit-perfect mode, when Android can tell; whether a USB audio device was connected in the last 7 days; and whether this is the first message today, this week and this month.
 - **What is never sent.** No install or device ID, no account, no location or country, and nothing about your music, file names or what you listen to.
 - **What stays on your phone.** Vesqen remembers when it last sent statistics and when it last saw a USB audio device. It needs these times to send at most once a day and to fill in the fields above.
-- **Where it goes.** The message goes to our statistics service, which runs on Cloudflare. The service adds the message to daily totals and does not keep the message itself. It does not record IP addresses. Cloudflare handles your IP address to deliver the request and to protect the service, as our service provider. The reply can include the latest version information, which Vesqen uses for update checks.
+- **Where it goes.** The message goes to our statistics service, which runs on Cloudflare. The service adds the message to daily totals and does not keep the message itself. It does not store IP addresses. Cloudflare handles your IP address to deliver the request and to protect the service, as our service provider, and keeps the request records described under "Cloudflare request records". The reply can include the latest version information, which Vesqen uses for update checks.
 - **Your choice.** In the EU, the European Economic Area, the UK, mainland China and South Korea, and whenever Vesqen cannot read a country, it asks first, with neither answer selected, and sends nothing unless you agree. Elsewhere statistics are on by default: the first screen explains them and has the switch, and nothing is sent before you leave that screen. You can turn statistics off at any time in Settings → Privacy & data → Usage statistics, and Vesqen stops sending at once. Statistics already sent are part of daily totals that are not linked to you, so they cannot be removed one by one.
 - **Pausing.** Right before it sends statistics or uploads a report, Vesqen reads a small status file on our website to check whether we have paused the service, at most once every 10 minutes. With statistics off, it reads the file only when you upload a report. The request carries nothing about you beyond what every web request carries, such as your IP address.
 
@@ -80,7 +80,7 @@ Only reading your music is essential. If you refuse notifications or folder acce
 
 - **Creating a report.** In Settings → Privacy & data → Export device report, you can create a report to help us with a problem. The report always includes the app version and build, your phone's manufacturer, model, Android version and system build name, and when it was made. You choose whether to add: your audio output's capabilities (including USB audio devices' vendor and product IDs and supported formats); the values on the Chain page (such as formats, decoder, buffering, battery and processor readings); the recent errors described above; the formats of tracks that failed; and, separately, their file names. Bluetooth device names, output route names, decoder names and the processor model are removed. You see the complete report before it leaves the app.
 - **Sending it.** You can share the report with an app you choose, email it to us, or upload it. Sharing and email go through the app you pick. Vesqen keeps the latest report files in its cache for sharing, and removes files older than a day the next time you share.
-- **Uploading it.** An upload sends the report to our service on Cloudflare. The service stores the report with a random receipt number and the time it arrived, and does not record IP addresses. The report is not linked to you unless you send us its receipt number. We keep uploaded reports for 7 days and then delete them. To delete a report sooner, email us its receipt number.
+- **Uploading it.** An upload sends the report to our service on Cloudflare. The service stores the report with a random receipt number and the time it arrived, and does not store IP addresses. The report is not linked to you unless you send us its receipt number. We keep uploaded reports for 7 days and then delete them. To delete a report sooner, email us its receipt number.
 
 ## Update checks
 
@@ -101,7 +101,7 @@ Only reading your music is essential. If you refuse notifications or folder acce
 
 The Vesqen website (vesqen.sumirenokai.com) is hosted by Cloudflare. It has no accounts, forms or advertising. It also serves the version files and the status file that the app reads.
 
-- **Serving the site.** To deliver pages and files and protect the site from abuse, Cloudflare processes each request, including your IP address, browser information and the address of the page. Cloudflare does this on our behalf, and it may also use this network data to protect its own services, as its privacy policy describes. Cloudflare shows us aggregated statistics, such as the number of requests by country or region. We don't use this information to identify visitors.
+- **Serving the site.** To deliver pages and files and protect the site from abuse, Cloudflare processes each request, including your IP address, browser information and the address of the page. Cloudflare does this on our behalf, and it may also use this network data to protect its own services, as its privacy policy describes. Cloudflare shows us statistics, such as the number of requests by country or region, and the sampled request records described under "Cloudflare request records". We don't use this information to identify visitors.
 - **Choosing a language.** When you open the home page, the site shows English or Chinese based on your browser's language setting. If that doesn't decide it, the site uses the country or region Cloudflare estimates from your IP address. This check runs on each visit and stores nothing.
 - **Visit statistics.** The site counts visits with Cloudflare Web Analytics. A small Cloudflare script on each page reports the address of the page, the page you came from and how quickly the page loaded, and Cloudflare adds the country or region and the type of browser and device. The script uses no cookies and stores nothing in your browser. We only see aggregated statistics, which Cloudflare shows us for up to six months. Visits through Cloudflare's data centers in the EU, the European Economic Area and the UK are not counted.
 - **Cookies.** On your first visit, the site asks whether it may remember your language. It sets at most two cookies, and neither is used for tracking:
@@ -123,6 +123,8 @@ You can change your answer at any time with "Cookie settings" at the bottom of e
 
 Cloudflare acts as our service provider for the website, the statistics and report service and email forwarding. It is certified under the EU-U.S. Data Privacy Framework, its UK Extension and the Swiss-U.S. Data Privacy Framework, and its data processing terms include the EU Standard Contractual Clauses. Information in this policy may be processed outside your country, including in the United States. It reaches these providers over encrypted connections when you use a feature that needs them, and each provider's privacy policy explains how to contact it. If you don't want this, turn statistics and automatic checks off and don't upload reports. Playback and your library keep working.
 
+**Cloudflare request records.** Cloudflare processes every request to the website and to our statistics and report service. Its dashboard shows us a sample of these requests for up to 31 days. Each sampled record has the time, the IP address, the domain and path requested, the browser or app type, and the country or region Cloudflare estimates; the dashboard also shows statistics made from these records. Cloudflare uses this data to protect the services as well: when one IP address sends more than 5 statistics or report requests within 10 seconds, it is blocked from them for 10 seconds. We look at these records only to keep the services working and to stop abuse. We don't match them with statistics, reports or emails, and we don't use them to identify you.
+
 ## Retention and deletion
 
 | Information | Kept for |
@@ -134,6 +136,7 @@ Cloudflare acts as our service provider for the website, the statistics and repo
 | Support emails | Up to 12 months after the conversation ends |
 | Test tester list | Up to 2 months after the test ends |
 | Website visit statistics | Shown to us for up to 6 months |
+| Cloudflare's sampled request records | Shown to us for up to 31 days |
 
 - **On your device.** Removing a music folder deletes its library records. You can also delete playlists and remove favorites in the app. To delete all app data, open Android Settings → Apps → Vesqen → Storage and clear storage, or uninstall Vesqen.
 - **On our service.** Expired statistics and reports are deleted within about an hour of the time shown above. Cloudflare's database keeps its own point-in-time backups for up to 30 days, after which deleted records are gone from those backups too.
@@ -144,7 +147,7 @@ Cloudflare acts as our service provider for the website, the statistics and repo
 - Data on your device is kept in Vesqen's private storage, protected by Android's app sandbox. The app sends only the network messages described in this policy.
 - All network requests use HTTPS. Vesqen installs an update only after checking its SHA-256 and that it is signed with the same key as the installed app.
 - Vesqen's access to your music folders is read-only.
-- Our statistics and report service keeps no IP addresses and no request logs.
+- Our statistics and report service writes no IP addresses or request logs to its database. Cloudflare's own request records are described under "Cloudflare request records".
 - Our support mailbox is protected with two-step verification.
 
 ## Children
