@@ -68,7 +68,7 @@ Privacy
 Playback and your library never use the network. Vesqen sends a usage statistics message at most once a day, with no ID of any kind, and you can turn it off. In the EU, the EEA, the UK, mainland China and South Korea it asks first. Device reports are sent only when you choose to upload one. The privacy policy lists what each one sends and how long it is kept: https://vesqen.sumirenokai.com/privacy/
 
 Beta
-This is a beta. It is free and includes every feature. Version 1.0 is planned to offer a free trial and a one-time purchase, with no subscription and no ads.
+This is a beta. It is free and includes every feature. From version 2.0, Pro features such as strict USB output are planned to come with a 7-day free trial and a one-time purchase, with no subscription and no ads.
 
 Feedback: vesqen@sumirenokai.com
 ```
@@ -112,7 +112,7 @@ BIT-PERFECT VERIFIED：一份来自外部测量的签名记录，与你的应用
 播放和曲库从不使用网络。Vesqen 每天最多发送一次使用统计，不带任何 ID，可以关闭；在欧盟、欧洲经济区、英国、中国大陆和韩国会先征求你的同意。设备报告只在你选择上传时才会发送。每一项发送什么、保留多久，隐私政策里都写清楚了：https://vesqen.sumirenokai.com/zh/privacy/
 
 测试版
-目前是测试版，免费，可以使用全部功能。正式版计划提供免费试用和一次性买断，不做订阅，也没有广告。
+目前是测试版，免费，可以使用全部功能。从 2.0 起，严格 USB 输出等高级功能计划提供免费试用和一次性买断，不做订阅，也没有广告。
 
 反馈：vesqen@sumirenokai.com
 ```

@@ -7,7 +7,7 @@
 - 正式版 1.0 不要求 `BIT-PERFECT VERIFIED`，写成公开限制；最迟在 2.0 之前完成，M7 是 2.0 的必做项。
 - Google Play 封闭测试最早使用 beta.2，因为 beta.2 才有设备报告。
 - beta.2 起申请联网权限，用于默认开启、可以关闭的匿名统计、设备报告上传和检查更新；服务端用现有的 Cloudflare 账号。
-- 收费方案在正式版准备上架前再讨论。2026-10-13 已确定：1.0 开始收费，beta.3 先加入说明和设置，见[商业模式](MONETIZATION.md)。
+- 收费方案在正式版准备上架前再讨论。2026-10-13 已确定：2.0 开始收费，1.0 和测试版一样免费，写明"2.0 之前免费"；付费功能表和条件见[商业模式](MONETIZATION.md)。
 
 ## beta.1（已完成）
 
@@ -34,12 +34,14 @@
 
 ## beta.3（开发中）
 
-2026-10-13 起开发。测试版仍然免费，可以使用全部功能。
+2026-10-13 起开发。测试版和 1.x 免费，可以使用全部功能；2.0 开始收费。
 
 已经合并到 `master`：
 
-- [#119](https://github.com/Sumire-no-kai/Vesqen/issues/119)（PR #121）：试用计时、权益状态、第一次打开严格 USB 时的说明，以及设置里的"高级功能"。收费开关关闭，不计时，也不锁功能。
-- [#118](https://github.com/Sumire-no-kai/Vesqen/issues/118)（PR #122）：beta.2 审查的遗留问题。Worker 已在 2026-10-13 部署。
+- [#119](https://github.com/Sumire-no-kai/Vesqen/issues/119)（PR #121）：试用计时、权益状态、第一次打开严格 USB 时的说明，以及设置里的"高级功能"。收费开关关闭，不计时，也不锁功能；文案写"2.0 之前免费"。
+- [#118](https://github.com/Sumire-no-kai/Vesqen/issues/118)（PR #122）：beta.2 审查的遗留问题。
+- [#120](https://github.com/Sumire-no-kai/Vesqen/issues/120) 的 App 和服务端部分（PR #123、#124、#127）：激活码格式、签发工具、App 验证和输入（只在调试版出现）、服务端发码和作废、激活链接放在 `vesqen-api.sumirenokai.com`。Worker 已在 2026-10-13 部署，销售保持关闭。
+- [#52](https://github.com/Sumire-no-kai/Vesqen/issues/52)（PR #126）：进程被结束后，按耳机或蓝牙的播放键恢复队列并播放。
 - 首次使用的三处界面修正。所有者在 Play 版上发现，直接提交（`0df5828` 到 `9a4e6f2`）：
   - 开屏的使用统计页：答复固定在第一屏，只有说明文字在放不下时滚动；
   - 没有授权的空曲库：主按钮改为"允许访问设备音乐"，"添加音乐文件夹"改为次要按钮；
@@ -49,15 +51,13 @@
 
 | Issue | 内容 |
 | --- | --- |
-| [#120](https://github.com/Sumire-no-kai/Vesqen/issues/120) | GitHub 版激活码的 App 部分（beta.3 中输入入口只出现在调试版） |
-| [#113](https://github.com/Sumire-no-kai/Vesqen/issues/113) | 崩溃后下次打开时询问是否发送错误报告 |
-| [#52](https://github.com/Sumire-no-kai/Vesqen/issues/52)、[#73](https://github.com/Sumire-no-kai/Vesqen/issues/73) | 可选，来不及就留到 1.0 |
+| [#113](https://github.com/Sumire-no-kai/Vesqen/issues/113) | 崩溃后下次打开时询问是否发送错误报告（PR #125，等所有者审隐私政策） |
 
 发版前：
 
 - 真机验收上面已经合并的内容。新加的界面测试已经编译，但还没在真机上跑。
 - beta.3 是用户第一次通过应用内更新器升级，要完整测一遍从 beta.2 升到 beta.3。
-- 发布说明写上这三处修正和"高级功能"的说明，并写明测试版仍然免费。
+- 发布说明写上这三处修正、耳机键恢复和"高级功能"的说明，写明"2.0 之前免费"。
 - 官网同步加一句收费说明（官网 `docs/SITE_PLAN.md`）。
 
 ## 1.0 正式版之前
@@ -79,6 +79,14 @@
 | [#49](https://github.com/Sumire-no-kai/Vesqen/issues/49) | 真实 DAC 矩阵与外部数字逐样本验证（BIT-PERFECT VERIFIED） |
 | [#71](https://github.com/Sumire-no-kai/Vesqen/issues/71) | M7 高级 USB 引擎：没有官方 bit-perfect 通道的手机也能严格直出 |
 | [#65](https://github.com/Sumire-no-kai/Vesqen/issues/65) | 严格 USB：16 位音源补零后送入 24 位 bit-perfect 通道 |
+
+2.0 开始收费（2026-10-13 所有者决定），以下随 2.0 完成：
+
+| Issue | 内容 |
+| --- | --- |
+| [#46](https://github.com/Sumire-no-kai/Vesqen/issues/46)、[#48](https://github.com/Sumire-no-kai/Vesqen/issues/48) | Play 版应用内购买和 Billing 组件的披露 |
+| [#120](https://github.com/Sumire-no-kai/Vesqen/issues/120) | 官网购买页、付款成功页和激活页（官网 PR #7），隐私政策购买一节，条款和退款政策，正式签名密钥和激活码，Stripe 正式开通 |
+| | 定价（付费功能表已定，见[商业模式](MONETIZATION.md)），打开收费开关 `vesqen.premiumEnforced` |
 
 ## 以后再评估
 
@@ -104,7 +112,7 @@
 - #45 依赖 beta.2（#69 设备报告）、#44、#56，以及 #47 的构建拆分。Play 构建不能包含 #68 的自行更新和“安装未知应用”权限。
 - #44 的截图要等 #35 重做完成后再拍。
 - #70 上线前，隐私政策要先改好并完成核查；#69 的上传接口也依赖 #70 的服务端。
-- #46 依赖 #48；收费方案 2026-10-13 已确定，见[商业模式](MONETIZATION.md)。
+- #46 依赖 #48，随 2.0 上线；收费方案 2026-10-13 已确定，见[商业模式](MONETIZATION.md)。
 - #49 需要一台开放了官方 bit-perfect 通道的手机，或者走 #71 的路径。
 - #74 以后再评估时，和 #47 的构建拆分一起考虑。
 - #72 的文案和版式随 #35 的链路页一起做。#73 要靠 #69 的设备报告收集各 ROM 能否收到 codec 广播。
