@@ -36,6 +36,34 @@ test('an optional read-only token is sent only when configured',async t=>{
   assert.equal(env.DB.rows('SELECT * FROM daily_downloads').length,2);
 });
 
+test('a rejected token falls back to an anonymous read and still fails the run',async t=>{
+  const env={...environment(),DOWNLOAD_COUNTS_REPO:'Sumire-no-kai/Vesqen',GITHUB_TOKEN:'github_pat_expired'};t.after(()=>env.DB.close());
+  const requests=[];
+  const fetcher=anonymous=>async (url,init)=>{
+    requests.push(init.headers);
+    if (init.headers.Authorization) return new Response(JSON.stringify({message:'Bad credentials'}),{status:401});
+    return new Response(JSON.stringify(anonymous.body),{status:anonymous.status});
+  };
+  // The anonymous limit is used up as well: nothing is stored, and the error names the token.
+  await assert.rejects(snapshotDownloads(env,now,fetcher({status:403,body:{message:'rate limited'}})),{message:'github_token_rejected'});
+  assert.equal(requests.length,2);
+  assert.equal(requests[1].Authorization,undefined);
+  assert.equal(env.DB.rows('SELECT * FROM daily_downloads').length,0);
+  // The anonymous read works: the day is stored, and the run still reports the token.
+  await assert.rejects(snapshotDownloads(env,now,fetcher({status:200,body:releases})),{message:'github_token_rejected'});
+  assert.equal(env.DB.rows('SELECT * FROM daily_downloads').length,2);
+  // A stored day is not read again.
+  await snapshotDownloads(env,now+3600000,fetcher({status:200,body:releases}));
+  assert.equal(requests.length,4);
+});
+
+test('without a token a 401 is an ordinary failure with no second read',async t=>{
+  const env={...environment(),DOWNLOAD_COUNTS_REPO:'Sumire-no-kai/Vesqen'};t.after(()=>env.DB.close());
+  const {requests,fetcher}=github(401,{message:'Requires authentication'});
+  await assert.rejects(snapshotDownloads(env,now,fetcher),{message:'download_counts_unavailable'});
+  assert.equal(requests.length,1);
+});
+
 test('one snapshot per UTC day keeps only published APK counters',async t=>{
   const env={...environment(),DOWNLOAD_COUNTS_REPO:'Sumire-no-kai/Vesqen'};t.after(()=>env.DB.close());
   const {requests,fetcher}=github();

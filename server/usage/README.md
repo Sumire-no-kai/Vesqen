@@ -97,7 +97,11 @@ In production the anonymous limit is usually already used up by other Cloudflare
 (2026-10-12: every hourly read got 4xx). Give the Worker its own limit with a fine-grained
 GitHub token that has read-only access to public repositories and no other permission:
 `npx wrangler secret put GITHUB_TOKEN --config wrangler.local.jsonc`. The token is sent only to
-`api.github.com`; rotate it when it expires.
+`api.github.com`; rotate it when it expires. If GitHub rejects the token (401, for example after
+it expires), the Worker repeats the read without it and stores the day if that succeeds. Every
+run that reads GitHub still ends with the error `github_token_rejected` until the token is
+replaced, even when the anonymous read stored the day, so the failing scheduled run is the sign
+to rotate it.
 
 `downloads` is GitHub's cumulative `download_count`. It counts every fetch of the
 file: browser downloads, in-app updates (#68 points them at the same GitHub file),
