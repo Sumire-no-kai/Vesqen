@@ -57,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.unit.Dp
@@ -410,6 +411,27 @@ class VesqenAppTest {
     }
 
     @Test
+    fun empty_library_without_access_makes_allowing_access_the_main_action() {
+        var accessRequests = 0
+        var addFolderCalls = 0
+        render(
+            state = VesqenUiState(library = LibraryUiState(musicAccess = MusicAccess.NEEDS_PERMISSION)),
+            onRequestMusicAccess = { accessRequests++ },
+            onAddLibraryFolder = { addFolderCalls++ },
+        )
+        // One request on screen: the centred main button, not a second one in a notice above it.
+        composeRule.onAllNodesWithTag("vesqen.library.music-access-notice").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.permission.request")
+            .assertTextEquals(context.getString(R.string.device_music_access_compact))
+            .performClick()
+        composeRule.onNodeWithTag("vesqen.library.empty.add-folder").performClick()
+        composeRule.runOnIdle {
+            assertEquals(1, accessRequests)
+            assertEquals(1, addFolderCalls)
+        }
+    }
+
+    @Test
     fun denied_device_permission_keeps_SAF_folder_import_embedded_in_library() {
         var addFolderCalls = 0
         render(
@@ -476,6 +498,22 @@ class VesqenAppTest {
             assertEquals(1, appSettingsCalls)
             assertEquals(1, notificationSettingsCalls)
         }
+    }
+
+    @Test
+    fun tracks_found_above_the_top_row_keep_the_list_at_the_top() {
+        fun track(id: Long, title: String) = AudioTrack(
+            id = id, contentUri = "content://media/external/audio/media/$id",
+            title = title, artist = "Mori", album = "Quiet Rooms", durationMs = 200_000,
+        )
+        val later = (1L..30L).map { track(it, "M %02d".format(it)) }
+        val earlier = (101L..130L).map { track(it, "A %02d".format(it - 100)) }
+        var state by mutableStateOf(grantedState(tracks = later))
+        render(state, stateProvider = { state })
+        composeRule.onNodeWithTag("vesqen.library.track.1").assertIsDisplayed()
+        // A scan finds tracks that sort above everything shown so far.
+        composeRule.runOnIdle { state = grantedState(tracks = earlier + later) }
+        composeRule.onNodeWithTag("vesqen.library.track.101").assertIsDisplayed()
     }
 
     @Test
@@ -812,11 +850,33 @@ class VesqenAppTest {
         ))
         composeRule.setContent { VesqenTheme { UsageIntroductionScreen(usage) } }
         composeRule.onAllNodesWithTag("vesqen.usage-intro.accept").assertCountEquals(0)
-        composeRule.onNodeWithTag("vesqen.usage-intro.switch").performScrollTo().assertIsOn().performClick()
-        composeRule.onNodeWithTag("vesqen.usage-intro.continue").performScrollTo().performClick()
+        // The answer is pinned on the first screen; it never needs a scroll to reach.
+        composeRule.onNodeWithTag("vesqen.usage-intro.switch").assertIsDisplayed().assertIsOn().performClick()
+        composeRule.onNodeWithTag("vesqen.usage-intro.continue").assertIsDisplayed().performClick()
         composeRule.runOnIdle {
             assertFalse(usage.snapshot.value.introductionRequired)
             assertFalse(usage.snapshot.value.enabled)
+        }
+    }
+
+    @Test
+    fun usage_introduction_answer_fits_a_small_phone_without_scrolling() {
+        val usage = FakeUsageStatistics(UsageStatisticsSnapshot(
+            status = UsageSettingsStatus.READY,
+            enabled = true,
+            regionPolicy = UsageRegionPolicy.DEFAULT_ENABLED,
+            introductionRequired = true,
+            endpointConfigured = true,
+        ))
+        composeRule.setContent {
+            VesqenTheme {
+                Box(Modifier.width(360.dp).height(640.dp).testTag("frame")) { UsageIntroductionScreen(usage) }
+            }
+        }
+        val frame = composeRule.onNodeWithTag("frame").fetchSemanticsNode().boundsInRoot
+        listOf("vesqen.usage-intro.switch", "vesqen.usage-intro.continue").forEach { tag ->
+            val bounds = composeRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+            assertTrue("$tag must sit fully inside the first screen", bounds.top >= frame.top && bounds.bottom <= frame.bottom)
         }
     }
 
@@ -831,8 +891,8 @@ class VesqenAppTest {
         ))
         composeRule.setContent { VesqenTheme { UsageIntroductionScreen(usage) } }
         composeRule.onAllNodesWithTag("vesqen.usage-intro.switch").assertCountEquals(0)
-        composeRule.onNodeWithTag("vesqen.usage-intro.decline").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.usage-intro.accept").performScrollTo().performClick()
+        composeRule.onNodeWithTag("vesqen.usage-intro.decline").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.usage-intro.accept").assertIsDisplayed().performClick()
         composeRule.runOnIdle {
             assertFalse(usage.snapshot.value.introductionRequired)
             assertTrue(usage.snapshot.value.enabled)
