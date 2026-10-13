@@ -1,7 +1,7 @@
 # Vesqen Privacy Policy
 
 - Effective date: September 26, 2026
-- Last updated: October 12, 2026
+- Last updated: October 13, 2026
 
 This policy explains what information the Vesqen Android app handles, where that information stays, what the app sends over the network, and what we receive when you contact us or join a test. It applies to every build of Vesqen we distribute, including Google Play and GitHub Releases, and to the Vesqen website.
 
@@ -41,6 +41,7 @@ Vesqen processes the following information on your device. None of it is sent to
 - **Your playback chain.** To show the Chain view and to operate strict USB output, Vesqen reads audio route information that Android provides: the current output device's name and type (including connected Bluetooth audio devices), and for USB audio devices, the vendor ID, product ID, name, USB descriptor version and supported audio formats. Vesqen does not request direct access to USB devices.
 - **Output verification records.** If you import a verification record file, Vesqen stores it in its private storage. To decide whether to show `BIT-PERFECT VERIFIED`, it compares the record with your current setup: the installed app's version and package hash, your phone's manufacturer, model and Android version, a hash of the system build fingerprint computed on the device, the connected USB audio device, and the audio format being played.
 - **Recent errors.** Vesqen keeps a short record of recent playback errors, strict USB stops and the reasons Android gave for closing the app: at most 100 events from the last 7 days. For a track that failed to play, it keeps the track's format and file name. The record exists so you can choose to include it in a device report.
+- **Crash details.** If Vesqen closes because of an error in its own code, it saves the error type and the code locations that led to it (class, method and line number), including the errors that caused it, with the app version and the time. It never saves the error's message text, which can contain a file path or a song title. It keeps the last 3 crashes for at most 7 days, and deletes them after you send them or tap No thanks.
 - **Your region.** To decide whether to ask before sending usage statistics, Vesqen reads the region of your phone's language settings and the country codes of your SIM card and mobile network. This needs no permission. The result is used on the device and is not stored or sent.
 
 Vesqen never modifies or deletes your music files.
@@ -78,7 +79,8 @@ Only reading your music is essential. If you refuse notifications or folder acce
 
 ## Device reports
 
-- **Creating a report.** In Settings → Privacy & data → Export device report, you can create a report to help us with a problem. The report always includes the app version and build, your phone's manufacturer, model, Android version and system build name, and when it was made. You choose whether to add: your audio output's capabilities (including USB audio devices' vendor and product IDs and supported formats); the values on the Chain page (such as formats, decoder, buffering, battery and processor readings); the recent errors described above; the formats of tracks that failed; and, separately, their file names. Bluetooth device names, output route names, decoder names and the processor model are removed. You see the complete report before it leaves the app.
+- **Creating a report.** In Settings → Privacy & data → Export device report, you can create a report to help us with a problem. The report always includes the app version and build, your phone's manufacturer, model, Android version and system build name, and when it was made. You choose whether to add: your audio output's capabilities (including USB audio devices' vendor and product IDs and supported formats); the values on the Chain page (such as formats, decoder, buffering, battery and processor readings); the recent errors described above; the crash details described above; the formats of tracks that failed; and, separately, their file names. Bluetooth device names, output route names, decoder names and the processor model are removed. You see the complete report before it leaves the app.
+- **After a crash.** If Vesqen crashed or stopped responding, the next time you open it, it asks once whether to send a report. Review and send opens Export device report with the crash details and recent errors selected. There you see the complete report and then choose to upload, share or email it. No thanks deletes the saved crash details. Nothing is sent unless you choose to send it.
 - **Sending it.** You can share the report with an app you choose, email it to us, or upload it. Sharing and email go through the app you pick. Vesqen keeps the latest report files in its cache for sharing, and removes files older than a day the next time you share.
 - **Uploading it.** An upload sends the report to our service on Cloudflare. The service stores the report with a random receipt number and the time it arrived, and does not store IP addresses. The report is not linked to you unless you send us its receipt number. We keep uploaded reports for 7 days and then delete them. To delete a report sooner, email us its receipt number.
 
@@ -131,6 +133,7 @@ Cloudflare acts as our service provider for the website, the statistics and repo
 | --- | --- |
 | Data in the app on your device | Until you delete it |
 | Recent errors on your device | 7 days, at most 100 events |
+| Crash details on your device | 7 days, at most 3 crashes |
 | Usage statistics | Daily totals for 90 days |
 | Uploaded device reports | 7 days |
 | Support emails | Up to 12 months after the conversation ends |
