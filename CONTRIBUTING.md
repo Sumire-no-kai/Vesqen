@@ -19,7 +19,7 @@ You don't need to enable any logging. Don't attach music files, and remove perso
 1. Read [`docs/PRD.md`](docs/PRD.md) and keep the stated first-release scope and non-goals intact.
 2. Open an issue before large architectural work, new codecs, DSP, native code, network features, or changes to bit-perfect claims.
 3. Keep experimental engines and AI features optional and outside the core playback path.
-4. The core app stays offline: don't add the `INTERNET` permission, analytics, crash reporting or accounts.
+4. Playback, the library and Chain work offline. The app's network use is limited to what the PRD lists: usage statistics that can be turned off, device reports and crash reports that the person chooses to send, and the GitHub build's update check. Don't add other network features, third-party analytics or crash SDKs, ads or accounts without an issue and an owner decision.
 
 ## Local checks
 
