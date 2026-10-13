@@ -2,6 +2,7 @@ package io.github.sumirenokai.vesqen
 
 import android.app.Activity
 import android.app.Application
+import android.content.Context
 import android.os.Bundle
 import io.github.sumirenokai.vesqen.diagnostics.AndroidDiagnosticRecordingStore
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
@@ -79,6 +80,10 @@ class VesqenApplication : Application() {
     val deviceReporter: io.github.sumirenokai.vesqen.reports.DeviceReporter
         get() = deviceReportRuntime.reporter
 
+    /** #113: asks once after a crash or ANR; sending still goes through [deviceReporter]. */
+    val crashPrompt: io.github.sumirenokai.vesqen.reports.CrashPrompt
+        get() = deviceReportRuntime.crashes
+
     val outputVerificationRepository: OutputVerificationRepository by lazy {
         AndroidOutputVerificationRepository(this)
     }
@@ -132,6 +137,17 @@ class VesqenApplication : Application() {
         override fun onActivityPaused(activity: Activity) = Unit
         override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
         override fun onActivityDestroyed(activity: Activity) = Unit
+    }
+
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(base)
+        // #113: before content providers and onCreate run, so a crash in either is recorded too.
+        // The directory is resolved only when a crash happens.
+        io.github.sumirenokai.vesqen.reports.CrashRecordingHandler.install(
+            directory = { io.github.sumirenokai.vesqen.reports.crashDirectory(this) },
+            appVersion = BuildConfig.VERSION_NAME,
+            versionCode = BuildConfig.VERSION_CODE,
+        )
     }
 
     override fun onCreate() {

@@ -31,7 +31,7 @@ class DeviceReportContractTest {
         assertContract("vocabulary.json", DeviceReportContract.encode(DeviceReportContract.vocabulary()))
 
     @Test fun `checked-in sample report matches the generator`() =
-        assertContract("sample-report.json", DeviceReportGenerator.generate(sampleData(), DeviceReportOptions(true, true, true, true, true)).previewText)
+        assertContract("sample-report.json", DeviceReportGenerator.generate(sampleData(), DeviceReportOptions(true, true, true, true, true, true)).previewText)
 
     @Test fun `values the app produces pass the report filter`() {
         val produced = buildList {
@@ -127,6 +127,21 @@ class DeviceReportContractTest {
                 ),
             )),
             history = history,
+            // A filtered name exports as null; the second exception is the first one's cause.
+            crashes = CrashHistorySnapshot(listOf(CrashRecord(
+                "800-1", 800, "1.0.0-beta.2", 9,
+                listOf(
+                    CrashException("java.lang.IllegalStateException", listOf(
+                        CrashFrame("io.github.sumirenokai.vesqen.playback.PlaybackService\$onCreate\$1", "invokeSuspend", 120),
+                        CrashFrame("kotlin.coroutines.jvm.internal.BaseContinuationImpl", "resumeWith", 33),
+                        CrashFrame(null, "run", null),
+                    ), omittedFrames = 18),
+                    CrashException("java.io.IOException", listOf(
+                        CrashFrame("io.github.sumirenokai.vesqen.library.LibraryCatalog", "<init>", 42),
+                    ), omittedFrames = 0),
+                ),
+                causesOmitted = false,
+            ))),
         )
     }
 }

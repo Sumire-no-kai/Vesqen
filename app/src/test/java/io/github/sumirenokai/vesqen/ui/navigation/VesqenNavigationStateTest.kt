@@ -84,6 +84,28 @@ class VesqenNavigationStateTest {
     }
 
     @Test
+    fun `device report opened from the crash question returns to where it was asked`() {
+        val report = VesqenNavigationState().openDeviceReport()
+        assertEquals(VesqenDestination.DEVICE_REPORT, report.destination)
+        assertEquals(VesqenDestination.LIBRARY, report.back().destination)
+        assertEquals(report, report.openDeviceReport())
+    }
+
+    @Test
+    fun `device report opened over two details opens from settings`() {
+        val report = VesqenNavigationState()
+            .selectTopLevel(VesqenDestination.SETTINGS)
+            .openAbout()
+            .openPrivacyPolicy()
+            .openDeviceReport()
+
+        assertEquals(VesqenDestination.DEVICE_REPORT, report.destination)
+        val settings = report.back()
+        assertEquals(VesqenDestination.SETTINGS, settings.destination)
+        assertEquals(VesqenDestination.LIBRARY, settings.back().destination)
+    }
+
+    @Test
     fun `privacy policy opened from about unwinds through about and settings`() {
         val privacy = VesqenNavigationState()
             .selectTopLevel(VesqenDestination.SETTINGS)

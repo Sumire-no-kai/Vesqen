@@ -2,7 +2,12 @@
   "schemaVersion": 1,
   "limits": {
     "maxEvents": 100,
-    "maxAgeMs": 604800000
+    "maxAgeMs": 604800000,
+    "maxCrashes": 3,
+    "maxCrashExceptions": 4,
+    "maxCrashFrames": 24,
+    "maxClassNameLength": 200,
+    "maxMethodNameLength": 100
   },
   "enums": {
     "reportErrorKind": [
@@ -24,6 +29,11 @@
       "AVAILABLE",
       "UNSUPPORTED_ANDROID_VERSION",
       "PLATFORM_UNAVAILABLE"
+    ],
+    "crashHistoryAvailability": [
+      "AVAILABLE",
+      "STORAGE_UNAVAILABLE",
+      "RECORD_DISCARDED"
     ],
     "usbOutputFailure": [
       "UNSUPPORTED_ANDROID_VERSION",
@@ -306,7 +316,9 @@
       "cpu.delta_ms",
       "window.elapsed_ms",
       "window.seconds"
-    ]
+    ],
+    "classNamePattern": "[A-Za-z0-9_$.-]+",
+    "methodNamePattern": "<init>|<clinit>|[A-Za-z0-9_$-]+"
   },
   "metrics": [
     {

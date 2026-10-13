@@ -68,4 +68,6 @@ internal data class DeviceReportData(
     val telemetry: TelemetrySnapshot? = null,
     val history: ErrorHistorySnapshot = ErrorHistorySnapshot(),
     val telemetryUnavailableReason: TelemetryUnavailableReason = TelemetryUnavailableReason.NOT_SAMPLED,
+    /** #113: read only when the crash group is selected. */
+    val crashes: CrashHistorySnapshot = CrashHistorySnapshot(),
 )

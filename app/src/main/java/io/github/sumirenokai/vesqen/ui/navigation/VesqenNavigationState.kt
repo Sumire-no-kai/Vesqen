@@ -66,7 +66,15 @@ data class VesqenNavigationState(
 
     fun openUsageStatistics(): VesqenNavigationState = openDetail(VesqenDestination.USAGE_STATISTICS)
 
-    fun openDeviceReport(): VesqenNavigationState = openDetail(VesqenDestination.DEVICE_REPORT)
+    /**
+     * The report opens from Settings and from the crash question (#113), which can appear over any
+     * surface. Over another detail it opens from Settings, so details never nest past two levels.
+     */
+    fun openDeviceReport(): VesqenNavigationState = when {
+        destination == VesqenDestination.DEVICE_REPORT -> this
+        destination.isSecondaryDetail -> selectTopLevel(VesqenDestination.SETTINGS).openDetail(VesqenDestination.DEVICE_REPORT)
+        else -> openDetail(VesqenDestination.DEVICE_REPORT)
+    }
 
     /**
      * Pro features open from Settings and from strict output dialogs, which can appear over any

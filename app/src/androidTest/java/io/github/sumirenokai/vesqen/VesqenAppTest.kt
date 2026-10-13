@@ -93,10 +93,12 @@ import io.github.sumirenokai.vesqen.premium.ActivationState
 import io.github.sumirenokai.vesqen.premium.PremiumAccess
 import io.github.sumirenokai.vesqen.premium.PremiumStore
 import io.github.sumirenokai.vesqen.premium.TrialRecord
+import io.github.sumirenokai.vesqen.reports.CrashPrompt
 import io.github.sumirenokai.vesqen.reports.DeviceReportArtifact
 import io.github.sumirenokai.vesqen.reports.DeviceReportDelivery
 import io.github.sumirenokai.vesqen.reports.DeviceReportFailure
 import io.github.sumirenokai.vesqen.reports.DeviceReportOptions
+import io.github.sumirenokai.vesqen.reports.DeviceReportSnapshot
 import io.github.sumirenokai.vesqen.reports.DeviceReportState
 import io.github.sumirenokai.vesqen.reports.DeviceReporter
 import io.github.sumirenokai.vesqen.reports.FakeDeviceReporter
@@ -166,6 +168,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -1002,6 +1007,79 @@ class VesqenAppTest {
         composeRule.runOnIdle { reporter.emit(DeviceReportState.Preview(artifact)) }
         listOf(R.string.report_upload, R.string.report_share, R.string.report_email)
             .forEach { assertSingleCompleteLine(context.getString(it)) }
+    }
+
+    @Test
+    fun after_a_crash_the_question_appears_once_and_review_opens_the_report_with_crash_details_selected() {
+        val reporter = FakeDeviceReporter()
+        val crash = FakeCrashPrompt(due = true)
+        render(grantedState(), deviceReporter = reporter, crashPrompt = crash)
+
+        composeRule.onNodeWithTag("vesqen.crash-prompt").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.crash_prompt_title)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.crash_prompt_body)).assertIsDisplayed()
+        composeRule.runOnIdle { assertEquals(1, crash.shown) }
+        composeRule.onNodeWithTag("vesqen.crash-prompt.review")
+            .assertTextEquals(context.getString(R.string.crash_prompt_review)).performClick()
+
+        composeRule.onNodeWithTag("vesqen.crash-prompt").assertDoesNotExist()
+        composeRule.onNodeWithTag("vesqen.report").assertIsDisplayed()
+        composeRule.runOnIdle {
+            assertEquals(DeviceReportOptions(recentErrors = true, crashes = true), reporter.snapshot.value.options)
+            // Nothing is created or sent until the user asks for it on this page.
+            assertEquals(DeviceReportState.Editing, reporter.snapshot.value.state)
+            assertEquals(0, crash.declined)
+        }
+        composeRule.onNodeWithTag("vesqen.report").performScrollToNode(hasTestTag("vesqen.report.option.crashes"))
+        composeRule.onNodeWithTag("vesqen.report.option.crashes").assertIsOn()
+        composeRule.onNodeWithTag("vesqen.report.option.errors").assertIsOn()
+        composeRule.onNodeWithTag("vesqen.report.option.chain").assertIsOff()
+
+        // Back returns to where the question was asked, and it is not asked again.
+        composeRule.onNodeWithTag("vesqen.report").performScrollToNode(hasTestTag("vesqen.report.back"))
+        composeRule.onNodeWithTag("vesqen.report.back").performClick()
+        composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
+        composeRule.onNodeWithTag("vesqen.crash-prompt").assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals(1, crash.shown) }
+    }
+
+    @Test
+    fun no_thanks_closes_the_crash_question_and_sends_nothing() {
+        val reporter = FakeDeviceReporter()
+        val crash = FakeCrashPrompt(due = true)
+        render(grantedState(), deviceReporter = reporter, crashPrompt = crash)
+
+        composeRule.onNodeWithTag("vesqen.crash-prompt.decline")
+            .assertTextEquals(context.getString(R.string.crash_prompt_decline)).performClick()
+
+        composeRule.onNodeWithTag("vesqen.crash-prompt").assertDoesNotExist()
+        composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
+        composeRule.runOnIdle {
+            assertEquals(1, crash.declined)
+            assertEquals(DeviceReportSnapshot(), reporter.snapshot.value)
+        }
+    }
+
+    @Test
+    fun the_crash_question_waits_until_a_crash_is_found() {
+        val crash = FakeCrashPrompt(due = false)
+        render(grantedState(), deviceReporter = FakeDeviceReporter(), crashPrompt = crash)
+        composeRule.onNodeWithTag("vesqen.crash-prompt").assertDoesNotExist()
+
+        // The records are read on IO after start, so the answer can arrive after the first frame.
+        composeRule.runOnIdle { crash.emit(true) }
+        composeRule.onNodeWithTag("vesqen.crash-prompt").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.crash-prompt.decline").performClick()
+        composeRule.runOnIdle { assertEquals(1, crash.shown) }
+    }
+
+    @Test
+    fun without_device_reports_the_crash_question_is_not_asked() {
+        // A build without device reports has nowhere to send one.
+        val crash = FakeCrashPrompt(due = true)
+        render(grantedState(), crashPrompt = crash)
+        composeRule.onNodeWithTag("vesqen.crash-prompt").assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals(0, crash.shown) }
     }
 
     private fun openDeviceReport() {
@@ -3645,6 +3723,7 @@ class VesqenAppTest {
         reportUploadAvailable: Boolean = false,
         premiumAccess: PremiumAccess? = null,
         activationCodes: ActivationCodes? = null,
+        crashPrompt: CrashPrompt? = null,
     ) {
         composeRule.setContent {
             VesqenTheme(darkTheme = darkTheme) {
@@ -3685,6 +3764,7 @@ class VesqenAppTest {
                         usageStatistics = usageStatistics,
                         deviceReporter = deviceReporter,
                         reportUploadAvailable = reportUploadAvailable,
+                        crashPrompt = crashPrompt,
                     )
                 }
                 val renderWithinSize: @Composable () -> Unit = {
@@ -3878,6 +3958,19 @@ class VesqenAppTest {
             ),
         )
     }
+}
+
+/** Counts what the app shell asks of the crash question; no files or records behind it. */
+private class FakeCrashPrompt(due: Boolean) : CrashPrompt {
+    private val mutableDue = MutableStateFlow(due)
+    override val due: StateFlow<Boolean> = mutableDue.asStateFlow()
+    var shown = 0
+        private set
+    var declined = 0
+        private set
+    fun emit(value: Boolean) { mutableDue.value = value }
+    override fun markShown() { shown++; mutableDue.value = false }
+    override fun decline() { declined++; mutableDue.value = false }
 }
 
 private class MemoryPremiumStore(private var trial: TrialRecord = TrialRecord()) : PremiumStore {

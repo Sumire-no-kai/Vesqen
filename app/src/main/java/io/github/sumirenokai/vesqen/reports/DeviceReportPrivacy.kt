@@ -160,6 +160,26 @@ internal object DeviceReportPrivacy {
                 }
             },
         )
+        if (options.crashes) result["crashes"] = linkedMapOf(
+            "availability" to data.crashes.availability.name,
+            "maxCrashes" to CrashReportStore.MAX_CRASHES, "maxAgeMs" to CrashReportStore.MAX_AGE_MS,
+            "records" to data.crashes.records.takeLast(CrashReportStore.MAX_CRASHES).map(CrashCapture::filtered).map { crash ->
+                linkedMapOf(
+                    "occurredAtEpochMs" to crash.occurredAtEpochMs,
+                    "appVersion" to label(crash.appVersion), "versionCode" to crash.versionCode,
+                    "confidence" to "MEASURED", "source" to "vesqen.uncaught_exception_handler",
+                    // Types and code locations only. A message or thread name is never recorded.
+                    "exceptions" to crash.exceptions.map { exception -> linkedMapOf(
+                        "type" to exception.type,
+                        "frames" to exception.frames.map { frame -> linkedMapOf(
+                            "className" to frame.className, "methodName" to frame.methodName, "line" to frame.line,
+                        ) },
+                        "omittedFrames" to exception.omittedFrames,
+                    ) },
+                    "causesOmitted" to crash.causesOmitted,
+                )
+            },
+        )
         return result
     }
 

@@ -159,6 +159,8 @@
     <string name="report_chain_body">Every value on the Chain page, and whether Vesqen changed the audio</string>
     <string name="report_errors">Recent errors</string>
     <string name="report_errors_body">Playback errors, strict output stops and app exit reasons from the last 7 days</string>
+    <string name="report_crashes">Crash details</string>
+    <string name="report_crashes_body">Exception type and stack trace from crashes in the last 7 days</string>
     <string name="report_formats">Formats of failed tracks</string>
     <string name="report_formats_body">Format, sample rate, bit depth and channels</string>
     <string name="report_file_names">Include file names</string>
@@ -185,6 +187,10 @@
     <string name="report_failure_upload">The upload failed. Try again later, or share or email it.</string>
     <string name="report_failure_upload_paused">Uploads are paused for now. You can share or email the report instead.</string>
     <string name="report_failure_upload_unavailable">Uploading isn’t available right now. Try again later, or share or email it.</string>
+    <string name="crash_prompt_title">Vesqen closed unexpectedly last time</string>
+    <string name="crash_prompt_body">A report can help find the cause. It shows the error type and where in the code it happened. You can read all of it before you send it.</string>
+    <string name="crash_prompt_review">Review and send</string>
+    <string name="crash_prompt_decline">No thanks</string>
     <string name="licenses_title">Open source licenses</string>
     <string name="licenses_intro">Vesqen uses the following open-source software.</string>
     <string name="licenses_loading">Loading…</string>

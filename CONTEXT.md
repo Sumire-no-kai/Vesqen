@@ -41,7 +41,7 @@ The listener-facing Audio Proof view that progressively discloses source, decode
 _Avoid_: Link, output selector
 
 **Device Report**:
-A user-initiated, previewed export of device and audio facts, built from the sections the user selects: basic app and device info (always included), audio output capability, the current Chain evidence, a bounded history of recent errors and Android exit reasons, and the format of failing tracks. File names are excluded unless the user opts in. It is uploaded or shared only after the user confirms. It never contains the library or listening history.
+A user-initiated, previewed export of device and audio facts, built from the sections the user selects: basic app and device info (always included), audio output capability, the current Chain evidence, a bounded history of recent errors and Android exit reasons, the format of failing tracks, and recent crash details (exception types and stack frames, never message text). File names are excluded unless the user opts in. It is uploaded or shared only after the user confirms. It never contains the library or listening history.
 _Avoid_: Crash log, bug dump
 
 **Usage Ping**:
