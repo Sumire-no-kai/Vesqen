@@ -115,7 +115,9 @@ they are ever unwanted.
 `GET /v1/activation?session=...` lets the purchase page read the code. The format, the owner's
 issuing tool, the pool upload, the stored fields and the owner tasks are documented in
 [`docs/ACTIVATION_CODES.md`](../../docs/ACTIVATION_CODES.md). Sales stay closed until
-`ACTIVATION_INGEST` is `open` and both Stripe secrets are set:
+`ACTIVATION_INGEST` is `open` and both Stripe secrets are set. The same host also serves the
+activation link itself: `/.well-known/assetlinks.json` for Android and `/activate`, which sends a
+browser on to the website's activation page; both work while sales are closed.
 
 ```bash
 npx wrangler secret put STRIPE_WEBHOOK_SECRET --config wrangler.local.jsonc

@@ -8,8 +8,10 @@
             android:exported="false"
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
-        <!-- #120: activation links from the website. Only the GitHub build takes website codes;
-             the Play build sells through Google Play. The site's assetlinks.json verifies the link. -->
+        <!-- #120: activation links from the website's purchase page. They live on the API host, not on
+             the website: Chrome keeps a link that stays on the current site in the browser, so the
+             purchase page could not hand it to the app. vesqen-api serves the assetlinks.json that
+             verifies it. Only the GitHub build takes website codes; Play sells through Google Play. -->
         <activity
             android:name="io.github.sumirenokai.vesqen.premium.ActivationLinkActivity"
             android:exported="true"
@@ -21,7 +23,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" />
-                <data android:host="vesqen.sumirenokai.com" />
+                <data android:host="vesqen-api.sumirenokai.com" />
                 <data android:pathPrefix="/activate" />
             </intent-filter>
         </activity>
