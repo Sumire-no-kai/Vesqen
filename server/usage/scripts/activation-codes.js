@@ -5,6 +5,7 @@
 //   node scripts/activation-codes.js keygen --key-id 1 --out <private.pem>
 //   node scripts/activation-codes.js issue --key <private.pem> --key-id 1 --ledger <ledger.json> --count 500 --out <codes.csv>
 //   node scripts/activation-codes.js verify --key-id 1 --public <SPKI base64> <code>
+//   node scripts/activation-codes.js pool-sql --key-id 1 --codes <codes.csv> --out <pool.sql>
 import {generateKeyPairSync, createPrivateKey, createPublicKey} from 'node:crypto';
 import {existsSync, readFileSync, renameSync, writeFileSync} from 'node:fs';
 import {parseArgs} from 'node:util';
@@ -13,7 +14,7 @@ import {signCode, verifyCode} from '../src/activation-code.js';
 const [command, ...rest] = process.argv.slice(2);
 const {values, positionals} = parseArgs({args:rest, allowPositionals:true, options:{
   'key-id':{type:'string'}, out:{type:'string'}, key:{type:'string'}, ledger:{type:'string'},
-  count:{type:'string'}, public:{type:'string'}, init:{type:'boolean', default:false},
+  count:{type:'string'}, public:{type:'string'}, codes:{type:'string'}, init:{type:'boolean', default:false},
 }});
 const keyId = Number(values['key-id']);
 
@@ -57,6 +58,18 @@ if (command === 'keygen') {
 } else if (command === 'verify') {
   if (!values.public || positionals.length !== 1) fail('verify needs --key-id, --public and one code');
   console.log(JSON.stringify(verifyCode(positionals[0], {[keyId]:values.public})));
+} else if (command === 'pool-sql') {
+  // For `wrangler d1 execute vesqen-usage --remote --file <pool.sql>`. Existing serials are left
+  // alone, so uploading the same file twice changes nothing.
+  if (!values.codes || !values.out || !Number.isInteger(keyId)) fail('pool-sql needs --key-id, --codes and --out');
+  if (existsSync(values.out)) fail(`${values.out} exists; refusing to overwrite`);
+  const rows = readFileSync(values.codes, 'utf8').trim().split('\n').slice(1).map(row => row.split(','));
+  const lines = rows.map(([serial, code]) => {
+    if (!/^\d+$/.test(serial) || !/^[0-9A-HJKMNP-TV-Z]{117}$/.test(code)) fail(`bad row for serial ${serial}`);
+    return `INSERT OR IGNORE INTO activation_codes(key_id, serial, code) VALUES(${keyId}, ${Number(serial)}, '${code}');`;
+  });
+  writeFileSync(values.out, lines.join('\n') + '\n', {mode:0o600, flag:'wx'});
+  console.log(`${lines.length} codes for key ${keyId} in ${values.out}`);
 } else {
-  fail('usage: activation-codes.js keygen|issue|verify (see the header of this file)');
+  fail('usage: activation-codes.js keygen|issue|verify|pool-sql (see the header of this file)');
 }

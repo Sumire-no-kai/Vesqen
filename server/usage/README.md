@@ -109,6 +109,20 @@ scripts and retries. It is a trend, not a number of people. These rows hold only
 public counters and are not removed by the retention job; delete them by hand if
 they are ever unwanted.
 
+## Activation codes (#120)
+
+`POST /v1/stripe/webhook` delivers activation codes for website purchases, and
+`GET /v1/activation?session=...` lets the purchase page read the code. The format, the owner's
+issuing tool, the pool upload, the stored fields and the owner tasks are documented in
+[`docs/ACTIVATION_CODES.md`](../../docs/ACTIVATION_CODES.md). Sales stay closed until
+`ACTIVATION_INGEST` is `open` and both Stripe secrets are set:
+
+```bash
+npx wrangler secret put STRIPE_WEBHOOK_SECRET --config wrangler.local.jsonc
+npx wrangler secret put STRIPE_SECRET_KEY --config wrangler.local.jsonc
+npx wrangler d1 migrations apply vesqen-usage --remote --config wrangler.local.jsonc
+```
+
 ## Retention and logs
 
 Owner-selected defaults: **reports 7 days, daily aggregates 90 UTC date buckets**.
