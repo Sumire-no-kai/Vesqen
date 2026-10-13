@@ -166,13 +166,13 @@ As of 2026-10-01:
   copies v2 to them (see below). The issuer key does not affect app signing;
   losing it means rotating to a new issuer key through an app update before new
   verification records can be signed;
-- Play App Signing import and certificate reconciliation: **not yet executed**
-  (Google Play is deferred; the first release goes through the website and
-  GitHub Releases);
+- Play App Signing import and certificate reconciliation: **done on
+  2026-10-13**, before the first Play upload (see the
+  [enrollment record](#play-enrollment-record--2026-10-13));
 - signed APK candidate and same-signer update acceptance: **done for
   `1.0.0-beta.1`** (CI-signed APK, published 2026-10-01; see
   [M4 device acceptance](M4_DEVICE_ACCEPTANCE.md) and the release receipt).
-  No AAB has been produced while Google Play is deferred.
+  The first Play bundle is `1.0.0-beta.2`, signed locally with the upload key.
 
 Backup copy 1 was created on 2026-09-21 on controlled removable media as an
 AES-256 encrypted, compressed, read-only UDZO disk image without reformatting
@@ -234,25 +234,48 @@ certificate must exactly match the separate upload certificate.
 
 ## Google Play enrollment and upload
 
-Play App Signing must receive the existing application signing `v1` key before the first release is uploaded, so Play-delivered APKs keep the same signer as GitHub APKs. The owner runs every command that opens a private key and types the password at the prompt; no password goes on a command line, into a file, or through an assistant.
+Play App Signing must receive the existing application signing `v1` key before the first release is uploaded, so Play-delivered APKs keep the same signer as GitHub APKs. The owner runs every command that opens a private key. Commands read the password from its Keychain entry (macOS asks the owner to allow each access); no password is printed, typed into a chat, passed as a literal argument or written to a file.
 
-1. **Import the app signing key.** In Play Console open *Protected with Play → Play Store distribution → Play app signing*, choose to use an existing key exported from a Java keystore, and download `pepk.jar` and the encryption public key it offers. Run the command the page shows, replacing only the keystore path and alias, for example:
+1. **Replace Play's generated key.** Play Console generates an app signing key when the app is created. Before anything is uploaded, open *Protected with Play → Play Store protection → Manage Play app signing → Change key*, accept the warning (it only matters once a build was uploaded or installed), and choose *Export and upload a key from Java keystore*. Download the encryption public key and the PEPK tool into a new folder.
+2. **Export the key with PEPK.** PEPK encrypts with its bundled BouncyCastle provider, which Oracle JDK refuses to load from an unsigned jar (`Cannot find any provider supporting RSA/NONE/OAEPWithSHA1AndMGF1Padding`), so run it with an OpenJDK runtime such as a temporary Temurin JRE. PEPK reads passwords only from a console and offers no environment or file option, so an `expect` script answers its two prompts from an environment variable without echoing:
 
-   ```bash
-   java -jar pepk.jar --keystore="$HOME/Library/Application Support/Vesqen/keys/vesqen-app-signing-v1.p12" --alias=vesqen-app-signing-v1 --output=vesqen-app-signing-v1-encrypted.zip --include-cert --rsa-aes-encryption --encryption-key-path=encryption_public_key.pem
+   ```tcl
+   # pepk.exp — usage: PEPK_PW=... expect pepk.exp <openjdk>/bin/java -jar pepk.jar <pepk args...>
+   set pw $env(PEPK_PW)
+   unset env(PEPK_PW)
+   set timeout 120
+   spawn -noecho {*}$argv
+   expect {
+     -re {Enter password for [^\r\n]*:} { send -- "$pw\r"; exp_continue }
+     eof
+   }
+   catch wait result
+   exit [lindex $result 3]
    ```
 
-   Upload the encrypted ZIP, then delete it. It can only be decrypted by Google, but it should not linger.
-2. **Register the upload certificate.** Upload the public [`release-keys/vesqen-play-upload-v1-cert.pem`](release-keys/vesqen-play-upload-v1-cert.pem) as the upload key certificate.
-3. **Reconcile.** Play Console must show the application certificate SHA-256 `74:3E:96:FC:…:62:93` and the upload certificate SHA-256 `6A:78:82:9F:…:31:5B` recorded above. Stop if either differs.
-4. **Sign the bundle.** Download the `unsigned-play-bundle` artifact from the release run, check its SHA-256 against the run, and sign it with the upload key:
+   ```bash
+   PEPK_PW="$(security find-generic-password -s 'Vesqen App Signing' -a vesqen-app-signing-v1 -w)" expect pepk.exp <openjdk>/bin/java -jar pepk.jar --keystore="$HOME/Library/Application Support/Vesqen/keys/vesqen-app-signing-v1.p12" --alias=vesqen-app-signing-v1 --output=vesqen-app-signing-v1-encrypted.zip --include-cert --rsa-aes-encryption --encryption-key-path=encryption_public_key.pem
+   ```
+
+   PEPK refuses to overwrite an existing output file. Check that the ZIP's `certificate.pem` has the application certificate SHA-256 before uploading it as *Upload generated ZIP*.
+3. **Register the upload certificate.** In the same dialog, expand step 5 (*create a new upload key*) and upload the public [`release-keys/vesqen-play-upload-v1-cert.pem`](release-keys/vesqen-play-upload-v1-cert.pem) as *Upload your upload key certificate*. Without it Play expects bundles signed with the application key and rejects the upload-key signature. Save.
+4. **Reconcile.** Play Console must show the application certificate SHA-256 `74:3E:96:FC:…:62:93` and the upload certificate SHA-256 `6A:78:82:9F:…:31:5B` recorded above. Stop if either differs. Then delete the encrypted ZIP, the PEPK download and the temporary runtime.
+5. **Sign the bundle.** Download the `unsigned-play-bundle` artifact from the release run, check its SHA-256 against the run, and sign it with the upload key:
 
    ```bash
-   jarsigner -keystore "$HOME/Library/Application Support/Vesqen/keys/vesqen-play-upload-v1.p12" -storetype PKCS12 -sigalg SHA256withRSA -digestalg SHA-256 -signedjar Vesqen-<version>-play.aab app-play-release.aab vesqen-play-upload-v1
+   VESQEN_UPLOAD_PW="$(security find-generic-password -s 'Vesqen Play Upload' -a vesqen-play-upload-v1 -w)" jarsigner -storepass:env VESQEN_UPLOAD_PW -keystore "$HOME/Library/Application Support/Vesqen/keys/vesqen-play-upload-v1.p12" -storetype PKCS12 -sigalg SHA256withRSA -digestalg SHA-256 -signedjar Vesqen-<version>-play.aab app-play-release.aab vesqen-play-upload-v1
    keytool -printcert -jarfile Vesqen-<version>-play.aab | grep SHA256
    ```
 
    The printed SHA-256 must equal the upload certificate. Upload that AAB to the closed testing track and record its SHA-256 in the per-release record.
+
+### Play enrollment record — 2026-10-13
+
+- Play Console had generated an app signing key when the app was created on 2026-10-12 (SHA-256 `F7:8F:EF:E0:…:C6:E3`). Nothing had been uploaded or installed, and it was replaced through *Change key*.
+- PEPK came from `www.gstatic.com/play-apps-publisher-rapid/signing-tool/prod/pepk.jar` (SHA-256 `aaccc077…858e24e`) and ran under Temurin JRE 25.0.4.1+1 (archive SHA-256 `5b02bcc9…98f37e1b`, checked against Adoptium). The exported ZIP's certificate was `CN=Vesqen App Signing v1`, SHA-256 `74:3E:96:FC:…:62:93`.
+- After saving, Play Console showed the app signing certificate SHA-256 `74:3E:96:FC:B7:1D:C5:81:88:49:68:19:A0:01:A2:7C:D8:8D:90:91:62:C5:AE:92:9C:87:BF:A2:9A:B8:62:93` and the upload certificate SHA-256 `6A:78:82:9F:9C:74:FA:CE:FB:CE:C4:62:57:CF:9B:E6:01:55:1F:3B:86:49:E6:1E:14:6B:1A:98:20:06:31:5B` (SHA-1 `36:84:2D:1B:…:D2:56`). Both match the identities above; the generated key is no longer listed.
+- The encrypted ZIP, the PEPK download, the encryption public key and the temporary JRE were deleted afterwards.
+- `1.0.0-beta.2` bundle: `unsigned-play-bundle` from run 38213613584 (commit `76781ec`, SHA-256 `b89f24e6…043521`), signed locally with the upload key to SHA-256 `59636eec21b96622d31e3244f4e4c035875662bfe9919c1fa0396ffd4e949d8f`; all 199 original entries unchanged.
 
 ## Per-release record
 
