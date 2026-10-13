@@ -33,11 +33,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
@@ -258,25 +260,30 @@ private fun ReportActions(state: DeviceReportState, uploadAvailable: Boolean, de
         modifier = Modifier.padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.sm),
         verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xs),
     ) {
-        // One row of equal buttons keeps the bar short and even.
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.sm)) {
-            val button = Modifier.weight(1f).heightIn(min = 48.dp)
+        // One row of equal buttons keeps the bar short and even. The narrow side padding leaves the
+        // labels room at larger text before the buttons have to stack.
+        EqualButtons(Modifier.fillMaxWidth()) {
+            val button = Modifier.heightIn(min = 48.dp)
+            val padding = PaddingValues(horizontal = VesqenSpacing.sm, vertical = VesqenSpacing.xs)
             if (uploadAvailable) {
                 Button(
                     onClick = { deviceReporter.send(DeviceReportDelivery.UPLOAD) },
                     enabled = idle,
                     modifier = button.testTag("vesqen.report.upload"),
+                    contentPadding = padding,
                 ) { Text(stringResource(R.string.report_upload)) }
             }
             OutlinedButton(
                 onClick = { deviceReporter.send(DeviceReportDelivery.SHARE) },
                 enabled = idle,
                 modifier = button.testTag("vesqen.report.share"),
+                contentPadding = padding,
             ) { Text(stringResource(R.string.report_share)) }
             OutlinedButton(
                 onClick = { deviceReporter.send(DeviceReportDelivery.EMAIL) },
                 enabled = idle,
                 modifier = button.testTag("vesqen.report.email"),
+                contentPadding = padding,
             ) { Text(stringResource(R.string.report_email)) }
         }
         // The Email button addresses the developer; say so before anyone taps it.
@@ -285,6 +292,31 @@ private fun ReportActions(state: DeviceReportState, uploadAvailable: Boolean, de
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/**
+ * Equal-width buttons side by side while every label fits on one line. Otherwise each button takes
+ * a full line, so large text or a narrow window never breaks a label mid-word (#118).
+ */
+@Composable
+private fun EqualButtons(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Layout(content, modifier) { buttons, constraints ->
+        val gap = VesqenSpacing.sm.roundToPx()
+        val width = constraints.maxWidth
+        val share = (width - gap * (buttons.size - 1)) / buttons.size
+        val sideBySide = buttons.all { it.maxIntrinsicWidth(constraints.maxHeight) <= share }
+        val placeables = buttons.map { it.measure(Constraints.fixedWidth(if (sideBySide) share else width)) }
+        val height = if (sideBySide) placeables.maxOf { it.height }
+            else placeables.sumOf { it.height } + gap * (placeables.size - 1)
+        layout(width, height) {
+            var x = 0
+            var y = 0
+            placeables.forEach { button ->
+                button.placeRelative(x, y)
+                if (sideBySide) x += share + gap else y += button.height + gap
+            }
+        }
     }
 }
 
