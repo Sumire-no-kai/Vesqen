@@ -79,6 +79,8 @@ import io.github.sumirenokai.vesqen.diagnostics.exportTo
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
+import io.github.sumirenokai.vesqen.premium.PremiumAccess
+import io.github.sumirenokai.vesqen.premium.PremiumState
 import io.github.sumirenokai.vesqen.reports.DeviceReporter
 import io.github.sumirenokai.vesqen.service.ServiceState
 import io.github.sumirenokai.vesqen.telemetry.PlaybackTelemetry
@@ -102,8 +104,10 @@ import io.github.sumirenokai.vesqen.ui.screens.DeviceReportScreen
 import io.github.sumirenokai.vesqen.ui.screens.LibraryScreen
 import io.github.sumirenokai.vesqen.ui.screens.LicensesScreen
 import io.github.sumirenokai.vesqen.ui.screens.NowScreen
+import io.github.sumirenokai.vesqen.ui.screens.PremiumScreen
 import io.github.sumirenokai.vesqen.ui.screens.PrivacyPolicyScreen
 import io.github.sumirenokai.vesqen.ui.screens.SettingsScreen
+import io.github.sumirenokai.vesqen.ui.screens.StrictOutputIntroductionDialog
 import io.github.sumirenokai.vesqen.ui.screens.UsageIntroductionScreen
 import io.github.sumirenokai.vesqen.ui.screens.UsageStatisticsScreen
 import io.github.sumirenokai.vesqen.ui.screens.usageIntroductionDue
@@ -337,6 +341,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
         // Reports upload to the same server as statistics; builds without one share and email only,
         // as does every build once the owner retired uploads (#96).
         reportUploadAvailable = BuildConfig.USAGE_ENDPOINT.isNotEmpty() && serviceStatus.reportUploads != ServiceState.RETIRED,
+        premiumAccess = application.premiumAccess,
     )
 }
 
@@ -399,6 +404,7 @@ fun VesqenAppContent(
     usageStatistics: UsageStatistics? = null,
     deviceReporter: DeviceReporter? = null,
     reportUploadAvailable: Boolean = false,
+    premiumAccess: PremiumAccess? = null,
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     var showStrictUsbUnavailable by rememberSaveable { mutableStateOf(false) }
@@ -408,11 +414,13 @@ fun VesqenAppContent(
             showStrictUsbUnavailable = false
         }
     }
-    StrictUsbFailureDialog(
-        status = state.playback.usbOutputStatus,
-        canChangeOutputMode = state.playback.canSetUsbOutputMode,
-        onSetUsbOutputMode = onSetUsbOutputMode,
-    )
+    // #119: the first time strict output is turned on, explain once that it is a Pro feature.
+    var showStrictIntroduction by rememberSaveable { mutableStateOf(false) }
+    val strictIntroductionShown = premiumAccess?.strictIntroductionShown?.collectAsStateWithLifecycle()?.value ?: true
+    val setUsbOutputMode: (UsbOutputMode) -> Unit = { mode ->
+        onSetUsbOutputMode(mode)
+        if (mode == UsbOutputMode.STRICT_BIT_PERFECT && !strictIntroductionShown) showStrictIntroduction = true
+    }
     StrictUsbUnavailableDialog(
         support = officialMixerApiSupport.takeIf { showStrictUsbUnavailable },
         onDismiss = { showStrictUsbUnavailable = false },
@@ -508,6 +516,34 @@ fun VesqenAppContent(
         applyNavigation(navigationState.openDeviceReport())
     }
 
+    fun openPremium() {
+        applyNavigation(navigationState.openPremium())
+    }
+
+    fun closeStrictIntroduction() {
+        showStrictIntroduction = false
+        premiumAccess?.markStrictIntroductionShown()
+    }
+
+    if (showStrictIntroduction && premiumAccess != null) {
+        StrictOutputIntroductionDialog(
+            freeInBeta = premiumAccess.state.collectAsStateWithLifecycle().value == PremiumState.FreeInBeta,
+            onDismiss = ::closeStrictIntroduction,
+            onOpenPremium = {
+                closeStrictIntroduction()
+                openPremium()
+            },
+        )
+    } else {
+        // A failure from the same switch waits until the explanation is closed.
+        StrictUsbFailureDialog(
+            status = state.playback.usbOutputStatus,
+            canChangeOutputMode = state.playback.canSetUsbOutputMode,
+            onSetUsbOutputMode = setUsbOutputMode,
+            onOpenPremium = if (premiumAccess != null) ::openPremium else null,
+        )
+    }
+
     fun togglePlayerOrientation() {
         playerOrientationOverrideName = if (isLandscape) {
             PlayerOrientationOverride.FORCE_PORTRAIT.name
@@ -598,8 +634,10 @@ fun VesqenAppContent(
                 onNext = onNext,
                 onSeek = onSeek,
                 onCyclePlaybackOrder = onCyclePlaybackOrder,
-                onSetUsbOutputMode = onSetUsbOutputMode,
+                onSetUsbOutputMode = setUsbOutputMode,
                 onExplainStrictUsbUnavailable = { showStrictUsbUnavailable = true },
+                premiumAccess = premiumAccess,
+                onOpenPremium = ::openPremium,
                 verificationRegistryState = verificationRegistryState,
                 verificationImportResult = verificationImportResult,
                 onImportVerificationRegistry = onImportVerificationRegistry,
@@ -667,8 +705,10 @@ fun VesqenAppContent(
             onNext = onNext,
             onSeek = onSeek,
             onCyclePlaybackOrder = onCyclePlaybackOrder,
-            onSetUsbOutputMode = onSetUsbOutputMode,
+            onSetUsbOutputMode = setUsbOutputMode,
             onExplainStrictUsbUnavailable = { showStrictUsbUnavailable = true },
+            premiumAccess = premiumAccess,
+            onOpenPremium = ::openPremium,
             verificationRegistryState = verificationRegistryState,
             verificationImportResult = verificationImportResult,
             onImportVerificationRegistry = onImportVerificationRegistry,
@@ -740,6 +780,8 @@ private fun VesqenDestinationFrame(
     onCyclePlaybackOrder: () -> Unit,
     onSetUsbOutputMode: (UsbOutputMode) -> Unit,
     onExplainStrictUsbUnavailable: () -> Unit,
+    premiumAccess: PremiumAccess?,
+    onOpenPremium: () -> Unit,
     verificationRegistryState: OutputVerificationRegistryState,
     verificationImportResult: OutputVerificationImportResult?,
     onImportVerificationRegistry: () -> Unit,
@@ -1080,6 +1122,8 @@ private fun VesqenDestinationFrame(
                         onOpenDeviceReport = onOpenDeviceReport,
                         versionName = versionName,
                         modifier = destinationModifier,
+                        premiumAccess = premiumAccess,
+                        onOpenPremium = onOpenPremium,
                     )
 
                     VesqenDestination.CHAIN -> ChainScreen(
@@ -1125,6 +1169,10 @@ private fun VesqenDestinationFrame(
                             onBack = onNavigateBack,
                             modifier = destinationModifier,
                         )
+                    }
+
+                    VesqenDestination.PREMIUM -> premiumAccess?.let {
+                        PremiumScreen(premiumAccess = it, onBack = onNavigateBack, modifier = destinationModifier)
                     }
                 }
             }

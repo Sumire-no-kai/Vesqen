@@ -39,6 +39,8 @@ import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -57,6 +59,7 @@ import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
+import io.github.sumirenokai.vesqen.premium.PremiumAccess
 import io.github.sumirenokai.vesqen.service.ServiceState
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.components.PaperCard
@@ -98,6 +101,8 @@ fun SettingsScreen(
     verificationRegistryState: OutputVerificationRegistryState = OutputVerificationRegistryState.Empty,
     verificationImportResult: OutputVerificationImportResult? = null,
     onExplainStrictUsbUnavailable: () -> Unit = {},
+    premiumAccess: PremiumAccess? = null,
+    onOpenPremium: () -> Unit = {},
 ) {
     val unsupportedPlatform = outputStatus.officialMixerApiSupport?.takeUnless { it.mixerApiAvailable }
     val strictSelected = outputStatus.mode == UsbOutputMode.STRICT_BIT_PERFECT
@@ -147,6 +152,10 @@ fun SettingsScreen(
                             },
                             modifier = Modifier.testTag("vesqen.settings.output.strict-usb"),
                         )
+                    }
+                    if (premiumAccess != null) {
+                        PaperDivider()
+                        SettingsPremiumRow(premiumAccess, onOpenPremium)
                     }
                 }
             }
@@ -330,9 +339,23 @@ internal fun strictUsbFailureLabel(failure: UsbOutputFailure, decisionCode: Stri
         UsbOutputFailure.PROCESSING_NOT_NEUTRAL -> R.string.usb_failure_processing
         UsbOutputFailure.SERVICE_STOPPED -> R.string.usb_failure_service_stopped
         UsbOutputFailure.PLATFORM_ERROR -> R.string.usb_failure_platform
+        UsbOutputFailure.TRIAL_ENDED -> R.string.usb_failure_trial_ended
     },
 )
 
+
+/** #119: strict USB output is the paid feature today, so its status sits under the output modes. */
+@Composable
+private fun SettingsPremiumRow(premiumAccess: PremiumAccess, onOpenPremium: () -> Unit) {
+    LaunchedEffect(premiumAccess) { premiumAccess.refresh() }
+    val state by premiumAccess.state.collectAsStateWithLifecycle()
+    SettingsRow(
+        title = stringResource(R.string.settings_premium),
+        value = premiumSettingsValue(state),
+        onClick = onOpenPremium,
+        modifier = Modifier.testTag("vesqen.settings.premium"),
+    )
+}
 
 /**
  * Usage statistics appear only when this build has a server to send them to; the device report

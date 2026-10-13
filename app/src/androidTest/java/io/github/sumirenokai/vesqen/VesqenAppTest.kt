@@ -85,6 +85,9 @@ import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailureOrigin
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
+import io.github.sumirenokai.vesqen.premium.PremiumAccess
+import io.github.sumirenokai.vesqen.premium.PremiumStore
+import io.github.sumirenokai.vesqen.premium.TrialRecord
 import io.github.sumirenokai.vesqen.reports.DeviceReportArtifact
 import io.github.sumirenokai.vesqen.reports.DeviceReportDelivery
 import io.github.sumirenokai.vesqen.reports.DeviceReportFailure
@@ -222,6 +225,59 @@ class VesqenAppTest {
             state = state.copy(playback = state.playback.copy(usbOutputStatus = UsbOutputStatus()))
         }
         composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertDoesNotExist()
+    }
+
+    @Test
+    fun turning_strict_output_on_explains_pro_features_once() {
+        val premium = PremiumAccess(MemoryPremiumStore(), enforced = false)
+        val modes = mutableListOf<UsbOutputMode>()
+        render(
+            grantedState(playback = PlaybackSnapshot(isControllerReady = true)),
+            onSetUsbOutputMode = modes::add,
+            premiumAccess = premium,
+        )
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.premium")
+            .assertTextContains(context.getString(R.string.settings_premium_free_in_beta))
+        composeRule.onNodeWithTag("vesqen.settings.output.strict-usb").performClick()
+        composeRule.onNodeWithTag("vesqen.premium.strict-intro").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.premium_strict_intro_body_beta)).assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.premium.strict-intro.open").performClick()
+        composeRule.onNodeWithTag("vesqen.premium.status")
+            .assertTextEquals(context.getString(R.string.premium_status_free_in_beta))
+        composeRule.runOnIdle {
+            assertEquals(listOf(UsbOutputMode.STRICT_BIT_PERFECT), modes)
+            assertTrue(premium.strictIntroductionShown.value)
+        }
+        composeRule.onNodeWithTag("vesqen.premium.back").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.output.strict-usb").performClick()
+        composeRule.onNodeWithTag("vesqen.premium.strict-intro").assertDoesNotExist()
+    }
+
+    @Test
+    fun an_ended_trial_offers_pro_features_instead_of_keeping_strict_mode() {
+        val ended = MemoryPremiumStore(TrialRecord(startedAtEpochMs = 0, latestSeenEpochMs = 0))
+        val premium = PremiumAccess(ended, enforced = true)
+        val failure = UsbOutputStatus(
+            mode = UsbOutputMode.STRICT_BIT_PERFECT,
+            phase = UsbOutputPhase.FAILED,
+            failure = UsbOutputFailure.TRIAL_ENDED,
+            generation = 1,
+            failureOrigin = UsbOutputFailureOrigin.USER_PLAYBACK,
+        )
+        render(
+            state = activePlaybackState().let { it.copy(playback = it.playback.copy(usbOutputStatus = failure)) },
+            premiumAccess = premium,
+        )
+        composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(
+            R.string.player_trial_ended_body, context.getString(R.string.usb_failure_trial_ended),
+        )).assertIsDisplayed()
+        composeRule.onAllNodesWithTag("vesqen.output.keep-strict").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.output.open-premium").performClick()
+        composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertDoesNotExist()
+        composeRule.onNodeWithTag("vesqen.premium.status")
+            .assertTextEquals(context.getString(R.string.premium_status_trial_ended))
     }
 
     @Test
@@ -3482,6 +3538,7 @@ class VesqenAppTest {
         usageStatistics: UsageStatistics? = null,
         deviceReporter: DeviceReporter? = null,
         reportUploadAvailable: Boolean = false,
+        premiumAccess: PremiumAccess? = null,
     ) {
         composeRule.setContent {
             VesqenTheme(darkTheme = darkTheme) {
@@ -3503,6 +3560,7 @@ class VesqenAppTest {
                         onSeek = {},
                         onCyclePlaybackOrder = onCyclePlaybackOrder,
                         onSetUsbOutputMode = onSetUsbOutputMode,
+                        premiumAccess = premiumAccess,
                         onAddLibraryFolder = onAddLibraryFolder,
                         onRemoveLibraryFolder = onRemoveLibraryFolder,
                         onResumeLibraryScan = onResumeLibraryScan,
@@ -3713,4 +3771,12 @@ class VesqenAppTest {
             ),
         )
     }
+}
+
+private class MemoryPremiumStore(private var trial: TrialRecord = TrialRecord()) : PremiumStore {
+    private var introduction = false
+    override fun readTrial() = trial
+    override fun writeTrial(record: TrialRecord) { trial = record }
+    override fun strictIntroductionShown() = introduction
+    override fun markStrictIntroductionShown() { introduction = true }
 }

@@ -44,7 +44,8 @@
       "DEVICE_DISCONNECTED",
       "PROCESSING_NOT_NEUTRAL",
       "SERVICE_STOPPED",
-      "PLATFORM_ERROR"
+      "PLATFORM_ERROR",
+      "TRIAL_ENDED"
     ],
     "usbOutputFailureOrigin": [
       "SERVICE_START",

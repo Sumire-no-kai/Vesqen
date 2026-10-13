@@ -6,7 +6,10 @@ import android.os.Bundle
 import io.github.sumirenokai.vesqen.diagnostics.AndroidDiagnosticRecordingStore
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryRecorder
+import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStateRepository
+import io.github.sumirenokai.vesqen.premium.AndroidPremiumStore
+import io.github.sumirenokai.vesqen.premium.PremiumAccess
 import io.github.sumirenokai.vesqen.telemetry.AndroidPlaybackTelemetry
 import io.github.sumirenokai.vesqen.telemetry.PlaybackTelemetry
 import io.github.sumirenokai.vesqen.verification.AndroidOutputVerificationRepository
@@ -47,6 +50,11 @@ class VesqenApplication : Application() {
     val usageStatistics: io.github.sumirenokai.vesqen.usage.UsageStatistics get() = usageRuntime.statistics
 
     val usbOutputStateRepository = UsbOutputStateRepository()
+
+    /** #119: the trial and paid-feature state; the betas build it with enforcement off. */
+    val premiumAccess: PremiumAccess by lazy {
+        PremiumAccess(AndroidPremiumStore(this), enforced = BuildConfig.PREMIUM_ENFORCED)
+    }
 
     internal val deviceReportRuntime by lazy {
         io.github.sumirenokai.vesqen.reports.AndroidDeviceReportRuntime(
@@ -124,6 +132,10 @@ class VesqenApplication : Application() {
         // The updater restores an interrupted installation; usage starts recording USB connections.
         updateRuntime
         usageRuntime
+        // The trial starts the first time strict output actually plays (#119).
+        usbOutputStateRepository.addListener { status ->
+            if (status.phase == UsbOutputPhase.ACTIVE) premiumAccess.onStrictOutputActive()
+        }
         registerActivityLifecycleCallbacks(foregroundHook)
         applicationScope.launch { outputVerificationRepository.load() }
     }

@@ -45,8 +45,11 @@ internal class AndroidDeviceReportRuntime(
             ExitHistoryAvailability.UNSUPPORTED_ANDROID_VERSION to emptyList() },
     )
     private val strictListener: (UsbOutputStatus) -> Unit = { status ->
-        // A strict session ends with SERVICE_STOPPED whenever playback stops; that is not an error.
-        if (status.phase == UsbOutputPhase.FAILED && status.failure != UsbOutputFailure.SERVICE_STOPPED) {
+        // A strict session ends with SERVICE_STOPPED whenever playback stops, and an ended trial
+        // (#119) is a purchase state; neither is an error.
+        if (status.phase == UsbOutputPhase.FAILED && status.failure != UsbOutputFailure.SERVICE_STOPPED &&
+            status.failure != UsbOutputFailure.TRIAL_ENDED
+        ) {
             // This callback may run on the audio thread. Use the failure's own immutable source
             // format, never read a possibly different current MediaItem later on the main thread.
             val format = status.sourceFormat?.let {

@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.WorkspacePremium
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationItemIconPosition
@@ -223,4 +224,5 @@ private val VesqenDestination.icon: ImageVector
         VesqenDestination.LICENSES -> Icons.Outlined.Description
         VesqenDestination.USAGE_STATISTICS -> Icons.Outlined.BarChart
         VesqenDestination.DEVICE_REPORT -> Icons.Outlined.BugReport
+        VesqenDestination.PREMIUM -> Icons.Outlined.WorkspacePremium
     }

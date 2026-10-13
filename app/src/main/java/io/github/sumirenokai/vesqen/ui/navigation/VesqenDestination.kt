@@ -17,6 +17,7 @@ enum class VesqenDestination(
     LICENSES(R.string.licenses_title, "vesqen.nav.licenses-detail"),
     USAGE_STATISTICS(R.string.usage_title, "vesqen.nav.usage-detail"),
     DEVICE_REPORT(R.string.report_title, "vesqen.nav.report-detail"),
+    PREMIUM(R.string.settings_premium, "vesqen.nav.premium-detail"),
 }
 
 // Bottom-bar order from the B artboard (owner decision 2026-10-03: Chain is a top-level tab).
@@ -31,7 +32,7 @@ internal val TopLevelDestinations = listOf(
 internal val VesqenDestination.detailDepth: Int
     get() = when (this) {
         VesqenDestination.ABOUT, VesqenDestination.LICENSES, VesqenDestination.USAGE_STATISTICS,
-        VesqenDestination.DEVICE_REPORT -> 1
+        VesqenDestination.DEVICE_REPORT, VesqenDestination.PREMIUM -> 1
         VesqenDestination.PRIVACY_POLICY -> 2
         else -> 0
     }

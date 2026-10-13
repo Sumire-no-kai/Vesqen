@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.playback.OfficialMixerApiSupport
+import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailureOrigin
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
@@ -75,12 +76,15 @@ internal fun StrictUsbFailureDialog(
     status: UsbOutputStatus,
     canChangeOutputMode: Boolean,
     onSetUsbOutputMode: (UsbOutputMode) -> Unit,
+    onOpenPremium: (() -> Unit)? = null,
 ) {
     var dismissedFailure by rememberSaveable { mutableStateOf<String?>(null) }
     val failure = status.failure?.takeIf { status.failureInterruptsUser() } ?: return
     // A fresh failed attempt has a new coordinator generation. Telemetry refreshes do not.
     val failureKey = "${status.generation}:${status.observedAtEpochMs}:${failure.name}"
     if (dismissedFailure == failureKey) return
+    // #119: an ended trial is not fixed by another DAC; offer Pro features instead of keeping strict.
+    val openPremium = onOpenPremium?.takeIf { failure == UsbOutputFailure.TRIAL_ENDED }
 
     AlertDialog(
         modifier = Modifier.testTag("vesqen.output.failure-dialog"),
@@ -88,7 +92,10 @@ internal fun StrictUsbFailureDialog(
         title = { Text(stringResource(R.string.chain_strict_failed_title)) },
         text = {
             Text(
-                stringResource(R.string.player_strict_failure_body, strictUsbFailureLabel(failure, status.decisionCode)),
+                stringResource(
+                    if (openPremium != null) R.string.player_trial_ended_body else R.string.player_strict_failure_body,
+                    strictUsbFailureLabel(failure, status.decisionCode),
+                ),
                 modifier = Modifier.verticalScroll(rememberScrollState()),
             )
         },
@@ -102,10 +109,20 @@ internal fun StrictUsbFailureDialog(
             ) { Text(stringResource(R.string.player_use_system_output)) }
         },
         dismissButton = {
-            TextButton(
-                onClick = { dismissedFailure = failureKey },
-                modifier = Modifier.testTag("vesqen.output.keep-strict"),
-            ) { Text(stringResource(R.string.player_keep_strict_output)) }
+            if (openPremium != null) {
+                TextButton(
+                    onClick = {
+                        dismissedFailure = failureKey
+                        openPremium()
+                    },
+                    modifier = Modifier.testTag("vesqen.output.open-premium"),
+                ) { Text(stringResource(R.string.premium_open)) }
+            } else {
+                TextButton(
+                    onClick = { dismissedFailure = failureKey },
+                    modifier = Modifier.testTag("vesqen.output.keep-strict"),
+                ) { Text(stringResource(R.string.player_keep_strict_output)) }
+            }
         },
     )
 }
