@@ -21,7 +21,7 @@ class VesqenApplication : Application() {
     private val applicationJob = SupervisorJob()
     private val applicationScope = CoroutineScope(applicationJob + Dispatchers.Default)
 
-    /** Null in the Play build, which Google Play updates. */
+    /** Null in the Play build, which Google Play updates. Typed by the flavor's factory: GitHubUpdateRuntime in the GitHub build. */
     internal val updateRuntime by lazy {
         io.github.sumirenokai.vesqen.updates.createUpdateRuntime(this, applicationScope)
     }
