@@ -74,10 +74,14 @@ use them, so a pool that may have leaked is revoked as a batch.
 - **Where entry appears.** The GitHub build shows the activation section on the Pro features page
   only in builds that charge (`vesqen.premiumEnforced`) and in debug builds. The betas' release
   builds take no codes.
-- **Activation links.** `https://vesqen.sumirenokai.com/activate#<code>` opens
+- **Activation links.** `https://vesqen-api.sumirenokai.com/activate#<code>` opens
   `ActivationLinkActivity`, which checks the code and opens the Pro features page. The code sits in
-  the fragment, which browsers do not send to the server. The site's `/.well-known/assetlinks.json`
-  must list the app signing certificate for Android to open the link in the app.
+  the fragment, which browsers do not send to the server. The link uses the API host on purpose:
+  Chrome keeps a link that stays on the current site in the browser, so a link on
+  `vesqen.sumirenokai.com` could never leave the website's purchase page for the app. The Worker
+  serves the `/.well-known/assetlinks.json` that lets Android verify the link, and sends a browser
+  that does open it (no app, or an unverified link) on to the website's `/activate/` page, which
+  shows the code for pasting.
 - **Storage.** The kept code is stored in the app's private storage and checked again at every
   start. A revoked serial or a key the build no longer trusts removes the unlock. The app never
   contacts a server to activate.

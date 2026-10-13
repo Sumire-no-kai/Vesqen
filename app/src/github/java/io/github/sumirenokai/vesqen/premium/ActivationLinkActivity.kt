@@ -7,7 +7,7 @@ import io.github.sumirenokai.vesqen.MainActivity
 import io.github.sumirenokai.vesqen.VesqenApplication
 
 /**
- * Opens `https://vesqen.sumirenokai.com/activate#<code>` from the website's purchase page (#120).
+ * Opens `https://vesqen-api.sumirenokai.com/activate#<code>` from the website's purchase page (#120).
  * The code sits in the fragment, which browsers never send to the server. This activity checks it,
  * then hands over to the app on its Pro features page, which shows the result; it has no UI of its own.
  */
@@ -28,7 +28,7 @@ class ActivationLinkActivity : Activity() {
     }
 
     private companion object {
-        const val HOST = "vesqen.sumirenokai.com"
+        const val HOST = "vesqen-api.sumirenokai.com"
         const val PATH = "/activate"
     }
 }

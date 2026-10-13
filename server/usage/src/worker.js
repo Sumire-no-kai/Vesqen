@@ -3,6 +3,7 @@ import {validateReport} from './report-schema.js';
 import {updateManifests} from './updates.js';
 import {snapshotDownloads} from './downloads.js';
 import {handleActivation, isActivationPath} from './activation.js';
+import {handleAppLink, isAppLinkPath} from './app-links.js';
 // The main module may export only handlers, so the limit lives in its own module.
 import {DISTINCT_VALUES_PER_DAY} from './limits.js';
 
@@ -73,6 +74,7 @@ async function incrementUsage(env, ping, day) {
 export async function handle(request, env, now = Date.now(), fetcher = fetch) {
   try {
     const url = new URL(request.url);
+    if (isAppLinkPath(url.pathname)) return handleAppLink(request, url);
     if (isActivationPath(url.pathname)) return await handleActivation(request, env, now, fetcher);
     if (!['/v1/usage','/v1/reports'].includes(url.pathname)) return response(404,{error:'NOT_FOUND'});
     if (request.method !== 'POST') return response(405,{error:'METHOD_NOT_ALLOWED'});

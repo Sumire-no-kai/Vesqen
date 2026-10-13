@@ -125,3 +125,22 @@ test('sales stay closed until opened, and requests are checked before anything i
   assert.equal((await handle(new Request('https://example.invalid/v1/stripe/webhook'), env, now, fetcher)).status, 405);
   assert.deepEqual(env.calls, []);
 });
+
+test('the API host verifies the activation link and sends browsers on to the website', async () => {
+  const env = {DB:null}; // Neither answer touches storage, and both work while sales are closed.
+  const links = await handle(new Request('https://example.invalid/.well-known/assetlinks.json'), env, now);
+  assert.equal(links.status, 200);
+  assert.equal(links.headers.get('content-type'), 'application/json');
+  const [statement] = await links.json();
+  assert.deepEqual(statement.relation, ['delegate_permission/common.handle_all_urls']);
+  assert.equal(statement.target.package_name, 'io.github.sumirenokai.vesqen');
+  // The application signing certificate of docs/release-keys/vesqen-app-signing-v1-cert.pem.
+  assert.deepEqual(statement.target.sha256_cert_fingerprints,
+    ['74:3E:96:FC:B7:1D:C5:81:88:49:68:19:A0:01:A2:7C:D8:8D:90:91:62:C5:AE:92:9C:87:BF:A2:9A:B8:62:93']);
+  const english = await handle(new Request('https://example.invalid/activate', {headers:{'accept-language':'en-AU,en;q=0.9'}}), env, now);
+  assert.equal(english.status, 302);
+  assert.equal(english.headers.get('location'), 'https://vesqen.sumirenokai.com/activate/');
+  const chinese = await handle(new Request('https://example.invalid/activate/', {headers:{'accept-language':'zh-CN,zh;q=0.9,en;q=0.8'}}), env, now);
+  assert.equal(chinese.headers.get('location'), 'https://vesqen.sumirenokai.com/zh/activate/');
+  assert.equal((await handle(new Request('https://example.invalid/activate', {method:'POST'}), env, now)).status, 405);
+});
