@@ -8,7 +8,10 @@ import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryRecorder
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStateRepository
+import io.github.sumirenokai.vesqen.premium.ActivationCodes
+import io.github.sumirenokai.vesqen.premium.ActivationState
 import io.github.sumirenokai.vesqen.premium.AndroidPremiumStore
+import io.github.sumirenokai.vesqen.premium.createActivationCodes
 import io.github.sumirenokai.vesqen.premium.PremiumAccess
 import io.github.sumirenokai.vesqen.telemetry.AndroidPlaybackTelemetry
 import io.github.sumirenokai.vesqen.telemetry.PlaybackTelemetry
@@ -53,7 +56,16 @@ class VesqenApplication : Application() {
 
     /** #119: the trial and paid-feature state; the betas build it with enforcement off. */
     val premiumAccess: PremiumAccess by lazy {
-        PremiumAccess(AndroidPremiumStore(this), enforced = BuildConfig.PREMIUM_ENFORCED)
+        PremiumAccess(
+            AndroidPremiumStore(this),
+            enforced = BuildConfig.PREMIUM_ENFORCED,
+            isUnlocked = { activationCodes?.state?.value is ActivationState.Active },
+        )
+    }
+
+    /** #120: website activation codes; null in the Play build and in builds that do not charge yet. */
+    val activationCodes: ActivationCodes? by lazy {
+        createActivationCodes(this, onChanged = { premiumAccess.refresh() })
     }
 
     internal val deviceReportRuntime by lazy {

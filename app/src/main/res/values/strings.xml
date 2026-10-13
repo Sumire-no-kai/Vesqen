@@ -862,6 +862,13 @@
     <string name="premium_strict_intro_body">You can try it free for 7 days, counted from the first time it plays. After that, a one-time purchase unlocks it. Library, playback and Chain are always free.</string>
     <string name="premium_strict_intro_body_beta">It’s free during the beta. From version 1.0, you can try it free for 7 days and then unlock it with a one-time purchase. Library, playback and Chain are always free.</string>
     <string name="premium_strict_intro_ok">OK</string>
+    <string name="premium_activation_title">Activation code</string>
+    <string name="premium_activation_hint">Paste your activation code</string>
+    <string name="premium_activate">Activate</string>
+    <string name="premium_activation_active">Pro features are unlocked with this code. Keep it: you need it again after reinstalling Vesqen or on a new phone.</string>
+    <string name="premium_activation_malformed">This doesn’t look like a Vesqen activation code. Check that the whole code was copied.</string>
+    <string name="premium_activation_not_genuine">This activation code isn’t valid for this version of Vesqen.</string>
+    <string name="premium_activation_revoked">This activation code was revoked. If you bought it on the Vesqen website, email vesqen@sumirenokai.com for a new one.</string>
     <string name="premium_open">View Pro features</string>
     <string name="player_trial_ended_body">%1$s\n\nStrict USB output doesn’t switch to system output on its own. You can unlock Pro features with a one-time purchase, or switch to System output and play again.</string>
 </resources>

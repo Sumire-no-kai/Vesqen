@@ -1,0 +1,2 @@
+# Activation codes revoked after a refund, a chargeback or a leak (#120, docs/ACTIVATION_CODES.md).
+# One `keyId:serial` per line. Every app version ships the list as it stood at release.
