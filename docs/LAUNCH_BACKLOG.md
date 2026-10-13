@@ -7,7 +7,7 @@
 - 正式版 1.0 不要求 `BIT-PERFECT VERIFIED`，写成公开限制；最迟在 2.0 之前完成，M7 是 2.0 的必做项。
 - Google Play 封闭测试最早使用 beta.2，因为 beta.2 才有设备报告。
 - beta.2 起申请联网权限，用于默认开启、可以关闭的匿名统计、设备报告上传和检查更新；服务端用现有的 Cloudflare 账号。
-- 收费方案在正式版准备上架前再讨论。
+- 收费方案在正式版准备上架前再讨论。2026-10-13 已确定：1.0 开始收费，beta.3 先加入说明和设置，见[商业模式](MONETIZATION.md)。
 
 ## beta.1（已完成）
 
@@ -60,7 +60,7 @@
 | [#45](https://github.com/Sumire-no-kai/Vesqen/issues/45) | 在 Play Console 创建应用并完成 12 人、14 天封闭测试（含填写隐私政策网址） |
 | [#44](https://github.com/Sumire-no-kai/Vesqen/issues/44) | 商品详情与上架材料，见 [Google Play 上架材料](PLAY_LISTING.md) |
 | [#56](https://github.com/Sumire-no-kai/Vesqen/issues/56) | 前台服务申报（`mediaPlayback`，需要演示视频） |
-| [#46](https://github.com/Sumire-no-kai/Vesqen/issues/46) | 14 天试用与一次性应用内解锁（Play 构建） |
+| [#46](https://github.com/Sumire-no-kai/Vesqen/issues/46) | 7 天试用与一次性应用内解锁（Play 构建） |
 | [#47](https://github.com/Sumire-no-kai/Vesqen/issues/47) | GitHub / Play 构建拆分（Billing 只进 Play 构建，自行更新只进 GitHub 构建） |
 | [#48](https://github.com/Sumire-no-kai/Vesqen/issues/48) | 确认 Billing 带入的 Google 日志组件，写进隐私政策和数据安全表单 |
 
@@ -69,7 +69,7 @@
 - #45 依赖 beta.2（#69 设备报告）、#44、#56，以及 #47 的构建拆分。Play 构建不能包含 #68 的自行更新和“安装未知应用”权限。
 - #44 的截图要等 #35 重做完成后再拍。
 - #70 上线前，隐私政策要先改好并完成核查；#69 的上传接口也依赖 #70 的服务端。
-- #46 依赖 #47 和 #48；收费方案在正式版准备上架前讨论。
+- #46 依赖 #48；收费方案 2026-10-13 已确定，见[商业模式](MONETIZATION.md)。
 - #49 需要一台开放了官方 bit-perfect 通道的手机，或者走 #71 的路径。
 - #74 和 #47 的构建拆分一起考虑。
 - #72 的文案和版式随 #35 的链路页一起做。#73 要靠 #69 的设备报告收集各 ROM 能否收到 codec 广播。
