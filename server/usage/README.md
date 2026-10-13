@@ -21,6 +21,10 @@ database IDs, service hostnames, API tokens or other credentials.
   including confidence, time, sources, dependency closure, reason codes and the
   field privacy allowlists. Optional filename is only a basename; no library,
   listening-history, path, Bluetooth-name, MAC or arbitrary exception-text fields.
+  The optional `crashes` group (#113) carries exception types and stack frames only:
+  class and method names must match the contract's patterns and length limits, and
+  record, exception and frame counts are capped. Deploy this server before an app
+  that sends `crashes`, because older servers reject the unknown field.
   The response contains a random **report** receipt ID, not a device/client ID.
   Only the exact JSON text the user previewed (after validation) plus server
   receipt/expiry times are stored, not HTTP headers, IP or the raw HTTP request. Upload must be invoked only after

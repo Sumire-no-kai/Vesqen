@@ -7,8 +7,9 @@ uploader described below.
 ## UI integration
 
 Obtain `VesqenApplication.deviceReporter`, collect its `snapshot`, and update
-`DeviceReportOptions`. Basic information is mandatory. Every optional group and
-`includeFileNames` defaults to false. Filenames apply only to failing-track formats.
+`DeviceReportOptions`. Basic information is mandatory. Every optional group,
+`includeFileNames` and `crashes` (#113) default to false. Filenames apply only to
+failing-track formats.
 
 `generate()` captures the selected inputs once and produces `Preview(report)`.
 Display the **complete** `report.previewText`. Only after the user confirms, call
@@ -62,7 +63,8 @@ idempotency contract. The receipt identifies a report, not a device or install.
 
 All builds record only player error codes, strict-output failure/origin codes and
 Android historical **failure** exits. No exceptions, stack traces, exit description,
-process name, media ID, title, library list or listening history is stored.
+process name, media ID, title, library list or listening history is stored in this
+journal; Vesqen's own crashes are kept separately (see "Crash records" below).
 An error may retain reviewed source-format fields and a basename for an explicit
 filename opt-in during export. URI display-name lookup runs on IO and its URI is
 never serialized. This is separate from Debug diagnostic recording; its existing
@@ -88,6 +90,70 @@ attributed to a later current track. Format fields describe library metadata or
 the strict request, **not** independently verified decoded/output samples. Library
 formats are exported as `ESTIMATED` (cached metadata, as in Audio Proof); a strict
 request's format is `MEASURED` because Vesqen itself asked Android for it.
+
+## Crash records and the crash question (#113)
+
+Owner decision, 2026-10-11. After a crash or ANR, the next app open asks once:
+"Vesqen closed unexpectedly last time", with "Review and send" and "No thanks". Nothing
+is sent automatically.
+
+**Capture.** `CrashRecordingHandler` is installed in `VesqenApplication.attachBaseContext`,
+before content providers and `onCreate`, in every build and on every Android version.
+It records the crash and then always hands the same thread and exception to the
+previous default handler, which on Android logs the crash and ends the process. A
+failure while recording is attached to the crash as a suppressed exception, so
+Android's crash log shows both; it never replaces the crash. One record per process.
+The crash path depends only on `CrashRecord.kt` and `CrashReportStore`, not on the
+report vocabulary, whose initialisation could itself be what failed.
+
+**Contents.** `CrashCapture` reads the exception's class name and stack frames (class,
+method, line) for the thrown exception and up to three causes, following `getCause()`
+with a cycle check. It keeps the top 24 frames of each and counts the rest. It adds the
+app version, version code and time. It never reads a message, localized message,
+`toString()`, suppressed exceptions, source file names or the thread's name. Every
+type, class and method name must match `classNamePattern` or `methodNamePattern` in
+the contract (ASCII letters, digits and `_ $ . -`; methods also `<init>` and
+`<clinit>`) and stay within 200 or 100 characters; anything else becomes null, as do
+negative line numbers. A path, a title, spaces or non-ASCII text therefore cannot pass.
+The same filter runs at capture, when a record is read back, and at export.
+
+**Storage.** One file per crash in the private `noBackupFilesDir/device-report-crashes/`.
+The crash path writes a `.next` file, syncs it and renames it atomically. It takes no
+lock and reads no records, and then deletes the oldest beyond three. Readers keep at
+most three records from the last seven days (the error history's retention), drop
+records dated in the future, delete records that cannot be decoded (reported as
+`RECORD_DISCARDED`) and remove `.next` leftovers older than a minute; a newer one may
+still be in progress. A record is at most 64 KiB on disk (about 30 KiB at the limits).
+
+**The question.** `CrashReportRuntime` decides once per process, on IO, whether the
+question is due: a crash record, or on Android 11+ a historical exit with
+`REASON_CRASH_NATIVE` or `REASON_ANR` from the last seven days (type and time only),
+newer than the time stored when the question was last shown. `REASON_CRASH` does not
+ask again, since the handler already recorded it. The app shell shows the question
+once the usage introduction, if due, is done, and marks it shown as soon as it appears,
+so the same crash is never offered twice. Dismissing it without an answer keeps the
+records until they expire; "No thanks" deletes all crash records. "Review and send"
+only opens Export device report with `crashes` and `recentErrors` selected, because
+recent errors hold Android's ANR and native-crash exits. Nothing is created or sent
+until the user previews the report and picks upload, share or email. If the store
+cannot be read, the question is not asked and the crash section says
+`STORAGE_UNAVAILABLE`. On the first run of a version with this feature, unseen
+native-crash and ANR exits from the last seven days count once.
+
+**Sending.** `DefaultDeviceReporter` hands the data behind a successfully uploaded,
+shared or emailed report to the runtime, which deletes exactly the crash records that
+report contained. A send cancelled by starting over keeps them until they expire.
+Uploads use the same `/v1/reports` uploader and the #96 service switch as every
+other report.
+
+**Report shape.** The optional `crashes` group holds `availability`
+(`CrashHistoryAvailability`), `maxCrashes`, `maxAgeMs` and `records`. Each record has
+`occurredAtEpochMs`, `appVersion` (the basic-label filter), `versionCode`,
+`confidence` `MEASURED`, `source` `vesqen.uncaught_exception_handler`, `exceptions`
+(`type`, `frames` with `className`, `methodName` and `line`, and `omittedFrames`) and
+`causesOmitted`. At every limit the group is about 100 KB; a typical crash is a few
+KB. Release builds are optimized by R8, so their class and method names need the
+build's `mapping.txt` to be read.
 
 ## Privacy and evidence
 
@@ -156,7 +222,10 @@ as lossless. Bluetooth retains `LOSSY_OR_UNKNOWN_DEPENDING_ON_CODEC`.
 catalog and limits) and `sample-report.json` (one of each group and evidence kind)
 are generated from the app. App-segment enum lists come directly from the production
 assessment enums via `DeviceReportVocabulary`; the sample includes Bluetooth and a
-reasoned `UNKNOWN` transition condition. `DeviceReportContractTest` fails when either differs
+reasoned `UNKNOWN` transition condition. Crash limits and name patterns come from
+`CrashCapture` and `CrashReportStore`; the sample includes a crash with a cause and a
+filtered frame. Servers reject unknown fields, so a server that accepts `crashes` must
+be deployed before an app that can send it. `DeviceReportContractTest` fails when either differs
 from the code and writes the current output under `app/build/contracts/` for review.
 The report server validates against these files instead of its own copies.
 
