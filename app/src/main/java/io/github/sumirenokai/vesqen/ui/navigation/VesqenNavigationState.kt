@@ -68,6 +68,16 @@ data class VesqenNavigationState(
 
     fun openDeviceReport(): VesqenNavigationState = openDetail(VesqenDestination.DEVICE_REPORT)
 
+    /**
+     * Pro features open from Settings and from strict output dialogs, which can appear over any
+     * surface. Over another detail they open from Settings, so details never nest past two levels.
+     */
+    fun openPremium(): VesqenNavigationState = when {
+        destination == VesqenDestination.PREMIUM -> this
+        destination.isSecondaryDetail -> selectTopLevel(VesqenDestination.SETTINGS).openDetail(VesqenDestination.PREMIUM)
+        else -> openDetail(VesqenDestination.PREMIUM)
+    }
+
     fun back(): VesqenNavigationState = when {
         destination == VesqenDestination.LIBRARY -> this
         destination == VesqenDestination.CHAIN -> copy(

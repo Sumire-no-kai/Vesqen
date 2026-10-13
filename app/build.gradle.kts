@@ -31,6 +31,13 @@ require(debugUpdateEndpoint.matches(Regex("https://[A-Za-z0-9._~:/%-]+/"))) {
     "The Debug update manifest base URL must be HTTPS and end with /"
 }
 
+// #119: whether this build charges for paid features. Off for the betas, which stay free and count no
+// trial; 1.0 turns it on. `-Pvesqen.premiumEnforced=true` builds a charging debug APK for device tests.
+val premiumEnforced = providers.gradleProperty("vesqen.premiumEnforced").orElse("false").get()
+require(premiumEnforced == "true" || premiumEnforced == "false") {
+    "vesqen.premiumEnforced must be true or false"
+}
+
 // Empty until the owner deploys #70. Shared across build types, with no production host in source.
 val usageEndpoint = providers.gradleProperty("vesqen.usageEndpoint").orElse("").get()
 require(usageEndpoint.isEmpty() || usageEndpoint.matches(Regex("https://[A-Za-z0-9.-]+(:[0-9]+)?/v1/usage"))) {
@@ -48,6 +55,7 @@ android {
         buildConfigField("String", "UPDATE_MANIFEST_BASE_URL", "\"https://vesqen.sumirenokai.com/updates/\"")
         // #96: the owner's remote switch, read only right before a usage ping or report upload.
         buildConfigField("String", "SERVICE_SWITCH_URL", "\"https://vesqen.sumirenokai.com/service/status.json\"")
+        buildConfigField("boolean", "PREMIUM_ENFORCED", premiumEnforced)
         applicationId = "io.github.sumirenokai.vesqen"
         minSdk = 26
         targetSdk = 36

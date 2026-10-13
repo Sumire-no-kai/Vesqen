@@ -45,6 +45,8 @@ internal class UsbOutputCoordinator(
     private val stateRepository: UsbOutputStateRepository,
     private val resolver: UsbOutputStrategyResolver = UsbOutputStrategyResolver(),
     private val mixerAdapter: MixerBitPerfectAdapter = MixerBitPerfectAdapterFactory.create(context),
+    /** #119: false once the strict output trial ended without a purchase. */
+    private val strictOutputAllowed: () -> Boolean = { true },
 ) : ForwardingAudioOutputProvider(
     AudioTrackAudioOutputProvider.Builder(context.applicationContext).build(),
 ), Player.Listener {
@@ -298,6 +300,12 @@ internal class UsbOutputCoordinator(
         val generation = synchronized(lock) { configurationGeneration }
         val activePlayer = player ?: return
         sourceFormat = activePlayer.currentMediaItem.toSourcePcmFormat()
+        // Checked whenever strict output is prepared, never mid-track: a song that is already
+        // playing finishes, and the next attempt stops like any other strict failure (#119).
+        if (!strictOutputAllowed()) {
+            failClosed(UsbOutputFailure.TRIAL_ENDED, "strict_usb.trial_ended", expectedGeneration = generation)
+            return
+        }
         enforceNeutralProcessing(activePlayer)
         val source = sourceFormat
         val devices = usbAudioOutputs()

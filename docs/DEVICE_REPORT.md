@@ -79,7 +79,8 @@ so history keeps working, and the report says `JOURNAL_RESET` for that run.
 Historical exits are deduplicated by timestamp and reason; Android versions before
 30 report unsupported history. Normal user stops (including a strict session ending
 with `SERVICE_STOPPED`), successful/self exits, and low-memory or signal kills of a
-background process are excluded. Android may omit exits.
+background process are excluded. Android may omit exits. Strict output that stops because the
+Pro feature trial ended (`TRIAL_ENDED`, #119) is a purchase state, not an error, and is not recorded.
 
 Strict failures use the failure snapshot's own source format. A reliable filename,
 container or codec is not available there; these remain absent rather than being

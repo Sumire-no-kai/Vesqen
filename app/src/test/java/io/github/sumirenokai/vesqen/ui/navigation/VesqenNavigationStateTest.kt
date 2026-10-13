@@ -135,4 +135,30 @@ class VesqenNavigationStateTest {
         assertEquals(true, VesqenDestination.CHAIN.navigationOrder < VesqenDestination.SETTINGS.navigationOrder)
         assertEquals(true, VesqenDestination.ABOUT.navigationOrder > VesqenDestination.SETTINGS.navigationOrder)
     }
+
+    @Test
+    fun `pro features opened from the player return to the player`() {
+        val premium = VesqenNavigationState()
+            .selectTopLevel(VesqenDestination.SETTINGS)
+            .selectTopLevel(VesqenDestination.NOW)
+            .openPremium()
+
+        assertEquals(VesqenDestination.PREMIUM, premium.destination)
+        val now = premium.back()
+        assertEquals(VesqenDestination.NOW, now.destination)
+        assertEquals(VesqenDestination.SETTINGS, now.back().destination)
+    }
+
+    @Test
+    fun `pro features opened over a nested detail open from settings`() {
+        val premium = VesqenNavigationState()
+            .selectTopLevel(VesqenDestination.SETTINGS)
+            .openAbout()
+            .openPrivacyPolicy()
+            .openPremium()
+
+        assertEquals(VesqenDestination.PREMIUM, premium.destination)
+        assertEquals(VesqenDestination.SETTINGS, premium.back().destination)
+        assertEquals(premium, premium.openPremium())
+    }
 }

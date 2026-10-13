@@ -104,7 +104,11 @@ class PlaybackService : MediaSessionService() {
             .setTransferListener(telemetry.transferListener)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
         val outputStateRepository = (application as VesqenApplication).usbOutputStateRepository
-        val outputCoordinator = UsbOutputCoordinator(this, outputStateRepository).also {
+        val outputCoordinator = UsbOutputCoordinator(
+            this,
+            outputStateRepository,
+            strictOutputAllowed = (application as VesqenApplication).premiumAccess::strictOutputAllowed,
+        ).also {
             usbOutputCoordinator = it
         }
         val player = ExoPlayer.Builder(this, VesqenAudioRenderersFactory(this, outputCoordinator))

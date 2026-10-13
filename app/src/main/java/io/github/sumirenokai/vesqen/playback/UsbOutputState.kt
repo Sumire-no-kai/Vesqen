@@ -36,6 +36,8 @@ enum class UsbOutputFailure {
     PROCESSING_NOT_NEUTRAL,
     SERVICE_STOPPED,
     PLATFORM_ERROR,
+    /** #119: strict output is a paid feature whose trial ended without a purchase. */
+    TRIAL_ENDED,
 }
 
 /** Why this strict-output attempt exists; presentation decides how prominently to show a failure. */
