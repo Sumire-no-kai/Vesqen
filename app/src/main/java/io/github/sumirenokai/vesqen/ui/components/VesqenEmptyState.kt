@@ -15,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -35,6 +36,11 @@ fun VesqenEmptyState(
     onAction: () -> Unit,
     modifier: Modifier = Modifier,
     primaryAction: Boolean = true,
+    actionTestTag: String? = null,
+    /** A second, quieter way forward under the main action. */
+    secondaryActionLabel: String? = null,
+    onSecondaryAction: () -> Unit = {},
+    secondaryActionTestTag: String? = null,
 ) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
@@ -55,10 +61,17 @@ fun VesqenEmptyState(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(VesqenSpacing.md))
+            val actionModifier = actionTestTag?.let { Modifier.testTag(it) } ?: Modifier
             if (primaryAction) {
-                Button(onClick = onAction, modifier = Modifier.heightIn(min = 52.dp)) { Text(actionLabel) }
+                Button(onClick = onAction, modifier = actionModifier.heightIn(min = 52.dp)) { Text(actionLabel) }
             } else {
-                OutlinedButton(onClick = onAction, modifier = Modifier.heightIn(min = 44.dp)) { Text(actionLabel) }
+                OutlinedButton(onClick = onAction, modifier = actionModifier.heightIn(min = 44.dp)) { Text(actionLabel) }
+            }
+            if (secondaryActionLabel != null) {
+                OutlinedButton(
+                    onClick = onSecondaryAction,
+                    modifier = (secondaryActionTestTag?.let { Modifier.testTag(it) } ?: Modifier).heightIn(min = 48.dp),
+                ) { Text(secondaryActionLabel) }
             }
         }
     }

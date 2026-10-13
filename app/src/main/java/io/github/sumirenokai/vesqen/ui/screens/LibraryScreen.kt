@@ -387,7 +387,9 @@ fun LibraryScreen(
                 sourceActionsEnabled = !state.isLoading && orderTarget == null,
             )
         }
-        if (state.musicAccess != MusicAccess.GRANTED) {
+        // An empty library without device access makes the request its main button, so the
+        // notice would only compete with it there.
+        if (state.musicAccess != MusicAccess.GRANTED && !(state.tracks.isEmpty() && !state.isLoading && !state.loadingFailed)) {
             DeviceMusicAccessNotice(
                 denied = state.musicAccess == MusicAccess.DENIED,
                 onRequestMusicAccess = onRequestMusicAccess,
@@ -504,16 +506,29 @@ fun LibraryScreen(
                         modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
                     )
 
-                    // #35: without device access nothing was searched yet, so it does not say "not found".
-                    state.tracks.isEmpty() -> VesqenEmptyState(
-                        title = stringResource(
-                            if (state.musicAccess == MusicAccess.GRANTED) R.string.no_local_music else R.string.library_no_access_title,
-                        ),
-                        body = stringResource(
-                            if (state.musicAccess == MusicAccess.GRANTED) R.string.no_local_music_body else R.string.library_no_access_body,
-                        ),
+                    state.tracks.isEmpty() && state.musicAccess == MusicAccess.GRANTED -> VesqenEmptyState(
+                        title = stringResource(R.string.no_local_music),
+                        body = stringResource(R.string.no_local_music_body),
                         actionLabel = stringResource(R.string.add_music_folder),
                         onAction = onAddLibraryFolder,
+                        modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
+                    )
+
+                    // #35: without device access nothing was searched yet, so it does not say "not found".
+                    // Allowing access is what most people need first, so it is the main button; a
+                    // folder stays the second way in (first-launch feedback, 2026-10-13).
+                    state.tracks.isEmpty() -> VesqenEmptyState(
+                        title = stringResource(R.string.library_no_access_title),
+                        body = stringResource(R.string.library_no_access_body),
+                        actionLabel = stringResource(
+                            if (state.musicAccess == MusicAccess.DENIED) R.string.allow_music_access_in_settings
+                            else R.string.device_music_access_compact,
+                        ),
+                        onAction = if (state.musicAccess == MusicAccess.DENIED) onOpenAppSettings else onRequestMusicAccess,
+                        actionTestTag = "vesqen.permission.request",
+                        secondaryActionLabel = stringResource(R.string.add_music_folder),
+                        onSecondaryAction = onAddLibraryFolder,
+                        secondaryActionTestTag = "vesqen.library.empty.add-folder",
                         modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
                     )
 

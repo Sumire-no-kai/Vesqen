@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">Vesqen</string>
     <string name="allow_music_access_short">允许</string>
+    <string name="allow_music_access_in_settings">去设置里允许</string>
     <string name="try_again">重试</string>
     <string name="system_mixed">SYSTEM MIXED</string>
     <string name="bit_perfect_available">BIT-PERFECT AVAILABLE</string>
