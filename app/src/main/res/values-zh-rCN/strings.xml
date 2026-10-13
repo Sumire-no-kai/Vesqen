@@ -156,6 +156,8 @@
     <string name="report_chain_body">链路页上的各项数据，以及 Vesqen 这一段有没有改动音频</string>
     <string name="report_errors">最近的错误</string>
     <string name="report_errors_body">最近 7 天的播放错误、严格输出停止的原因和应用退出的原因</string>
+    <string name="report_crashes">崩溃记录</string>
+    <string name="report_crashes_body">最近 7 天崩溃时的异常类型和调用栈</string>
     <string name="report_formats">出错曲目的格式</string>
     <string name="report_formats_body">格式、采样率、位深和声道</string>
     <string name="report_file_names">包含文件名</string>
@@ -182,6 +184,10 @@
     <string name="report_failure_upload">上传失败。可以稍后再试，或者分享、发邮件。</string>
     <string name="report_failure_upload_paused">上传暂停中。可以分享或发邮件发送报告。</string>
     <string name="report_failure_upload_unavailable">上传暂时不可用。可以稍后再试，或者分享、发邮件。</string>
+    <string name="crash_prompt_title">Vesqen 上次意外退出了</string>
+    <string name="crash_prompt_body">发送报告可以帮助找到原因。报告包含错误类型和出错的代码位置，发送前你可以看到全文。</string>
+    <string name="crash_prompt_review">查看并发送</string>
+    <string name="crash_prompt_decline">不用了</string>
     <string name="licenses_title">开源许可</string>
     <string name="licenses_intro">Vesqen 使用了下面这些开源软件。</string>
     <string name="licenses_loading">正在读取…</string>

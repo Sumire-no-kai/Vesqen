@@ -82,6 +82,8 @@ import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.premium.ActivationCodes
 import io.github.sumirenokai.vesqen.premium.PremiumAccess
 import io.github.sumirenokai.vesqen.premium.PremiumState
+import io.github.sumirenokai.vesqen.reports.CrashPrompt
+import io.github.sumirenokai.vesqen.reports.DeviceReportOptions
 import io.github.sumirenokai.vesqen.reports.DeviceReporter
 import io.github.sumirenokai.vesqen.service.ServiceState
 import io.github.sumirenokai.vesqen.telemetry.PlaybackTelemetry
@@ -101,6 +103,7 @@ import io.github.sumirenokai.vesqen.ui.navigation.isSecondaryDetail
 import io.github.sumirenokai.vesqen.ui.navigation.navigationOrder
 import io.github.sumirenokai.vesqen.ui.screens.AboutScreen
 import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
+import io.github.sumirenokai.vesqen.ui.screens.CrashPromptDialog
 import io.github.sumirenokai.vesqen.ui.screens.DeviceReportScreen
 import io.github.sumirenokai.vesqen.ui.screens.LibraryScreen
 import io.github.sumirenokai.vesqen.ui.screens.LicensesScreen
@@ -345,6 +348,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
         premiumAccess = application.premiumAccess,
         activationCodes = application.activationCodes,
         openPremiumRequest = openPremiumRequest,
+        crashPrompt = application.crashPrompt,
     )
 }
 
@@ -411,6 +415,7 @@ fun VesqenAppContent(
     activationCodes: ActivationCodes? = null,
     /** Each increase opens the Pro features page, as after an activation link (#120). */
     openPremiumRequest: Int = 0,
+    crashPrompt: CrashPrompt? = null,
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     var showStrictUsbUnavailable by rememberSaveable { mutableStateOf(false) }
@@ -535,7 +540,33 @@ fun VesqenAppContent(
         premiumAccess?.markStrictIntroductionShown()
     }
 
-    if (showStrictIntroduction && premiumAccess != null) {
+    // #113: after a crash or ANR, ask once. The statistics introduction, when due, comes first.
+    val crashPromptDue = crashPrompt?.due?.collectAsStateWithLifecycle()?.value == true
+    var showCrashPrompt by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(crashPromptDue, deviceReporter) {
+        if (crashPromptDue && deviceReporter != null) {
+            showCrashPrompt = true
+            // Marked once it is on screen, so the same crash is never asked about again.
+            crashPrompt?.markShown()
+        }
+    }
+
+    if (showCrashPrompt && deviceReporter != null) {
+        CrashPromptDialog(
+            onReview = {
+                showCrashPrompt = false
+                // Recent errors hold Android's records of ANRs and native crashes (type and time).
+                deviceReporter.setOptions(DeviceReportOptions(recentErrors = true, crashes = true))
+                openDeviceReport()
+            },
+            onDecline = {
+                showCrashPrompt = false
+                crashPrompt?.decline()
+            },
+            // Closed without an answer: not asked again, and the records stay until they expire.
+            onDismiss = { showCrashPrompt = false },
+        )
+    } else if (showStrictIntroduction && premiumAccess != null) {
         StrictOutputIntroductionDialog(
             freeInBeta = premiumAccess.state.collectAsStateWithLifecycle().value == PremiumState.FreeInBeta,
             onDismiss = ::closeStrictIntroduction,

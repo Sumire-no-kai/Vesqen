@@ -19,7 +19,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LinearProgressIndicator
@@ -158,6 +161,10 @@ private fun ReportOptions(options: DeviceReportOptions, enabled: Boolean, onChan
         PaperDivider()
         ReportOption(R.string.report_errors, R.string.report_errors_body, options.recentErrors, enabled, "errors") {
             onChange(options.copy(recentErrors = it))
+        }
+        PaperDivider()
+        ReportOption(R.string.report_crashes, R.string.report_crashes_body, options.crashes, enabled, "crashes") {
+            onChange(options.copy(crashes = it))
         }
         PaperDivider()
         ReportOption(R.string.report_formats, R.string.report_formats_body, options.failedTrackFormats, enabled, "formats") {
@@ -338,6 +345,41 @@ private fun ReportStatus(text: String, tag: String) {
         modifier = Modifier
             .padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.sm)
             .testTag(tag),
+    )
+}
+
+/**
+ * #113: asked once on the first open after a crash or ANR. "Review and send" opens this report with
+ * crash details selected; nothing is sent until the user previews it and picks a way to send.
+ */
+@Composable
+internal fun CrashPromptDialog(
+    onReview: () -> Unit,
+    onDecline: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        modifier = Modifier.testTag("vesqen.crash-prompt"),
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.crash_prompt_title)) },
+        text = {
+            Text(
+                stringResource(R.string.crash_prompt_body),
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onReview,
+                modifier = Modifier.testTag("vesqen.crash-prompt.review"),
+            ) { Text(stringResource(R.string.crash_prompt_review)) }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDecline,
+                modifier = Modifier.testTag("vesqen.crash-prompt.decline"),
+            ) { Text(stringResource(R.string.crash_prompt_decline)) }
+        },
     )
 }
 
