@@ -225,6 +225,7 @@ If the service were deferred or stopped, the music would stop as soon as the use
 - **反馈**：vesqen@sumirenokai.com，也可以在 Play 上直接反馈。
 - **记录**：仓库只记录测试人数、起止日期和结论，不记录测试者身份、邮箱或订单号。测试者名单在测试结束后 2 个月内删除，与隐私政策一致。
 - **签名和 AAB**：按 [发布签名记录](RELEASE_SIGNING.md#google-play-enrollment-and-upload) 导入 application signing v1、注册 upload v1 证书并核对指纹，再用上传密钥在本机签 AAB。beta.2 的 AAB 来自 GitHub Actions 运行 38213613584 的 `unsigned-play-bundle`，保留 30 天（到 2026-11-11），SHA-256 `b89f24e63f8891cc2bf697c68fd4f8fb03c1d6e3b7ec3672ac9526e865043521`。
-- **App integrity**：第一次创建版本时，在 Test and release → App integrity 查看 Play 自动保护附带的 “Share app telemetry with Google” 开关。隐私政策和数据安全表单都没有写这一项，开启前先和所有者确认，并同步改这两处。
-- **开发者验证**：导入签名密钥后，在 Play Console 的开发者验证页面确认包名和签名密钥都已登记。GitHub 版用同一把密钥，也靠这一步覆盖。
-- **顺序**：商品详情 → 封闭测试轨道和测试者 → Play 应用签名和上传 AAB → 前台服务申报 → App integrity → 送审。审核通过、测试者加入后，14 天从那时开始计算。
+- **自动保护**：Protected with Play → Automatic protection 里只有 Installer check（默认开启）。它在 Play 下发的 APK 里加本地检查，从其他来源装了 Play 版时提示去 Play 安装，不联网、不发数据。“Share app telemetry with Google” 开关属于防篡改保护，只对部分 Play 合作伙伴开放，本账号没有这一项（2026-10-13 核对）。以后如果出现，开启前先和所有者确认，并同步改隐私政策和数据安全表单。改了自动保护设置后，要重新上传 AAB 才生效。
+- **开发者验证**：Android developer verification 页面里，`io.github.sumirenokai.vesqen` 为 Registered，应用签名密钥 `74:3E:96:FC:…:62:93` 为 Verified（2026-10-13 核对）。GitHub 版用同一把密钥，所以也已覆盖。列表里另外 3 把是 Play 生成的密钥，包括已弃用的 `F7:8F:…:C6:E3`，不影响。
+- **顺序**：商品详情 → 封闭测试轨道和测试者 → Play 应用签名和上传 AAB → 前台服务申报 → 送审。审核通过、测试者加入后，14 天从那时开始计算。
+- **进度**：2026-10-13 第一次送审（封闭测试 `11 (1.0.0-beta.2)`、商品详情、应用内容、商店设置）当天通过，封闭测试轨道 Active，178 个国家/地区。前台服务申报的演示视频是 YouTube 不公开视频。测试者在名单里之后，用 Android 上的 Play 链接或网页链接 `https://play.google.com/apps/testing/io.github.sumirenokai.vesqen` 加入。当天加入人数为 0，名单 2 人。
