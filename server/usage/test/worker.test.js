@@ -145,3 +145,20 @@ test('an unknown ingest value closes the endpoint instead of opening it',async t
   assert.deepEqual(await closed.json(),{error:'SERVICE_PAUSED'});
   assert.equal(env.DB.rows('SELECT * FROM daily_totals').length,0);
 });
+
+test('only GitHub pings fetch the version files, since stores update the other channels',async t=>{
+  const env={...environment(),UPDATE_MANIFEST_BASE_URL:'https://updates.example.invalid/updates/'};t.after(()=>env.DB.close());
+  const fetched=[];
+  const fetcher=async url=>{fetched.push(url);return Response.json({schemaVersion:1,channel:url.endsWith('/beta.json')?'beta':'stable',release:null});};
+  for (const channel of ['play','fdroid','other']) {
+    const response=await handle(request({...ping(),channel}),env,now,fetcher);
+    assert.equal(response.status,200);
+    assert.deepEqual(await response.json(),{updateManifests:{}});
+  }
+  assert.deepEqual(fetched,[]);
+  const github=await handle(request(ping()),env,now,fetcher);
+  assert.deepEqual(Object.keys((await github.json()).updateManifests),['stable','beta']);
+  assert.equal(fetched.length,2);
+  // Every ping is still counted, whatever its channel.
+  assert.equal(env.DB.rows('SELECT requests FROM daily_totals')[0].requests,4);
+});

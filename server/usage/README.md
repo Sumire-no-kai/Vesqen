@@ -70,7 +70,9 @@ a 2.5-second timeout, in parallel with the D1 write, without forwarding any user
 headers or payload. Redirects are not followed (`redirect: 'manual'`; Workers does
 not support `'error'`). Fields the static files gain later are ignored, as the
 app's parser does. Valid files are included under `updateManifests` in the usage
-response for the client's existing updater seam. When none is included, the app
+response for the client's existing updater seam. Only pings from the `github`
+channel fetch them: Google Play updates the Play build, so its pings get an empty
+`updateManifests` and cause no fetch. When none is included, the app
 runs its own update check for that day (#84), so an unconfigured relay cannot stop
 automatic updates.
 A failed/unconfigured/oversized source simply yields no manifest and does not
