@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -36,6 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.service.ServiceState
 import io.github.sumirenokai.vesqen.ui.components.PaperCard
+import io.github.sumirenokai.vesqen.ui.components.PaperDivider
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.pageTitle
 import io.github.sumirenokai.vesqen.usage.UsageRegionPolicy
@@ -91,50 +93,65 @@ fun UsageStatisticsScreen(usageStatistics: UsageStatistics, onBack: () -> Unit, 
 /**
  * First-launch explanation. Where statistics start on, the switch is on the same page; where
  * consent comes first, both answers carry equal weight and nothing is preselected.
+ *
+ * The answer stays pinned at the bottom of one screen; only the explanation scrolls, and only when
+ * a small screen or large text makes it longer than the space above the answer.
  */
 @Composable
 fun UsageIntroductionScreen(usageStatistics: UsageStatistics, modifier: Modifier = Modifier) {
     val snapshot by usageStatistics.snapshot.collectAsStateWithLifecycle()
     val askFirst = snapshot.regionPolicy != UsageRegionPolicy.DEFAULT_ENABLED
     var send by rememberSaveable { mutableStateOf(true) }
+    val scroll = rememberScrollState()
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(contentAlignment = Alignment.TopCenter) {
             Column(
                 modifier = Modifier
                     .safeDrawingPadding()
                     .widthIn(max = 720.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.xl)
+                    .fillMaxHeight()
                     .testTag("vesqen.usage-intro"),
-                verticalArrangement = Arrangement.spacedBy(VesqenSpacing.lg),
             ) {
-                Text(
-                    text = stringResource(R.string.usage_title),
-                    style = MaterialTheme.typography.displayMedium.pageTitle(),
-                    modifier = Modifier.semantics { heading() },
-                )
-                UsageExplanation()
-                if (askFirst) {
-                    Column(verticalArrangement = Arrangement.spacedBy(VesqenSpacing.sm)) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(scroll)
+                        .padding(start = VesqenSpacing.lg, end = VesqenSpacing.lg, top = VesqenSpacing.lg, bottom = VesqenSpacing.md),
+                    verticalArrangement = Arrangement.spacedBy(VesqenSpacing.md),
+                ) {
+                    Text(
+                        text = stringResource(R.string.usage_title),
+                        style = MaterialTheme.typography.displaySmall.pageTitle(),
+                        modifier = Modifier.semantics { heading() },
+                    )
+                    UsageExplanation()
+                }
+                // A hairline only while more explanation sits under the answer.
+                if (scroll.canScrollForward) PaperDivider()
+                Column(
+                    modifier = Modifier.padding(start = VesqenSpacing.lg, end = VesqenSpacing.lg, top = VesqenSpacing.sm, bottom = VesqenSpacing.lg),
+                    verticalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
+                ) {
+                    if (askFirst) {
                         UsageChoice(R.string.usage_accept, "vesqen.usage-intro.accept") { usageStatistics.completeIntroduction(true) }
                         UsageChoice(R.string.usage_decline, "vesqen.usage-intro.decline") { usageStatistics.completeIntroduction(false) }
+                    } else {
+                        PaperCard {
+                            SettingsSwitchRow(
+                                title = stringResource(R.string.usage_switch),
+                                checked = send,
+                                onCheckedChange = { send = it },
+                                modifier = Modifier.testTag("vesqen.usage-intro.switch"),
+                            )
+                        }
+                        Button(
+                            onClick = { usageStatistics.completeIntroduction(send) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 52.dp)
+                                .testTag("vesqen.usage-intro.continue"),
+                        ) { Text(stringResource(R.string.usage_continue)) }
                     }
-                } else {
-                    PaperCard {
-                        SettingsSwitchRow(
-                            title = stringResource(R.string.usage_switch),
-                            checked = send,
-                            onCheckedChange = { send = it },
-                            modifier = Modifier.testTag("vesqen.usage-intro.switch"),
-                        )
-                    }
-                    Button(
-                        onClick = { usageStatistics.completeIntroduction(send) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 52.dp)
-                            .testTag("vesqen.usage-intro.continue"),
-                    ) { Text(stringResource(R.string.usage_continue)) }
                 }
             }
         }
@@ -157,7 +174,7 @@ private fun UsageChoice(@StringRes label: Int, tag: String, onClick: () -> Unit)
 private fun UsageExplanation(modifier: Modifier = Modifier) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(VesqenSpacing.sm)) {
         Text(stringResource(R.string.usage_body), style = MaterialTheme.typography.bodyLarge)
-        Column(verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs)) {
             listOf(
                 R.string.usage_field_app,
                 R.string.usage_field_device,
@@ -166,8 +183,8 @@ private fun UsageExplanation(modifier: Modifier = Modifier) {
                 R.string.usage_field_first,
             ).forEach { field ->
                 Row(horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.xs)) {
-                    Text("·", style = MaterialTheme.typography.bodyLarge)
-                    Text(stringResource(field), style = MaterialTheme.typography.bodyLarge)
+                    Text("·", style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(field), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
