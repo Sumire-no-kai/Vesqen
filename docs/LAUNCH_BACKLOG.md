@@ -42,7 +42,6 @@
 | [#53](https://github.com/Sumire-no-kai/Vesqen/issues/53) | 决定 1.0 的版本号与对外定位 |
 | [#54](https://github.com/Sumire-no-kai/Vesqen/issues/54) | 仓库与文档整理：发版复审记录、远程分支、签名文档中的本机路径 |
 | [#73](https://github.com/Sumire-no-kai/Vesqen/issues/73) | 链路页显示系统报告的蓝牙 codec（可选证据） |
-| [#74](https://github.com/Sumire-no-kai/Vesqen/issues/74) | 评估上架 F-Droid 和 IzzyOnDroid（可能需要无统计、无更新器的构建） |
 | [#75](https://github.com/Sumire-no-kai/Vesqen/issues/75) | 评估增加日语等界面语言 |
 
 ## 2.0 之前
@@ -52,6 +51,14 @@
 | [#49](https://github.com/Sumire-no-kai/Vesqen/issues/49) | 真实 DAC 矩阵与外部数字逐样本验证（BIT-PERFECT VERIFIED） |
 | [#71](https://github.com/Sumire-no-kai/Vesqen/issues/71) | M7 高级 USB 引擎：没有官方 bit-perfect 通道的手机也能严格直出 |
 | [#65](https://github.com/Sumire-no-kai/Vesqen/issues/65) | 严格 USB：16 位音源补零后送入 24 位 bit-perfect 通道 |
+
+## 以后再评估
+
+2026-10-13 移出 1.0：GitHub 版要在官网卖激活码，F-Droid 会重新签名（更新器用不了），默认开启的统计会被标成 Tracking，它对付费解锁的态度也还没查。
+
+| Issue | 内容 |
+| --- | --- |
+| [#74](https://github.com/Sumire-no-kai/Vesqen/issues/74) | 评估上架 F-Droid 和 IzzyOnDroid（可能需要无统计、无更新器的构建） |
 
 ## Google Play（暂缓，最早在 beta.2 之后）
 
@@ -71,5 +78,5 @@
 - #70 上线前，隐私政策要先改好并完成核查；#69 的上传接口也依赖 #70 的服务端。
 - #46 依赖 #48；收费方案 2026-10-13 已确定，见[商业模式](MONETIZATION.md)。
 - #49 需要一台开放了官方 bit-perfect 通道的手机，或者走 #71 的路径。
-- #74 和 #47 的构建拆分一起考虑。
+- #74 以后再评估时，和 #47 的构建拆分一起考虑。
 - #72 的文案和版式随 #35 的链路页一起做。#73 要靠 #69 的设备报告收集各 ROM 能否收到 codec 广播。
