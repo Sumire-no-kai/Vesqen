@@ -396,7 +396,13 @@ internal class UsbOutputCoordinator(
         )
         val pauseNeeded = activePlayer.playWhenReady
         if (pauseNeeded) {
-            synchronized(lock) { internalPauseInProgress = true }
+            // Play can arrive while this reconfiguration is pending, for example when a media
+            // button restores the queue and plays it in one step (#52). The internal pause must
+            // keep that request, as scheduleReconfigure() does for one made before it.
+            synchronized(lock) {
+                internalPauseInProgress = true
+                resumeAfterConfiguration = true
+            }
         }
         activePlayer.pause()
         if (!isGenerationCurrent(generation)) return
