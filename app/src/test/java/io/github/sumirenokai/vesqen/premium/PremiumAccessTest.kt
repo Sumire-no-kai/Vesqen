@@ -18,7 +18,7 @@ class PremiumAccessTest {
         val access = access(enforced = false)
         access.onStrictOutputActive()
         now += 30 * day
-        assertEquals(PremiumState.FreeInBeta, access.refresh())
+        assertEquals(PremiumState.NotCharging, access.refresh())
         assertTrue(access.strictOutputAllowed())
         assertNull(store.trial.startedAtEpochMs)
     }

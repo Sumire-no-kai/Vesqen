@@ -838,7 +838,7 @@
     <string name="now_notes_route_underruns">%1$s · %2$s underruns</string>
     <!-- #119: trial and Pro features. The trial length is PremiumAccess.TrialDays. -->
     <string name="settings_premium">Pro features</string>
-    <string name="settings_premium_free_in_beta">Free in beta</string>
+    <string name="settings_premium_not_charging">Free until 2.0</string>
     <string name="settings_premium_not_started">7-day trial</string>
     <plurals name="settings_premium_days_left">
         <item quantity="one">%1$d day left</item>
@@ -846,7 +846,7 @@
     </plurals>
     <string name="settings_premium_trial_ended">Trial ended</string>
     <string name="settings_premium_unlocked">Unlocked</string>
-    <string name="premium_status_free_in_beta">During the beta, everything is free and no trial is counted.</string>
+    <string name="premium_status_not_charging">Pro features are free until version 2.0, and no trial is counted.</string>
     <string name="premium_status_not_started">The 7-day free trial starts the first time strict USB output plays.</string>
     <plurals name="premium_status_days_left">
         <item quantity="one">Free trial: %1$d day left.</item>
@@ -857,10 +857,10 @@
     <string name="premium_free_features">Library, playback, System output and Chain are always free.</string>
     <string name="premium_paid_features">Pro features currently include strict USB output. Pro features added later are included in the same purchase.</string>
     <string name="premium_terms">You can try them free for 7 days, counted from the first time strict USB output plays. After that, a one-time purchase unlocks them. There is no subscription.</string>
-    <string name="premium_terms_beta">From version 1.0, you can try them free for 7 days and then unlock them with a one-time purchase. There is no subscription.</string>
+    <string name="premium_terms_not_charging">From version 2.0, you can try them free for 7 days and then unlock them with a one-time purchase. There is no subscription.</string>
     <string name="premium_strict_intro_title">Strict USB output is a Pro feature</string>
     <string name="premium_strict_intro_body">You can try it free for 7 days, counted from the first time it plays. After that, a one-time purchase unlocks it. Library, playback and Chain are always free.</string>
-    <string name="premium_strict_intro_body_beta">It’s free during the beta. From version 1.0, you can try it free for 7 days and then unlock it with a one-time purchase. Library, playback and Chain are always free.</string>
+    <string name="premium_strict_intro_body_not_charging">It’s free until version 2.0. Not every phone offers Android’s official bit-perfect path, so we’re building Vesqen’s own USB output to bring strict output to those phones. It’s planned for 2.0, but we can’t promise it yet. From 2.0, you can try it free for 7 days and then unlock it with a one-time purchase. Library, playback and Chain are always free.</string>
     <string name="premium_strict_intro_ok">OK</string>
     <string name="premium_activation_title">Activation code</string>
     <string name="premium_activation_hint">Paste your activation code</string>

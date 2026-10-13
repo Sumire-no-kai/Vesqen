@@ -31,8 +31,9 @@ require(debugUpdateEndpoint.matches(Regex("https://[A-Za-z0-9._~:/%-]+/"))) {
     "The Debug update manifest base URL must be HTTPS and end with /"
 }
 
-// #119: whether this build charges for paid features. Off for the betas, which stay free and count no
-// trial; 1.0 turns it on. `-Pvesqen.premiumEnforced=true` builds a charging debug APK for device tests.
+// #119: whether this build charges for paid features. Off for the betas and 1.x, which stay free and
+// count no trial; it turns on with 2.0, once Vesqen's own USB output works on phones without the
+// official path (owner decision 2026-10-13). `-Pvesqen.premiumEnforced=true` builds a charging debug APK for device tests.
 val premiumEnforced = providers.gradleProperty("vesqen.premiumEnforced").orElse("false").get()
 require(premiumEnforced == "true" || premiumEnforced == "false") {
     "vesqen.premiumEnforced must be true or false"

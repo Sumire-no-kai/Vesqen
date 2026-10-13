@@ -84,7 +84,7 @@ fun PremiumScreen(
                     PremiumNote(stringResource(R.string.premium_paid_features))
                     PremiumNote(
                         stringResource(
-                            if (state == PremiumState.FreeInBeta) R.string.premium_terms_beta else R.string.premium_terms,
+                            if (state == PremiumState.NotCharging) R.string.premium_terms_not_charging else R.string.premium_terms,
                         ),
                     )
                 }
@@ -97,7 +97,7 @@ fun PremiumScreen(
 /** The short value beside "Pro features" in Settings. */
 @Composable
 internal fun premiumSettingsValue(state: PremiumState): String = when (state) {
-    PremiumState.FreeInBeta -> stringResource(R.string.settings_premium_free_in_beta)
+    PremiumState.NotCharging -> stringResource(R.string.settings_premium_not_charging)
     PremiumState.TrialNotStarted -> stringResource(R.string.settings_premium_not_started)
     is PremiumState.Trial -> pluralStringResource(R.plurals.settings_premium_days_left, state.daysLeft, state.daysLeft)
     PremiumState.TrialEnded -> stringResource(R.string.settings_premium_trial_ended)
@@ -106,7 +106,7 @@ internal fun premiumSettingsValue(state: PremiumState): String = when (state) {
 
 @Composable
 private fun premiumStatusSentence(state: PremiumState): String = when (state) {
-    PremiumState.FreeInBeta -> stringResource(R.string.premium_status_free_in_beta)
+    PremiumState.NotCharging -> stringResource(R.string.premium_status_not_charging)
     PremiumState.TrialNotStarted -> stringResource(R.string.premium_status_not_started)
     is PremiumState.Trial -> pluralStringResource(R.plurals.premium_status_days_left, state.daysLeft, state.daysLeft)
     PremiumState.TrialEnded -> stringResource(R.string.premium_status_trial_ended)
@@ -116,7 +116,7 @@ private fun premiumStatusSentence(state: PremiumState): String = when (state) {
 /** Shown once, the first time strict USB output is turned on (#119). */
 @Composable
 internal fun StrictOutputIntroductionDialog(
-    freeInBeta: Boolean,
+    notCharging: Boolean,
     onDismiss: () -> Unit,
     onOpenPremium: () -> Unit,
 ) {
@@ -127,7 +127,7 @@ internal fun StrictOutputIntroductionDialog(
         text = {
             Text(
                 stringResource(
-                    if (freeInBeta) R.string.premium_strict_intro_body_beta else R.string.premium_strict_intro_body,
+                    if (notCharging) R.string.premium_strict_intro_body_not_charging else R.string.premium_strict_intro_body,
                 ),
                 modifier = Modifier.verticalScroll(rememberScrollState()),
             )

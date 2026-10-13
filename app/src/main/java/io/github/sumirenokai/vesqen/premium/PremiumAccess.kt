@@ -8,8 +8,8 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /** What the paid features may do now (PRD "2026-10-13 收费方案", #119). */
 sealed interface PremiumState {
-    /** A build that does not charge yet (the betas): everything works and no trial is counted. */
-    data object FreeInBeta : PremiumState
+    /** A build that does not charge yet (the betas and 1.x, until 2.0): everything works and no trial is counted. */
+    data object NotCharging : PremiumState
     data object TrialNotStarted : PremiumState
     data class Trial(val endsAtEpochMs: Long, val daysLeft: Int) : PremiumState
     data object TrialEnded : PremiumState
@@ -83,7 +83,7 @@ class PremiumAccess internal constructor(
     }
 
     private fun evaluate(now: Long): PremiumState {
-        if (!enforced) return PremiumState.FreeInBeta
+        if (!enforced) return PremiumState.NotCharging
         if (isUnlocked()) return PremiumState.Unlocked
         val startedAt = trial.startedAtEpochMs ?: return PremiumState.TrialNotStarted
         val endsAt = startedAt + TrialDurationMs

@@ -814,14 +814,14 @@
     <string name="now_notes_route_underruns">%1$s · 欠载 %2$s 次</string>
     <!-- #119：试用和高级功能。试用天数见 PremiumAccess.TrialDays。 -->
     <string name="settings_premium">高级功能</string>
-    <string name="settings_premium_free_in_beta">测试版免费</string>
+    <string name="settings_premium_not_charging">2.0 前免费</string>
     <string name="settings_premium_not_started">可试用 7 天</string>
     <plurals name="settings_premium_days_left">
         <item quantity="other">试用还剩 %1$d 天</item>
     </plurals>
     <string name="settings_premium_trial_ended">试用已结束</string>
     <string name="settings_premium_unlocked">已解锁</string>
-    <string name="premium_status_free_in_beta">测试版期间全部免费，不计算试用。</string>
+    <string name="premium_status_not_charging">2.0 之前高级功能免费，不计算试用。</string>
     <string name="premium_status_not_started">7 天免费试用从严格 USB 输出第一次开始播放时计算。</string>
     <plurals name="premium_status_days_left">
         <item quantity="other">免费试用还剩 %1$d 天。</item>
@@ -831,10 +831,10 @@
     <string name="premium_free_features">曲库、播放、系统输出和链路一直免费。</string>
     <string name="premium_paid_features">高级功能目前包括严格 USB 输出。以后加入的高级功能也包含在同一次购买里。</string>
     <string name="premium_terms">可以免费试用 7 天，从严格 USB 输出第一次开始播放时计算。之后一次性买断，没有订阅。</string>
-    <string name="premium_terms_beta">正式版起，高级功能可以免费试用 7 天，之后一次性买断，没有订阅。</string>
+    <string name="premium_terms_not_charging">2.0 起，高级功能可以免费试用 7 天，之后一次性买断，没有订阅。</string>
     <string name="premium_strict_intro_title">严格 USB 输出是高级功能</string>
     <string name="premium_strict_intro_body">可以免费试用 7 天，从第一次开始播放时计算，到期后一次性买断。曲库、播放和链路一直免费。</string>
-    <string name="premium_strict_intro_body_beta">测试版期间免费。正式版起可以免费试用 7 天，之后一次性买断。曲库、播放和链路一直免费。</string>
+    <string name="premium_strict_intro_body_not_charging">2.0 之前免费使用。不是所有手机都开放了 Android 官方的 bit-perfect 通道，我们正在开发 Vesqen 自己的 USB 输出，计划在 2.0 推出，让这些手机也能严格直出，目前还不能保证。2.0 起可以免费试用 7 天，之后一次性买断。曲库、播放和链路一直免费。</string>
     <string name="premium_strict_intro_ok">知道了</string>
     <string name="premium_activation_title">激活码</string>
     <string name="premium_activation_hint">粘贴激活码</string>

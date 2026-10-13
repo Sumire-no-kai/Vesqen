@@ -534,7 +534,7 @@ fun VesqenAppContent(
 
     if (showStrictIntroduction && premiumAccess != null) {
         StrictOutputIntroductionDialog(
-            freeInBeta = premiumAccess.state.collectAsStateWithLifecycle().value == PremiumState.FreeInBeta,
+            notCharging = premiumAccess.state.collectAsStateWithLifecycle().value == PremiumState.NotCharging,
             onDismiss = ::closeStrictIntroduction,
             onOpenPremium = {
                 closeStrictIntroduction()
