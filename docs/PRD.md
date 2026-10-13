@@ -978,7 +978,7 @@ GitHub 版没有应用商店的统计，开发迭代又需要真实的设备和�
 **渠道**
 
 - Play 版用 Google Play 一次性商品（#46），不接受激活码，也不引导到官网购买。
-- GitHub 版在官网通过 Stripe Managed Payments 销售激活码。激活码是 Ed25519 签名的凭证，在本机验证；App 不为收费联系服务端。付款后成功页先尝试跳回 Vesqen，同时提供激活按钮和二维码。激活链接和输入入口只在 GitHub 构建中。
+- GitHub 版在官网通过 Stripe Managed Payments 销售激活码。激活码是 ECDSA P-256 签名的凭证，在本机验证（[激活码技术说明](ACTIVATION_CODES.md)）；App 不为收费联系服务端。付款后成功页先尝试跳回 Vesqen，同时提供激活按钮和二维码。激活链接和输入入口只在 GitHub 构建中。
 - 服务端只保存 Stripe 订单编号、激活码编号、状态和时间，不保存邮箱、姓名或 IP。
 - 两个渠道的购买不通用。
 

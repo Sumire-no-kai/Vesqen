@@ -40,6 +40,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeUp
@@ -86,6 +87,9 @@ import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailureOrigin
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
+import io.github.sumirenokai.vesqen.premium.ActivationCodes
+import io.github.sumirenokai.vesqen.premium.ActivationResult
+import io.github.sumirenokai.vesqen.premium.ActivationState
 import io.github.sumirenokai.vesqen.premium.PremiumAccess
 import io.github.sumirenokai.vesqen.premium.PremiumStore
 import io.github.sumirenokai.vesqen.premium.TrialRecord
@@ -253,6 +257,25 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.premium.back").performClick()
         composeRule.onNodeWithTag("vesqen.settings.output.strict-usb").performClick()
         composeRule.onNodeWithTag("vesqen.premium.strict-intro").assertDoesNotExist()
+    }
+
+    @Test
+    fun an_activation_code_is_entered_on_the_pro_page_and_then_shown_for_copying() {
+        val codes = FakeActivationCodes(valid = "ABCDE-FGHJK")
+        render(grantedState(), premiumAccess = PremiumAccess(MemoryPremiumStore(), enforced = false), activationCodes = codes)
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.premium").performClick()
+        composeRule.onNodeWithTag("vesqen.premium").performScrollToNode(hasTestTag("vesqen.premium.activation.input"))
+        composeRule.onNodeWithTag("vesqen.premium.activation.input").performTextInput("wrong")
+        composeRule.onNodeWithTag("vesqen.premium.activation.activate").performClick()
+        composeRule.onNodeWithTag("vesqen.premium.activation.error")
+            .assertTextEquals(context.getString(R.string.premium_activation_not_genuine))
+        composeRule.onNodeWithTag("vesqen.premium.activation.input").performTextClearance()
+        composeRule.onNodeWithTag("vesqen.premium.activation.input").performTextInput("abcde fghjk")
+        composeRule.onNodeWithTag("vesqen.premium.activation.activate").performClick()
+        composeRule.onNodeWithTag("vesqen.premium").performScrollToNode(hasTestTag("vesqen.premium.activation.code"))
+        composeRule.onNodeWithTag("vesqen.premium.activation.code").assertTextEquals("ABCDE-FGHJK")
+        composeRule.onAllNodesWithTag("vesqen.premium.activation.input").assertCountEquals(0)
     }
 
     @Test
@@ -3621,6 +3644,7 @@ class VesqenAppTest {
         deviceReporter: DeviceReporter? = null,
         reportUploadAvailable: Boolean = false,
         premiumAccess: PremiumAccess? = null,
+        activationCodes: ActivationCodes? = null,
     ) {
         composeRule.setContent {
             VesqenTheme(darkTheme = darkTheme) {
@@ -3643,6 +3667,7 @@ class VesqenAppTest {
                         onCyclePlaybackOrder = onCyclePlaybackOrder,
                         onSetUsbOutputMode = onSetUsbOutputMode,
                         premiumAccess = premiumAccess,
+                        activationCodes = activationCodes,
                         onAddLibraryFolder = onAddLibraryFolder,
                         onRemoveLibraryFolder = onRemoveLibraryFolder,
                         onResumeLibraryScan = onResumeLibraryScan,
@@ -3861,4 +3886,22 @@ private class MemoryPremiumStore(private var trial: TrialRecord = TrialRecord())
     override fun writeTrial(record: TrialRecord) { trial = record }
     override fun strictIntroductionShown() = introduction
     override fun markStrictIntroductionShown() { introduction = true }
+}
+
+/** Accepts exactly [valid], however it is spaced or cased; anything else is not genuine. */
+private class FakeActivationCodes(private val valid: String) : ActivationCodes {
+    private val mutableState = kotlinx.coroutines.flow.MutableStateFlow<ActivationState>(ActivationState.None)
+    private val mutableResult = kotlinx.coroutines.flow.MutableStateFlow<ActivationResult?>(null)
+    override val state = mutableState
+    override val lastResult = mutableResult
+    override fun activate(text: String): ActivationResult {
+        val result = if (text.uppercase().filter(Char::isLetterOrDigit) == valid.filter(Char::isLetterOrDigit)) {
+            mutableState.value = ActivationState.Active(valid)
+            ActivationResult.ACTIVATED
+        } else {
+            ActivationResult.NOT_GENUINE
+        }
+        mutableResult.value = result
+        return result
+    }
 }

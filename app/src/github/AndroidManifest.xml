@@ -8,5 +8,22 @@
             android:exported="false"
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <!-- #120: activation links from the website. Only the GitHub build takes website codes;
+             the Play build sells through Google Play. The site's assetlinks.json verifies the link. -->
+        <activity
+            android:name="io.github.sumirenokai.vesqen.premium.ActivationLinkActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="vesqen.sumirenokai.com" />
+                <data android:pathPrefix="/activate" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

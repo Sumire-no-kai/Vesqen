@@ -79,6 +79,7 @@ import io.github.sumirenokai.vesqen.diagnostics.exportTo
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
+import io.github.sumirenokai.vesqen.premium.ActivationCodes
 import io.github.sumirenokai.vesqen.premium.PremiumAccess
 import io.github.sumirenokai.vesqen.premium.PremiumState
 import io.github.sumirenokai.vesqen.reports.DeviceReporter
@@ -154,7 +155,7 @@ internal fun shouldRefreshPlaybackPosition(
 
 /** Android boundary for real permissions, MediaStore, and Media3. */
 @Composable
-fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
+fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int = 0) {
     val context = LocalContext.current
     val application = context.applicationContext as VesqenApplication
     val chainPreferencesRepository = remember(application) {
@@ -342,6 +343,8 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel()) {
         // as does every build once the owner retired uploads (#96).
         reportUploadAvailable = BuildConfig.USAGE_ENDPOINT.isNotEmpty() && serviceStatus.reportUploads != ServiceState.RETIRED,
         premiumAccess = application.premiumAccess,
+        activationCodes = application.activationCodes,
+        openPremiumRequest = openPremiumRequest,
     )
 }
 
@@ -405,6 +408,9 @@ fun VesqenAppContent(
     deviceReporter: DeviceReporter? = null,
     reportUploadAvailable: Boolean = false,
     premiumAccess: PremiumAccess? = null,
+    activationCodes: ActivationCodes? = null,
+    /** Each increase opens the Pro features page, as after an activation link (#120). */
+    openPremiumRequest: Int = 0,
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     var showStrictUsbUnavailable by rememberSaveable { mutableStateOf(false) }
@@ -518,6 +524,10 @@ fun VesqenAppContent(
 
     fun openPremium() {
         applyNavigation(navigationState.openPremium())
+    }
+
+    LaunchedEffect(openPremiumRequest) {
+        if (openPremiumRequest > 0 && premiumAccess != null) openPremium()
     }
 
     fun closeStrictIntroduction() {
@@ -637,6 +647,7 @@ fun VesqenAppContent(
                 onSetUsbOutputMode = setUsbOutputMode,
                 onExplainStrictUsbUnavailable = { showStrictUsbUnavailable = true },
                 premiumAccess = premiumAccess,
+                activationCodes = activationCodes,
                 onOpenPremium = ::openPremium,
                 verificationRegistryState = verificationRegistryState,
                 verificationImportResult = verificationImportResult,
@@ -708,6 +719,7 @@ fun VesqenAppContent(
             onSetUsbOutputMode = setUsbOutputMode,
             onExplainStrictUsbUnavailable = { showStrictUsbUnavailable = true },
             premiumAccess = premiumAccess,
+            activationCodes = activationCodes,
             onOpenPremium = ::openPremium,
             verificationRegistryState = verificationRegistryState,
             verificationImportResult = verificationImportResult,
@@ -781,6 +793,7 @@ private fun VesqenDestinationFrame(
     onSetUsbOutputMode: (UsbOutputMode) -> Unit,
     onExplainStrictUsbUnavailable: () -> Unit,
     premiumAccess: PremiumAccess?,
+    activationCodes: ActivationCodes?,
     onOpenPremium: () -> Unit,
     verificationRegistryState: OutputVerificationRegistryState,
     verificationImportResult: OutputVerificationImportResult?,
@@ -1172,7 +1185,12 @@ private fun VesqenDestinationFrame(
                     }
 
                     VesqenDestination.PREMIUM -> premiumAccess?.let {
-                        PremiumScreen(premiumAccess = it, onBack = onNavigateBack, modifier = destinationModifier)
+                        PremiumScreen(
+                            premiumAccess = it,
+                            activationCodes = activationCodes,
+                            onBack = onNavigateBack,
+                            modifier = destinationModifier,
+                        )
                     }
                 }
             }

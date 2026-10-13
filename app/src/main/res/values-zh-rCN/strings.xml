@@ -836,6 +836,13 @@
     <string name="premium_strict_intro_body">可以免费试用 7 天，从第一次开始播放时计算，到期后一次性买断。曲库、播放和链路一直免费。</string>
     <string name="premium_strict_intro_body_beta">测试版期间免费。正式版起可以免费试用 7 天，之后一次性买断。曲库、播放和链路一直免费。</string>
     <string name="premium_strict_intro_ok">知道了</string>
+    <string name="premium_activation_title">激活码</string>
+    <string name="premium_activation_hint">粘贴激活码</string>
+    <string name="premium_activate">激活</string>
+    <string name="premium_activation_active">高级功能已用这个激活码解锁。请保存好，重装 Vesqen 或换手机后还要再输入一次。</string>
+    <string name="premium_activation_malformed">这不像 Vesqen 的激活码。请确认复制了完整的激活码。</string>
+    <string name="premium_activation_not_genuine">这个激活码在这个版本的 Vesqen 里无效。</string>
+    <string name="premium_activation_revoked">这个激活码已作废。如果是在 Vesqen 官网买的，请发邮件到 vesqen@sumirenokai.com 换一个新的。</string>
     <string name="premium_open">查看高级功能</string>
     <string name="player_trial_ended_body">%1$s\n\n严格 USB 输出不会自动换成系统输出。可以一次性买断高级功能，或者改用系统输出后重新播放。</string>
 </resources>
