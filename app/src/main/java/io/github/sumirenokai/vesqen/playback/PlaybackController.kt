@@ -209,7 +209,7 @@ class PlaybackController(
         tracksById.clear()
         tracks.forEach { track -> tracksById[track.id.toString()] = track }
         activeController.setMediaItems(
-            tracks.map { it.toMediaItem() },
+            tracks.map { it.toPlaybackMediaItem() },
             startIndex,
             positionMs,
         )
@@ -230,7 +230,7 @@ class PlaybackController(
             tracksById[track.id.toString()] = track
             availableTracksById[track.id.toString()] = track
             val insertionIndex = (player.currentMediaItemIndex + 1).coerceIn(0, player.mediaItemCount)
-            player.addMediaItem(insertionIndex, track.toMediaItem())
+            player.addMediaItem(insertionIndex, track.toPlaybackMediaItem())
             publish(player, rebuildQueue = true)
         }
     }
@@ -239,7 +239,7 @@ class PlaybackController(
         controller?.let { player ->
             tracksById[track.id.toString()] = track
             availableTracksById[track.id.toString()] = track
-            player.addMediaItem(track.toMediaItem())
+            player.addMediaItem(track.toPlaybackMediaItem())
             publish(player, rebuildQueue = true)
         }
     }
@@ -499,32 +499,6 @@ class PlaybackController(
         )
     }
 
-    private fun AudioTrack.toMediaItem(occurrenceId: String = java.util.UUID.randomUUID().toString()): MediaItem {
-        val extras = Bundle(TelemetryMediaItemExtras.from(this)).apply {
-            putLong(ARTWORK_REVISION_EXTRA, artworkRevision)
-            putString(PLAYBACK_ARTWORK_SOURCE_EXTRA, contentUri)
-            putString(PLAYBACK_OCCURRENCE_EXTRA, occurrenceId)
-        }
-        val metadata = MediaMetadata.Builder()
-            .setTitle(title)
-            // A missing tag stays unset, so notifications, the lock screen and connected devices show
-            // nothing rather than an empty or placeholder line.
-            .setArtist(artist.takeIf(String::isNotBlank))
-            .setAlbumTitle(album.takeIf(String::isNotBlank))
-            .setAlbumArtist(albumArtist.takeIf(String::isNotBlank))
-            .setTrackNumber(trackNumber)
-            .setDiscNumber(discNumber)
-            .setRecordingYear(year)
-            .setGenre(genre.takeIf(String::isNotBlank))
-            .setExtras(extras)
-        albumArtworkUri?.takeIf(String::isNotBlank)?.let { metadata.setArtworkUri(it.toUri()) }
-        return MediaItem.Builder()
-            .setMediaId(id.toString())
-            .setUri(contentUri)
-            .setMediaMetadata(metadata.build())
-            .build()
-    }
-
     private fun Int.toPlaybackRepeatMode(): PlaybackRepeatMode = when (this) {
         Player.REPEAT_MODE_ALL -> PlaybackRepeatMode.ALL
         Player.REPEAT_MODE_ONE -> PlaybackRepeatMode.ONE
@@ -551,12 +525,6 @@ class PlaybackController(
             repeatMode = settings.repeatMode.toMedia3RepeatMode()
         }
         if (!shuffleModeEnabled && settings.shuffleEnabled) shuffleModeEnabled = true
-    }
-
-    private fun PlaybackRepeatMode.toMedia3RepeatMode(): Int = when (this) {
-        PlaybackRepeatMode.OFF -> Player.REPEAT_MODE_OFF
-        PlaybackRepeatMode.ALL -> Player.REPEAT_MODE_ALL
-        PlaybackRepeatMode.ONE -> Player.REPEAT_MODE_ONE
     }
 
     private fun Player.seekToNeighbor(
@@ -604,7 +572,7 @@ class PlaybackController(
                     availableTracksById[queuedItem.mediaId]?.let { updatedTrack ->
                         tracksById[queuedItem.mediaId] = updatedTrack
                         val updatedFingerprint = updatedTrack.productionPlaybackMediaFingerprint()
-                        if (queuedItem.matches(updatedFingerprint)) null else updatedTrack.toMediaItem(
+                        if (queuedItem.matches(updatedFingerprint)) null else updatedTrack.toPlaybackMediaItem(
                             occurrenceId = queuedItem.mediaMetadata.extras?.getString(PLAYBACK_OCCURRENCE_EXTRA)
                                 ?: java.util.UUID.randomUUID().toString(),
                         )
@@ -635,10 +603,6 @@ class PlaybackController(
             shuffleEnabled = restored.shuffleEnabled,
             repeatMode = restored.repeatMode,
         )
-    }
-
-    private companion object {
-        const val ARTWORK_REVISION_EXTRA = PLAYBACK_ARTWORK_REVISION_EXTRA
     }
 }
 
@@ -680,6 +644,44 @@ internal inline fun <T> buildSinglePlaybackReplacementBatch(
 
 internal const val PLAYBACK_ARTWORK_REVISION_EXTRA =
     "io.github.sumirenokai.vesqen.playback.artwork_revision"
+
+/**
+ * The one MediaItem shape for a queue entry, whether the UI starts the queue or the service restores
+ * it (#52). Telemetry, strict USB output and catalog reconciliation all read these extras.
+ */
+internal fun AudioTrack.toPlaybackMediaItem(
+    occurrenceId: String = java.util.UUID.randomUUID().toString(),
+): MediaItem {
+    val extras = Bundle(TelemetryMediaItemExtras.from(this)).apply {
+        putLong(PLAYBACK_ARTWORK_REVISION_EXTRA, artworkRevision)
+        putString(PLAYBACK_ARTWORK_SOURCE_EXTRA, contentUri)
+        putString(PLAYBACK_OCCURRENCE_EXTRA, occurrenceId)
+    }
+    val metadata = MediaMetadata.Builder()
+        .setTitle(title)
+        // A missing tag stays unset, so notifications, the lock screen and connected devices show
+        // nothing rather than an empty or placeholder line.
+        .setArtist(artist.takeIf(String::isNotBlank))
+        .setAlbumTitle(album.takeIf(String::isNotBlank))
+        .setAlbumArtist(albumArtist.takeIf(String::isNotBlank))
+        .setTrackNumber(trackNumber)
+        .setDiscNumber(discNumber)
+        .setRecordingYear(year)
+        .setGenre(genre.takeIf(String::isNotBlank))
+        .setExtras(extras)
+    albumArtworkUri?.takeIf(String::isNotBlank)?.let { metadata.setArtworkUri(it.toUri()) }
+    return MediaItem.Builder()
+        .setMediaId(id.toString())
+        .setUri(contentUri)
+        .setMediaMetadata(metadata.build())
+        .build()
+}
+
+internal fun PlaybackRepeatMode.toMedia3RepeatMode(): Int = when (this) {
+    PlaybackRepeatMode.OFF -> Player.REPEAT_MODE_OFF
+    PlaybackRepeatMode.ALL -> Player.REPEAT_MODE_ALL
+    PlaybackRepeatMode.ONE -> Player.REPEAT_MODE_ONE
+}
 
 private data class PlaybackQueueCache(
     val mediaIds: List<String> = emptyList(),

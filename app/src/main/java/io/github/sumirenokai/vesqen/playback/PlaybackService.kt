@@ -1,11 +1,25 @@
 package io.github.sumirenokai.vesqen.playback
 
+import android.annotation.SuppressLint
+import android.app.ForegroundServiceStartNotAllowedException
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.view.KeyEvent
+import androidx.core.app.NotificationChannelCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
+import androidx.core.os.BundleCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.datasource.DefaultDataSource
@@ -22,20 +36,61 @@ import com.google.common.util.concurrent.SettableFuture
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.MainActivity
 import io.github.sumirenokai.vesqen.VesqenApplication
+import io.github.sumirenokai.vesqen.library.AndroidLibraryCatalog
+import io.github.sumirenokai.vesqen.library.musicLibraryPermission
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @androidx.annotation.OptIn(UnstableApi::class)
 class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
+    private val playbackStateStore by lazy { PlaybackStateStore(this) }
     private var playbackStateKeeper: PlaybackStateKeeper? = null
     private var sessionArtworkLoader: SessionArtworkLoader? = null
     private var usbOutputCoordinator: UsbOutputCoordinator? = null
+    private var notificationProvider: DefaultMediaNotificationProvider? = null
+    /** Opened on the first playback resumption; the UI keeps its own catalog. */
+    private var resumptionCatalog: AndroidLibraryCatalog? = null
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val mediaButtonStart = MediaButtonStartObligation()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val usbOutputCommand = SessionCommand(UsbOutputSessionContract.SET_MODE_ACTION, android.os.Bundle.EMPTY)
     private val outputStateListener: (UsbOutputStatus) -> Unit = { status ->
         mainHandler.post {
             mediaSession?.setSessionExtras(UsbOutputSessionContract.toBundle(status))
+            // A strict failure stops the requested Play without sound (PRD 9.2), which also ends a
+            // media button start.
+            if (status.stopsRequestedPlayback()) endMediaButtonStartWithoutPlayback()
         }
     }
+    private val playbackListener = object : Player.Listener {
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (isPlaying) mediaButtonStart.playbackStarted()
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            endMediaButtonStartWithoutPlayback()
+        }
+    }
+
+    private val resumption = PlaybackResumption(
+        loadSavedState = { playbackStateStore.load() },
+        readPlayableTracks = {
+            val catalog = withContext(Dispatchers.Main.immediate) {
+                resumptionCatalog ?: AndroidLibraryCatalog(this@PlaybackService).also { resumptionCatalog = it }
+            }
+            // The Library lists device music only while this permission is granted.
+            catalog.playableTracks(
+                includeDeviceLibrary = ContextCompat.checkSelfPermission(this, musicLibraryPermission) ==
+                    PackageManager.PERMISSION_GRANTED,
+            )
+        },
+    )
 
     private val sessionCallback = object : MediaSession.Callback {
         override fun onConnectAsync(
@@ -68,6 +123,17 @@ class PlaybackService : MediaSessionService() {
                 ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
             return applyUsbOutputMode(mode)
         }
+
+        /**
+         * #52: Media3 calls this only when Play reaches a player without a current item. Service
+         * start, process recreation and session creation never restore the queue.
+         */
+        override fun onPlaybackResumption(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            isForPlayback: Boolean,
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> =
+            resumeSavedQueue(mediaSession.player, isForPlayback)
     }
 
     private fun applyUsbOutputMode(mode: UsbOutputMode): ListenableFuture<SessionResult> {
@@ -88,12 +154,64 @@ class PlaybackService : MediaSessionService() {
         return result
     }
 
+    /**
+     * Restores the saved queue for one Play request. Media3 then sets it on the player and plays,
+     * so strict USB output checks it like any other Play (UsbOutputCoordinator, PRD 9.2).
+     */
+    private fun resumeSavedQueue(
+        player: Player,
+        isForPlayback: Boolean,
+    ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+        val result = SettableFuture.create<MediaSession.MediaItemsWithStartPosition>()
+        serviceScope.launch {
+            val restored = try {
+                withContext(Dispatchers.IO) { resumption.restore() }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                // A locked or unreadable catalog leaves nothing to restore. Media3 logs the
+                // failure and applies Play to the empty player, which stays silent.
+                result.setException(failure)
+                null
+            }
+            when {
+                result.isDone -> Unit
+                restored == null -> result.setException(NoSuchElementException("No saved queue can be played"))
+                // The UI started or restored a queue while the catalog was read. Media3 plays that
+                // one instead, because a failed resumption still applies the Play request.
+                isForPlayback && player.currentMediaItem != null ->
+                    result.setException(IllegalStateException("A queue was set while the saved one was read"))
+                else -> {
+                    if (isForPlayback) {
+                        player.shuffleModeEnabled = restored.shuffleEnabled
+                        player.repeatMode = restored.repeatMode.toMedia3RepeatMode()
+                    }
+                    result.set(
+                        MediaSession.MediaItemsWithStartPosition(
+                            restored.tracks.map { it.toPlaybackMediaItem() },
+                            restored.startIndex,
+                            restored.positionMs,
+                        ),
+                    )
+                }
+            }
+            // Runs after Media3 applied the result and the Play request to the player.
+            if (isForPlayback) {
+                mainHandler.post {
+                    if (player.currentMediaItem == null) endMediaButtonStartWithoutPlayback()
+                }
+            }
+        }
+        return result
+    }
+
     @UnstableApi
     override fun onCreate() {
         super.onCreate()
         val notificationProvider = DefaultMediaNotificationProvider.Builder(this)
             .build()
             .apply { setSmallIcon(R.drawable.ic_notification_vesqen) }
+            .also { notificationProvider = it }
         setMediaNotificationProvider(notificationProvider)
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
@@ -121,11 +239,12 @@ class PlaybackService : MediaSessionService() {
                 pauseAtEndOfMediaItems = false
             }
         player.addListener((application as VesqenApplication).deviceReportRuntime.playbackListener(player))
+        player.addListener(playbackListener)
         telemetry.attachPlayer(player)
         outputCoordinator.attachPlayer(player)
         playbackStateKeeper = PlaybackStateKeeper(
             player = player,
-            stateStore = PlaybackStateStore(this),
+            stateStore = playbackStateStore,
             handler = Handler(Looper.getMainLooper()),
             onPlaybackStarted = (application as VesqenApplication)
                 .playbackHistoryRecorder::recordPlayback,
@@ -144,21 +263,91 @@ class PlaybackService : MediaSessionService() {
     }
 
     @UnstableApi
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
-        mediaSession.takeIf {
-            // The service remains exported so Android system controls, media buttons, trusted
-            // assistants and this app can reach it. An arbitrary local app does not need read
-            // access to the user's current title or queue.
-            controllerInfo.isTrusted
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
+        val session = mediaSession ?: return null
+        // The service remains exported so Android system controls, media buttons, trusted
+        // assistants and this app can reach it. An arbitrary local app does not need read
+        // access to the user's current title or queue.
+        if (controllerInfo.isTrusted) return session
+        // #52: a media button that starts the service only hands its key to the session; it is
+        // not a connected controller and reads nothing. Media3 stops the service cleanly when
+        // this returns null.
+        val hints = controllerInfo.connectionHints
+        val isMediaButtonStart = isMediaButtonStartPlaceholder(
+            isPackageNameVerified = controllerInfo.isPackageNameVerified,
+            controllerInfoType = hints.getString(CONNECTION_HINT_KEY_CONTROLLER_INFO_TYPE),
+        )
+        val mayStart = isMediaButtonStart && mediaButtonMayStartPlayback(
+            keyCode = hints.getBundle(CONNECTION_HINT_KEY_INTENT_EXTRAS)
+                ?.let { extras -> BundleCompat.getParcelable(extras, Intent.EXTRA_KEY_EVENT, KeyEvent::class.java) }
+                ?.keyCode,
+            hasCurrentItem = session.player.currentMediaItem != null,
+            hasSavedQueue = { playbackStateStore.load() != null },
+        )
+        return session.takeIf { mayStart }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val result = super.onStartCommand(intent, flags, startId)
+        val session = mediaSession
+        if (
+            intent?.action == Intent.ACTION_MEDIA_BUTTON &&
+            session != null && isSessionAdded(session) && !isPlaybackOngoing
+        ) {
+            mediaButtonStart.open()
         }
+        return result
+    }
+
+    /**
+     * Meets Android's foreground start requirement when a media button start ends without
+     * playback, the same way Media3 stops a start it rejects: a hidden notification that is
+     * removed at once. Media3 shows its own notification if playback starts later.
+     */
+    // ServiceCompat passes the API 29 foreground service type only where it exists.
+    @SuppressLint("InlinedApi")
+    private fun endMediaButtonStartWithoutPlayback() {
+        if (!mediaButtonStart.endWithoutPlayback(inForeground = isPlaybackOngoing)) return
+        val channel = checkNotNull(notificationProvider).notificationChannelInfo
+        NotificationManagerCompat.from(this).createNotificationChannel(
+            NotificationChannelCompat.Builder(channel.id, NotificationManagerCompat.IMPORTANCE_LOW)
+                .setName(channel.name)
+                .build(),
+        )
+        val notification = NotificationCompat.Builder(this, channel.id)
+            .setSmallIcon(R.drawable.ic_notification_vesqen)
+            .setSilent(true)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_DEFERRED)
+            .build()
+        try {
+            ServiceCompat.startForeground(
+                this,
+                MEDIA_BUTTON_START_NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
+            )
+        } catch (notAllowed: IllegalStateException) {
+            // Android refuses only when this was not a foreground start, so nothing was owed.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                notAllowed !is ForegroundServiceStartNotAllowedException
+            ) {
+                throw notAllowed
+            }
+            return
+        }
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+    }
 
     override fun onDestroy() {
+        serviceScope.cancel()
         (application as VesqenApplication).usbOutputStateRepository.removeListener(outputStateListener)
         usbOutputCoordinator?.close()
         usbOutputCoordinator = null
         playbackStateKeeper?.stop()
         playbackStateKeeper = null
         mediaSession?.run {
+            player.removeListener(playbackListener)
             (application as VesqenApplication).telemetryRuntime.detachPlayer(player as ExoPlayer)
             player.release()
             release()
@@ -166,6 +355,13 @@ class PlaybackService : MediaSessionService() {
         mediaSession = null
         sessionArtworkLoader?.close()
         sessionArtworkLoader = null
+        resumptionCatalog?.close()
+        resumptionCatalog = null
         super.onDestroy()
+    }
+
+    private companion object {
+        /** Media3 uses 1001 for the media notification and 20938 for its own stop notification. */
+        const val MEDIA_BUTTON_START_NOTIFICATION_ID = 20939
     }
 }
