@@ -83,6 +83,18 @@ internal fun LibraryTrackList(
             reorder(currentTracks.toMutableList().apply { add(target, removeAt(from)) })
         }
     }
+    // Keyed rows keep the old first row in view when rows arrive above it, so tracks found by a
+    // scan pushed a list resting at the top into its middle. A list at the top stays there; a
+    // list the person scrolled keeps its place, as before.
+    val firstTrackId = tracks.firstOrNull()?.id
+    val shownFirstTrack = remember { ShownFirstTrack(firstTrackId) }
+    SideEffect {
+        if (firstTrackId != shownFirstTrack.id) {
+            val atTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+            if (atTop && !editing) listState.requestScrollToItem(0)
+            shownFirstTrack.id = firstTrackId
+        }
+    }
     SideEffect {
         reorderViewport?.let { (index, offset) ->
             // Apply after the new item provider is composed; an earlier remeasure can
@@ -205,3 +217,6 @@ internal fun Modifier.hairlineBelow(): Modifier {
         drawLine(hairline, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
     }
 }
+
+/** The first row the list last showed; plain data, so updating it never recomposes. */
+private class ShownFirstTrack(var id: Long?)
