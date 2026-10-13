@@ -77,6 +77,15 @@ internal class AndroidLibraryCatalog(
         snapshotInternal(includeDeviceLibrary)
     }
 
+    /**
+     * The tracks the Library would list now, for the playback service to restore a saved queue
+     * (#52). Unlike [snapshot] this only reads: a scan that the UI's catalog is running at the same
+     * time must not be marked interrupted.
+     */
+    suspend fun playableTracks(includeDeviceLibrary: Boolean): List<AudioTrack> = serialized {
+        snapshotInternal(includeDeviceLibrary).tracks
+    }
+
     override suspend fun addFolder(treeUri: Uri): Unit = serialized {
         val persistedPermission = contentResolver.persistedUriPermissions.any {
             it.uri == treeUri && it.isReadPermission

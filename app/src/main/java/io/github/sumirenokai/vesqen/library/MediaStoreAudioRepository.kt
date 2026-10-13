@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.library
 
+import android.Manifest
 import android.content.ContentUris
 import android.content.ContentResolver
 import android.content.Context
@@ -7,6 +8,17 @@ import android.os.Build
 import android.provider.MediaStore
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+
+/**
+ * The runtime permission that opens the device music library. The Library and the playback
+ * service's queue restore (#52) check the same one.
+ */
+internal val musicLibraryPermission: String
+    get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        Manifest.permission.READ_MEDIA_AUDIO
+    } else {
+        Manifest.permission.READ_EXTERNAL_STORAGE
+    }
 
 /** MediaStore adapter for the catalog; its source identity never escapes this boundary. */
 internal class MediaStoreAudioRepository(
