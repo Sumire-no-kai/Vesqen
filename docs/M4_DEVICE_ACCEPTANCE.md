@@ -186,3 +186,14 @@
 - 两台手机在升级之后都没有崩溃记录；唯一一次进程退出是安装更新本身（`PACKAGE UPDATED`）。
 - 没有覆盖：官网的 `updates/beta.json` 要在发布后才上线，所以这次没有验证应用内检查更新能否拿到线上版本文件。应用内的下载、核对、安装流程已在 #68 中用本地文件验证（2026-10-10），发布后再补查一次"检查更新"。#72 蓝牙和扬声器各播一首仍未做。
 - 结论：安装、versionCode 增大的同签名升级和数据保留通过，覆盖 Android 9 和 15。
+
+### 2026-10-14 · beta.3 CI 签名 APK 从 beta.2 升级
+
+- 候选：[GitHub APK release #38484502335](https://github.com/Sumire-no-kai/Vesqen/actions/runs/38484502335)，源码和工作流都是 `master` 的 `0c77c9533d42db07e2dd854bafdb831867f31c0c`，所有者批准签名后生成草稿 `v1.0.0-beta.3`。`Vesqen-1.0.0-beta.3.apk` 的 SHA-256 为 `83d0b86a3f15c63a7256aa7d3b581bd5487125a03b88313fee227cb55bcd546b`（未签名包 `f1c22eb0…365b`）。同一次运行产出的未签名 Play 版 AAB（`unsigned-play-bundle`）SHA-256 为 `f0beb7aed8556ec420b6f33fd01137850af6d407ca4a656ddba5fc07c36695b1`。R8 映射（`release-mapping`）里 GitHub 版 `mapping.txt` 为 `68eaf405…2080`，Play 版为 `577ea576…8b3c`。
+- 本机复核草稿附件：`SHA256SUMS` 和 `release-manifest.json` 一致；apksigner 只有一个签名者，证书 SHA-256 为 `743e96fc…6293`，v2、v3 验证通过，zipalign 通过；aapt 显示 1.0.0-beta.3 / 12，带 `INTERNET` 和 `REQUEST_INSTALL_PACKAGES`（GitHub 版），激活链接只接受 `vesqen-api.sumirenokai.com`。Play 版 AAB 的 Manifest 里没有 `REQUEST_INSTALL_PACKAGES`、更新安装界面和激活链接。
+- Honor STF-AL00 / Android 9（无线 adb）：设备上原有 GitHub 版 beta.2（base.apk 哈希 `36954f80…e70a0`，升级前备份到 `build/qa/device-backups/`）。升级前第 93 / 106 首“05. 前前前世”暂停在 3:17，已收藏，输出为系统输出。用 `adb install -r` 安装草稿 APK：versionCode 11 → 12，firstInstallTime 仍是 2026-10-01 12:18:56，设备上 base.apk 哈希为 `83d0b86a…546b`。打开后没有再显示使用统计说明（beta.2 时已回答），也没有崩溃提示；曲库完整，队列、进度 3:17 和收藏保留。从 3:17 继续播放到 3:23，前台服务正常，暂停正常。设置“播放输出”卡片里的“高级功能”一行显示“2.0 前免费”，点进去是 2.0 之前免费的说明，没有激活码入口（发布版在收费开关打开前不显示）。
+- 崩溃提示（#113）：`adb shell am crash` 之后重新打开，出现“Vesqen 上次意外退出了”。“查看并发送”打开设备报告，默认勾选“最近的错误”和“崩溃记录”。预览里的崩溃记录只有 `android.app.RemoteServiceException` 和各帧的类名、方法、行号，没有异常消息和文件路径；Android 9 没有系统退出记录（`UNSUPPORTED_ANDROID_VERSION`）。没有上传。
+- 耳机键恢复（#52）在这台 Honor 上不成立。Vesqen 播放时是系统的媒体按键会话，但系统没有记住它（`Last MediaButtonReceiver: null`），保存下来的按键接收者一直是网易云音乐。用 `am kill` 结束 Vesqen 后，`input keyevent 87`（下一首）被系统发给网易云并把它拉起，网易云没有播放，随后结束了它的进程。从最近任务划掉 Vesqen 后，记住的仍是网易云，所以没有再发播放键。Media3 1.11 在 Android 12 以下运行时把按键交给播放服务，只有会话正常释放时才换成 #52 的广播接收器；这台手机上两种情况都没有让系统记住 Vesqen。
+- 界面测试：iQOO V2171A / Android 15 上的“Vesqen Test”（`.devicetest`，由 `0c77c95` 构建，app/test APK SHA-256 为 `a3bae9a4…b06f` / `eeee0d77…401a`）。`VesqenAppTest` 新增和改动的 15 项全部通过：崩溃提示 4 项、严格 USB 首次说明和试用结束 2 项、激活码 1 项、使用统计说明 3 项、空曲库 2 项、扫描后停在顶部 1 项、大字号设备报告按钮 2 项。`PlaybackResumptionDeviceTest` 1 项通过。vivo 的外部来源确认要在手机上点“继续安装”；点过之后包已装好，但 adb 和 Gradle 的安装命令一直不返回（`ShellCommandUnresponsiveException`），所以改为核对设备上的 APK 哈希后直接运行 `am instrument`。fast_freezer 冻结过一次测试进程，按 `build/qa/run-vivo.sh` 的办法把 `ComponentActivity` 拉到前台。
+- 没有覆盖：Android 12 及以上的耳机键恢复（iQOO 当前的媒体按键会话属于另一个应用，没有发按键）；连接蓝牙和重启时保持安静；没有 DAC 时的严格 USB；应用内更新器，要等发布和官网 `updates/beta.json` 上线后再测。
+- 结论：安装、versionCode 增大的同签名升级和数据保留通过（Android 9）。
