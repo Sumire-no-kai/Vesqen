@@ -39,6 +39,14 @@ Google Play upload and the output-verification issuer are outside this workflow.
    It does not rebuild, re-sign or replace attachments.
    Both draft creation and publication require a versionCode higher than every
    already-published release, so an older pending draft cannot become a downgrade.
+7. Download the run's `release-mapping` artifact and archive it with that version's
+   signing records. Release builds are R8-optimized, so the class and method names
+   in crash details (#113) are obfuscated; this build's `mapping.txt` turns them
+   back. The artifact is kept for 90 days and is not a release asset. To read a
+   crash, save its frames as a stack trace and run R8's retrace with the matching
+   file: `retrace mapping.txt stacktrace.txt` (Android SDK Command-line Tools) or
+   `java -cp r8.jar com.android.tools.r8.retrace.Retrace mapping.txt stacktrace.txt`.
+   The Play bundle carries its own mapping, which Play Console uses.
 
 For the frozen first beta, run **GitHub APK release** manually from `master`,
 selecting `release/1.0.0-beta.1` and its reviewed full 40-character commit SHA.
@@ -46,7 +54,8 @@ Do not build this beta from `master`: the development branch already contains
 changes intended for beta.2. Manual runs may also target a reviewed `master`
 commit. `create_draft=false` retains signed artifacts without creating a Release.
 
-Unsigned artifacts expire after 7 days; signed workflow artifacts after 30 days.
+Unsigned artifacts expire after 7 days; signed workflow artifacts after 30 days;
+the R8 mapping after 90 days.
 Draft Release attachments are the durable candidate. Re-running a signing job
 does not replace an existing draft or public release. Keep the existing draft
 for QA; a new distributed build requires a new version and versionCode.
