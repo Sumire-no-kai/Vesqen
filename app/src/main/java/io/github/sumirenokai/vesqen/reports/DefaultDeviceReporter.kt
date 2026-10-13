@@ -14,10 +14,14 @@ internal class DefaultDeviceReporter(
     private val capture: suspend (DeviceReportOptions) -> DeviceReportData,
     private val sharer: DeviceReportSharer,
     private val uploader: DeviceReportUploader = UnconfiguredDeviceReportUploader,
+    /** #113: told once per successful send, with the data the sent report was made from. */
+    private val delivered: (DeviceReportData) -> Unit = {},
 ) : DeviceReporter {
     private val lock = Any()
     private var revision = 0L
     private var operation: Job? = null
+    /** The data behind the report in the current state; cleared with it. */
+    private var reportData: DeviceReportData? = null
     private val mutable = MutableStateFlow(DeviceReportSnapshot())
     override val snapshot = mutable.asStateFlow()
 
@@ -25,12 +29,14 @@ internal class DefaultDeviceReporter(
         if (options == mutable.value.options) return@synchronized
         revision++
         operation?.cancel()
+        reportData = null
         mutable.value = DeviceReportSnapshot(options)
     }
 
     override fun discard() = synchronized(lock) {
         revision++
         operation?.cancel()
+        reportData = null
         mutable.value = mutable.value.copy(state = DeviceReportState.Editing)
     }
 
@@ -38,11 +44,13 @@ internal class DefaultDeviceReporter(
         if (mutable.value.state is DeviceReportState.Generating || mutable.value.state is DeviceReportState.Sending) return@synchronized
         val request = ++revision
         val options = mutable.value.options
+        reportData = null
         mutable.value = mutable.value.copy(state = DeviceReportState.Generating)
         operation = scope.launch {
             try {
-                val artifact = DeviceReportGenerator.generate(capture(options), options)
-                publish(request, DeviceReportState.Preview(artifact))
+                val data = capture(options)
+                val artifact = DeviceReportGenerator.generate(data, options)
+                publish(request, DeviceReportState.Preview(artifact), data)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: IOException) { publish(request, DeviceReportState.Failed(DeviceReportFailure.GENERATION_FAILED)) }
             catch (_: SecurityException) { publish(request, DeviceReportState.Failed(DeviceReportFailure.GENERATION_FAILED)) }
@@ -57,6 +65,7 @@ internal class DefaultDeviceReporter(
             else -> null
         } ?: return@synchronized
         val request = revision
+        val data = reportData
         mutable.value = mutable.value.copy(state = DeviceReportState.Sending(report, delivery))
         operation = scope.launch {
             val failureCode = if (delivery == DeviceReportDelivery.UPLOAD) DeviceReportFailure.UPLOAD_FAILED else DeviceReportFailure.SHARE_FAILED
@@ -73,11 +82,17 @@ internal class DefaultDeviceReporter(
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: IOException) { DeviceReportState.Failed(failureCode, report) }
             catch (_: SecurityException) { DeviceReportState.Failed(failureCode, report) }
+            // A send cancelled by discarding throws above; its crash records then stay until they
+            // expire, even if the bytes already reached the server.
+            if (sentState is DeviceReportState.Sent && data != null) delivered(data)
             publish(request, sentState)
         }
     }
 
-    private fun publish(request: Long, state: DeviceReportState) = synchronized(lock) {
-        if (request == revision) mutable.value = mutable.value.copy(state = state)
+    private fun publish(request: Long, state: DeviceReportState, data: DeviceReportData? = null) = synchronized(lock) {
+        if (request == revision) {
+            mutable.value = mutable.value.copy(state = state)
+            if (data != null) reportData = data
+        }
     }
 }

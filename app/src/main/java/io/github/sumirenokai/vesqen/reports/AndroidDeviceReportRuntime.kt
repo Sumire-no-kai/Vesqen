@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.reports
 
+import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.app.ApplicationExitInfo
 import android.content.Context
@@ -39,10 +40,22 @@ internal class AndroidDeviceReportRuntime(
     telemetry: () -> PlaybackTelemetry,
     uploader: DeviceReportUploader = UnconfiguredDeviceReportUploader,
 ) {
+    /** Read once per process, on IO, by the error history and the crash question alike. */
+    private val exitHistory by lazy {
+        if (Build.VERSION.SDK_INT >= 30) historicalExits(context) else
+            ExitHistoryAvailability.UNSUPPORTED_ANDROID_VERSION to emptyList()
+    }
     private val errors = ReportErrorRecorder(
         scope, ErrorHistoryStore(File(context.noBackupFilesDir, "device-report-errors")),
-        exits = { if (Build.VERSION.SDK_INT >= 30) historicalExits(context) else
-            ExitHistoryAvailability.UNSUPPORTED_ANDROID_VERSION to emptyList() },
+        exits = { exitHistory },
+    )
+
+    /** #113: the records [CrashRecordingHandler] wrote, and the one-time question about them. */
+    val crashes = CrashReportRuntime(
+        scope, CrashReportStore(crashDirectory(context)),
+        systemCrashTimes = {
+            exitHistory.second.filter { it.platformCode in SYSTEM_CRASH_REASONS }.map { it.occurredAtEpochMs }
+        },
     )
     private val strictListener: (UsbOutputStatus) -> Unit = { status ->
         // A strict session ends with SERVICE_STOPPED whenever playback stops, and an ended trial
@@ -96,10 +109,13 @@ internal class AndroidDeviceReportRuntime(
                 generatedAtEpochMs = System.currentTimeMillis(), telemetry = evidence,
                 history = if (options.recentErrors || options.failedTrackFormats) errors.snapshot() else ErrorHistorySnapshot(),
                 telemetryUnavailableReason = TelemetryUnavailableReason.TEMPORARILY_UNAVAILABLE,
+                crashes = if (options.crashes) crashes.snapshot() else CrashHistorySnapshot(),
             )
         },
         sharer = AndroidDeviceReportSharing(context),
         uploader = uploader,
+        // A sent crash record has done its job (#113); only the records in that report are deleted.
+        delivered = { data -> crashes.delivered(data.crashes.records) },
     )
 
     fun playbackListener(player: Player): Player.Listener = object : Player.Listener {
@@ -133,6 +149,14 @@ private fun readDisplayName(context: Context, uri: Uri): String? = try {
     // SQL, state or argument errors) leaves the event recorded without a file name.
     null
 }
+
+/**
+ * Android's records of a native crash and an ANR. Vesqen's own handler records Java crashes with
+ * their stack, so REASON_CRASH does not ask the question again. The constants are Android 11 values
+ * compared only with Android 11 exit records.
+ */
+@SuppressLint("InlinedApi")
+private val SYSTEM_CRASH_REASONS = setOf(ApplicationExitInfo.REASON_CRASH_NATIVE, ApplicationExitInfo.REASON_ANR)
 
 @RequiresApi(30)
 private fun historicalExits(context: Context): Pair<ExitHistoryAvailability, List<ReportErrorEvent>> = try {

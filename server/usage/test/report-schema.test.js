@@ -21,14 +21,15 @@ function fullReport() {
   value.recentErrors={availability:'AVAILABLE',exitHistory:'AVAILABLE',maxEvents:100,maxAgeMs:604800000,
     events:[{kind:'PLAYBACK',occurredAtEpochMs:100,occurredAtElapsedRealtimeMs:80,platformCode:2000,strictFailure:null,strictOrigin:null,confidence:'MEASURED',source:'media3.player'}]};
   value.failedTrackFormats={availability:'AVAILABLE',tracks:[{occurredAtEpochMs:100,occurredAtElapsedRealtimeMs:80,confidence:'ESTIMATED',source:'LIBRARY_METADATA',container:'flac',codecMime:'audio/flac',codecLabel:'FLAC',sampleRateHz:48000,bitDepth:24,channelCount:2,privacyFiltered:false,missingFieldReason:'SOURCE_DID_NOT_REPORT'}]};
+  value.crashes=structuredClone(sample.crashes);
   return value;
 }
 
 test('#69 report contract accepts every group combination and optional basename',()=>{
-  for(let mask=0;mask<32;mask++) {
+  for(let mask=0;mask<64;mask++) {
     const value=fullReport();
-    ['audioCapabilities','chainEvidence','recentErrors','failedTrackFormats'].forEach((key,index)=>{if(!(mask&(1<<index))) delete value[key];});
-    if((mask&16)&&value.failedTrackFormats) value.failedTrackFormats.tracks[0].fileName='Track.flac';
+    ['audioCapabilities','chainEvidence','recentErrors','failedTrackFormats','crashes'].forEach((key,index)=>{if(!(mask&(1<<index))) delete value[key];});
+    if((mask&32)&&value.failedTrackFormats) value.failedTrackFormats.tracks[0].fileName='Track.flac';
     assert.equal(validateReport(value),value);
   }
 });
@@ -120,7 +121,7 @@ test('mutated sample enums provenance text and confidence are rejected',()=>{
   }
   const controlled=new Set(['id','confidence','source','unavailableReason','methodId','calculationId','unit',
     'redactedReason','availability','exitHistory','kind','strictFailure','strictOrigin','missingFieldReason','fileNameUnavailableReason',
-    'status','sourceCompression','sourceCompressionMetricId','route','condition','reason','metricId']);
+    'status','sourceCompression','sourceCompressionMetricId','route','condition','reason','metricId','type','className','methodName']);
   for(const [path,original] of leaves(sample)) {
     const key=path.at(-1);
     const textReading=key==='value' && path.at(-2)==='reading' && typeof original==='string';
@@ -167,6 +168,62 @@ test('error availability format provenance and retention follow the contract',()
   assert.throws(()=>validateReport(tooManyFormats));
 });
 
+test('#113 crash details keep types and code locations within the limits',()=>{
+  assert.ok(sample.crashes.records[0].exceptions[0].frames.some(frame=>frame.className===null));
+  for(const availability of vocabulary.enums.crashHistoryAvailability) {
+    const value=structuredClone(sample);value.crashes.availability=availability;validateReport(value);
+  }
+  const empty=structuredClone(sample);empty.crashes.records=[];validateReport(empty);
+  const old=structuredClone(sample);delete old.crashes;validateReport(old);
+  const nulls=structuredClone(sample);
+  Object.assign(nulls.crashes.records[0],{appVersion:null});
+  nulls.crashes.records[0].exceptions[0].type=null;
+  Object.assign(nulls.crashes.records[0].exceptions[0].frames[0],{className:null,methodName:null,line:null});
+  validateReport(nulls);
+  const {limits}=vocabulary;
+  const full=structuredClone(sample);
+  const record=full.crashes.records[0];
+  const frame={className:'a'.repeat(limits.maxClassNameLength),methodName:'b'.repeat(limits.maxMethodNameLength),line:2147483647};
+  record.exceptions=Array.from({length:limits.maxCrashExceptions},()=>({type:'java.lang.Error',frames:Array(limits.maxCrashFrames).fill(frame),omittedFrames:0}));
+  full.crashes.records=Array(limits.maxCrashes).fill(record);
+  validateReport(full);
+  for(const name of ['<init>','<clinit>','invoke-0kLqBqw','access$getPlayer$p']) {
+    const value=structuredClone(sample);value.crashes.records[0].exceptions[0].frames[0].methodName=name;validateReport(value);
+  }
+  for(const name of ['-$$Lambda$Player$x1','$r8$lambda$abc','a.b']) {
+    const value=structuredClone(sample);value.crashes.records[0].exceptions[0].frames[0].className=name;validateReport(value);
+  }
+});
+
+test('#113 crash details reject messages, thread names, paths and anything past the limits',()=>{
+  const {limits}=vocabulary;
+  const crash=v=>v.crashes.records[0];
+  const exception=v=>crash(v).exceptions[0];
+  const frame=v=>exception(v).frames[0];
+  const mutations=[
+    v=>{crash(v).message='Could not play Secret Song';},v=>{exception(v).message='open failed: /storage/emulated/0/Music/Song.flac';},
+    v=>{crash(v).threadName='Secret Song player';},v=>{exception(v).localizedMessage='Song';},v=>{frame(v).fileName='Player.kt';},
+    v=>{exception(v).suppressed=[];},v=>{crash(v).id='800-1';},
+    v=>{exception(v).type='java.lang.Error: /storage/emulated/0/Music/Song.flac';},
+    v=>{frame(v).className='/data/user/0/io.github.sumirenokai.vesqen/files';},v=>{frame(v).className='Secret Song';},
+    v=>{frame(v).className='com.example.Pläyer';},v=>{frame(v).className='C:\\Music';},v=>{frame(v).className='';},
+    v=>{frame(v).methodName='play Secret Song';},v=>{frame(v).methodName='foo<init>';},v=>{frame(v).methodName='play\n';},
+    v=>{frame(v).className='a'.repeat(limits.maxClassNameLength+1);},v=>{frame(v).methodName='b'.repeat(limits.maxMethodNameLength+1);},
+    v=>{frame(v).line=-1;},v=>{frame(v).line=1.5;},v=>{frame(v).line='12';},v=>{frame(v).line=2147483648;},
+    v=>{exception(v).omittedFrames=-1;},v=>{crash(v).causesOmitted='no';},v=>{crash(v).appVersion='/sdcard/Song.flac';},
+    v=>{crash(v).versionCode=-1;},v=>{crash(v).occurredAtEpochMs=null;},
+    v=>{crash(v).confidence='DERIVED';},v=>{crash(v).source='android.historical_process_exit';},
+    v=>{exception(v).frames=Array(limits.maxCrashFrames+1).fill(frame(v));},
+    v=>{crash(v).exceptions=Array(limits.maxCrashExceptions+1).fill(exception(v));},v=>{crash(v).exceptions=[];},
+    v=>{v.crashes.records=Array(limits.maxCrashes+1).fill(crash(v));},
+    v=>{v.crashes.maxCrashes=limits.maxCrashes+1;},v=>{v.crashes.maxAgeMs=limits.maxAgeMs+1;},
+    v=>{v.crashes.availability='QUEUE_OVERFLOW';},v=>{delete v.crashes.availability;},
+  ];
+  for(const [index,mutation] of mutations.entries()) {
+    const value=structuredClone(sample);mutation(value);
+    assert.throws(()=>validateReport(value),`mutation ${index}`);
+  }
+});
 
 test('app segment is optional for old reports but requires chain evidence',()=>{
   const old=structuredClone(sample);delete old.appSegment;validateReport(old);

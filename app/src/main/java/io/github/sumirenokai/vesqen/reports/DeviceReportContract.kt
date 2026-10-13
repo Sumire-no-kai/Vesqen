@@ -19,12 +19,18 @@ internal object DeviceReportContract {
             "limits" to linkedMapOf(
                 "maxEvents" to ErrorHistoryStore.MAX_EVENTS,
                 "maxAgeMs" to ErrorHistoryStore.MAX_AGE_MS,
+                "maxCrashes" to CrashReportStore.MAX_CRASHES,
+                "maxCrashExceptions" to CrashCapture.MAX_EXCEPTIONS,
+                "maxCrashFrames" to CrashCapture.MAX_FRAMES,
+                "maxClassNameLength" to CrashCapture.MAX_CLASS_NAME_LENGTH,
+                "maxMethodNameLength" to CrashCapture.MAX_METHOD_NAME_LENGTH,
             ),
             "enums" to linkedMapOf(
                 "reportErrorKind" to ReportErrorKind.entries.map { it.name },
                 "errorFormatSource" to ErrorFormatSource.entries.map { it.name },
                 "errorHistoryAvailability" to ErrorHistoryAvailability.entries.map { it.name },
                 "exitHistoryAvailability" to ExitHistoryAvailability.entries.map { it.name },
+                "crashHistoryAvailability" to CrashHistoryAvailability.entries.map { it.name },
                 "usbOutputFailure" to UsbOutputFailure.entries.map { it.name },
                 "usbOutputFailureOrigin" to UsbOutputFailureOrigin.entries.map { it.name },
                 "telemetryUnavailableReason" to TelemetryUnavailableReason.entries.map { it.name },
@@ -47,6 +53,8 @@ internal object DeviceReportContract {
                 "sources" to words.sources.sorted(),
                 "calculations" to words.calculations.sorted(),
                 "operandNames" to words.operandNames.sorted(),
+                "classNamePattern" to CrashCapture.CLASS_NAME_PATTERN,
+                "methodNamePattern" to CrashCapture.METHOD_NAME_PATTERN,
             ),
             "metrics" to TelemetryMetricCatalog.allIds.sortedBy { it.value }.map { id ->
                 val descriptor = TelemetryMetricCatalog.descriptor(id)

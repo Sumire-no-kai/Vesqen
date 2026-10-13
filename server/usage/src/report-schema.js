@@ -18,6 +18,10 @@ const count = maximum => v => integer(v) && v <= maximum;
 const array = (v, maximum, predicate) => Array.isArray(v) && v.length <= maximum && v.every(predicate);
 const pathlessLabel = v => label(v) && !/\.(?:flac|alac|wav|wave|aiff?|mp3|mp4|m4a|aac|opus|ogg|wma|mkv|txt|json|log|db|sqlite|jpg|png|pdf|zip|apk)(?:\b|$)/i.test(v);
 const filename = v => typeof v === 'string' && v.length > 0 && v.length <= 255 && !/[\x00-\x1f\x7f-\x9f/\\:%]/.test(v) && !mac.test(v) && !['.','..'].includes(v);
+const classNamePattern = matchesPattern(text.classNamePattern);
+const methodNamePattern = matchesPattern(text.methodNamePattern);
+const className = v => nullable(v, x => x.length <= limits.maxClassNameLength && classNamePattern(x));
+const methodName = v => nullable(v, x => x.length <= limits.maxMethodNameLength && methodNamePattern(x));
 
 function textReading(id, v) {
   if (typeof v !== 'string' || v.length > 300) return false;
@@ -127,8 +131,25 @@ function appSegment(a, evidence) {
     check(a.checks.every(c => c.status === 'UNKNOWN' && c.reason === 'MISSING'));
   }
 }
+// #113: exception types and code locations only. Message text, thread names and file names have no field.
+function crashes(c) {
+  checkFields(c, {availability:oneOf(enums.crashHistoryAvailability),maxCrashes:x => x === limits.maxCrashes,
+    maxAgeMs:x => x === limits.maxAgeMs,records:records => array(records,limits.maxCrashes,record => {
+      checkFields(record, {occurredAtEpochMs:integer,appVersion:x => nullable(x,pathlessLabel),versionCode:integer,
+        confidence:x => enums.telemetryConfidence.includes(x) && x === 'MEASURED',source:x => x === 'vesqen.uncaught_exception_handler',
+        exceptions:exceptions => exceptions?.length > 0 && array(exceptions,limits.maxCrashExceptions,exception => {
+          checkFields(exception, {type:className,omittedFrames:integer,frames:frames => array(frames,limits.maxCrashFrames,frame => {
+            checkFields(frame, {className,methodName,line:x => nullable(x,count(2147483647))});
+            return true;
+          })});
+          return true;
+        }),
+        causesOmitted:boolean});
+      return true;
+    })});
+}
 export function validateReport(v) {
-  object(v, ['schemaVersion','generatedAtEpochMs','basic'], ['audioCapabilities','chainEvidence','appSegment','recentErrors','failedTrackFormats']);
+  object(v, ['schemaVersion','generatedAtEpochMs','basic'], ['audioCapabilities','chainEvidence','appSegment','recentErrors','failedTrackFormats','crashes']);
   check(v.schemaVersion === vocabulary.schemaVersion && integer(v.generatedAtEpochMs));
   checkFields(v.basic, {appVersion:x => nullable(x,pathlessLabel),versionCode:integer,buildType:x => nullable(x,pathlessLabel),
     manufacturer:x => nullable(x,pathlessLabel),model:x => nullable(x,pathlessLabel),androidVersion:x => nullable(x,pathlessLabel),
@@ -167,5 +188,6 @@ export function validateReport(v) {
       return true;
     }));
   }
+  if (Object.hasOwn(v,'crashes')) crashes(v.crashes);
   return v;
 }

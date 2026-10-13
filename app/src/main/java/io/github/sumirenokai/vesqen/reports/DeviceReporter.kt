@@ -10,6 +10,8 @@ data class DeviceReportOptions(
     val recentErrors: Boolean = false,
     val failedTrackFormats: Boolean = false,
     val includeFileNames: Boolean = false,
+    /** #113: exception types and stack frames from recent crashes. */
+    val crashes: Boolean = false,
 )
 
 /** The only report payload: preview, sharing and upload all consume these exact UTF-8 bytes. */

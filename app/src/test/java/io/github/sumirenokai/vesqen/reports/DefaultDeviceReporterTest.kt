@@ -112,6 +112,27 @@ class DefaultDeviceReporterTest {
         assertEquals(DeviceReportState.Failed(DeviceReportFailure.GENERATION_FAILED), failing.snapshot.value.state)
     }
 
+    @Test fun `a sent report hands over the data it was made from and a failed send does not`() = runBlocking {
+        val delivered = mutableListOf<DeviceReportData>()
+        val captured = reportData()
+        var fail = true
+        val reporter = DefaultDeviceReporter(CoroutineScope(coroutineContext + Dispatchers.Unconfined), { captured },
+            DeviceReportSharer { _, _ -> if (fail) DeviceReportFailure.NO_SHARE_APPLICATION else null }, delivered = delivered::add)
+        reporter.setOptions(DeviceReportOptions(crashes = true))
+        reporter.generate()
+        reporter.send(DeviceReportDelivery.SHARE)
+        assertTrue(reporter.snapshot.value.state is DeviceReportState.Failed)
+        reporter.send(DeviceReportDelivery.UPLOAD)
+        assertTrue(delivered.isEmpty())
+        fail = false
+        reporter.send(DeviceReportDelivery.EMAIL)
+        assertEquals(listOf(captured), delivered)
+        // Starting over drops the report, so nothing more is handed over.
+        reporter.discard()
+        reporter.send(DeviceReportDelivery.EMAIL)
+        assertEquals(1, delivered.size)
+    }
+
     @Test fun `debug fake lets UI drive preview and errors without IO`() {
         val fake = FakeDeviceReporter()
         fake.setOptions(DeviceReportOptions(recentErrors = true))

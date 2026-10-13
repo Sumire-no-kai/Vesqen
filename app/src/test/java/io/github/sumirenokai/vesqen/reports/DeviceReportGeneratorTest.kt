@@ -7,8 +7,8 @@ import org.junit.Test
 
 class DeviceReportGeneratorTest {
     @Test fun `all option combinations isolate groups and filenames while retaining basic information`() {
-        for (mask in 0 until 32) {
-            val options = DeviceReportOptions(mask and 1 != 0, mask and 2 != 0, mask and 4 != 0, mask and 8 != 0, mask and 16 != 0)
+        for (mask in 0 until 64) {
+            val options = DeviceReportOptions(mask and 1 != 0, mask and 2 != 0, mask and 4 != 0, mask and 8 != 0, mask and 16 != 0, mask and 32 != 0)
             val report = DeviceReportGenerator.generate(reportData(), options).previewText
             assertTrue(report.contains("\"basic\""))
             assertEquals(options.audioCapabilities, report.contains("\"audioCapabilities\""))
@@ -17,9 +17,11 @@ class DeviceReportGeneratorTest {
             assertEquals(options.recentErrors, report.contains("\"recentErrors\""))
             assertEquals(options.failedTrackFormats, report.contains("\"failedTrackFormats\""))
             assertEquals(options.failedTrackFormats && options.includeFileNames, report.contains("private-track.flac"))
+            assertEquals(options.crashes, report.contains("\"crashes\""))
+            assertEquals(options.crashes, report.contains("java.lang.IllegalStateException"))
             assertFalse(report.contains("private-folder"))
         }
-        assertEquals(DeviceReportOptions(false, false, false, false, false), DeviceReportOptions())
+        assertEquals(DeviceReportOptions(false, false, false, false, false, false), DeviceReportOptions())
     }
 
     @Test fun `capabilities alone cannot export current source or process data`() {
@@ -160,4 +162,6 @@ internal fun error(time: Long = 100) = ReportErrorEvent(ReportErrorKind.PLAYBACK
     format = FailedTrackFormat("flac", "audio/flac", 48000, 24, 2), fileName = "/private-folder/private-track.flac")
 
 internal fun reportData() = DeviceReportData(DeviceReportBasic("0.1.0", 1, "debug", "Manufacturer", "Model", "16", 36, "Build-1"), 200,
-    history = ErrorHistorySnapshot(listOf(error())))
+    history = ErrorHistorySnapshot(listOf(error())),
+    crashes = CrashHistorySnapshot(listOf(CrashRecord("150-a", 150, "0.1.0", 1, listOf(CrashException(
+        "java.lang.IllegalStateException", listOf(CrashFrame("com.example.Player", "play", 7)), 0)), causesOmitted = false))))
