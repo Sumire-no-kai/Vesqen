@@ -26,6 +26,8 @@ One version is built as two product flavors (#47). Both carry the same `versionN
 
 Both flavors send the same usage statistics and device report uploads; the usage message's `channel` field tells them apart. The GitHub release workflow builds both from the same commit and keeps the unsigned AAB as the `unsigned-play-bundle` artifact.
 
+CI runs the shared unit tests once, on `githubDebug`. The Play flavor has no unit tests of its own: CI compiles the shared ones for it and runs only `ThirdPartyLicensesTest`, whose input is that flavor's dependency list, then lints and builds it like the GitHub flavor. Locally, `:app:testDebugUnitTest` still runs the unit tests on both flavors.
+
 The long-lived application certificate, replaceable Play upload certificate,
 local and approved CI custody boundaries, and per-release signing ledger are defined in
 [`RELEASE_SIGNING.md`](RELEASE_SIGNING.md). Signing passwords and private keys
