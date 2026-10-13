@@ -84,10 +84,41 @@ use them, so a pool that may have leaked is revoked as a batch.
 - **Revocation list.** `app/src/github/assets/activation/revoked.txt` has one `keyId:serial` per
   line and ships with each version.
 
-## Server side (planned, #120)
+## Server side
 
-The Worker takes Stripe's `checkout.session.completed` event and assigns a pool code to the order.
-Refund and dispute events mark the code revoked, and the next app version adds it to the
-revocation list. The success page asks the Worker for the order's code after Stripe confirms the
-payment. The Worker stores only the Stripe order id, the code's key id and serial, its state and
-times; no email, name or IP. That part, its D1 tables and the website pages are not built yet.
+The usage Worker (`server/usage`) delivers codes; it never signs them.
+
+- **Pool.** Issued codes go into the `activation_codes` table (migration `0003`). Upload them with
+  `node scripts/activation-codes.js pool-sql --key-id 1 --codes <codes.csv> --out <pool.sql>`, then
+  `npx wrangler d1 execute vesqen-usage --remote --file <pool.sql>`. A repeated upload changes nothing.
+- **`POST /v1/stripe/webhook`.**
+  - Checks Stripe's signature (`STRIPE_WEBHOOK_SECRET`, five-minute tolerance).
+  - A paid `checkout.session.completed` or `checkout.session.async_payment_succeeded` takes the next
+    free code for that order. When the pool is empty it answers 503, so Stripe retries after more
+    codes are uploaded.
+  - A full `charge.refunded` revokes the order's code with reason `refund`; `charge.dispute.created`
+    revokes it with reason `dispute`. The first reason stands, and a partial refund keeps the code.
+- **`GET /v1/activation?session=<Checkout Session id>`.** The purchase page's request, readable only
+  from `ACTIVATION_ORIGIN`.
+  - Returns the order's code, or `410` when it was revoked.
+  - When the event has not arrived yet, it asks Stripe whether the session is paid, using
+    `STRIPE_SECRET_KEY`, a restricted key that can only read Checkout Sessions. A paid session then
+    gets its code; an unpaid one gets `409`.
+  - Rate-limited under one fixed key.
+- **Switch.** `ACTIVATION_INGEST` must be `open`; unset or any other value answers 503 before
+  anything is read. It ships `closed` until the owner opens sales.
+- **Stored.** The Checkout Session id and payment intent id of the order, the code's key id and
+  serial, and when it was assigned or revoked. No email, name, address or IP. Rows are kept as the
+  license record.
+
+Every step is idempotent. A retried or late event finds its order already served. Two orders can
+never take the same code, because one statement takes the lowest free code for an order that has none.
+
+### Owner tasks
+
+- **Lost code.** Find the order in the Stripe Dashboard by the buyer's email, copy its Checkout
+  Session id (`cs_...`), then run
+  `npx wrangler d1 execute vesqen-usage --remote --command "SELECT code FROM activation_codes WHERE order_id='cs_...'"`.
+- **Revocations for the next release.** Run
+  `SELECT key_id || ':' || serial FROM activation_codes WHERE revoked_at IS NOT NULL ORDER BY 1`
+  and add new lines to `revoked.txt`. A leaked code is revoked by hand with `revoke_reason='leak'`.

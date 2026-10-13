@@ -6,6 +6,7 @@ import {mkdtempSync, readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {decode, display, encode, signCode, verifyCode} from '../src/activation-code.js';
+import {Database} from './database.js';
 
 // Shared with the app's ActivationCodeVerifierTest: a throwaway key whose private half was deleted.
 export const VECTOR = {
@@ -79,4 +80,13 @@ test('the issue command never repeats a serial and keeps the ledger as the recor
   execFileSync(process.execPath, [script, 'keygen', '--key-id', '1', '--out', other]);
   assert.throws(() => execFileSync(process.execPath,
     [script, 'issue', '--key', other, '--key-id', '1', '--ledger', ledger, '--count', '1', '--out', join(dir, 'c.csv')]));
+  // The pool upload inserts each issued code once and leaves existing serials alone.
+  execFileSync(process.execPath, [script, 'pool-sql', '--key-id', '1', '--codes', join(dir, 'a.csv'), '--out', join(dir, 'pool.sql')]);
+  const sql = readFileSync(join(dir, 'pool.sql'), 'utf8').trim().split('\n');
+  assert.equal(sql.length, 3);
+  assert.match(sql[0], /^INSERT OR IGNORE INTO activation_codes\(key_id, serial, code\) VALUES\(1, 1, '[0-9A-Z]{117}'\);$/);
+  const db = new Database();
+  for (const line of [...sql, ...sql]) db.db.exec(line);
+  assert.deepEqual(db.rows('SELECT serial FROM activation_codes ORDER BY serial').map(row => row.serial), [1, 2, 3]);
+  db.close();
 });

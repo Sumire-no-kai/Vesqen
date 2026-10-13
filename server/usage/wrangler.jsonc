@@ -17,7 +17,8 @@
   }],
   "ratelimits": [
     { "name": "USAGE_LIMITER", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } },
-    { "name": "REPORT_LIMITER", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } }
+    { "name": "REPORT_LIMITER", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } },
+    { "name": "ACTIVATION_LIMITER", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } }
   ],
   "vars": {
     "REPORT_RETENTION_DAYS": "7",
@@ -27,7 +28,12 @@
     "DOWNLOAD_COUNTS_REPO": "",
     // #96: "closed" stops an endpoint at once (503, nothing read or stored).
     "USAGE_INGEST": "open",
-    "REPORT_INGEST": "open"
+    "REPORT_INGEST": "open",
+    // #120: website sales. Closed until the owner opens them; the purchase page's origin may read codes.
+    // Secrets set with `wrangler secret put`: STRIPE_WEBHOOK_SECRET, and STRIPE_SECRET_KEY as a
+    // restricted key that can only read Checkout Sessions.
+    "ACTIVATION_INGEST": "closed",
+    "ACTIVATION_ORIGIN": "https://vesqen.sumirenokai.com"
   },
   "triggers": { "crons": ["0 * * * *"] }
 }
