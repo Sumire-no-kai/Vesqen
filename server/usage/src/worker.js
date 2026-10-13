@@ -88,10 +88,11 @@ export async function handle(request, env, now = Date.now(), fetcher = fetch) {
     const day = new Date(now).toISOString().slice(0,10);
     if (isUsage) {
       // The relay is optional: its failure never discards the accepted ping, and running both at
-      // once keeps the response inside the app's read timeout.
+      // once keeps the response inside the app's read timeout. Only the GitHub build updates
+      // itself; the store updates every other channel, so its pings fetch no version files.
       const [, manifests] = await Promise.all([
         incrementUsage(env,validated,day),
-        updateManifests(env.UPDATE_MANIFEST_BASE_URL, fetcher),
+        validated.channel === 'github' ? updateManifests(env.UPDATE_MANIFEST_BASE_URL, fetcher) : {},
       ]);
       return response(200,{updateManifests:manifests});
     }

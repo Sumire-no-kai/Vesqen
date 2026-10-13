@@ -144,7 +144,7 @@
     <string name="usage_accept">同意发送</string>
     <string name="usage_decline">不发送</string>
     <string name="usage_storage_unavailable">这个设置暂时无法保存。</string>
-    <string name="usage_paused">Vesqen 暂停了使用统计，目前不会发送。你的开关保持不变，暂停结束后照常发送。</string>
+    <string name="usage_paused">Vesqen 暂停了使用统计，目前不会发送。你的开关保持不变。Vesqen 会在下一次每日发送前再检查暂停状态，所以暂停结束后，这条说明最多还会显示一天。</string>
     <string name="report_title">导出设备报告</string>
     <string name="report_intro">报告帮助开发者了解不同手机上的问题。你决定包含哪些内容，发送前可以看到全文。</string>
     <string name="report_basic">基本信息</string>

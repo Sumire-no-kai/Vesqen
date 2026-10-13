@@ -24,7 +24,7 @@ class VesqenApplication : Application() {
     private val applicationJob = SupervisorJob()
     private val applicationScope = CoroutineScope(applicationJob + Dispatchers.Default)
 
-    /** Null in the Play build, which Google Play updates. */
+    /** Null in the Play build, which Google Play updates. Typed by the flavor's factory: GitHubUpdateRuntime in the GitHub build. */
     internal val updateRuntime by lazy {
         io.github.sumirenokai.vesqen.updates.createUpdateRuntime(this, applicationScope)
     }
@@ -107,16 +107,13 @@ class VesqenApplication : Application() {
         get() = developerDiagnosticRecorder
 
     /** Both builds: the daily usage ping first, then the GitHub build's update check, which its reply may answer. */
+    private val foreground = ForegroundTrigger(applicationScope, usage = { usageRuntime.onForeground() }, updates = { updateRuntime })
     private val foregroundHook = object : ActivityLifecycleCallbacks {
-        private var started = 0
         override fun onActivityStarted(activity: Activity) {
-            if (activity is MainActivity && started++ == 0) applicationScope.launch {
-                val manifestRelayed = usageRuntime.onForeground()
-                updateRuntime?.onForeground(usageRequestExpected = manifestRelayed)
-            }
+            if (activity is MainActivity) foreground.activityStarted()
         }
         override fun onActivityStopped(activity: Activity) {
-            if (activity is MainActivity) started--
+            if (activity is MainActivity) foreground.activityStopped()
         }
         override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
         override fun onActivityResumed(activity: Activity) = Unit

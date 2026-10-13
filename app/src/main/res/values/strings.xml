@@ -147,7 +147,7 @@
     <string name="usage_accept">Send statistics</string>
     <string name="usage_decline">Don’t send</string>
     <string name="usage_storage_unavailable">This setting can’t be saved right now.</string>
-    <string name="usage_paused">Vesqen has paused usage statistics, so nothing is sent for now. Your setting stays as it is, and sending resumes when the pause ends.</string>
+    <string name="usage_paused">Vesqen has paused usage statistics, so nothing is sent for now. Your setting stays as it is. Vesqen checks the pause again before the next daily send, so after it ends this note can stay for up to a day.</string>
     <string name="report_title">Export device report</string>
     <string name="report_intro">A report helps the developer understand problems on different phones. You choose what goes in and see all of it before sending.</string>
     <string name="report_basic">Basic information</string>

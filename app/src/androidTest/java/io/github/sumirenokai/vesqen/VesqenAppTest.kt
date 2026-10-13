@@ -899,6 +899,28 @@ class VesqenAppTest {
         composeRule.runOnIdle { assertEquals(DeviceReportState.Editing, reporter.snapshot.value.state) }
     }
 
+    @Test
+    fun device_report_buttons_keep_whole_labels_side_by_side_at_130_percent_text() {
+        assertDeviceReportButtonLabels(width = 360.dp, fontScale = 1.3f)
+    }
+
+    @Test
+    fun device_report_buttons_stack_with_whole_labels_at_200_percent_text() {
+        assertDeviceReportButtonLabels(width = 320.dp, fontScale = 2f)
+    }
+
+    /** #118: three equal buttons used to break "Upload" and "Email" mid-word at large text. */
+    private fun assertDeviceReportButtonLabels(width: Dp, fontScale: Float) {
+        val reporter = FakeDeviceReporter()
+        render(grantedState(), deviceReporter = reporter, reportUploadAvailable = true,
+            containerWidth = width, containerHeight = 720.dp, fontScale = fontScale)
+        openDeviceReport()
+        val artifact = DeviceReportArtifact("{\"schemaVersion\":1}\n".toByteArray(Charsets.UTF_8))
+        composeRule.runOnIdle { reporter.emit(DeviceReportState.Preview(artifact)) }
+        listOf(R.string.report_upload, R.string.report_share, R.string.report_email)
+            .forEach { assertSingleCompleteLine(context.getString(it)) }
+    }
+
     private fun openDeviceReport() {
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
         composeRule.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.device-report"))

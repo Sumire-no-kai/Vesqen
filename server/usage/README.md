@@ -70,7 +70,9 @@ a 2.5-second timeout, in parallel with the D1 write, without forwarding any user
 headers or payload. Redirects are not followed (`redirect: 'manual'`; Workers does
 not support `'error'`). Fields the static files gain later are ignored, as the
 app's parser does. Valid files are included under `updateManifests` in the usage
-response for the client's existing updater seam. When none is included, the app
+response for the client's existing updater seam. Only pings from the `github`
+channel fetch them: Google Play updates the Play build, so its pings get an empty
+`updateManifests` and cause no fetch. When none is included, the app
 runs its own update check for that day (#84), so an unconfigured relay cannot stop
 automatic updates.
 A failed/unconfigured/oversized source simply yields no manifest and does not
@@ -95,7 +97,11 @@ In production the anonymous limit is usually already used up by other Cloudflare
 (2026-10-12: every hourly read got 4xx). Give the Worker its own limit with a fine-grained
 GitHub token that has read-only access to public repositories and no other permission:
 `npx wrangler secret put GITHUB_TOKEN --config wrangler.local.jsonc`. The token is sent only to
-`api.github.com`; rotate it when it expires.
+`api.github.com`; rotate it when it expires. If GitHub rejects the token (401, for example after
+it expires), the Worker repeats the read without it and stores the day if that succeeds. Every
+run that reads GitHub still ends with the error `github_token_rejected` until the token is
+replaced, even when the anonymous read stored the day, so the failing scheduled run is the sign
+to rotate it.
 
 `downloads` is GitHub's cumulative `download_count`. It counts every fetch of the
 file: browser downloads, in-app updates (#68 points them at the same GitHub file),

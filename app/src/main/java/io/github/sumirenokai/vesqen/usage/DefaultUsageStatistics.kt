@@ -21,7 +21,7 @@ internal class DefaultUsageStatistics(
     private val facts: () -> UsageFacts,
     private val transport: UsageTransport,
     private val acceptUpdate: (String) -> Unit = {},
-    /** A successful ping without update data: the updater checks on its own instead. */
+    /** The started task brought no update data (no ping sent, or none in the reply): the updater checks on its own. */
     private val missingUpdate: () -> Unit = {},
     private val clock: () -> Long = System::currentTimeMillis,
     /** #96: asked right before each ping. Null only in tests that do not exercise the switch. */
@@ -64,7 +64,11 @@ internal class DefaultUsageStatistics(
         } } }
     }
 
-    /** Called from the app's foreground hook. True suppresses the updater's duplicate manifest GET. */
+    /**
+     * Called from the app's foreground hook. True suppresses the updater's duplicate manifest GET:
+     * the started task then calls [acceptUpdate] or [missingUpdate] once, unless the ping itself
+     * failed, which skips that day's automatic update check (#78).
+     */
     suspend fun onForeground(): Boolean {
         initialization.join()
         // A report upload may have read the switch since; show its current word on usage too.
@@ -112,6 +116,11 @@ internal class DefaultUsageStatistics(
                     // OEM per-app firewalls surface as SecurityException from DNS, not IOException.
                     catch (_: SecurityException) { null.also { failed = true } }
                     if (manifest != null) acceptUpdate(manifest) else if (!failed) missingUpdate()
+                } else {
+                    // The region changed, the network dropped, storage failed or statistics were just
+                    // turned off. onForeground already told the updater to wait for this task, so
+                    // hand the check back, as when the switch stops the ping.
+                    missingUpdate()
                 }
             } finally { pending.set(false) }
         }

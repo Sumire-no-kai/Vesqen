@@ -6,8 +6,8 @@ const APK = /^[0-9A-Za-z._+-]{1,200}\.apk$/;
 
 /**
  * Reads GitHub's public download counters for the release APKs once per UTC day (owner decision,
- * 2026-10-08). The request carries no user data and no credentials; only the release tag, file
- * name and cumulative count are stored. Unset DOWNLOAD_COUNTS_REPO turns this off.
+ * 2026-10-08). The request carries no user data, only the optional read-only token; only the
+ * release tag, file name and cumulative count are stored. Unset DOWNLOAD_COUNTS_REPO turns this off.
  */
 export async function snapshotDownloads(env, now, fetcher = fetch) {
   const repository = env.DOWNLOAD_COUNTS_REPO;
@@ -17,14 +17,27 @@ export async function snapshotDownloads(env, now, fetcher = fetch) {
   // The hourly trigger retries a day that failed; a stored day is not fetched again.
   const stored = await env.DB.prepare('SELECT 1 AS present FROM daily_downloads WHERE day=? LIMIT 1').bind(day).all();
   if (stored.results.length) return;
-  const response = await fetcher(`https://api.github.com/repos/${repository}/releases?per_page=100`, {
+  const read = token => fetcher(`https://api.github.com/repos/${repository}/releases?per_page=100`, {
     redirect:'manual', signal:AbortSignal.timeout(10000),
     // GitHub rejects API requests without a User-Agent. Cloudflare's shared egress addresses use up
     // the anonymous per-address limit, so an optional read-only GITHUB_TOKEN secret gets its own.
     headers:{Accept:'application/vnd.github+json','User-Agent':'vesqen-usage-worker','X-GitHub-Api-Version':'2022-11-28',
-      ...(env.GITHUB_TOKEN ? {Authorization:`Bearer ${env.GITHUB_TOKEN}`} : {})},
+      ...(token ? {Authorization:`Bearer ${token}`} : {})},
   });
-  if (response.status !== 200) throw new Error('download_counts_unavailable');
+  let response = await read(env.GITHUB_TOKEN);
+  // An expired or revoked token answers 401. Read anonymously instead, and still fail the run
+  // once the day is handled, so the owner learns that the token needs replacing.
+  const tokenRejected = Boolean(env.GITHUB_TOKEN) && response.status === 401;
+  if (tokenRejected) {
+    await response.body?.cancel();
+    response = await read(null);
+  }
+  if (response.status !== 200) throw new Error(tokenRejected ? 'github_token_rejected' : 'download_counts_unavailable');
+  await storeSnapshot(env, day, response);
+  if (tokenRejected) throw new Error('github_token_rejected');
+}
+
+async function storeSnapshot(env, day, response) {
   const releases = JSON.parse(await readBoundedText(response.body, 4000000, 10000));
   if (!Array.isArray(releases)) throw new Error('download_counts_invalid');
   const rows = releases

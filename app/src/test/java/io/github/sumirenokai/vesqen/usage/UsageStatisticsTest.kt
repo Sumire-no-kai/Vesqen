@@ -179,6 +179,47 @@ class UsageStatisticsTest {
         assertEquals(0, run(UsageTransport { throw SecurityException("Permission denied") }))
     }
 
+    @Test fun aStartedTaskThatSendsNothingStillHandsTheUpdateCheckBackOnce() = runBlocking {
+        // onForeground returned true in each case, so the updater skipped its own check and waits
+        // for this task (#118).
+        fun CoroutineScope.run(store: MemoryStore = MemoryStore(ready), region: () -> UsageRegionPolicy = { UsageRegionPolicy.DEFAULT_ENABLED },
+            online: () -> Boolean = { true }, beforeForeground: () -> Unit = {}): Triple<Int, Int, Int> {
+            var sends = 0
+            var accepted = 0
+            var standalone = 0
+            val engine = DefaultUsageStatistics(CoroutineScope(coroutineContext + Dispatchers.Unconfined), store, region, true,
+                online, { facts }, UsageTransport { sends++; "manifest" }, { accepted++ }, { standalone++ }, { USAGE_DAY_MS * 10 })
+            beforeForeground()
+            assertTrue(runBlocking { engine.onForeground() })
+            return Triple(sends, accepted, standalone)
+        }
+        // The person's region now asks for consent first.
+        var policy = UsageRegionPolicy.DEFAULT_ENABLED
+        assertEquals(Triple(0, 0, 1), run(MemoryStore(ready.copy(consent = UsageConsent.DEFAULT_ENABLED)), region = { policy },
+            beforeForeground = { policy = UsageRegionPolicy.EXPLICIT_CONSENT }))
+        // The network dropped between the foreground check and the task.
+        val answers = ArrayDeque(listOf(true, false))
+        assertEquals(Triple(0, 0, 1), run(online = { answers.removeFirstOrNull() ?: false }))
+        // The day could not be reserved.
+        val failing = MemoryStore(ready)
+        assertEquals(Triple(0, 0, 1), run(failing, beforeForeground = { failing.fail = true }))
+    }
+
+    @Test fun statisticsTurnedOffJustBeforeThePingIsPreparedHandTheUpdateCheckBack() = runBlocking {
+        var sends = 0
+        var standalone = 0
+        // A queued dispatcher: the switch-off is still waiting when onForeground reads the settings.
+        val engine = DefaultUsageStatistics(CoroutineScope(coroutineContext), MemoryStore(ready), { UsageRegionPolicy.DEFAULT_ENABLED },
+            true, { true }, { facts }, UsageTransport { sends++; null }, {}, { standalone++ }, { USAGE_DAY_MS * 10 })
+        yield()
+        engine.setEnabled(false)
+        assertTrue(engine.onForeground())
+        coroutineContext.job.children.toList().joinAll()
+        assertFalse(engine.snapshot.value.enabled)
+        assertEquals(0, sends)
+        assertEquals(1, standalone)
+    }
+
     @Test fun theServiceSwitchCanOnlyStopThePingAndHandsTheUpdateCheckBack() = runBlocking {
         fun CoroutineScope.run(status: ServiceStatus?, preferences: UsagePreferences = ready): Triple<Int, Int, Int> {
             var sends = 0

@@ -34,8 +34,11 @@ jobs:
       - name: Verify M4 evidence tools
         run: python3 -m unittest discover -s tools/tests -v
 
+      # The shared unit tests run once, on the GitHub flavor. The Play flavor has no unit tests of
+      # its own, so it compiles them and runs only the license catalog test, whose input is the
+      # flavor's own dependency list. Lint, both APKs and both instrumentation APKs still cover it.
       - name: Verify debug and tests
-        run: ./gradlew testDebugUnitTest lintDebug assembleDebug assembleDeviceTest assembleDeviceTestAndroidTest --no-daemon
+        run: ./gradlew testGithubDebugUnitTest testPlayDebugUnitTest --tests 'io.github.sumirenokai.vesqen.licenses.ThirdPartyLicensesTest' lintDebug assembleDebug assembleDeviceTest assembleDeviceTestAndroidTest --no-daemon
 
       - name: Assemble Profile
         run: ./gradlew assembleProfile --no-daemon

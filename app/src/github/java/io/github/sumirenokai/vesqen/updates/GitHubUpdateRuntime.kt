@@ -10,7 +10,11 @@ import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 
-internal fun createUpdateRuntime(application: Application, scope: CoroutineScope): UpdateRuntime? =
+/**
+ * Returns the concrete type, so GitHub-only code reads `VesqenApplication.updateRuntime` without a
+ * cast. Nullable like the Play build's factory, because shared code treats the runtime as optional.
+ */
+internal fun createUpdateRuntime(application: Application, scope: CoroutineScope): GitHubUpdateRuntime? =
     GitHubUpdateRuntime(application, scope)
 
 /** The GitHub flavor's update composition root. */

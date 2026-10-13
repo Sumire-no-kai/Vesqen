@@ -128,7 +128,11 @@ jobs:
         run: |
           python3 -m unittest discover -s ../control/tools/tests -p 'test_github_release.py' -v
           python3 -m unittest discover -s tools/tests -v
-          ./gradlew :app:checkPrivacyPolicyFinal :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDeviceTest :app:assembleDeviceTestAndroidTest :app:assembleGithubRelease :app:bundlePlayRelease \
+          # Shared unit tests run once, on the GitHub flavor; the Play flavor compiles them and runs
+          # only its license catalog test, as in Android CI.
+          ./gradlew :app:checkPrivacyPolicyFinal :app:testGithubDebugUnitTest \
+            :app:testPlayDebugUnitTest --tests 'io.github.sumirenokai.vesqen.licenses.ThirdPartyLicensesTest' \
+            :app:lintDebug :app:assembleDebug :app:assembleDeviceTest :app:assembleDeviceTestAndroidTest :app:assembleGithubRelease :app:bundlePlayRelease \
             -Pvesqen.usageEndpoint="$VESQEN_USAGE_ENDPOINT" --no-daemon
       - name: Prepare unsigned candidate and source record
         env:
