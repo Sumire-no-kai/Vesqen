@@ -229,3 +229,4 @@ If the service were deferred or stopped, the music would stop as soon as the use
 - **开发者验证**：Android developer verification 页面里，`io.github.sumirenokai.vesqen` 为 Registered，应用签名密钥 `74:3E:96:FC:…:62:93` 为 Verified（2026-10-13 核对）。GitHub 版用同一把密钥，所以也已覆盖。列表里另外 3 把是 Play 生成的密钥，包括已弃用的 `F7:8F:…:C6:E3`，不影响。
 - **顺序**：商品详情 → 封闭测试轨道和测试者 → Play 应用签名和上传 AAB → 前台服务申报 → 送审。审核通过、测试者加入后，14 天从那时开始计算。
 - **进度**：2026-10-13 第一次送审（封闭测试 `11 (1.0.0-beta.2)`、商品详情、应用内容、商店设置）当天通过，封闭测试轨道 Active，178 个国家/地区。前台服务申报的演示视频是 YouTube 不公开视频。测试者在名单里之后，用 Android 上的 Play 链接或网页链接 `https://play.google.com/apps/testing/io.github.sumirenokai.vesqen` 加入。当天加入人数为 0，名单 2 人。
+- **版本审核的警告**：Play 提示“包含原生代码但没有上传调试符号”。包里唯一的原生库是 AndroidX Compose 图形库自带的 `libandroidx.graphics.path.so`，发布时已经去掉了符号；Vesqen 自己没有 NDK 代码，所以没有可上传的符号，这条警告可以忽略。
