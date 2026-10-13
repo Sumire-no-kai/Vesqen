@@ -11,6 +11,6 @@ interface UpdateRuntime {
     fun onForeground(usageRequestExpected: Boolean)
     fun acceptUsageResponse(manifest: String)
 
-    /** The usage ping succeeded without update data (e.g. relay not configured): check directly. */
+    /** The expected usage request brought no update data (nothing sent, or relay not configured): check directly. */
     fun checkWithoutUsageResponse()
 }
