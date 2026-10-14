@@ -200,5 +200,9 @@
   - 重新从界面播放、暂停、结束进程，记住的接收者又回到 Vesqen 后，`input keyevent 126` 和 `cmd media_session dispatch play` 都没有唤起 Vesqen，也没有唤起别的应用。
   - 广播记录里只有发给网易云的两条 `MEDIA_BUTTON`，系统一次也没有把按键广播发给 Vesqen 的接收器。所以在这台 vivo 上，按键怎么分发由 vivo 自己决定，不看 Android 记住的接收者。
   - 杀掉进程后，系统安排 1 秒后重启 `PlaybackService`（`am_schedule_service_restart`），但进程没有起来。
+- 原因（2026-10-15，[#129](https://github.com/Sumire-no-kai/Vesqen/issues/129)）：两台手机都只给系统内置名单里的应用分发媒体按键。
+  - iQOO：vivo 另存一份 `vivo_media_button_receiver`，只记 `vivo_audio_policy_media_session_applist` 里的应用（网易云、i音乐、Spotify 等）。i音乐一播放两份记录都换成它；Vesqen 播放时只有 Android 的记录变。
+  - Honor：EMUI `third_app_filter.xml` 的 `mediasession` 名单（华为音乐、网易云、Spotify 等）。华为音乐播放本地歌曲时记录立刻换成它；Vesqen 播放时不变。
+  - 实验包给 Vesqen 的会话补上和这些应用相同的广播 PendingIntent 接收器，两台手机的记录仍然不变，所以与接收器类型无关。实验应用已卸载，iQOO 的 Vesqen Test 已换回上面的 beta.3 测试包。两台手机记住的应用现在分别是 i音乐和华为音乐（原来都是网易云）。
 - 没有覆盖：其他厂商和原生 Android 上的耳机键恢复；连接蓝牙和重启时保持安静；没有 DAC 时的严格 USB；应用内更新器，要等发布和官网 `updates/beta.json` 上线后再测。
 - 结论：安装、versionCode 增大的同签名升级和数据保留通过（Android 9）。耳机键恢复在两台测试机上都不成立，beta.3 的发布说明不把它列为新功能，只写进已知限制。

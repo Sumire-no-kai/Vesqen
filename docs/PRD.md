@@ -1027,5 +1027,5 @@ GitHub 版没有应用商店的统计，开发迭代又需要真实的设备和�
 
 **2026-10-15 真机结果**
 
-- 两台测试手机都没有通过：按键没有到达 Vesqen。Honor（Android 9）始终记着网易云音乐作为按键接收者；iQOO（Android 15）上 vivo 自己分发按键，下一首转给了网易云，播放键没有发给任何应用。记录见 `docs/M4_DEVICE_ACCEPTANCE.md` 2026-10-14 一节，跟进在 [#129](https://github.com/Sumire-no-kai/Vesqen/issues/129)。
+- 两台测试手机都没有通过：按键没有到达 Vesqen。原因是两台手机都只给系统内置名单里的音乐应用分发媒体按键（vivo 的 `vivo_audio_policy_media_session_applist`、EMUI 的 `third_app_filter.xml`），Vesqen 不在名单里；换成和名单里应用相同的接收器类型也没有用。记录见 `docs/M4_DEVICE_ACCEPTANCE.md` 2026-10-14 一节，跟进在 [#129](https://github.com/Sumire-no-kai/Vesqen/issues/129)。
 - beta.3 保留这段代码，但发布说明不列为新功能，只写进已知限制。
