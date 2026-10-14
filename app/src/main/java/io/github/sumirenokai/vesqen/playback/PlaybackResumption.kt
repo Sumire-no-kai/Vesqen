@@ -63,16 +63,30 @@ internal fun UsbOutputStatus.stopsRequestedPlayback(): Boolean =
 
 /**
  * Android requires startForeground() within seconds once a media button starts this service with
- * startForegroundService(), even when nothing ends up playing, or it stops the app. Media3 enters
- * the foreground only for ongoing playback. A resume that finds no playable queue, a strict USB
- * failure (PRD 9.2) or a playback error therefore leaves the requirement to the service.
+ * startForegroundService(), even when playback starts later, or it stops the app. Media3 enters the
+ * foreground only once playback is under way. When a queue has to be restored first, which can
+ * take longer than Android allows, the service enters the foreground itself as the press arrives,
+ * with a hidden notification Media3 replaces when playback starts. A loaded queue starts playing
+ * well within the limit. Either way, a resume that finds no playable queue, a strict USB failure
+ * (PRD 9.2) or a playback error leaves the foreground to the service.
  */
 internal class MediaButtonStartObligation {
-    private var open = false
+    enum class Ending {
+        /** Nothing is owed, or Media3 runs the foreground. */
+        NONE,
+        /** The service entered the foreground for a restore and must leave it, removing its notification. */
+        LEAVE_FOREGROUND,
+        /** The service never entered the foreground and must enter and leave it once to meet the start. */
+        ENTER_AND_LEAVE,
+    }
 
-    /** A media button started the service while it was not in the foreground. */
-    fun open() {
+    private var open = false
+    private var enteredForeground = false
+
+    /** A media button started the service; [enteredForeground] when it already entered for a restore. */
+    fun open(enteredForeground: Boolean) {
         open = true
+        this.enteredForeground = enteredForeground
     }
 
     /** Playback started; Media3 keeps the service in the foreground from here. */
@@ -80,13 +94,14 @@ internal class MediaButtonStartObligation {
         open = false
     }
 
-    /**
-     * The attempt ended without playback. True when the service must enter and leave the
-     * foreground itself to meet Android's requirement.
-     */
-    fun endWithoutPlayback(inForeground: Boolean): Boolean {
-        val owed = open && !inForeground
+    /** The attempt ended without playback. [mediaInForeground]: Media3 already runs the foreground. */
+    fun endWithoutPlayback(mediaInForeground: Boolean): Ending {
+        val ending = when {
+            !open || mediaInForeground -> Ending.NONE
+            enteredForeground -> Ending.LEAVE_FOREGROUND
+            else -> Ending.ENTER_AND_LEAVE
+        }
         open = false
-        return owed
+        return ending
     }
 }

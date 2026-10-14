@@ -282,7 +282,7 @@ class PlaybackService : MediaSessionService() {
                 ?.let { extras -> BundleCompat.getParcelable(extras, Intent.EXTRA_KEY_EVENT, KeyEvent::class.java) }
                 ?.keyCode,
             hasCurrentItem = session.player.currentMediaItem != null,
-            hasSavedQueue = { playbackStateStore.load() != null },
+            hasSavedQueue = playbackStateStore::hasSavedQueue,
         )
         return session.takeIf { mayStart }
     }
@@ -294,20 +294,42 @@ class PlaybackService : MediaSessionService() {
             intent?.action == Intent.ACTION_MEDIA_BUTTON &&
             session != null && isSessionAdded(session) && !isPlaybackOngoing
         ) {
-            mediaButtonStart.open()
+            // Restoring a saved queue can outlast Android's deadline for startForeground() (5 s
+            // before Android 12, 10 s from it), so that start enters the foreground at once. No
+            // media notification exists for an empty player, so Media3's id is free for it.
+            val restoring = session.player.currentMediaItem == null
+            if (!restoring) {
+                mediaButtonStart.open(enteredForeground = false)
+            } else if (enterForegroundHidden(DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID)) {
+                mediaButtonStart.open(enteredForeground = true)
+            }
         }
         return result
     }
 
     /**
-     * Meets Android's foreground start requirement when a media button start ends without
-     * playback, the same way Media3 stops a start it rejects: a hidden notification that is
-     * removed at once. Media3 shows its own notification if playback starts later.
+     * A media button start ended without playback (nothing restorable, a strict USB failure under
+     * PRD 9.2, or a playback error). Leaves the foreground the way Media3 stops a start it rejects,
+     * first entering it under a separate id when it never did, so Media3's paused notification for a
+     * loaded queue stays as it was. Once Media3 runs the foreground, it owns it.
+     */
+    private fun endMediaButtonStartWithoutPlayback() {
+        when (mediaButtonStart.endWithoutPlayback(mediaInForeground = isPlaybackOngoing)) {
+            MediaButtonStartObligation.Ending.NONE -> return
+            MediaButtonStartObligation.Ending.LEAVE_FOREGROUND -> Unit
+            MediaButtonStartObligation.Ending.ENTER_AND_LEAVE ->
+                if (!enterForegroundHidden(REJECTED_START_NOTIFICATION_ID)) return
+        }
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+    }
+
+    /**
+     * Enters the foreground with a silent notification hidden from the lock screen. False when
+     * Android refuses, which happens only when this was not a foreground start, so nothing is owed.
      */
     // ServiceCompat passes the API 29 foreground service type only where it exists.
     @SuppressLint("InlinedApi")
-    private fun endMediaButtonStartWithoutPlayback() {
-        if (!mediaButtonStart.endWithoutPlayback(inForeground = isPlaybackOngoing)) return
+    private fun enterForegroundHidden(notificationId: Int): Boolean {
         val channel = checkNotNull(notificationProvider).notificationChannelInfo
         NotificationManagerCompat.from(this).createNotificationChannel(
             NotificationChannelCompat.Builder(channel.id, NotificationManagerCompat.IMPORTANCE_LOW)
@@ -321,22 +343,16 @@ class PlaybackService : MediaSessionService() {
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_DEFERRED)
             .build()
         try {
-            ServiceCompat.startForeground(
-                this,
-                MEDIA_BUTTON_START_NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
-            )
+            ServiceCompat.startForeground(this, notificationId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         } catch (notAllowed: IllegalStateException) {
-            // Android refuses only when this was not a foreground start, so nothing was owed.
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
                 notAllowed !is ForegroundServiceStartNotAllowedException
             ) {
                 throw notAllowed
             }
-            return
+            return false
         }
-        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        return true
     }
 
     override fun onDestroy() {
@@ -362,6 +378,6 @@ class PlaybackService : MediaSessionService() {
 
     private companion object {
         /** Media3 uses 1001 for the media notification and 20938 for its own stop notification. */
-        const val MEDIA_BUTTON_START_NOTIFICATION_ID = 20939
+        const val REJECTED_START_NOTIFICATION_ID = 20939
     }
 }

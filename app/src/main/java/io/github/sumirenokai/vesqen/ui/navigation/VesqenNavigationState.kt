@@ -66,24 +66,17 @@ data class VesqenNavigationState(
 
     fun openUsageStatistics(): VesqenNavigationState = openDetail(VesqenDestination.USAGE_STATISTICS)
 
-    /**
-     * The report opens from Settings and from the crash question (#113), which can appear over any
-     * surface. Over another detail it opens from Settings, so details never nest past two levels.
-     */
-    fun openDeviceReport(): VesqenNavigationState = when {
-        destination == VesqenDestination.DEVICE_REPORT -> this
-        destination.isSecondaryDetail -> selectTopLevel(VesqenDestination.SETTINGS).openDetail(VesqenDestination.DEVICE_REPORT)
-        else -> openDetail(VesqenDestination.DEVICE_REPORT)
-    }
+    /** Opens from Settings and from the crash question (#113), which can appear over any surface. */
+    fun openDeviceReport(): VesqenNavigationState = openSettingsDetailFromAnywhere(VesqenDestination.DEVICE_REPORT)
 
-    /**
-     * Pro features open from Settings and from strict output dialogs, which can appear over any
-     * surface. Over another detail they open from Settings, so details never nest past two levels.
-     */
-    fun openPremium(): VesqenNavigationState = when {
-        destination == VesqenDestination.PREMIUM -> this
-        destination.isSecondaryDetail -> selectTopLevel(VesqenDestination.SETTINGS).openDetail(VesqenDestination.PREMIUM)
-        else -> openDetail(VesqenDestination.PREMIUM)
+    /** Opens from Settings and from strict output dialogs, which can appear over any surface. */
+    fun openPremium(): VesqenNavigationState = openSettingsDetailFromAnywhere(VesqenDestination.PREMIUM)
+
+    /** Over another detail, a Settings detail opens from Settings, so details never nest past two levels. */
+    private fun openSettingsDetailFromAnywhere(detail: VesqenDestination): VesqenNavigationState = when {
+        destination == detail -> this
+        destination.isSecondaryDetail -> selectTopLevel(VesqenDestination.SETTINGS).openDetail(detail)
+        else -> openDetail(detail)
     }
 
     fun back(): VesqenNavigationState = when {

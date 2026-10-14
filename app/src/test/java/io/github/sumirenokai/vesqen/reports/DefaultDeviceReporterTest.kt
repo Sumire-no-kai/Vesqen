@@ -112,24 +112,27 @@ class DefaultDeviceReporterTest {
         assertEquals(DeviceReportState.Failed(DeviceReportFailure.GENERATION_FAILED), failing.snapshot.value.state)
     }
 
-    @Test fun `a sent report hands over the data it was made from and a failed send does not`() = runBlocking {
+    @Test fun `only an uploaded report hands over the data it was made from`() = runBlocking {
         val delivered = mutableListOf<DeviceReportData>()
         val captured = reportData()
-        var fail = true
+        val uploader = FakeDeviceReportUploader().apply { failure = DeviceReportFailure.UPLOAD_FAILED }
         val reporter = DefaultDeviceReporter(CoroutineScope(coroutineContext + Dispatchers.Unconfined), { captured },
-            DeviceReportSharer { _, _ -> if (fail) DeviceReportFailure.NO_SHARE_APPLICATION else null }, delivered = delivered::add)
+            DeviceReportSharer { _, _ -> null }, uploader = uploader, delivered = delivered::add)
         reporter.setOptions(DeviceReportOptions(crashes = true))
         reporter.generate()
+        // The person can still back out of the share sheet or the mail draft.
         reporter.send(DeviceReportDelivery.SHARE)
-        assertTrue(reporter.snapshot.value.state is DeviceReportState.Failed)
-        reporter.send(DeviceReportDelivery.UPLOAD)
-        assertTrue(delivered.isEmpty())
-        fail = false
         reporter.send(DeviceReportDelivery.EMAIL)
+        assertTrue(reporter.snapshot.value.state is DeviceReportState.Sent)
+        reporter.send(DeviceReportDelivery.UPLOAD)
+        assertTrue(reporter.snapshot.value.state is DeviceReportState.Failed)
+        assertTrue(delivered.isEmpty())
+        uploader.failure = null
+        reporter.send(DeviceReportDelivery.UPLOAD)
         assertEquals(listOf(captured), delivered)
         // Starting over drops the report, so nothing more is handed over.
         reporter.discard()
-        reporter.send(DeviceReportDelivery.EMAIL)
+        reporter.send(DeviceReportDelivery.UPLOAD)
         assertEquals(1, delivered.size)
     }
 

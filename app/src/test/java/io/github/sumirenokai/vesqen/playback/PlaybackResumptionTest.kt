@@ -119,27 +119,31 @@ class PlaybackResumptionTest {
     }
 
     @Test
-    fun `a media button start that ends without playback is owed once`() {
-        val obligation = MediaButtonStartObligation()
-        obligation.open()
+    fun `a media button start that ends without playback is settled once`() {
+        val loaded = MediaButtonStartObligation().apply { open(enteredForeground = false) }
+        assertEquals(MediaButtonStartObligation.Ending.ENTER_AND_LEAVE, loaded.endWithoutPlayback(mediaInForeground = false))
+        assertEquals(MediaButtonStartObligation.Ending.NONE, loaded.endWithoutPlayback(mediaInForeground = false))
 
-        assertTrue(obligation.endWithoutPlayback(inForeground = false))
-        assertFalse(obligation.endWithoutPlayback(inForeground = false))
+        // A restore entered the foreground as the press arrived; it only has to leave.
+        val restoring = MediaButtonStartObligation().apply { open(enteredForeground = true) }
+        assertEquals(MediaButtonStartObligation.Ending.LEAVE_FOREGROUND, restoring.endWithoutPlayback(mediaInForeground = false))
+        assertEquals(MediaButtonStartObligation.Ending.NONE, restoring.endWithoutPlayback(mediaInForeground = false))
     }
 
     @Test
-    fun `started playback or the foreground settles a media button start`() {
-        val started = MediaButtonStartObligation().apply {
-            open()
-            playbackStarted()
+    fun `started playback or Media3's foreground settles a media button start`() {
+        listOf(false, true).forEach { entered ->
+            val started = MediaButtonStartObligation().apply {
+                open(enteredForeground = entered)
+                playbackStarted()
+            }
+            assertEquals(MediaButtonStartObligation.Ending.NONE, started.endWithoutPlayback(mediaInForeground = false))
+
+            val mediaForeground = MediaButtonStartObligation().apply { open(enteredForeground = entered) }
+            assertEquals(MediaButtonStartObligation.Ending.NONE, mediaForeground.endWithoutPlayback(mediaInForeground = true))
+            assertEquals(MediaButtonStartObligation.Ending.NONE, mediaForeground.endWithoutPlayback(mediaInForeground = false))
         }
-        assertFalse(started.endWithoutPlayback(inForeground = false))
-
-        val inForeground = MediaButtonStartObligation().apply { open() }
-        assertFalse(inForeground.endWithoutPlayback(inForeground = true))
-        assertFalse(inForeground.endWithoutPlayback(inForeground = false))
-
-        assertFalse(MediaButtonStartObligation().endWithoutPlayback(inForeground = false))
+        assertEquals(MediaButtonStartObligation.Ending.NONE, MediaButtonStartObligation().endWithoutPlayback(mediaInForeground = false))
     }
 
     private fun strictFailure(origin: UsbOutputFailureOrigin) = UsbOutputStatus(

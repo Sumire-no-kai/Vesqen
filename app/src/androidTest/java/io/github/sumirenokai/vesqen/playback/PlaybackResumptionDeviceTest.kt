@@ -1,6 +1,11 @@
 package io.github.sumirenokai.vesqen.playback
 
+import android.app.ActivityManager
+import android.app.NotificationManager
 import android.content.ComponentName
+import android.content.Intent
+import android.view.KeyEvent
+import androidx.core.content.ContextCompat
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -16,6 +21,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -67,6 +73,55 @@ class PlaybackResumptionDeviceTest {
             if (previous != null) store.save(previous) else store.clear()
         }
     }
+
+    /**
+     * A Play press after the process ended reaches the service the way Media3's MediaButtonReceiver
+     * delivers it. The service must enter the foreground at once (Android's deadline does not wait
+     * for the queue to be restored), and when nothing can play it must leave it again and remove
+     * the hidden notification, keeping the saved queue. Run with an activity of this app in front,
+     * which allows the foreground start the receiver gets from Android.
+     */
+    @Test
+    fun aPlayPressStartLeavesTheForegroundAndKeepsTheQueueWhenNothingCanPlay() = runBlocking {
+        val store = PlaybackStateStore(app)
+        val previous = store.load()
+        val saved = PersistedPlaybackState(
+            queueTrackIds = listOf(-52, -53),
+            currentTrackId = -53,
+            positionMs = 12_345,
+            shuffleEnabled = false,
+            repeatMode = PlaybackRepeatMode.OFF,
+            currentQueueIndex = 1,
+        )
+        store.save(saved)
+        val service = ComponentName(app, PlaybackService::class.java)
+        try {
+            val press = Intent(Intent.ACTION_MEDIA_BUTTON)
+                .setComponent(service)
+                .putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY))
+            main { ContextCompat.startForegroundService(app, press) }
+            withTimeout(15_000) { while (!serviceRunning(service)) delay(25) }
+            // Ended without playback: out of the foreground, the hidden notification gone.
+            withTimeout(15_000) { while (serviceInForeground(service)) delay(25) }
+            val notifications = app.getSystemService(NotificationManager::class.java).activeNotifications
+            assertTrue(
+                "The hidden media button notification must be removed",
+                notifications.none { it.id == androidx.media3.session.DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID },
+            )
+            assertEquals("The saved queue must survive a failed restore", saved, store.load())
+        } finally {
+            main { app.stopService(Intent().setComponent(service)) }
+            if (previous != null) store.save(previous) else store.clear()
+        }
+    }
+
+    @Suppress("DEPRECATION") // Still returns this app's own services.
+    private fun runningService(service: ComponentName) =
+        app.getSystemService(ActivityManager::class.java).getRunningServices(Int.MAX_VALUE).firstOrNull { it.service == service }
+
+    private fun serviceRunning(service: ComponentName) = runningService(service) != null
+
+    private fun serviceInForeground(service: ComponentName) = runningService(service)?.foreground == true
 
     private fun <T> main(action: () -> T): T {
         var result: Result<T>? = null

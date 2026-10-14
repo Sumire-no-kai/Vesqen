@@ -14,7 +14,10 @@ internal class DefaultDeviceReporter(
     private val capture: suspend (DeviceReportOptions) -> DeviceReportData,
     private val sharer: DeviceReportSharer,
     private val uploader: DeviceReportUploader = UnconfiguredDeviceReportUploader,
-    /** #113: told once per successful send, with the data the sent report was made from. */
+    /**
+     * #113: told once per successful upload, with the data the uploaded report was made from. A
+     * share or email counts only as handed to another app, which the person can still cancel.
+     */
     private val delivered: (DeviceReportData) -> Unit = {},
 ) : DeviceReporter {
     private val lock = Any()
@@ -82,9 +85,10 @@ internal class DefaultDeviceReporter(
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: IOException) { DeviceReportState.Failed(failureCode, report) }
             catch (_: SecurityException) { DeviceReportState.Failed(failureCode, report) }
-            // A send cancelled by discarding throws above; its crash records then stay until they
-            // expire, even if the bytes already reached the server.
-            if (sentState is DeviceReportState.Sent && data != null) delivered(data)
+            // Only the server confirms receipt. After a share or email the records stay until they
+            // expire, since the person may have backed out of the other app. A send cancelled by
+            // discarding throws above and keeps them too, even if the bytes reached the server.
+            if (delivery == DeviceReportDelivery.UPLOAD && sentState is DeviceReportState.Sent && data != null) delivered(data)
             publish(request, sentState)
         }
     }

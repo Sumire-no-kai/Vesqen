@@ -1,7 +1,7 @@
 # Vesqen Privacy Policy
 
 - Effective date: September 26, 2026
-- Last updated: October 13, 2026
+- Last updated: October 15, 2026
 
 This policy explains what information the Vesqen Android app handles, where that information stays, what the app sends over the network, and what we receive when you contact us or join a test. It applies to every build of Vesqen we distribute, including Google Play and GitHub Releases, and to the Vesqen website.
 
@@ -41,7 +41,7 @@ Vesqen processes the following information on your device. None of it is sent to
 - **Your playback chain.** To show the Chain view and to operate strict USB output, Vesqen reads audio route information that Android provides: the current output device's name and type (including connected Bluetooth audio devices), and for USB audio devices, the vendor ID, product ID, name, USB descriptor version and supported audio formats. Vesqen does not request direct access to USB devices.
 - **Output verification records.** If you import a verification record file, Vesqen stores it in its private storage. To decide whether to show `BIT-PERFECT VERIFIED`, it compares the record with your current setup: the installed app's version and package hash, your phone's manufacturer, model and Android version, a hash of the system build fingerprint computed on the device, the connected USB audio device, and the audio format being played.
 - **Recent errors.** Vesqen keeps a short record of recent playback errors, strict USB stops and the reasons Android gave for closing the app: at most 100 events from the last 7 days. For a track that failed to play, it keeps the track's format and file name. The record exists so you can choose to include it in a device report.
-- **Crash details.** If Vesqen crashes because of an error it did not handle, it saves the error type and the code locations that led to it (class, method and line number), including the errors that caused it, with the app version and the time. It never saves the error's message text, which can contain a file path or a song title. It keeps the last 3 crashes for at most 7 days, and deletes them after you send them or tap No thanks.
+- **Crash details.** If Vesqen crashes because of an error it did not handle, it saves the error type and the code locations that led to it (class, method and line number), including the errors that caused it, with the app version and the time. It never saves the error's message text, which can contain a file path or a song title. It keeps the last 3 crashes for at most 7 days. It deletes them after you upload them in a report or tap No thanks. After you share or email a report, it keeps them until they expire, because Vesqen cannot tell whether you sent it.
 - **Your region.** To decide whether to ask before sending usage statistics, Vesqen reads the region of your phone's language settings and the country codes of your SIM card and mobile network. This needs no permission. The result is used on the device and is not stored or sent.
 
 Vesqen never modifies or deletes your music files.
