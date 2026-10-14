@@ -41,7 +41,7 @@
 - [#119](https://github.com/Sumire-no-kai/Vesqen/issues/119)（PR #121）：试用计时、权益状态、第一次打开严格 USB 时的说明，以及设置里的"高级功能"。收费开关关闭，不计时，也不锁功能；文案写"2.0 之前免费"。
 - [#118](https://github.com/Sumire-no-kai/Vesqen/issues/118)（PR #122）：beta.2 审查的遗留问题。
 - [#120](https://github.com/Sumire-no-kai/Vesqen/issues/120) 的 App 和服务端部分（PR #123、#124、#127）：激活码格式、签发工具、App 验证和输入（只在调试版出现）、服务端发码和作废、激活链接放在 `vesqen-api.sumirenokai.com`。Worker 已在 2026-10-13 部署，销售保持关闭。
-- [#52](https://github.com/Sumire-no-kai/Vesqen/issues/52)（PR #126）：进程被结束后，按耳机或蓝牙的播放键恢复队列并播放。
+- [#52](https://github.com/Sumire-no-kai/Vesqen/issues/52)（PR #126）：进程被结束后，按耳机或蓝牙的播放键恢复队列并播放。两台测试手机上按键都没有到达 Vesqen，发布说明不列为新功能，跟进在 [#129](https://github.com/Sumire-no-kai/Vesqen/issues/129)。
 - 首次使用的三处界面修正。所有者在 Play 版上发现，直接提交（`0df5828` 到 `9a4e6f2`）：
   - 开屏的使用统计页：答复固定在第一屏，只有说明文字在放不下时滚动；
   - 没有授权的空曲库：主按钮改为"允许访问设备音乐"，"添加音乐文件夹"改为次要按钮；
@@ -55,9 +55,9 @@
 
 发版前：
 
-- 真机验收上面已经合并的内容。新加的界面测试已经编译，但还没在真机上跑。
+- 真机验收上面已经合并的内容：2026-10-14 完成，界面测试在 iQOO 上全部通过，签名草稿在 Honor 上从 beta.2 升级并保留数据（`docs/M4_DEVICE_ACCEPTANCE.md`）。
 - beta.3 是用户第一次通过应用内更新器升级，要完整测一遍从 beta.2 升到 beta.3。
-- 发布说明写上这三处修正、耳机键恢复和"高级功能"的说明，写明"2.0 之前免费"。
+- 发布说明写上这三处修正和"高级功能"的说明，写明"2.0 之前免费"；耳机键恢复只写进已知限制（#129）。
 - 官网同步加一句收费说明（官网 `docs/SITE_PLAN.md`）。
 - Play Console 商品详情里"测试版"那一段换成 [`PLAY_LISTING.md`](PLAY_LISTING.md) 的新文字（"从 2.0 起……"）。旧文字写的是 1.0 收费，已经上传过（所有者 2026-10-13 要求 beta.3 上线时提醒）。
 

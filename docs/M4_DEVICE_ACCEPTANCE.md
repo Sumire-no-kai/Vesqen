@@ -195,5 +195,10 @@
 - 崩溃提示（#113）：`adb shell am crash` 之后重新打开，出现“Vesqen 上次意外退出了”。“查看并发送”打开设备报告，默认勾选“最近的错误”和“崩溃记录”。预览里的崩溃记录只有 `android.app.RemoteServiceException` 和各帧的类名、方法、行号，没有异常消息和文件路径；Android 9 没有系统退出记录（`UNSUPPORTED_ANDROID_VERSION`）。没有上传。
 - 耳机键恢复（#52）在这台 Honor 上不成立。Vesqen 播放时是系统的媒体按键会话，但系统没有记住它（`Last MediaButtonReceiver: null`），保存下来的按键接收者一直是网易云音乐。用 `am kill` 结束 Vesqen 后，`input keyevent 87`（下一首）被系统发给网易云并把它拉起，网易云没有播放，随后结束了它的进程。从最近任务划掉 Vesqen 后，记住的仍是网易云，所以没有再发播放键。Media3 1.11 在 Android 12 以下运行时把按键交给播放服务，只有会话正常释放时才换成 #52 的广播接收器；这台手机上两种情况都没有让系统记住 Vesqen。
 - 界面测试：iQOO V2171A / Android 15 上的“Vesqen Test”（`.devicetest`，由 `0c77c95` 构建，app/test APK SHA-256 为 `a3bae9a4…b06f` / `eeee0d77…401a`）。`VesqenAppTest` 新增和改动的 15 项全部通过：崩溃提示 4 项、严格 USB 首次说明和试用结束 2 项、激活码 1 项、使用统计说明 3 项、空曲库 2 项、扫描后停在顶部 1 项、大字号设备报告按钮 2 项。`PlaybackResumptionDeviceTest` 1 项通过。vivo 的外部来源确认要在手机上点“继续安装”；点过之后包已装好，但 adb 和 Gradle 的安装命令一直不返回（`ShellCommandUnresponsiveException`），所以改为核对设备上的 APK 哈希后直接运行 `am instrument`。fast_freezer 冻结过一次测试进程，按 `build/qa/run-vivo.sh` 的办法把 `ComponentActivity` 拉到前台。
-- 没有覆盖：Android 12 及以上的耳机键恢复（iQOO 当前的媒体按键会话属于另一个应用，没有发按键）；连接蓝牙和重启时保持安静；没有 DAC 时的严格 USB；应用内更新器，要等发布和官网 `updates/beta.json` 上线后再测。
-- 结论：安装、versionCode 增大的同签名升级和数据保留通过（Android 9）。
+- 耳机键恢复（#52）在 iQOO 上也不成立（2026-10-15，“Vesqen Test”，所有者同意先停掉当时占着媒体按键会话的 `com.phoenix.read`）。从曲库点歌播放后，系统记住的按键接收者是 Media3 的 `MediaButtonReceiver`（`Last MediaButtonReceiver` 显示这个组件）。暂停、回到桌面，用 `run-as … kill -9` 结束进程后：
+  - `input keyevent 87`（下一首）没有发给 Vesqen，而是被 vivo 的 `com.vivo.media.FeatureService.handleMediaButtonEventTransfer` 转给网易云音乐。网易云被拉起并开始播放，大约 13 秒后用 `am force-stop` 停掉；从这以后，系统记住的接收者变成了网易云。
+  - 重新从界面播放、暂停、结束进程，记住的接收者又回到 Vesqen 后，`input keyevent 126` 和 `cmd media_session dispatch play` 都没有唤起 Vesqen，也没有唤起别的应用。
+  - 广播记录里只有发给网易云的两条 `MEDIA_BUTTON`，系统一次也没有把按键广播发给 Vesqen 的接收器。所以在这台 vivo 上，按键怎么分发由 vivo 自己决定，不看 Android 记住的接收者。
+  - 杀掉进程后，系统安排 1 秒后重启 `PlaybackService`（`am_schedule_service_restart`），但进程没有起来。
+- 没有覆盖：其他厂商和原生 Android 上的耳机键恢复；连接蓝牙和重启时保持安静；没有 DAC 时的严格 USB；应用内更新器，要等发布和官网 `updates/beta.json` 上线后再测。
+- 结论：安装、versionCode 增大的同签名升级和数据保留通过（Android 9）。耳机键恢复在两台测试机上都不成立，beta.3 的发布说明不把它列为新功能，只写进已知限制。
