@@ -909,6 +909,25 @@ class VesqenAppTest {
     }
 
     @Test
+    fun usage_introduction_answer_stays_reachable_in_a_very_short_window() {
+        val usage = FakeUsageStatistics(UsageStatisticsSnapshot(
+            status = UsageSettingsStatus.READY,
+            enabled = true,
+            regionPolicy = UsageRegionPolicy.DEFAULT_ENABLED,
+            introductionRequired = true,
+            endpointConfigured = true,
+        ))
+        // Shorter than the answer itself, as in split screen: pinning would cut the button off.
+        composeRule.setContent {
+            VesqenTheme {
+                Box(Modifier.width(360.dp).height(140.dp)) { UsageIntroductionScreen(usage) }
+            }
+        }
+        composeRule.onNodeWithTag("vesqen.usage-intro.continue").performScrollTo().assertIsDisplayed().performClick()
+        composeRule.runOnIdle { assertFalse(usage.snapshot.value.introductionRequired) }
+    }
+
+    @Test
     fun usage_introduction_where_consent_comes_first_offers_two_answers_and_no_switch() {
         val usage = FakeUsageStatistics(UsageStatisticsSnapshot(
             status = UsageSettingsStatus.READY,

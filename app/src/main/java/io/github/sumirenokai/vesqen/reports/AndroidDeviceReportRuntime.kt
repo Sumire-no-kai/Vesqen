@@ -114,7 +114,7 @@ internal class AndroidDeviceReportRuntime(
         },
         sharer = AndroidDeviceReportSharing(context),
         uploader = uploader,
-        // A sent crash record has done its job (#113); only the records in that report are deleted.
+        // An uploaded crash record has done its job (#113); only the records in that report are deleted.
         delivered = { data -> crashes.delivered(data.crashes.records) },
     )
 

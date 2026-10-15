@@ -50,6 +50,12 @@ internal class PlaybackStateStore(context: Context) {
         )
     }
 
+    /**
+     * Whether a queue was saved, without parsing it: a media button start asks this on the main
+     * thread before deciding to take the press (#52). [load] still decides what can be restored.
+     */
+    fun hasSavedQueue(): Boolean = !preferences.getString(KEY_QUEUE_IDS, null).isNullOrEmpty()
+
     fun save(state: PersistedPlaybackState) {
         if (state.queueTrackIds.isEmpty()) {
             clear()

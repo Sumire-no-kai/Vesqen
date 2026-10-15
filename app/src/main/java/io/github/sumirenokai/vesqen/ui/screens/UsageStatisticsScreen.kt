@@ -3,6 +3,7 @@ package io.github.sumirenokai.vesqen.ui.screens
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -23,11 +24,15 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -95,7 +100,9 @@ fun UsageStatisticsScreen(usageStatistics: UsageStatistics, onBack: () -> Unit, 
  * consent comes first, both answers carry equal weight and nothing is preselected.
  *
  * The answer stays pinned at the bottom of one screen; only the explanation scrolls, and only when
- * a small screen or large text makes it longer than the space above the answer.
+ * a small screen or large text makes it longer than the space above the answer. A window too short
+ * to keep the answer and the start of the explanation in view (split screen, or a low landscape
+ * window at large text) scrolls as one page instead, so the answer can always be reached.
  */
 @Composable
 fun UsageIntroductionScreen(usageStatistics: UsageStatistics, modifier: Modifier = Modifier) {
@@ -103,60 +110,81 @@ fun UsageIntroductionScreen(usageStatistics: UsageStatistics, modifier: Modifier
     val askFirst = snapshot.regionPolicy != UsageRegionPolicy.DEFAULT_ENABLED
     var send by rememberSaveable { mutableStateOf(true) }
     val scroll = rememberScrollState()
+    // The answer's height as last laid out; the same in both arrangements.
+    var answerHeight by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    val explanation: @Composable () -> Unit = {
+        Column(
+            modifier = Modifier.padding(start = VesqenSpacing.lg, end = VesqenSpacing.lg, top = VesqenSpacing.lg, bottom = VesqenSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(VesqenSpacing.md),
+        ) {
+            Text(
+                text = stringResource(R.string.usage_title),
+                style = MaterialTheme.typography.displaySmall.pageTitle(),
+                modifier = Modifier.semantics { heading() },
+            )
+            UsageExplanation()
+        }
+    }
+    val answer: @Composable () -> Unit = {
+        Column(
+            modifier = Modifier
+                .onSizeChanged { answerHeight = it.height }
+                .padding(start = VesqenSpacing.lg, end = VesqenSpacing.lg, top = VesqenSpacing.sm, bottom = VesqenSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
+        ) {
+            if (askFirst) {
+                UsageChoice(R.string.usage_accept, "vesqen.usage-intro.accept") { usageStatistics.completeIntroduction(true) }
+                UsageChoice(R.string.usage_decline, "vesqen.usage-intro.decline") { usageStatistics.completeIntroduction(false) }
+            } else {
+                PaperCard {
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.usage_switch),
+                        checked = send,
+                        onCheckedChange = { send = it },
+                        modifier = Modifier.testTag("vesqen.usage-intro.switch"),
+                    )
+                }
+                Button(
+                    onClick = { usageStatistics.completeIntroduction(send) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp)
+                        .testTag("vesqen.usage-intro.continue"),
+                ) { Text(stringResource(R.string.usage_continue)) }
+            }
+        }
+    }
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(contentAlignment = Alignment.TopCenter) {
-            Column(
+            BoxWithConstraints(
                 modifier = Modifier
                     .safeDrawingPadding()
                     .widthIn(max = 720.dp)
                     .fillMaxHeight()
                     .testTag("vesqen.usage-intro"),
             ) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(scroll)
-                        .padding(start = VesqenSpacing.lg, end = VesqenSpacing.lg, top = VesqenSpacing.lg, bottom = VesqenSpacing.md),
-                    verticalArrangement = Arrangement.spacedBy(VesqenSpacing.md),
-                ) {
-                    Text(
-                        text = stringResource(R.string.usage_title),
-                        style = MaterialTheme.typography.displaySmall.pageTitle(),
-                        modifier = Modifier.semantics { heading() },
-                    )
-                    UsageExplanation()
-                }
-                // A hairline only while more explanation sits under the answer.
-                if (scroll.canScrollForward) PaperDivider()
-                Column(
-                    modifier = Modifier.padding(start = VesqenSpacing.lg, end = VesqenSpacing.lg, top = VesqenSpacing.sm, bottom = VesqenSpacing.lg),
-                    verticalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
-                ) {
-                    if (askFirst) {
-                        UsageChoice(R.string.usage_accept, "vesqen.usage-intro.accept") { usageStatistics.completeIntroduction(true) }
-                        UsageChoice(R.string.usage_decline, "vesqen.usage-intro.decline") { usageStatistics.completeIntroduction(false) }
-                    } else {
-                        PaperCard {
-                            SettingsSwitchRow(
-                                title = stringResource(R.string.usage_switch),
-                                checked = send,
-                                onCheckedChange = { send = it },
-                                modifier = Modifier.testTag("vesqen.usage-intro.switch"),
-                            )
-                        }
-                        Button(
-                            onClick = { usageStatistics.completeIntroduction(send) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 52.dp)
-                                .testTag("vesqen.usage-intro.continue"),
-                        ) { Text(stringResource(R.string.usage_continue)) }
+                val pinAnswer = with(density) { answerHeight.toDp() } + MinPinnedExplanationHeight <= maxHeight
+                if (pinAnswer) {
+                    Column(Modifier.fillMaxHeight()) {
+                        Box(Modifier.weight(1f).verticalScroll(scroll)) { explanation() }
+                        // A hairline only while more explanation sits under the answer.
+                        if (scroll.canScrollForward) PaperDivider()
+                        answer()
+                    }
+                } else {
+                    Column(Modifier.verticalScroll(scroll)) {
+                        explanation()
+                        answer()
                     }
                 }
             }
         }
     }
 }
+
+/** Room for the title and the first lines of the explanation above a pinned answer. */
+private val MinPinnedExplanationHeight = 160.dp
 
 @Composable
 private fun UsageChoice(@StringRes label: Int, tag: String, onClick: () -> Unit) {
