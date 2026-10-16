@@ -117,7 +117,33 @@ BIT-PERFECT VERIFIED：一份来自外部测量的签名记录，与你的应用
 反馈：vesqen@sumirenokai.com
 ```
 
-## 3. 版本说明（`1.0.0-beta.2`，Play）
+## 3. 版本说明（`1.0.0-beta.3`，Play）
+
+Play 上的测试者从 beta.2 升级上来，写和 beta.2 相比的变化。Play 版没有应用内更新器，不提更新检查；耳机键恢复在测过的手机上不可用，不写进新功能。在 Play Console 里按语言标签分开填写。
+
+English（491/500）
+
+```text
+New in this test version:
+• A Pro features page in Settings. Strict USB output is a Pro feature and stays free until version 2.0.
+• After a crash, Vesqen asks once whether to send a report. You see the whole report first; it never includes file paths or song titles.
+• A smoother first run: the usage statistics question fits on one screen, and an empty library leads with allowing access to your music.
+• Fixes for device report buttons at large text sizes.
+Feedback: vesqen@sumirenokai.com
+```
+
+中文（192/500）
+
+```text
+这个测试版的变化：
+• 设置里多了“高级功能”页。严格 USB 输出属于高级功能，2.0 之前免费。
+• 意外退出后，下次打开时会询问一次是否发送报告。你会先看到报告全文，报告不含文件路径和歌名。
+• 第一次使用更顺手：使用统计的问题在一屏内答完；曲库为空时，主按钮改为允许访问设备音乐。
+• 修复大字号下设备报告按钮的文字被拆开。
+反馈：vesqen@sumirenokai.com
+```
+
+## 3a. 版本说明（`1.0.0-beta.2`，Play）
 
 Play 上的测试者是第一次安装，不写和 beta.1 相比的变化。在 Play Console 里按语言标签分开填写。
 
