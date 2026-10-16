@@ -5,7 +5,9 @@ import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -88,18 +90,33 @@ internal val LocalVesqenSerif = staticCompositionLocalOf<FontFamily> { Instrumen
 fun TextStyle.serif(): TextStyle = copy(fontFamily = LocalVesqenSerif.current, fontWeight = FontWeight.Normal)
 
 /**
- * Noto Serif SC SemiBold cut down to printable ASCII and the characters of the page titles listed
- * in tools/title_font_strings.txt (tools/subset_title_font.py). Other characters fall back to the
- * system font.
+ * Noto Serif SemiBold cut down to printable ASCII and the characters of the page titles listed in
+ * tools/title_font_strings.txt (tools/subset_title_font.py): the SC cut in res/font and the TC cut
+ * in res/font-b+zh+Hant. Other characters fall back to the system font.
+ *
+ * Loaded through the current resources rather than as a Compose resource font: Compose caches
+ * those for the whole process by resource id, so after the app language changes the titles would
+ * keep the previous language's cut.
  */
-private val TitleSerifSemiBold = FontFamily(Font(R.font.title_serif_semibold, FontWeight.SemiBold))
+@Composable
+internal fun rememberPageTitleSerif(): FontFamily {
+    val resources = LocalResources.current
+    val locales = LocalConfiguration.current.locales
+    return remember(resources, locales) { FontFamily(Typeface(resources.getFont(R.font.title_serif_semibold))) }
+}
+
+/** The page-title serif, provided by VesqenTheme. Read it through [pageTitle]. */
+internal val LocalVesqenPageTitle = staticCompositionLocalOf<FontFamily> {
+    FontFamily(Font(R.font.title_serif_semibold, FontWeight.SemiBold))
+}
 
 /**
- * Page titles (Library, Chain, Settings and the pages opened from them) are semibold serif in both
- * languages, so they read as titles above the regular serif names (owner decision, 2026-10-10).
+ * Page titles (Library, Chain, Settings and the pages opened from them) are semibold serif in every
+ * language, so they read as titles above the regular serif names (owner decision, 2026-10-10).
  * Keeps the caller's size.
  */
-fun TextStyle.pageTitle(): TextStyle = copy(fontFamily = TitleSerifSemiBold, fontWeight = FontWeight.SemiBold)
+@Composable
+fun TextStyle.pageTitle(): TextStyle = copy(fontFamily = LocalVesqenPageTitle.current, fontWeight = FontWeight.SemiBold)
 
 // The display styles are the serif big names and, through [pageTitle], page titles; headline and
 // title styles are sans.

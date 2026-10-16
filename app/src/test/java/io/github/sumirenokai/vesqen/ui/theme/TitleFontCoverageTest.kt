@@ -9,27 +9,45 @@ import org.junit.Test
 import org.w3c.dom.Element
 
 /**
- * The page-title font is a subset (tools/subset_title_font.py). A title character it lacks would
- * render in the system font, so a renamed or newly listed title must come with a regenerated font.
+ * The page-title fonts are subsets (tools/subset_title_font.py), one cut per font directory. A title
+ * character its cut lacks would render in the system font, so a renamed or newly listed title must
+ * come with regenerated fonts, and a new language with its own cut.
  */
 class TitleFontCoverageTest {
+    // Font directory -> string directories whose titles it renders; mirrors CUTS in the script.
+    private val cuts = mapOf(
+        "font" to listOf("values", "values-zh-rCN"),
+        "font-b+zh+Hant" to listOf("values-b+zh+Hant"),
+    )
+
     @Test
     fun titleFontCoversEveryPageTitleAndPrintableAscii() {
-        val covered = cmapCodePoints(File("src/main/res/font/title_serif_semibold.otf").readBytes())
         val keys = File("../tools/title_font_strings.txt").readLines()
             .map(String::trim)
             .filter { it.isNotEmpty() && !it.startsWith("#") }
         assertTrue(keys.isNotEmpty())
-        for (locale in listOf("values", "values-zh-rCN")) {
-            val strings = strings(File("src/main/res/$locale/strings.xml"))
-            for (key in keys) {
-                val title = requireNotNull(strings[key]) { "$locale has no $key" }
-                val missing = title.codePoints().toArray().filterNot(covered::contains)
-                    .joinToString("") { String(Character.toChars(it)) }
-                assertEquals("$locale/$key \"$title\" lacks glyphs", "", missing)
+        for ((directory, locales) in cuts) {
+            val covered = cmapCodePoints(File("src/main/res/$directory/title_serif_semibold.otf").readBytes())
+            for (locale in locales) {
+                val strings = strings(File("src/main/res/$locale/strings.xml"))
+                for (key in keys) {
+                    val title = requireNotNull(strings[key]) { "$locale has no $key" }
+                    val missing = title.codePoints().toArray().filterNot(covered::contains)
+                        .joinToString("") { String(Character.toChars(it)) }
+                    assertEquals("$directory: $locale/$key \"$title\" lacks glyphs", "", missing)
+                }
             }
+            assertTrue("$directory lacks printable ASCII", (0x20..0x7E).all(covered::contains))
         }
-        assertTrue((0x20..0x7E).all(covered::contains))
+    }
+
+    @Test
+    fun everyLanguageHasATitleCut() {
+        val languages = File("src/main/res").listFiles()!!
+            .filter { it.name.startsWith("values") && File(it, "strings.xml").exists() }
+            .map { it.name }
+            .toSet()
+        assertEquals(languages, cuts.values.flatten().toSet())
     }
 
     private fun strings(file: File): Map<String, String> {

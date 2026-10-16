@@ -57,10 +57,14 @@ public class LicenseCatalogTest {
 
     @Test public void unreviewedFontOrFontLicenseFails() throws Exception {
         Fixture fixture = fixture();
-        File font = new File(fixture.fonts, "new.ttf");
+        // A cut for one language sits in a qualified directory and still needs a review.
+        File font = new File(fixture.resources, "font-b+zh+Hant/new.otf");
+        Files.createDirectories(font.toPath().getParent());
         Files.writeString(font.toPath(), "font");
         assertThrows(IllegalStateException.class, () -> fixture.generate(Map.of("example:one:1", fixture.artifact)));
         Files.delete(font.toPath());
+        Files.writeString(new File(fixture.resources, "values-b+zh+Hant.txt").toPath(), "not a font");
+        fixture.generate(Map.of("example:one:1", fixture.artifact));
         Files.writeString(new File(fixture.fontLicenses, "new-OFL.txt").toPath(), "license");
         assertThrows(IllegalStateException.class, () -> fixture.generate(Map.of("example:one:1", fixture.artifact)));
     }
@@ -109,7 +113,7 @@ public class LicenseCatalogTest {
     }
 
     private Fixture fixture() throws Exception {
-        Fixture fixture = new Fixture(temporary.newFolder("catalog"), temporary.newFolder("fonts"),
+        Fixture fixture = new Fixture(temporary.newFolder("catalog"), temporary.newFolder("res"),
             temporary.newFolder("font-licenses"), temporary.newFile("library.jar"), new File(temporary.getRoot(), "out/catalog.xml"));
         Files.writeString(fixture.artifact.toPath(), "reviewed binary");
         Files.writeString(new File(fixture.catalog, "LICENSE").toPath(), "Full license\n");
@@ -136,9 +140,9 @@ public class LicenseCatalogTest {
             Map.of("schemaVersion", 1, "components", entries, "fonts", List.of())));
     }
 
-    private record Fixture(File catalog, File fonts, File fontLicenses, File artifact, File output) {
+    private record Fixture(File catalog, File resources, File fontLicenses, File artifact, File output) {
         void generate(Map<String, File> artifacts) throws Exception {
-            LicenseCatalog.generate(catalog, artifacts, fonts, fontLicenses, output);
+            LicenseCatalog.generate(catalog, artifacts, resources, fontLicenses, output);
         }
     }
 }

@@ -13,7 +13,8 @@ import java.util.*;
 final class LicenseCatalog {
     private LicenseCatalog() {}
 
-    static void generate(File catalogDirectory, Map<String, File> artifacts, File fonts,
+    /** Font keys in the catalog are paths under {@code resources}, such as font/x.ttf or font-ja/x.otf. */
+    static void generate(File catalogDirectory, Map<String, File> artifacts, File resources,
                          File fontLicenses, File output) throws Exception {
         Map<?, ?> catalog = (Map<?, ?>) new JsonSlurper().parse(new File(catalogDirectory, "catalog.json"), "UTF-8");
         require(Integer.valueOf(1).equals(catalog.get("schemaVersion")), "Unsupported license catalog schema");
@@ -37,12 +38,12 @@ final class LicenseCatalog {
             for (Map.Entry<?, ?> file : files.entrySet()) {
                 String name = (String) file.getKey();
                 require(reviewedFontFiles.add(name), "Duplicate reviewed font: " + name);
-                verifyHash(child(fonts, name), (String) file.getValue());
+                verifyHash(child(resources, name), (String) file.getValue());
             }
             for (Map<?, ?> license : records(entry, "licenses")) reviewedFontLicenses.add(string(license, "file"));
             for (Map<?, ?> notice : records(entry, "notices")) reviewedFontLicenses.add(string(notice, "file"));
         }
-        require(reviewedFontFiles.equals(fileNames(fonts)), "Font files differ from reviewed license catalog");
+        require(reviewedFontFiles.equals(fontFileNames(resources)), "Font files differ from reviewed license catalog");
         require(reviewedFontLicenses.equals(fileNames(fontLicenses)), "Font license files differ from reviewed catalog");
 
         // Build in memory first: validation failure never publishes a partially generated catalog.
@@ -153,6 +154,16 @@ final class LicenseCatalog {
         Set<String> result = new TreeSet<>();
         try (var paths = Files.walk(directory.toPath())) {
             paths.filter(Files::isRegularFile).forEach(path -> result.add(directory.toPath().relativize(path).toString().replace(File.separatorChar, '/')));
+        }
+        return result;
+    }
+
+    /** Every file in res/font and in its qualified variants, such as res/font-b+zh+Hant. */
+    private static Set<String> fontFileNames(File resources) throws Exception {
+        Set<String> result = new TreeSet<>();
+        for (String path : fileNames(resources)) {
+            String directory = path.substring(0, Math.max(path.indexOf('/'), 0));
+            if (directory.equals("font") || directory.startsWith("font-")) result.add(path);
         }
         return result;
     }
