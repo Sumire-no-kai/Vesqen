@@ -73,7 +73,7 @@
 | [#73](https://github.com/Sumire-no-kai/Vesqen/issues/73) | 链路页和链路注记显示系统报告的蓝牙编码，有线显示输出格式；实验通过，2026-10-16 决定进 1.0 |
 | [#50](https://github.com/Sumire-no-kai/Vesqen/issues/50) | 曲库首页快速滑动：两台手机修复前后各三轮对比，加上大曲库压力测试（M3-R1） |
 | [#51](https://github.com/Sumire-no-kai/Vesqen/issues/51) | 8 小时有线播放已通过；还缺新系统上的关屏长播、2 小时 24/96、拔耳机和来电 |
-| [#72](https://github.com/Sumire-no-kai/Vesqen/issues/72) | 蓝牙两段显示的真机记录：耳机和音箱各播一首 FLAC、一首 MP3，要用所有者的蓝牙设备 |
+| [#72](https://github.com/Sumire-no-kai/Vesqen/issues/72) | 蓝牙两段显示的真机记录：蓝牙耳机和手机扬声器各播一首 FLAC、一首 MP3；扬声器已在 2026-10-16 测完（有损音源按解码器实际输出判断） |
 | [#35](https://github.com/Sumire-no-kai/Vesqen/issues/35) | 按 beta.3 复核界面和文案（字号、深浅色、减少动效），加完整的 TalkBack |
 | [#54](https://github.com/Sumire-no-kai/Vesqen/issues/54) | 仓库与文档整理；删除 `codex/*` 远程分支前先问所有者 |
 | [#129](https://github.com/Sumire-no-kai/Vesqen/issues/129) | 在原生 Android（例如 Pixel）上验证耳机键恢复（#52） |

@@ -131,6 +131,44 @@ class AppSegmentAssessmentTest {
     }
 
     @Test
+    fun `compressed input is judged against the PCM its decoder actually produced`() {
+        val compressed = TelemetryEvidence.Unavailable(TelemetryUnavailableReason.NOT_APPLICABLE, CapturedAtMs)
+        fun text(value: String) = measured(TelemetryReading.Text(value))
+        fun precision(decoded: TelemetryEvidence?, output: String) = assess(snapshot(buildMap {
+            put(Metrics.DECODER_INPUT_MIME, text("audio/mpeg"))
+            put(Metrics.DECODER_INPUT_PCM_ENCODING, compressed)
+            put(Metrics.PLAYBACK_AUDIO_TRACK_ENCODING, text(output))
+            decoded?.let { put(Metrics.DECODER_OUTPUT_ENCODING, it) }
+        })).checks.single { it.condition == AppSegmentCondition.PCM_PRECISION }
+
+        // AOSP's MP3 decoder only outputs 16-bit (#72); passing that on as it is keeps everything.
+        assertEquals(AppSegmentStatus.UNCHANGED, precision(text("pcm-16"), "pcm-16").status)
+        assertEquals(AppSegmentStatus.UNCHANGED, precision(text("pcm-16"), "pcm-float").status)
+        assertEquals(SegmentReason.PRECISION_LOSS, precision(text("pcm-float"), "pcm-16").reason)
+        // Unmeasured decoder output: float still holds anything, 16-bit is missing evidence.
+        assertEquals(AppSegmentStatus.UNCHANGED, precision(null, "pcm-float").status)
+        val unmeasured = precision(null, "pcm-16")
+        assertEquals(AppSegmentStatus.UNKNOWN, unmeasured.status)
+        assertNull(unmeasured.reason)
+        assertTrue(unmeasured.issues.any { it.metricId == Metrics.DECODER_OUTPUT_ENCODING })
+    }
+
+    @Test
+    fun `a measured decoder output rate tells AAC's SBR from resampling`() {
+        fun hertz(value: Long) = measured(TelemetryReading.Integer(value, TelemetryUnit.HERTZ))
+        fun sampleRate(decoded: Long?, output: Long) = assess(snapshot(buildMap {
+            put(Metrics.DECODER_INPUT_MIME, measured(TelemetryReading.Text("audio/mp4a-latm")))
+            put(Metrics.DECODER_INPUT_SAMPLE_RATE, hertz(24_000))
+            put(Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE, hertz(output))
+            decoded?.let { put(Metrics.DECODER_OUTPUT_SAMPLE_RATE, hertz(it)) }
+        })).checks.single { it.condition == AppSegmentCondition.SAMPLE_RATE }
+
+        assertEquals(AppSegmentStatus.UNCHANGED, sampleRate(48_000, 48_000).status)
+        assertEquals(AppSegmentStatus.MODIFIED, sampleRate(48_000, 44_100).status)
+        assertEquals(SegmentReason.DECODER_MAY_CHANGE_FORMAT, sampleRate(null, 48_000).reason)
+    }
+
+    @Test
     fun `pcm precision table`() {
         val widths = listOf("pcm-8", "pcm-16", "pcm-24", "pcm-32", "pcm-float")
         val kept = setOf(

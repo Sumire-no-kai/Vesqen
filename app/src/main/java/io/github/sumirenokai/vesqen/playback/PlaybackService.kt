@@ -229,7 +229,7 @@ class PlaybackService : MediaSessionService() {
         ).also {
             usbOutputCoordinator = it
         }
-        val player = ExoPlayer.Builder(this, VesqenAudioRenderersFactory(this, outputCoordinator))
+        val player = ExoPlayer.Builder(this, VesqenAudioRenderersFactory(this, outputCoordinator, telemetry::onDecoderOutputFormat))
             .setMediaSourceFactory(mediaSourceFactory)
             .build()
             .apply {

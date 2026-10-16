@@ -62,7 +62,8 @@ internal val AppSegmentMetricIds: List<TelemetryMetricId> = listOf(
     Metrics.PROCESSING_SKIP_SILENCE, Metrics.PROCESSING_REPLAY_GAIN_ACTIVE, Metrics.PROCESSING_EQUALIZER_ACTIVE,
     Metrics.PROCESSING_LOUDNESS_ACTIVE, Metrics.PROCESSING_CROSSFADE_ACTIVE, Metrics.PROCESSING_APP_DSP_ACTIVE,
     Metrics.DECODER_INPUT_MIME, Metrics.DECODER_INPUT_SAMPLE_RATE, Metrics.DECODER_INPUT_CHANNEL_COUNT,
-    Metrics.DECODER_INPUT_PCM_ENCODING, Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE,
+    Metrics.DECODER_INPUT_PCM_ENCODING, Metrics.DECODER_OUTPUT_ENCODING, Metrics.DECODER_OUTPUT_SAMPLE_RATE,
+    Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE,
     Metrics.PLAYBACK_AUDIO_TRACK_CHANNEL_MASK, Metrics.PLAYBACK_AUDIO_TRACK_ENCODING,
     Metrics.ROUTE_SELECTED_SYSTEM_TYPE,
 )
@@ -150,9 +151,17 @@ internal fun assessAppSegment(
     }
     val inputMime = reader.measuredText(Metrics.DECODER_INPUT_MIME)
     val codecMayChangeFormat = inputMime == "audio/mp4a-latm" || inputMime == "audio/aac"
+    // The decoder's measured output rate (#72) tells an AAC decoder's SBR from Vesqen resampling.
+    val decodedRate = reader.measuredInteger(Metrics.DECODER_OUTPUT_SAMPLE_RATE)
     check(AppSegmentCondition.SAMPLE_RATE, listOf(Metrics.DECODER_INPUT_SAMPLE_RATE, Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE)) {
-        val same = (it[0] as TelemetryReading.Integer).value == (it[1] as TelemetryReading.Integer).value
-        if (!same && codecMayChangeFormat) Verdict.Unresolved(SegmentReason.DECODER_MAY_CHANGE_FORMAT) else Verdict.of(same)
+        val output = (it[1] as TelemetryReading.Integer).value
+        val same = (it[0] as TelemetryReading.Integer).value == output
+        when {
+            same -> Verdict.Kept
+            decodedRate != null -> Verdict.of(decodedRate == output)
+            codecMayChangeFormat -> Verdict.Unresolved(SegmentReason.DECODER_MAY_CHANGE_FORMAT)
+            else -> Verdict.Changed
+        }
     }
     check(AppSegmentCondition.CHANNELS, listOf(Metrics.DECODER_INPUT_CHANNEL_COUNT, Metrics.PLAYBACK_AUDIO_TRACK_CHANNEL_MASK)) {
         val output = channelCount((it[1] as TelemetryReading.Text).value)
@@ -200,15 +209,23 @@ private fun precisionCheck(reader: SegmentEvidenceReader): AppSegmentCheck {
         compressedInput && it.metricId == Metrics.DECODER_INPUT_PCM_ENCODING && it.reason == SegmentReason.UNAVAILABLE
     }
     val output = (read.evidence[Metrics.PLAYBACK_AUDIO_TRACK_ENCODING]?.reading as? TelemetryReading.Text)?.value
+    // Compressed input has no PCM width of its own: what counts is the PCM its decoder produced
+    // (#72). AOSP's lossy decoders only output 16-bit, so float output alone cannot be required.
+    val decoded = if (compressedInput) reader.read(listOf(Metrics.DECODER_OUTPUT_ENCODING)) else null
+    val decodedEncoding = decoded?.takeIf { it.issues.isEmpty() }
+        ?.let { (it.evidence[Metrics.DECODER_OUTPUT_ENCODING]?.reading as? TelemetryReading.Text)?.value }
+    val reference = if (compressedInput) decodedEncoding else (inputEvidence?.reading as? TelemetryReading.Text)?.value
     val verdict = when {
         blocking.isNotEmpty() || output == null -> Verdict.Unresolved(null)
-        compressedInput -> if (output == "pcm-float") Verdict.Kept else Verdict.Unresolved(SegmentReason.UNSUPPORTED_VALUE)
-        else -> when (preservesPcmPrecision((inputEvidence?.reading as TelemetryReading.Text).value, output)) {
+        // Float keeps every decoder's output, even when that output was not measured.
+        compressedInput && decodedEncoding == null -> if (output == "pcm-float") Verdict.Kept else Verdict.Unresolved(null)
+        else -> when (preservesPcmPrecision(requireNotNull(reference), output)) {
             true -> Verdict.Kept
             false -> Verdict.Changed
             null -> Verdict.Unresolved(SegmentReason.UNSUPPORTED_VALUE)
         }
     }
+    val issues = if (verdict is Verdict.Unresolved && decodedEncoding == null) blocking + decoded?.issues.orEmpty() else blocking
     return AppSegmentCheck(
         condition = AppSegmentCondition.PCM_PRECISION,
         status = when (verdict) {
@@ -221,8 +238,8 @@ private fun precisionCheck(reader: SegmentEvidenceReader): AppSegmentCheck {
             Verdict.Changed -> SegmentReason.PRECISION_LOSS
             is Verdict.Unresolved -> verdict.reason
         },
-        issues = blocking,
-        evidence = read.evidence,
+        issues = issues,
+        evidence = read.evidence + decoded?.evidence.orEmpty(),
     )
 }
 
@@ -264,6 +281,11 @@ private class SegmentEvidenceReader(
     fun measuredText(id: TelemetryMetricId): String? {
         val read = read(listOf(id))
         return if (read.issues.isEmpty()) (read.evidence[id]?.reading as? TelemetryReading.Text)?.value else null
+    }
+
+    fun measuredInteger(id: TelemetryMetricId): Long? {
+        val read = read(listOf(id))
+        return if (read.issues.isEmpty()) (read.evidence[id]?.reading as? TelemetryReading.Integer)?.value else null
     }
 
     fun read(ids: List<TelemetryMetricId>): SegmentEvidenceRead {
