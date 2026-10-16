@@ -37,7 +37,7 @@ Play 版和 GitHub 版的区别见 [版本管理](VERSIONING.md#build-flavors-an
 Offline music player that shows the path each song takes to your headphones.
 ```
 
-完整说明（2470/4000）
+完整说明（2526/4000）
 
 ```text
 Vesqen is an offline music player for the music already on your Android phone. It needs no account and shows no ads. While a song plays, Vesqen records each step from the file to your headphones, and every value says where it came from.
@@ -81,7 +81,7 @@ Feedback: vesqen@sumirenokai.com
 播放手机里的本地音乐，离线可用，并记下每首歌从文件到耳机经过的路径。
 ```
 
-完整说明（1037/4000）
+完整说明（1056/4000）
 
 ```text
 Vesqen 是一款 Android 离线音乐播放器，播放你手机里已有的音乐，不用注册账号，也没有广告。播放时，它会记下声音从文件到耳机经过的每一步，每个数值都写明来源。
