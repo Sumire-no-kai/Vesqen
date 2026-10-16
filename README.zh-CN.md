@@ -11,7 +11,7 @@ Vesqen 是一款 Android 离线音乐播放器，播放你手机里的音乐，�
 
 [官网](https://vesqen.sumirenokai.com/zh/) · [隐私政策](https://vesqen.sumirenokai.com/zh/privacy/) · [支持](https://vesqen.sumirenokai.com/zh/support/)
 
-> **当前状态：** 第二个公开测试版 `1.0.0-beta.2` 已在 [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0-beta.2) 发布。Google Play 版正在准备封闭测试，[欢迎报名](#下载)。依赖严格 USB 输出之前，请先看[已知限制](#已知限制)。
+> **当前状态：** 第三个公开测试版 `1.0.0-beta.3` 已在 [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0-beta.3) 发布。Google Play 版正在封闭测试，[欢迎报名](#下载)。依赖严格 USB 输出之前，请先看[已知限制](#已知限制)。
 
 ## 功能
 
@@ -52,7 +52,7 @@ Vesqen 是一款 Android 离线音乐播放器，播放你手机里的音乐，�
 - 目前还没有任何手机和 DAC 的组合通过 bit-perfect 验证，所以还没有 `BIT-PERFECT VERIFIED` 记录。
 - 严格 USB 输出还没有在真实的 DAC 上确认过。很多手机即使是 Android 14 及以上，也没有开放 Android 的 bit-perfect 通路，目前测过的 Android 14 及以上手机（vivo 和 iQOO，Android 15 和 16）都没有；在这些手机上，严格模式会停止播放并说明原因。所有组合都请当作未验证。
 - Android 13 及以下没有官方的 bit-perfect 混音接口，所以不能使用严格 USB 输出。
-- Vesqen 在后台被系统停止后，重新打开应用时会恢复播放队列；暂不支持直接用耳机按键恢复播放。
+- Vesqen 在后台被系统停止后，重新打开应用时会恢复播放队列。我们测过的手机只把耳机按键交给系统内置名单里的音乐应用，所以还不能直接用耳机按键恢复播放；在 Android 13 及以上，通知栏和锁屏上的播放按钮也不能让它恢复。
 - 长时间播放、折叠屏、高刷新率和完整的 TalkBack 读屏体验还在测试中。
 
 每个版本的发布说明都会列出当时的限制。已知问题和计划中的工作按版本分在各个[里程碑](https://github.com/Sumire-no-kai/Vesqen/milestones)里。

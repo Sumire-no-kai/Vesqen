@@ -11,7 +11,7 @@ Vesqen is an offline music player for Android. It plays the music stored on your
 
 [Website](https://vesqen.sumirenokai.com) · [Privacy policy](https://vesqen.sumirenokai.com/privacy/) · [Support](https://vesqen.sumirenokai.com/support/)
 
-> **Status:** `1.0.0-beta.2`, the second public beta, is out on [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0-beta.2). A Google Play version is getting ready for a closed test, and [testers are welcome](#download). Read the [known limitations](#known-limitations) before relying on strict USB output.
+> **Status:** `1.0.0-beta.3`, the third public beta, is out on [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0-beta.3). The Google Play version is in a closed test, and [testers are welcome](#download). Read the [known limitations](#known-limitations) before relying on strict USB output.
 
 ## What Vesqen does
 
@@ -52,7 +52,7 @@ Playback and your library never use the network, and your library, playlists and
 - No phone and DAC combination has been verified bit-perfect yet, so no `BIT-PERFECT VERIFIED` record exists.
 - Strict USB output hasn't been confirmed with a real DAC yet. Many phones don't offer Android's bit-perfect path, even on Android 14 and later; none of the Android 14+ phones tested so far (vivo and iQOO, on Android 15 and 16) do. On those phones strict mode stops and tells you why. Treat every combination as unverified.
 - Android 13 and earlier don't provide the official bit-perfect mixer API, so strict USB output isn't available there.
-- If Android stops Vesqen in the background, the queue comes back when you open the app again. Resuming straight from headphone buttons isn't supported yet.
+- If Android stops Vesqen in the background, the queue comes back when you open the app again. Resuming straight from headphone buttons doesn't work on the phones we tested, which pass those buttons only to music apps on a list built into the system. On Android 13 and later, the Play button in the notification shade and on the lock screen can't restart it either.
 - Long listening sessions, foldables, high refresh rates and complete TalkBack coverage are still being tested.
 
 Each release lists its own limitations in the release notes. Known bugs and planned work are grouped by release in the [milestones](https://github.com/Sumire-no-kai/Vesqen/milestones).
