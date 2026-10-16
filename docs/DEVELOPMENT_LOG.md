@@ -1216,6 +1216,6 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - 审查修复（PR #130）合并后，在 `master` 的 `f48fece4d0d0c7f743299c880f00b66e0806fc0d` 上手动运行 [GitHub APK release](https://github.com/Sumire-no-kai/Vesqen/actions/runs/38726792266)，所有者批准签名。第一次签名的草稿（`0c77c95`）没有公开，已经删除。
 - 设备验收见 [M4 设备验收](M4_DEVICE_ACCEPTANCE.md#2026-10-16--beta3-重新签名的-apk-从-beta2-升级)：Honor 上从 beta.2 覆盖升级并保留数据；PR #130 的设备测试在 iQOO 上通过。验收记录为 [1.0.0-beta.3.acceptance.json](releases/1.0.0-beta.3.acceptance.json)（`8796dac`）。
 - [公开发布工作流](https://github.com/Sumire-no-kai/Vesqen/actions/runs/38834335518)核对附件和验收记录后，创建附注标签 `v1.0.0-beta.3`，于 2026-10-16 01:18 UTC 作为预发布公开。
-- 发布记录：1.0.0-beta.3 / 12；APK SHA-256 `ffb512f6bb01e2c2819752a9d60f93adc507fb29aaa7d815ac331263ab01ee86`；应用签名证书 SHA-256 `743e96fcb71dc58188496819a001a27cd88d909162c5ae929c87bfa29ab86293`；未签名 Play 版 AAB `2c4715a6ffe0a4bb90f54006dc503c10165846dc70aea0c5f7f2850bba7c2c9d`，由所有者签名后上传封闭测试；R8 映射保存在本机 `build/qa/beta3-draft2/release-mapping/`。
+- 发布记录：1.0.0-beta.3 / 12；APK SHA-256 `ffb512f6bb01e2c2819752a9d60f93adc507fb29aaa7d815ac331263ab01ee86`；应用签名证书 SHA-256 `743e96fcb71dc58188496819a001a27cd88d909162c5ae929c87bfa29ab86293`；未签名 Play 版 AAB `2c4715a6ffe0a4bb90f54006dc503c10165846dc70aea0c5f7f2850bba7c2c9d`，所有者用上传密钥签名后为 `0a601042c61dd9025335c3fa661893944f8436699b1caff8f0be886467c10ddc`，上传封闭测试；R8 映射保存在本机 `build/qa/beta3-draft2/release-mapping/`。
 - 发布后：README 改为 beta.3（`d0006b1`）；官网更新版本号、首页加“2.0 之前免费”的收费说明、上线 `updates/beta.json`、同步 10 月 15 日的隐私政策（官网 `6882adf`）；应用内更新器从 beta.2 升级到 beta.3 在 Honor 上通过。
 

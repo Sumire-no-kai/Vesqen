@@ -276,6 +276,7 @@ Play App Signing must receive the existing application signing `v1` key before t
 - After saving, Play Console showed the app signing certificate SHA-256 `74:3E:96:FC:B7:1D:C5:81:88:49:68:19:A0:01:A2:7C:D8:8D:90:91:62:C5:AE:92:9C:87:BF:A2:9A:B8:62:93` and the upload certificate SHA-256 `6A:78:82:9F:9C:74:FA:CE:FB:CE:C4:62:57:CF:9B:E6:01:55:1F:3B:86:49:E6:1E:14:6B:1A:98:20:06:31:5B` (SHA-1 `36:84:2D:1B:…:D2:56`). Both match the identities above; the generated key is no longer listed.
 - The encrypted ZIP, the PEPK download, the encryption public key and the temporary JRE were deleted afterwards.
 - `1.0.0-beta.2` bundle: `unsigned-play-bundle` from run 38213613584 (commit `76781ec`, SHA-256 `b89f24e6…043521`), signed locally with the upload key to SHA-256 `59636eec21b96622d31e3244f4e4c035875662bfe9919c1fa0396ffd4e949d8f`; all 199 original entries unchanged.
+- `1.0.0-beta.3` bundle (2026-10-16): `unsigned-play-bundle` from run 38726792266 (commit `f48fece`, SHA-256 `2c4715a6ffe0a4bb90f54006dc503c10165846dc70aea0c5f7f2850bba7c2c9d`), signed locally by the owner with the upload key to SHA-256 `0a601042c61dd9025335c3fa661893944f8436699b1caff8f0be886467c10ddc`. `keytool` shows the upload certificate `6A:78:82:9F:…:31:5B`, `jarsigner -verify` passes, and all 199 original entries are unchanged; only `META-INF/MANIFEST.MF`, `VESQEN-P.SF` and `VESQEN-P.RSA` were added.
 
 ## Per-release record
 
