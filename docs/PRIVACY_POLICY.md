@@ -1,7 +1,7 @@
 # Vesqen Privacy Policy
 
 - Effective date: September 26, 2026
-- Last updated: October 15, 2026
+- Last updated: October 16, 2026
 
 This policy explains what information the Vesqen Android app handles, where that information stays, what the app sends over the network, and what we receive when you contact us or join a test. It applies to every build of Vesqen we distribute, including Google Play and GitHub Releases, and to the Vesqen website.
 
@@ -38,7 +38,7 @@ Vesqen processes the following information on your device. None of it is sent to
 
 - **Your music library.** From the audio files and folders you allow Vesqen to access, it reads the file name, folder name, size, modification time, tags (such as title, artist, album, album artist, genre, year, and track and disc numbers), embedded artwork, and audio format details (such as codec, sample rate, bit depth, channel count and bitrate).
 - **Your activity in the app.** Favorites and their order, playlists (names, contents, order, and when they were created or changed), how many times each track has been played and when it was last played, your current queue and playback position, and your settings.
-- **Your playback chain.** To show the Chain view and to operate strict USB output, Vesqen reads audio route information that Android provides: the current output device's name and type (including connected Bluetooth audio devices), and for USB audio devices, the vendor ID, product ID, name, USB descriptor version and supported audio formats. Vesqen does not request direct access to USB devices.
+- **Your playback chain.** To show the Chain view and to operate strict USB output, Vesqen reads audio route information that Android provides: the current output device's name and type (including connected Bluetooth audio devices), and for USB audio devices, the vendor ID, product ID, name, USB descriptor version and supported audio formats. Vesqen does not request direct access to USB devices. On Android 13 and later, if you allow Nearby devices, Vesqen also receives the Bluetooth codec that Android reports for the connected headphones or speaker, such as LDAC at 96 kHz, and shows it in Chain. It stays on your phone and is cleared when the device disconnects.
 - **Output verification records.** If you import a verification record file, Vesqen stores it in its private storage. To decide whether to show `BIT-PERFECT VERIFIED`, it compares the record with your current setup: the installed app's version and package hash, your phone's manufacturer, model and Android version, a hash of the system build fingerprint computed on the device, the connected USB audio device, and the audio format being played.
 - **Recent errors.** Vesqen keeps a short record of recent playback errors, strict USB stops and the reasons Android gave for closing the app: at most 100 events from the last 7 days. For a track that failed to play, it keeps the track's format and file name. The record exists so you can choose to include it in a device report.
 - **Crash details.** If Vesqen crashes because of an error it did not handle, it saves the error type and the code locations that led to it (class, method and line number), including the errors that caused it, with the app version and the time. It never saves the error's message text, which can contain a file path or a song title. It keeps the last 3 crashes for at most 7 days. It deletes them after you upload them in a report or tap No thanks. After you share or email a report, it keeps them until they expire, because Vesqen cannot tell whether you sent it.
@@ -55,12 +55,13 @@ Vesqen never modifies or deletes your music files.
 | Notifications (`POST_NOTIFICATIONS`) | To show playback controls while music is playing. |
 | Foreground service for media playback, and wake lock | To keep playing when the screen is off or Vesqen is in the background. |
 | Modify audio settings (`MODIFY_AUDIO_SETTINGS`) | To request Android's bit-perfect USB output mode when you turn on strict USB output. |
+| Nearby devices (`BLUETOOTH_CONNECT`, Android 13 and later) | Optional, and asked only when you choose to show the Bluetooth codec. Used only to receive the codec Android reports. Vesqen does not scan for, pair with or connect to Bluetooth devices. |
 | Internet (`INTERNET`) | For usage statistics, device report uploads and, in the GitHub version, update checks, described below. Playback and your library never use it. |
 | Network state (`ACCESS_NETWORK_STATE`) | To check that a working connection exists before sending usage statistics. Google's Media3 playback library, which Vesqen uses, also declares it. |
 | Install apps (`REQUEST_INSTALL_PACKAGES`) | Only in the GitHub version, to install an update you downloaded in Vesqen. Android asks you to confirm every installation. |
 | USB host (optional hardware feature) | To recognize USB audio devices. Vesqen still installs on phones without USB host support. |
 
-Only reading your music is essential. If you refuse notifications or folder access, Vesqen still plays the music it can read. Vesqen does not request location, contacts, phone, camera, microphone or Bluetooth permissions.
+Only reading your music is essential. If you refuse notifications, folder access or Nearby devices, Vesqen still plays the music it can read. Vesqen does not request location, contacts, phone, camera or microphone permissions.
 
 ## When information leaves the app
 
@@ -79,7 +80,7 @@ Only reading your music is essential. If you refuse notifications or folder acce
 
 ## Device reports
 
-- **Creating a report.** In Settings → Privacy & data → Export device report, you can create a report to help us with a problem. The report always includes the app version and build, your phone's manufacturer, model, Android version and system build name, and when it was made. You choose whether to add: your audio output's capabilities (including USB audio devices' vendor and product IDs and supported formats); the values on the Chain page (such as formats, decoder, buffering, battery and processor readings); the recent errors described above; the crash details described above; the formats of tracks that failed; and, separately, their file names. Bluetooth device names, output route names, decoder names and the processor model are removed. You see the complete report before it leaves the app.
+- **Creating a report.** In Settings → Privacy & data → Export device report, you can create a report to help us with a problem. The report always includes the app version and build, your phone's manufacturer, model, Android version and system build name, and when it was made. You choose whether to add: your audio output's capabilities (including USB audio devices' vendor and product IDs and supported formats); the values on the Chain page (such as formats, decoder, buffering, battery and processor readings, and the Bluetooth codec Android reported); the recent errors described above; the crash details described above; the formats of tracks that failed; and, separately, their file names. Bluetooth device names, output route names, decoder names and the processor model are removed. You see the complete report before it leaves the app.
 - **After a crash.** If Vesqen crashed or stopped responding, the next time you open it, it asks once whether to send a report. Review and send opens Export device report with the crash details and recent errors selected. There you see the complete report and then choose to upload, share or email it. No thanks deletes the saved crash details. Nothing is sent unless you choose to send it.
 - **Sending it.** You can share the report with an app you choose, email it to us, or upload it. Sharing and email go through the app you pick. Vesqen keeps the latest report files in its cache for sharing, and removes files older than a day the next time you share.
 - **Uploading it.** An upload sends the report to our service on Cloudflare. The service stores the report with a random receipt number and the time it arrived, and does not store IP addresses. The report is not linked to you unless you send us its receipt number. We keep uploaded reports for 7 days and then delete them. To delete a report sooner, email us its receipt number.

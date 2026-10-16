@@ -14,6 +14,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Android 13 and later: receives the Bluetooth codec Android reports, shown in Chain. Asked
+         only when the listener chooses to show it; playback never needs it (#73). -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <!-- Usage statistics and device report uploads in both builds, and update checks in the GitHub
          build. Playback and the library never use the network. -->
     <uses-permission android:name="android.permission.INTERNET" />

@@ -78,12 +78,16 @@ import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetric
+import io.github.sumirenokai.vesqen.telemetry.TelemetryUnavailableReason
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog as Metrics
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricId
 import io.github.sumirenokai.vesqen.telemetry.TelemetryPowerMode
 import io.github.sumirenokai.vesqen.telemetry.TelemetryRefreshInterval
 import io.github.sumirenokai.vesqen.ui.chain.ChainObservationState
 import io.github.sumirenokai.vesqen.ui.chain.ChainUnitDisplayMode
+import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecIsNominallyLossless
+import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecNeedsPermission
+import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecSummary
 import io.github.sumirenokai.vesqen.ui.chain.describesLastPlayback
 import io.github.sumirenokai.vesqen.ui.chain.effectiveTelemetryRefreshInterval
 import io.github.sumirenokai.vesqen.ui.chain.isTelemetrySnapshotStale
@@ -93,6 +97,7 @@ import io.github.sumirenokai.vesqen.ui.chain.telemetryEvidenceSource
 import io.github.sumirenokai.vesqen.ui.chain.telemetryEvidenceWindow
 import io.github.sumirenokai.vesqen.ui.chain.telemetryMetricLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetrySnapshotMaxAgeMs
+import io.github.sumirenokai.vesqen.ui.components.BluetoothCodecPermissionButton
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
 import io.github.sumirenokai.vesqen.ui.theme.VesqenDataStyle
@@ -126,9 +131,17 @@ internal val ChainPinnedMetricIds = listOf(
     Metrics.POWER_DEVICE_ESTIMATE,
 )
 
+/** The codec Android reports for a Bluetooth route (#73), stated in the system's part. */
+private val BluetoothCodecMetricIds = setOf(
+    Metrics.ROUTE_BLUETOOTH_CODEC,
+    Metrics.ROUTE_BLUETOOTH_CONFIGURATION,
+    Metrics.ROUTE_BLUETOOTH_CONFIGURED_BITRATE,
+)
+
 /** Everything the summary reads. Chain observes exactly these, and only while it is visible. */
 internal val ChainSummaryMetricIds: Set<TelemetryMetricId> =
-    Metrics.defaultIds + ChainStationFacts.values.flatten() + ChainPinnedMetricIds + AppSegmentMetricIds
+    Metrics.defaultIds + ChainStationFacts.values.flatten() + ChainPinnedMetricIds + AppSegmentMetricIds +
+        BluetoothCodecMetricIds
 
 /** The processing conditions of the segment verdict and the flag each one reads, in station order. */
 private val ProcessingFlags = listOf(
@@ -342,11 +355,17 @@ private fun ChainPath(
             )
             ChainStation.entries.forEach { station ->
                 if (station == ChainStation.ROUTE) {
+                    val codec = metrics[Metrics.ROUTE_BLUETOOTH_CODEC]?.evidence
                     ChainSegmentLabel(
                         title = stringResource(R.string.chain_segment_system),
-                        body = systemSegmentText(assessment),
+                        body = systemSegmentText(assessment, metrics),
                         tag = "vesqen.chain.segment.system",
                         hairline = hairline,
+                        footer = if (assessment?.route == RouteKind.BLUETOOTH && bluetoothCodecNeedsPermission(codec)) {
+                            { BluetoothCodecPermissionButton() }
+                        } else {
+                            null
+                        },
                     )
                 }
                 ChainStationRow(
@@ -371,7 +390,13 @@ private val NodeCenter = 10.dp
 
 /** A segment heading on the rail: no node, just the line passing beside it. */
 @Composable
-private fun ChainSegmentLabel(title: String, body: String?, tag: String, hairline: Color) {
+private fun ChainSegmentLabel(
+    title: String,
+    body: String?,
+    tag: String,
+    hairline: Color,
+    footer: (@Composable () -> Unit)? = null,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -385,6 +410,7 @@ private fun ChainSegmentLabel(title: String, body: String?, tag: String, hairlin
         Column(Modifier.weight(1f).padding(bottom = VesqenSpacing.sm), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(text = title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             body?.let { Text(text = it, style = MaterialTheme.typography.bodyMedium) }
+            footer?.invoke()
         }
     }
 }
@@ -566,11 +592,26 @@ private fun appSegmentVerdict(assessment: AppSegmentAssessment?, waiting: Boolea
 
 /**
  * PRD F6.5.1: only Bluetooth adds a statement about the system's part. Elsewhere the label just
- * marks where Vesqen's part ends; the declaration card above says what the system does.
+ * marks where Vesqen's part ends; the declaration card above says what the system does. With a
+ * codec report (F6.5.2, #73) it names the codec; it never claims the Bluetooth part is lossless.
  */
 @Composable
-private fun systemSegmentText(assessment: AppSegmentAssessment?): String? =
-    if (assessment?.route == RouteKind.BLUETOOTH) stringResource(R.string.chain_segment_bluetooth) else null
+private fun systemSegmentText(assessment: AppSegmentAssessment?, metrics: Map<TelemetryMetricId, TelemetryMetric>): String? {
+    if (assessment?.route != RouteKind.BLUETOOTH) return null
+    val context = LocalContext.current
+    val codec = metrics[Metrics.ROUTE_BLUETOOTH_CODEC]?.evidence
+    val summary = bluetoothCodecSummary(context, codec, metrics[Metrics.ROUTE_BLUETOOTH_CONFIGURATION]?.evidence)
+    return when {
+        summary == null -> listOfNotNull(
+            stringResource(R.string.chain_segment_bluetooth),
+            stringResource(R.string.chain_segment_bluetooth_reconnect)
+                .takeIf { (codec as? TelemetryEvidence.Unavailable)?.reason == TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT },
+        ).joinToString("\n")
+        bluetoothCodecIsNominallyLossless(codec) -> stringResource(R.string.chain_segment_bluetooth_reported, summary) +
+            "\n" + stringResource(R.string.chain_segment_bluetooth_nominally_lossless)
+        else -> stringResource(R.string.chain_segment_bluetooth_reported, summary)
+    }
+}
 
 @Composable
 private fun conditionList(conditions: List<AppSegmentCondition>): String =

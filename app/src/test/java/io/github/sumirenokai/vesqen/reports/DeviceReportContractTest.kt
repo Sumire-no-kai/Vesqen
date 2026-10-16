@@ -6,6 +6,8 @@ import io.github.sumirenokai.vesqen.playback.OutputDeclaration
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailureOrigin
 import io.github.sumirenokai.vesqen.playback.telemetryLabel
+import io.github.sumirenokai.vesqen.telemetry.BluetoothCodecSettings
+import io.github.sumirenokai.vesqen.telemetry.LdacQuality
 import io.github.sumirenokai.vesqen.telemetry.TelemetryDataSource
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvent
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEventKind
@@ -22,6 +24,7 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetryWindow
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog as Metrics
 import java.io.File
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 
@@ -44,6 +47,12 @@ class DeviceReportContractTest {
             listOf("pcm-16", "pcm-float", "e-ac3", "dts-hd", "encoding-1234").forEach {
                 add(text(Metrics.PLAYBACK_AUDIO_TRACK_ENCODING, it))
             }
+            DeviceReportVocabulary.bluetoothCodecNames.forEach { add(text(Metrics.ROUTE_BLUETOOTH_CODEC, it)) }
+            listOf(
+                BluetoothCodecSettings(96_000, 32, 2, LdacQuality.KBPS_990),
+                BluetoothCodecSettings(48_000, 24, 1, LdacQuality.ADAPTIVE_OR_990),
+                BluetoothCodecSettings(44_100, 16, 2, null),
+            ).forEach { add(text(Metrics.ROUTE_BLUETOOTH_CONFIGURATION, requireNotNull(it.token()))) }
         }
         produced.forEach { metric ->
             val report = DeviceReportGenerator.generate(
@@ -60,6 +69,15 @@ class DeviceReportContractTest {
             DeviceReportOptions(chainEvidence = true),
         ).previewText
         assertFalse(estimated, estimated.contains("\"methodRedacted\":true"))
+    }
+
+    @Test fun `an unreviewed Bluetooth codec name is withheld`() {
+        val report = DeviceReportGenerator.generate(
+            reportData().copy(telemetry = TelemetrySnapshot(200, metrics = listOf(text(Metrics.ROUTE_BLUETOOTH_CODEC, "Secret Headphones")))),
+            DeviceReportOptions(chainEvidence = true),
+        ).previewText
+        assertFalse(report, report.contains("Secret Headphones"))
+        assertTrue(report, report.contains("UNREVIEWED_OR_PRIVATE_TEXT"))
     }
 
     private fun assertContract(name: String, expected: String) {

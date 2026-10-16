@@ -171,6 +171,14 @@ phone model. USB inventory
 keeps numeric capabilities and per-report ordinals, without device identifiers or
 names. Filenames are never emitted when their option is off.
 
+The Bluetooth codec Android reports (#73, source `android.bluetooth_codec_report`)
+is exported as `route.bluetooth_codec`, only when the name is in
+`bluetoothCodecNames`, and `route.bluetooth_configuration`, only when every token
+matches `bluetoothConfigurationTokenPattern` (sample rate, bit depth, channel mode,
+LDAC quality). Another name is redacted. The device that sent the report is never
+recorded. The server validates against the same contract, so it must be deployed
+with the new `contracts/device-report` before an app that sends these values ships.
+
 Telemetry confidence, timestamps, known provenance IDs, dependency IDs, numeric
 operands, derivation windows and unavailable reasons survive export. New unknown
 provenance/calculation labels are marked redacted until reviewed. The report makes

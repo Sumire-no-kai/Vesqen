@@ -73,6 +73,7 @@ test('all contract text values validate and values outside each allowlist are re
     routeTypes:['route.selected_system_type','route.anticipated_type','route.connected_types','route.bluetooth_connected_types'],
     outputDeclarations:['route.output_declaration'], directModes:['route.request_format_direct_modes'],
     mixerProfileTokens:['route.anticipated_preferred_mixer_profile'], playbackStates:['playback.state'],
+    bluetoothCodecNames:['route.bluetooth_codec'],
   };
   const withMetric=m=>({...report(),chainEvidence:{capturedAtEpochMs:100,capturedAtElapsedRealtimeMs:100,metrics:[m]}});
   for(const [list,ids] of Object.entries(cases)) for(const id of ids) {
@@ -86,6 +87,11 @@ test('all contract text values validate and values outside each allowlist are re
     for(const value of ['encoding--1','encoding-12345678901','prefix-encoding-1','encoding-1\n'])
       assert.throws(()=>validateReport(withMetric(measured(id,{value}))),value);
   }
+  for(const value of ['96000hz,32bit,stereo,ldac_990kbps','44100hz,16bit,mono','48000hz,24bit,stereo,ldac_adaptive_or_990kbps'])
+    validateReport(withMetric(measured('route.bluetooth_configuration',{value})));
+  for(const value of ['96000hz,32bit,stereo,ldac_1000','Secret Headphones','96000hz,20bit'])
+    assert.throws(()=>validateReport(withMetric(measured('route.bluetooth_configuration',{value}))),value);
+  assert.throws(()=>validateReport(withMetric(measured('route.bluetooth_codec',{value:'Secret Headphones'}))));
   for(const value of vocabulary.text.platformEncodings.concat('encoding_1234')) {
     validateReport(withMetric(measured('route.anticipated_preferred_mixer_profile',{value})));
     assert.throws(()=>validateReport(withMetric(measured('route.anticipated_preferred_mixer_profile',{value:value+'!unreviewed'}))));

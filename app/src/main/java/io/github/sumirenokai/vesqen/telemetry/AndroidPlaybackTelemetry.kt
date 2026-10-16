@@ -87,6 +87,7 @@ class AndroidPlaybackTelemetry internal constructor(
         audioRouteSource,
         ::onOutputSignal,
     )
+    private val bluetoothCodecs = AndroidBluetoothCodecObserver(appContext, clock).also { it.start() }
     private var samplerJob: Job? = null
     private var samplerIntervalMs: Long? = null
     private var samplerGeneration = 0L
@@ -1267,6 +1268,61 @@ class AndroidPlaybackTelemetry internal constructor(
         }
     }
 
+    /**
+     * The codec Android last reported (#73). Its time is when Vesqen received the report, which on
+     * some phones is later than the negotiation, so it never stands for the negotiation time.
+     */
+    private fun addBluetoothCodecMetrics(
+        metrics: MutableMap<TelemetryMetricId, TelemetryMetric>,
+        routeReason: TelemetryUnavailableReason,
+        instant: TelemetryInstant,
+    ) {
+        val report = bluetoothCodecs.current
+        val reason = bluetoothCodecUnavailableReason(
+            routeReason, bluetoothCodecs.supported, bluetoothCodecs.permissionGranted, report,
+        )
+        if (reason != null || report == null) {
+            val detail = if (reason == TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT) {
+                "No codec report since Vesqen started; Android sends one when the headphones reconnect or the codec changes"
+            } else {
+                null
+            }
+            listOf(
+                TelemetryMetricCatalog.ROUTE_BLUETOOTH_CODEC,
+                TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURATION,
+                TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURED_BITRATE,
+            ).forEach { id ->
+                metrics.unavailable(id, reason ?: TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT, instant, ANDROID_BLUETOOTH_CODEC, detail)
+            }
+            return
+        }
+        val at = report.receivedAt
+        metrics.measuredTextOrUnavailable(
+            TelemetryMetricCatalog.ROUTE_BLUETOOTH_CODEC,
+            report.codecName,
+            ANDROID_BLUETOOTH_CODEC,
+            at,
+            TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT,
+        )
+        metrics.measuredTextOrUnavailable(
+            TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURATION,
+            report.settings.token(),
+            ANDROID_BLUETOOTH_CODEC,
+            at,
+            TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT,
+        )
+        // Only LDAC reports a quality tier; its nominal ceiling is a documented value, not a measurement.
+        metrics.estimatedIntegerOrUnavailable(
+            TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURED_BITRATE,
+            report.settings.ldacQuality?.nominalBitsPerSecond,
+            TelemetryUnit.BITS_PER_SECOND,
+            ANDROID_BLUETOOTH_CODEC,
+            at,
+            LDAC_NOMINAL_BITRATE_METHOD,
+            TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT,
+        )
+    }
+
     private fun addOutputMetrics(
         metrics: MutableMap<TelemetryMetricId, TelemetryMetric>,
         raw: RawTelemetrySample,
@@ -1397,16 +1453,15 @@ class AndroidPlaybackTelemetry internal constructor(
         val bluetoothReason = bluetoothTransportUnavailableReason(
             output.selectedSystemRouteType, output.anticipatedRouteType,
         )
-        // Public AudioManager endpoints describe PCM-facing capabilities, not negotiated radio
-        // codecs or over-the-air counters. Never relabel them as Bluetooth transport evidence.
-        listOf(
-            TelemetryMetricCatalog.ROUTE_BLUETOOTH_CODEC,
-            TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURATION,
-            TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURED_BITRATE,
+        addBluetoothCodecMetrics(metrics, bluetoothReason, output.observedAt)
+        // Public AudioManager endpoints describe PCM-facing capabilities and Android has no
+        // over-the-air counter, so nothing may be relabelled as the Bluetooth transport bitrate.
+        metrics.unavailable(
             TelemetryMetricCatalog.ROUTE_BLUETOOTH_TRANSPORT_BITRATE,
-        ).forEach { id ->
-            metrics.unavailable(id, bluetoothReason, output.observedAt, ANDROID_AUDIO_ROUTE)
-        }
+            bluetoothReason,
+            output.observedAt,
+            ANDROID_AUDIO_ROUTE,
+        )
         metrics.unavailable(
             TelemetryMetricCatalog.ROUTE_BLUETOOTH_CAPABILITIES,
             when (output.bluetoothConnectedTypes) {
@@ -2012,6 +2067,10 @@ class AndroidPlaybackTelemetry internal constructor(
         val ANDROID_BUILD = TelemetryDataSource(TelemetrySourceId("android.build"))
         val ANDROID_BATTERY = TelemetryDataSource(TelemetrySourceId("android.battery"))
         val ANDROID_AUDIO_ROUTE = TelemetryDataSource(TelemetrySourceId("android.audio_route"))
+        val ANDROID_BLUETOOTH_CODEC = TelemetryDataSource(
+            id = TelemetrySourceId("android.bluetooth_codec_report"),
+            detail = "Codec Android last reported for the active A2DP device; received time, not negotiation time",
+        )
         val ANDROID_SYSTEM_ROUTE = TelemetryDataSource(
             id = TelemetrySourceId("android.system_media_route"),
             detail = "System-selected media route; not proof of the final hardware signal path",

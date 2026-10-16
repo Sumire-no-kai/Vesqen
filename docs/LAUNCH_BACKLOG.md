@@ -70,7 +70,7 @@
 | Issue | 还要做 |
 | --- | --- |
 | [#75](https://github.com/Sumire-no-kai/Vesqen/issues/75) | 繁体中文和日语已合并（PR #131、#132）；日语还没有母语者审读，发布前决定是否带上 |
-| [#73](https://github.com/Sumire-no-kai/Vesqen/issues/73) | 先在测试手机上实验能否收到系统报告的蓝牙 codec，看结果再决定是否进 1.0 |
+| [#73](https://github.com/Sumire-no-kai/Vesqen/issues/73) | 链路页和链路注记显示系统报告的蓝牙编码，有线显示输出格式；实验通过，2026-10-16 决定进 1.0 |
 | [#50](https://github.com/Sumire-no-kai/Vesqen/issues/50) | 曲库首页快速滑动：两台手机修复前后各三轮对比，加上大曲库压力测试（M3-R1） |
 | [#51](https://github.com/Sumire-no-kai/Vesqen/issues/51) | 8 小时有线播放已通过；还缺新系统上的关屏长播、2 小时 24/96、拔耳机和来电 |
 | [#72](https://github.com/Sumire-no-kai/Vesqen/issues/72) | 蓝牙两段显示的真机记录：耳机和音箱各播一首 FLAC、一首 MP3，要用所有者的蓝牙设备 |
@@ -81,6 +81,7 @@
 发布 1.0 时：
 
 - 版本号改成 `1.0.0`（`versionCode` 13），写发布说明，重新签名，从 beta.3 做升级验收。
+- 发布前先部署服务端（`server/usage`），让它认识设备报告词表里新加的蓝牙编码字段（#73），否则带这些字段的报告会被拒收。官网隐私政策同步到 10 月 16 日版（`npm run sync-privacy`）。
 - 正式通道第一次启用：官网 `updates/stable.json` 第一次填上版本；GitHub 发布不标预发布。
 - 发布说明、README、官网和 Play 商品详情写明严格 USB 的限制（#53）。
 - Play：商品详情去掉"测试版"那一段，发布到正式版，建议分阶段放量。
