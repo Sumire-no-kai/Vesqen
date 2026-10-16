@@ -189,6 +189,8 @@
 
 ### 2026-10-14 · beta.3 CI 签名 APK 从 beta.2 升级
 
+> 2026-10-15 作废：本节的候选 `0c77c95`（APK `83d0b86a…546b`）在代码审查后撤下，草稿已删除，发布的是下面 2026-10-16 一节的重新签名版本。本节的设备观察（包括耳机键恢复的结论）仍然有效。
+
 - 候选：[GitHub APK release #38484502335](https://github.com/Sumire-no-kai/Vesqen/actions/runs/38484502335)，源码和工作流都是 `master` 的 `0c77c9533d42db07e2dd854bafdb831867f31c0c`，所有者批准签名后生成草稿 `v1.0.0-beta.3`。`Vesqen-1.0.0-beta.3.apk` 的 SHA-256 为 `83d0b86a3f15c63a7256aa7d3b581bd5487125a03b88313fee227cb55bcd546b`（未签名包 `f1c22eb0…365b`）。同一次运行产出的未签名 Play 版 AAB（`unsigned-play-bundle`）SHA-256 为 `f0beb7aed8556ec420b6f33fd01137850af6d407ca4a656ddba5fc07c36695b1`。R8 映射（`release-mapping`）里 GitHub 版 `mapping.txt` 为 `68eaf405…2080`，Play 版为 `577ea576…8b3c`。
 - 本机复核草稿附件：`SHA256SUMS` 和 `release-manifest.json` 一致；apksigner 只有一个签名者，证书 SHA-256 为 `743e96fc…6293`，v2、v3 验证通过，zipalign 通过；aapt 显示 1.0.0-beta.3 / 12，带 `INTERNET` 和 `REQUEST_INSTALL_PACKAGES`（GitHub 版），激活链接只接受 `vesqen-api.sumirenokai.com`。Play 版 AAB 的 Manifest 里没有 `REQUEST_INSTALL_PACKAGES`、更新安装界面和激活链接。
 - Honor STF-AL00 / Android 9（无线 adb）：设备上原有 GitHub 版 beta.2（base.apk 哈希 `36954f80…e70a0`，升级前备份到 `build/qa/device-backups/`）。升级前第 93 / 106 首“05. 前前前世”暂停在 3:17，已收藏，输出为系统输出。用 `adb install -r` 安装草稿 APK：versionCode 11 → 12，firstInstallTime 仍是 2026-10-01 12:18:56，设备上 base.apk 哈希为 `83d0b86a…546b`。打开后没有再显示使用统计说明（beta.2 时已回答），也没有崩溃提示；曲库完整，队列、进度 3:17 和收藏保留。从 3:17 继续播放到 3:23，前台服务正常，暂停正常。设置“播放输出”卡片里的“高级功能”一行显示“2.0 前免费”，点进去是 2.0 之前免费的说明，没有激活码入口（发布版在收费开关打开前不显示）。
@@ -206,3 +208,13 @@
   - 实验包给 Vesqen 的会话补上和这些应用相同的广播 PendingIntent 接收器，两台手机的记录仍然不变，所以与接收器类型无关。实验应用已卸载，iQOO 的 Vesqen Test 已换回上面的 beta.3 测试包。两台手机记住的应用现在分别是 i音乐和华为音乐（原来都是网易云）。
 - 没有覆盖：其他厂商和原生 Android 上的耳机键恢复；连接蓝牙和重启时保持安静；没有 DAC 时的严格 USB；应用内更新器，要等发布和官网 `updates/beta.json` 上线后再测。
 - 结论：安装、versionCode 增大的同签名升级和数据保留通过（Android 9）。耳机键恢复在两台测试机上都不成立，beta.3 的发布说明不把它列为新功能，只写进已知限制。
+
+### 2026-10-16 · beta.3 重新签名的 APK 从 beta.2 升级
+
+- 候选：代码审查修复（PR #130）合并后，在 `master` 的 `f48fece4d0d0c7f743299c880f00b66e0806fc0d` 上手动运行 [GitHub APK release #38726792266](https://github.com/Sumire-no-kai/Vesqen/actions/runs/38726792266)，所有者批准签名后生成新草稿 `v1.0.0-beta.3`（之前 `0c77c95` 的草稿已删除，没有公开过，也没有留下标签）。`Vesqen-1.0.0-beta.3.apk` 的 SHA-256 为 `ffb512f6bb01e2c2819752a9d60f93adc507fb29aaa7d815ac331263ab01ee86`（未签名包 `6da46ab2…ae0a`）。同一次运行产出的未签名 Play 版 AAB 为 `2c4715a6ffe0a4bb90f54006dc503c10165846dc70aea0c5f7f2850bba7c2c9d`；R8 映射里 GitHub 版 `mapping.txt` 为 `f6a41d0b…5408`，Play 版为 `9bad8480…7763`。
+- 本机复核草稿附件：`SHA256SUMS` 和 `release-manifest.json` 一致；apksigner 只有一个签名者，证书 SHA-256 为 `743e96fc…6293`，v2、v3 验证通过，zipalign 通过；aapt 显示 1.0.0-beta.3 / 12，带 `REQUEST_INSTALL_PACKAGES`（GitHub 版）。Play 版 AAB 的 Manifest 里没有 `REQUEST_INSTALL_PACKAGES`、更新安装界面和激活链接。草稿正文来自 `f48fece` 的发布说明：耳机键恢复只在已知限制里，两处 SHA-256 已填好。
+- Honor STF-AL00 / Android 9（无线 adb）：卸载旧草稿，装回公开的 beta.2（base.apk `36954f80…e70a0`），使用统计选“不发送”，授权后扫描出 106 首。播放第 93 首“05. 前前前世”，收藏后暂停在 0:44。用 `adb install -r` 安装新草稿：versionCode 11 → 12，firstInstallTime 不变（2026-10-16 11:46:26），设备上 base.apk 哈希为 `ffb512f6…ee86`。打开后没有统计说明和崩溃提示；曲库完整，队列（第 93 / 106 首）、进度 0:44 和收藏保留，输出为系统输出。从 0:44 继续播放到 0:50，前台服务和 Media3 的媒体通知正常，暂停正常。“高级功能”一行显示“2.0 前免费”，页面是 2.0 之前免费的说明。
+- 崩溃提示：`adb shell am crash` 后重新打开，出现“Vesqen 上次意外退出了”。“查看并发送”打开设备报告，生成后点“分享”，在系统分享面板返回取消；重新生成的报告里那条崩溃记录（`android.app.RemoteServiceException`）仍在，符合 PR #130 的改动：只有上传成功才删除。没有上传。
+- 结束后 Honor 回到原来的前台应用（SkyLink），Termux 一直在运行。
+- 没有覆盖：和 2026-10-14 一节相同（耳机键恢复在测试机上不可用、蓝牙和重启、无 DAC 时的严格 USB）；应用内更新器要等发布和官网 `updates/beta.json` 上线后再测。PR #130 的设备测试结果见该 PR。
+- 结论：安装、versionCode 增大的同签名升级和数据保留通过（Android 9）。
