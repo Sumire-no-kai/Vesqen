@@ -26,7 +26,7 @@ colors:
   signal-moss: "#9FBF4B"
 typography:
   page-title:
-    fontFamily: "Noto Serif SC SemiBold (Traditional Chinese: Noto Serif TC SemiBold), bundled subsets (page-title characters and printable ASCII)"
+    fontFamily: "Noto Serif SC SemiBold (Traditional Chinese: Noto Serif TC; Japanese: Noto Serif JP), bundled subsets (page-title characters and printable ASCII)"
     fontWeight: 600
     sizes: "32/38 sp; compact and pages opened from Settings 21/25 sp; privacy policy 26/30 sp"
   title:
@@ -145,7 +145,7 @@ Labels on filled Moss buttons: 6.0:1 (white on `moss-deep`), 11.4:1 (`night` on 
 
 ## Typography
 
-- **Page titles** ("Library", "Chain", "Settings" and the pages opened from them) use a bundled Noto Serif SC SemiBold in every language, so they read as titles above the names. The font is cut down to printable ASCII and the characters of the titles listed in `tools/title_font_strings.txt` (`tools/subset_title_font.py`, about 33 KB), so it looks the same on every Android version and phone. Traditional Chinese uses its own cut of Noto Serif TC SemiBold in `res/font-b+zh+Hant` (about 40 KB), so the titles have Taiwan glyph forms. Code marks these with `pageTitle()`. Owner decision, 2026-10-10.
+- **Page titles** ("Library", "Chain", "Settings" and the pages opened from them) use a bundled Noto Serif SC SemiBold in every language, so they read as titles above the names. The font is cut down to printable ASCII and the characters of the titles listed in `tools/title_font_strings.txt` (`tools/subset_title_font.py`, about 33 KB), so it looks the same on every Android version and phone. Traditional Chinese uses its own cut of Noto Serif TC SemiBold in `res/font-b+zh+Hant` (about 40 KB) and Japanese a cut of Noto Serif JP SemiBold in `res/font-ja` (about 44 KB), so the titles use each language's glyph forms. Code marks these with `pageTitle()`. Owner decision, 2026-10-10.
 - **Names of music** use Instrument Serif at weight 400 only at header sizes, with the system serif as fallback so Chinese uses Songti where the phone has it (Android 10 and later; Android 8–9 fall back to the system sans): the track title in Now, the album, artist or playlist page header, and the track details title. Code marks each of these with `serif()`.
 - **Names at list size** use the sans, Instrument Sans Medium with the system sans for Chinese and Japanese: 17 sp in song rows and the album shelf, 18 sp in the mini player, and 19 sp in album, artist, folder, genre and playlist rows and the Chain summary. Instrument Serif is a condensed display face and reads poorly at these sizes, and one family per row treats Latin and CJK names alike. Owner decision, 2026-10-16, after a side-by-side test on the iQOO.
 - **Headings that are not names** use Instrument Sans at weight 500: Settings group titles, sheet and dialog titles, Chain section and status titles, empty-state titles. Owner decision, 2026-10-10: a card never pairs a Songti heading with sans rows.

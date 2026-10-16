@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen.ui.theme
 
 import android.os.Build
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -92,8 +93,8 @@ fun TextStyle.serif(): TextStyle = copy(fontFamily = LocalVesqenSerif.current, f
 
 /**
  * Noto Serif SemiBold cut down to printable ASCII and the characters of the page titles listed in
- * tools/title_font_strings.txt (tools/subset_title_font.py): the SC cut in res/font and the TC cut
- * in res/font-b+zh+Hant. Other characters fall back to the system font.
+ * tools/title_font_strings.txt (tools/subset_title_font.py): the SC cut in res/font, the TC cut in
+ * res/font-b+zh+Hant and the JP cut in res/font-ja. Other characters fall back to the system font.
  *
  * Loaded through the current resources rather than as a Compose resource font: Compose caches
  * those for the whole process by resource id, so after the app language changes the titles would
@@ -118,6 +119,14 @@ internal val LocalVesqenPageTitle = staticCompositionLocalOf<FontFamily> {
  */
 @Composable
 fun TextStyle.pageTitle(): TextStyle = copy(fontFamily = LocalVesqenPageTitle.current, fontWeight = FontWeight.SemiBold)
+
+/**
+ * For one-line top-level titles at the display size (displayMedium, 32 sp): steps down to the
+ * compact size (headlineSmall, 21 sp) when the word does not fit beside the actions, as Japanese
+ * ライブラリ does on a 360 dp phone. Pass it only at the display size; it would enlarge a compact
+ * title.
+ */
+val TopLevelTitleAutoSize = TextAutoSize.StepBased(minFontSize = 21.sp, maxFontSize = 32.sp, stepSize = 1.sp)
 
 // The display styles are the serif big names and, through [pageTitle], page titles; headline and
 // title styles are sans.

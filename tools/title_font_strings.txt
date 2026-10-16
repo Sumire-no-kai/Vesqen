@@ -1,6 +1,6 @@
 # String resources shown as page titles. tools/subset_title_font.py keeps every character they use
 # (plus printable ASCII) in each language's cut of title_serif_semibold.otf (app/src/main/res/font,
-# font-b+zh+Hant), and TitleFontCoverageTest fails when a title uses a character its cut lacks. Add
+# font-b+zh+Hant, font-ja), and TitleFontCoverageTest fails when a title uses a character its cut lacks. Add
 # a key here when a new page title appears, then regenerate every cut.
 destination_library
 library_favorites

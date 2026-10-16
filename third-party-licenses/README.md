@@ -74,10 +74,12 @@ Services plugin and changes no signing/release workflow.
   has no copyright line, so `NotoSerifSC-OFL.txt` puts the font's copyright and
   trademark records (name IDs 0 and 7) above the unmodified license text. The font
   has no Reserved Font Name, so the subset keeps its name.
-- Noto Serif TC is cut the same way from `Serif/SubsetOTF/TC/NotoSerifTC-SemiBold.otf`
-  (same commit, version `2.003`) for the Traditional Chinese titles and ships as
-  `font-b+zh+Hant/title_serif_semibold.otf`. Its name IDs 0 and 7 match the SC font,
-  so `NotoSerifTC-OFL.txt` is the same text. Font keys in `catalog.json` are paths
+- Noto Serif TC and Noto Serif JP are cut the same way from
+  `Serif/SubsetOTF/TC/NotoSerifTC-SemiBold.otf` and `Serif/SubsetOTF/JP/NotoSerifJP-SemiBold.otf`
+  (same commit, version `2.003`) for the Traditional Chinese and Japanese titles, and
+  ship as `font-b+zh+Hant/title_serif_semibold.otf` and `font-ja/title_serif_semibold.otf`.
+  Their name IDs 0 and 7 match the SC font, so `NotoSerifTC-OFL.txt` and
+  `NotoSerifJP-OFL.txt` are the same text. Font keys in `catalog.json` are paths
   under `app/src/main/res`, and every file in `res/font` and its qualified
   directories must be listed.
 

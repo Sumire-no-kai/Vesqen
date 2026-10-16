@@ -1532,6 +1532,22 @@
         }
       ],
       "notices": []
+    },
+    {
+      "id": "font:NotoSerifJP",
+      "name": "Noto Serif JP",
+      "version": "2.003",
+      "files": {
+        "font-ja/title_serif_semibold.otf": "d3a1a126b8737805be1fb99049e87576c892a5bd745363ebc4f20a8a794d3171"
+      },
+      "licenses": [
+        {
+          "name": "OFL-1.1",
+          "file": "NotoSerifJP-OFL.txt",
+          "source": "https://github.com/notofonts/noto-cjk"
+        }
+      ],
+      "notices": []
     }
   ]
 }

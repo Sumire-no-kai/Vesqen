@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Cut a Noto Serif CJK SemiBold source down to the characters of Vesqen's page titles.
 
-usage: subset_title_font.py NotoSerifSC-SemiBold.otf|NotoSerifTC-SemiBold.otf
+usage: subset_title_font.py NotoSerif{SC,TC,JP}-SemiBold.otf
 
-Sources: Serif/SubsetOTF/{SC,TC}/NotoSerif{SC,TC}-SemiBold.otf from https://github.com/notofonts/noto-cjk
+Sources: Serif/SubsetOTF/{SC,TC,JP}/NotoSerif{SC,TC,JP}-SemiBold.otf from https://github.com/notofonts/noto-cjk
 at 9b0f1436e455d902de067a2501422e5dc71ad16b (Noto Serif CJK 2.003, checked against the hashes in
 CUTS), SIL OFL 1.1. The source files stay outside the repository; only the cuts are bundled. Each
 source is recognized by its hash and writes its own cut: printable ASCII, for English titles and
@@ -28,6 +28,8 @@ CUTS = {
         ("Noto Serif SC SemiBold 2.003", "font", ("values", "values-zh-rCN")),
     "e59aa64fa67b08efd000372cba5c4902424e50efef962084377c02c80f5ad593":
         ("Noto Serif TC SemiBold 2.003", "font-b+zh+Hant", ("values-b+zh+Hant",)),
+    "116d06c2b11ceba33ccb3f8c9eb1c86aba3d5761a1199fd37f74e83365e7a53d":
+        ("Noto Serif JP SemiBold 2.003", "font-ja", ("values-ja",)),
 }
 OUTPUT_NAME = "title_serif_semibold.otf"
 
