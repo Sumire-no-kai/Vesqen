@@ -1239,7 +1239,8 @@ class AndroidPlaybackTelemetry internal constructor(
             system.expensiveObservedAt,
             TelemetryUnavailableReason.NOT_EXPOSED_BY_PLATFORM,
         )
-        val devicePowerMw = system.batteryCurrentMa?.let { current ->
+        // On external power the battery current measures charging, not what the phone draws.
+        val devicePowerMw = system.batteryCurrentMa?.takeUnless { system.batteryPlugged == true }?.let { current ->
             system.batteryVoltageV?.let { voltage -> kotlin.math.abs(current * voltage) }
         }
         if (devicePowerMw != null) {
@@ -1257,6 +1258,14 @@ class AndroidPlaybackTelemetry internal constructor(
                         TelemetryMetricCatalog.POWER_BATTERY_VOLTAGE,
                     ),
                 ),
+            )
+        } else if (system.batteryPlugged == true) {
+            metrics.unavailable(
+                TelemetryMetricCatalog.POWER_DEVICE_ESTIMATE,
+                TelemetryUnavailableReason.TEMPORARILY_UNAVAILABLE,
+                system.expensiveObservedAt,
+                ANDROID_BATTERY,
+                "On external power the battery current measures charging, not the phone's draw",
             )
         } else {
             metrics.unavailable(
@@ -2402,6 +2411,7 @@ private class AndroidSystemTelemetryProbe(
                 null
             },
             batteryCurrentMa = expensive.batteryCurrentMa,
+            batteryPlugged = expensive.batteryPlugged,
             batteryVoltageV = expensive.batteryVoltageV,
             batteryTemperatureC = expensive.batteryTemperatureC,
             gcCount = expensive.gcCount,
@@ -2437,6 +2447,7 @@ private class AndroidSystemTelemetryProbe(
                 TelemetryUnavailableReason.TEMPORARILY_UNAVAILABLE
             },
             batteryCurrentMa = currentMicroAmps?.div(1_000.0),
+            batteryPlugged = battery?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1)?.takeIf { it >= 0 }?.let { it != 0 },
             batteryVoltageV = voltageMv?.div(1_000.0),
             batteryTemperatureC = temperatureTenths?.div(10.0),
             gcCount = gcCount,
@@ -2455,6 +2466,7 @@ private data class ExpensiveSystemSample(
     val thermalStatus: String?,
     val thermalUnavailableReason: TelemetryUnavailableReason?,
     val batteryCurrentMa: Double?,
+    val batteryPlugged: Boolean?,
     val batteryVoltageV: Double?,
     val batteryTemperatureC: Double?,
     val gcCount: Long?,
@@ -2471,6 +2483,7 @@ private data class SystemTelemetrySnapshot(
     val thermalUnavailableReason: TelemetryUnavailableReason?,
     val socModel: String?,
     val batteryCurrentMa: Double?,
+    val batteryPlugged: Boolean?,
     val batteryVoltageV: Double?,
     val batteryTemperatureC: Double?,
     val gcCount: Long?,

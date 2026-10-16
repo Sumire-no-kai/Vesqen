@@ -207,6 +207,16 @@ internal fun ChainSummaryScreen(
             }
             item(key = "current-source") { ChainNowPlaying(playback) }
             item(key = "output-status") { ChainDeclarationCard(playback, onUseSystemOutput) }
+            // The headline readings sit under the claim; the path below is the detail (owner, 2026-10-16).
+            item(key = "pinned") {
+                ChainPinnedMetrics(
+                    metrics = metrics,
+                    unitDisplayMode = unitDisplayMode,
+                    idle = lastPlayback,
+                    // Lower power stretches the cadence; the label says what the readings actually do.
+                    refreshInterval = effectiveTelemetryRefreshInterval(refreshInterval, powerMode),
+                )
+            }
             item(key = "path") {
                 ChainPath(
                     playback = playback,
@@ -225,15 +235,6 @@ internal fun ChainSummaryScreen(
                     text = stringResource(R.string.chain_core_boundary),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            item(key = "pinned") {
-                ChainPinnedMetrics(
-                    metrics = metrics,
-                    unitDisplayMode = unitDisplayMode,
-                    idle = lastPlayback,
-                    // Lower power stretches the cadence; the label says what the readings actually do.
-                    refreshInterval = effectiveTelemetryRefreshInterval(refreshInterval, powerMode),
                 )
             }
             item(key = "advanced") { ChainAdvancedEntry(onOpenAdvanced) }

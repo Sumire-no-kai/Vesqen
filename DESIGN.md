@@ -198,7 +198,7 @@ Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hai
 
 ### Chain
 
-- Summary: observation notice (live, last playback, stale, partial), now playing, the evidence card (chip, localized title, explanation), the five-step path (source file, decoder, app processing, AudioTrack, route) split into "Vesqen's part" and "the system's part", pinned metrics, and the link to the advanced dashboard.
+- Summary: observation notice (live, last playback, stale, partial), now playing, the evidence card (chip, localized title, explanation), pinned metrics, the five-step path (source file, decoder, app processing, AudioTrack, route) split into "Vesqen's part" and "the system's part", and the link to the advanced dashboard. The pinned metrics sit right under the evidence card so the headline readings come first and the path is the detail (owner decision, 2026-10-16).
 - Rows show the value and its confidence only. Freshness is the page notice's job; no row shows a ticking age.
 - Advanced dashboard: compact controls (view, refresh rate, customize), metric cards by section, recent events. A card's expanded details show source, method, window and "Updated: Just now / N minutes ago". Recent events are hairline rows in one card; severity is the label colour.
 - Ages never count seconds: under a minute is "Just now", then minutes, hours, days.
