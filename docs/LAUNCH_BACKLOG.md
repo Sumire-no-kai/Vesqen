@@ -63,14 +63,14 @@
 
 ## 1.0 正式版之前
 
-2026-10-16 所有者确定（[PRD](PRD.md) 末尾"2026-10-16 1.0 的范围"）：`1.0.0` 是 Google Play 正式版的第一版，GitHub 同时发布同一个版本；严格 USB 的设备矩阵写成公开限制，随 2.0 的 M7 完成（#53）；增加日语和繁体中文（#75）；链路页显示系统报告的蓝牙 codec（#73）。
+2026-10-16 所有者确定（[PRD](PRD.md) 末尾"2026-10-16 1.0 的范围"）：`1.0.0` 是 Google Play 正式版的第一版，GitHub 同时发布同一个版本；严格 USB 的设备矩阵写成公开限制，随 2.0 的 M7 完成（#53）；增加日语和繁体中文（#75）；系统报告的蓝牙 codec 先做实验（#73）。
 
 上线时间取决于 Play：2026-10-16 查看时封闭测试已满 12 人加入，连续 14 天后申请正式版，审核一般 7 天以内。申请表要写测试者反馈的总结。
 
 | Issue | 还要做 |
 | --- | --- |
-| [#75](https://github.com/Sumire-no-kai/Vesqen/issues/75) | 增加日语和繁体中文界面，日语找母语者审读 |
-| [#73](https://github.com/Sumire-no-kai/Vesqen/issues/73) | 链路页显示系统报告的蓝牙 codec。新权限、设备报告和隐私政策的改动先经所有者同意 |
+| [#75](https://github.com/Sumire-no-kai/Vesqen/issues/75) | 增加繁体中文和日语界面；日语暂时没有审读人 |
+| [#73](https://github.com/Sumire-no-kai/Vesqen/issues/73) | 先在测试手机上实验能否收到系统报告的蓝牙 codec，看结果再决定是否进 1.0 |
 | [#50](https://github.com/Sumire-no-kai/Vesqen/issues/50) | 曲库首页快速滑动：两台手机修复前后各三轮对比，加上大曲库压力测试（M3-R1） |
 | [#51](https://github.com/Sumire-no-kai/Vesqen/issues/51) | 8 小时有线播放已通过；还缺新系统上的关屏长播、2 小时 24/96、拔耳机和来电 |
 | [#72](https://github.com/Sumire-no-kai/Vesqen/issues/72) | 蓝牙两段显示的真机记录：耳机和音箱各播一首 FLAC、一首 MP3，要用所有者的蓝牙设备 |
