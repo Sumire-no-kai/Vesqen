@@ -1210,8 +1210,9 @@ class VesqenAppTest {
             }
         }
 
+        // Each chip is one merged TalkBack stop, so its decorative cue icon exists only in the unmerged tree.
         listOf("route", "availability", "requested", "activity", "verified", "failure").forEach { cue ->
-            composeRule.onNodeWithTag("vesqen.output-status.cue.$cue").assertIsDisplayed()
+            composeRule.onNodeWithTag("vesqen.output-status.cue.$cue", useUnmergedTree = true).assertIsDisplayed()
         }
     }
 
