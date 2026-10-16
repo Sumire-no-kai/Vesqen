@@ -445,6 +445,12 @@
     <string name="chain_unit_display_si">SI decimal</string>
     <string name="chain_unit_display_raw">Raw base units</string>
     <string name="chain_pinned_metrics">Pinned metrics</string>
+    <string name="chain_pinned_handoff">Sent to Android</string>
+    <string name="chain_pinned_output">Output</string>
+    <string name="chain_pinned_underruns">Underruns</string>
+    <string name="chain_pinned_output_speaker">Speaker</string>
+    <string name="chain_pinned_output_wired">Wired</string>
+    <string name="chain_pinned_output_bluetooth">Bluetooth</string>
     <string name="chain_pinned">Pinned</string>
     <string name="chain_pin">Pin metric</string>
     <string name="chain_unpin">Unpin metric</string>

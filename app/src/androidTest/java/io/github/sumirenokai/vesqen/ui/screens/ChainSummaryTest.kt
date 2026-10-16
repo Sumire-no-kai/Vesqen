@@ -14,6 +14,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -47,6 +48,7 @@ import io.github.sumirenokai.vesqen.ui.chain.ChainUnitDisplayMode
 import io.github.sumirenokai.vesqen.ui.chain.FakeAppSegmentTelemetry
 import io.github.sumirenokai.vesqen.ui.chain.FakeAppSegmentTelemetry.CapturedAtMs
 import io.github.sumirenokai.vesqen.ui.chain.FakeAppSegmentTelemetry.measured
+import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
 import io.github.sumirenokai.vesqen.ui.chain.telemetryEvidenceSource
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
 import org.junit.Assert.assertEquals
@@ -132,11 +134,76 @@ class ChainSummaryTest {
         segment(AppSegment).assertTextContains(string(R.string.chain_segment_waiting), substring = true)
         processing().assertTextContains(string(R.string.chain_segment_waiting), substring = true)
         scrollTo("vesqen.chain.pinned")
-        ChainPinnedMetricIds.forEach { id ->
-            composeRule.onNodeWithTag("vesqen.chain.core-value.${id.value}", useUnmergedTree = true).assertTextEquals("—")
-            composeRule.onNodeWithTag("vesqen.chain.core-evidence.${id.value}", useUnmergedTree = true)
-                .assertTextEquals(string(R.string.chain_idle_title))
+        ChainPinnedReading.entries.forEach { reading ->
+            pinned("value", reading).assertTextEquals("—")
+            pinned("detail", reading).assertTextEquals("")
+            pinned("evidence", reading).assertTextEquals("")
         }
+        // Only the notice says that nothing is playing; the cards do not repeat it.
+        composeRule.onAllNodes(hasText(string(R.string.chain_idle_title)) and hasAnyAncestor(hasTestTag("vesqen.chain.pinned")))
+            .assertCountEquals(0)
+    }
+
+    @Test
+    fun pinned_cards_sum_up_the_source_the_handoff_the_output_and_underruns() {
+        show(
+            snapshot(
+                Metrics.SOURCE_CODEC_LABEL to TelemetryReading.Text("FLAC"),
+                Metrics.SOURCE_BIT_DEPTH to TelemetryReading.Integer(16, TelemetryUnit.BITS),
+                Metrics.SOURCE_SAMPLE_RATE to TelemetryReading.Integer(44_100, TelemetryUnit.HERTZ),
+                Metrics.PLAYBACK_UNDERRUN_COUNT to TelemetryReading.Integer(0, TelemetryUnit.COUNT),
+            ),
+        )
+
+        scrollTo("vesqen.chain.pinned")
+        pinned("value", ChainPinnedReading.SOURCE).assertTextEquals("FLAC")
+        pinned("detail", ChainPinnedReading.SOURCE).assertTextEquals(
+            "${reading(TelemetryReading.Integer(16, TelemetryUnit.BITS))} · ${reading(TelemetryReading.Integer(44_100, TelemetryUnit.HERTZ))}",
+        )
+        pinned("value", ChainPinnedReading.HANDOFF).assertTextEquals(reading(TelemetryReading.Integer(44_100, TelemetryUnit.HERTZ)))
+        pinned("detail", ChainPinnedReading.HANDOFF).assertTextEquals("pcm-float")
+        pinned("value", ChainPinnedReading.OUTPUT).assertTextEquals(string(R.string.chain_pinned_output_speaker))
+        pinned("value", ChainPinnedReading.UNDERRUNS).assertTextEquals(reading(TelemetryReading.Integer(0, TelemetryUnit.COUNT)))
+        ChainPinnedReading.entries.forEach { pinned("evidence", it).assertTextEquals(string(R.string.chain_confidence_measured)) }
+    }
+
+    @Test
+    fun a_lossy_source_is_described_by_its_bit_rate() {
+        show(
+            snapshot(
+                Metrics.SOURCE_CODEC_LABEL to TelemetryReading.Text("MP3"),
+                Metrics.SOURCE_AVERAGE_BITRATE to TelemetryReading.Integer(320_000, TelemetryUnit.BITS_PER_SECOND),
+                Metrics.SOURCE_SAMPLE_RATE to TelemetryReading.Integer(44_100, TelemetryUnit.HERTZ),
+            ),
+        )
+
+        scrollTo("vesqen.chain.pinned")
+        pinned("value", ChainPinnedReading.SOURCE).assertTextEquals("MP3")
+        pinned("detail", ChainPinnedReading.SOURCE).assertTextEquals(
+            "${reading(TelemetryReading.Integer(320_000, TelemetryUnit.BITS_PER_SECOND))} · " +
+                reading(TelemetryReading.Integer(44_100, TelemetryUnit.HERTZ)),
+        )
+    }
+
+    @Test
+    fun the_output_card_names_the_reported_bluetooth_codec() {
+        show(
+            snapshot(
+                Metrics.ROUTE_SELECTED_SYSTEM_TYPE to TelemetryReading.Text("bluetooth"),
+                Metrics.ROUTE_BLUETOOTH_CODEC to TelemetryReading.Text("LDAC"),
+                Metrics.ROUTE_BLUETOOTH_CONFIGURATION to TelemetryReading.Text("96000hz,32bit,stereo,ldac_990kbps"),
+            ),
+        )
+
+        scrollTo("vesqen.chain.pinned")
+        pinned("value", ChainPinnedReading.OUTPUT).assertTextEquals("LDAC")
+        pinned("detail", ChainPinnedReading.OUTPUT).assertTextEquals(
+            listOf(
+                context.getString(R.string.chain_unit_khz, "96"),
+                context.getString(R.string.chain_unit_bits, "32"),
+                context.getString(R.string.chain_unit_kbps, "990"),
+            ).joinToString(" · "),
+        )
     }
 
     @Test
@@ -151,12 +218,11 @@ class ChainSummaryTest {
 
     @Test
     fun pinned_values_keep_their_size_with_large_text() {
-        val buffer = Metrics.PLAYBACK_ESTIMATED_TOTAL_BUFFERED_DURATION
-        show(snapshot(buffer to TelemetryReading.Integer(9_000, TelemetryUnit.MILLISECONDS)), fontScale = 1.3f)
+        show(FakeAppSegmentTelemetry.snapshot(), fontScale = 1.3f)
 
         scrollTo("vesqen.chain.pinned")
         val layouts = mutableListOf<TextLayoutResult>()
-        composeRule.onNodeWithTag("vesqen.chain.core-value.${buffer.value}", useUnmergedTree = true)
+        pinned("value", ChainPinnedReading.HANDOFF)
             .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         val layout = layouts.single()
         // A line taller than its box overflows at every size, and autosize then falls back to 12 sp.
@@ -242,6 +308,11 @@ class ChainSummaryTest {
 
     private fun snapshot(vararg readings: Pair<TelemetryMetricId, TelemetryReading>): TelemetrySnapshot =
         FakeAppSegmentTelemetry.snapshot(readings.associate { (id, reading) -> id to measured(reading) })
+
+    private fun pinned(part: String, reading: ChainPinnedReading): SemanticsNodeInteraction =
+        composeRule.onNodeWithTag("vesqen.chain.pinned-$part.${reading.tag}", useUnmergedTree = true)
+
+    private fun reading(value: TelemetryReading): String = formatTelemetryReading(context, value)
 
     private fun scrollTo(tag: String) {
         composeRule.onNodeWithTag("vesqen.chain.summary-list").performScrollToNode(hasTestTag(tag))

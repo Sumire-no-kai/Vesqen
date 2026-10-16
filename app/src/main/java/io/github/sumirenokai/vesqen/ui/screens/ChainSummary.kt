@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.ui.screens
 
+import android.content.Context
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -76,20 +77,27 @@ import io.github.sumirenokai.vesqen.chain.SourceCompression
 import io.github.sumirenokai.vesqen.chain.assessAppSegment
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
+import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetric
 import io.github.sumirenokai.vesqen.telemetry.TelemetryUnavailableReason
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog as Metrics
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricId
 import io.github.sumirenokai.vesqen.telemetry.TelemetryPowerMode
+import io.github.sumirenokai.vesqen.telemetry.TelemetryReading
 import io.github.sumirenokai.vesqen.telemetry.TelemetryRefreshInterval
+import io.github.sumirenokai.vesqen.telemetry.isBluetoothRouteType
 import io.github.sumirenokai.vesqen.ui.chain.ChainObservationState
 import io.github.sumirenokai.vesqen.ui.chain.ChainUnitDisplayMode
 import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecIsNominallyLossless
+import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecName
 import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecNeedsPermission
+import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecSettingsSummary
 import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecSummary
+import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecUnavailableText
 import io.github.sumirenokai.vesqen.ui.chain.describesLastPlayback
 import io.github.sumirenokai.vesqen.ui.chain.effectiveTelemetryRefreshInterval
+import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
 import io.github.sumirenokai.vesqen.ui.chain.isTelemetrySnapshotStale
 import io.github.sumirenokai.vesqen.ui.chain.telemetryConfidenceLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetryEvidenceMethod
@@ -100,9 +108,9 @@ import io.github.sumirenokai.vesqen.ui.chain.telemetrySnapshotMaxAgeMs
 import io.github.sumirenokai.vesqen.ui.components.BluetoothCodecPermissionButton
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
-import io.github.sumirenokai.vesqen.ui.theme.VesqenDataStyle
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
+import io.github.sumirenokai.vesqen.ui.theme.pageTitle
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 
 /** The five stations of B's "current playback path" (spec §5), in signal order. */
@@ -123,12 +131,28 @@ internal val ChainStationFacts: Map<ChainStation, List<TelemetryMetricId>> = map
     ChainStation.ROUTE to listOf(Metrics.ROUTE_SELECTED_SYSTEM_NAME),
 )
 
-/** B §5 pinned metrics: buffer, underruns, process CPU and the whole-device power estimate. */
-internal val ChainPinnedMetricIds = listOf(
-    Metrics.PLAYBACK_ESTIMATED_TOTAL_BUFFERED_DURATION,
+/**
+ * B §5 pinned readings: what is playing, what Vesqen hands Android, where Android sends it and
+ * whether playback kept up. Each card sums up facts the path below shows in full; CPU and power
+ * stay in the advanced dashboard (owner decision, 2026-10-16).
+ */
+internal enum class ChainPinnedReading(@StringRes val label: Int, val tag: String) {
+    SOURCE(R.string.chain_station_source, "source"),
+    HANDOFF(R.string.chain_pinned_handoff, "handoff"),
+    OUTPUT(R.string.chain_pinned_output, "output"),
+    UNDERRUNS(R.string.chain_pinned_underruns, "underruns"),
+}
+
+private val ChainPinnedMetricIds = setOf(
+    Metrics.SOURCE_CODEC_LABEL,
+    Metrics.SOURCE_BIT_DEPTH,
+    Metrics.SOURCE_SAMPLE_RATE,
+    Metrics.SOURCE_AVERAGE_BITRATE,
+    Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE,
+    Metrics.PLAYBACK_AUDIO_TRACK_ENCODING,
+    Metrics.ROUTE_SELECTED_SYSTEM_TYPE,
+    Metrics.ROUTE_SELECTED_SYSTEM_NAME,
     Metrics.PLAYBACK_UNDERRUN_COUNT,
-    Metrics.PROCESS_CPU_PERCENT,
-    Metrics.POWER_DEVICE_ESTIMATE,
 )
 
 /** The codec Android reports for a Bluetooth route (#73), stated in the system's part. */
@@ -210,6 +234,7 @@ internal fun ChainSummaryScreen(
             // The headline readings sit under the claim; the path below is the detail (owner, 2026-10-16).
             item(key = "pinned") {
                 ChainPinnedMetrics(
+                    playback = playback,
                     metrics = metrics,
                     unitDisplayMode = unitDisplayMode,
                     idle = lastPlayback,
@@ -655,11 +680,13 @@ internal fun conditionLabel(condition: AppSegmentCondition): Int = when (conditi
 /** B §5 pinned metrics, refreshed only while Chain is visible (the observation follows it). */
 @Composable
 private fun ChainPinnedMetrics(
+    playback: PlaybackSnapshot,
     metrics: Map<TelemetryMetricId, TelemetryMetric>,
     unitDisplayMode: ChainUnitDisplayMode,
     idle: Boolean,
     refreshInterval: TelemetryRefreshInterval,
 ) {
+    val context = LocalContext.current
     Column(Modifier.fillMaxWidth().testTag("vesqen.chain.pinned"), verticalArrangement = Arrangement.spacedBy(VesqenSpacing.sm)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -676,10 +703,11 @@ private fun ChainPinnedMetrics(
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val columns = if (maxWidth >= 300.dp && LocalDensity.current.fontScale < ChainLargeTextFontScale) 2 else 1
             Column(verticalArrangement = Arrangement.spacedBy(VesqenSpacing.sm)) {
-                ChainPinnedMetricIds.chunked(columns).forEach { row ->
+                ChainPinnedReading.entries.chunked(columns).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.sm)) {
-                        row.forEach { id ->
-                            ChainPinnedCard(id, metrics[id]?.evidence, unitDisplayMode, idle, Modifier.weight(1f))
+                        row.forEach { reading ->
+                            val content = pinnedContent(context, reading, metrics, playback.usbOutputStatus, unitDisplayMode)
+                            ChainPinnedCard(reading, content, idle, Modifier.weight(1f))
                         }
                         if (row.size < columns) Spacer(Modifier.weight(1f))
                     }
@@ -689,35 +717,124 @@ private fun ChainPinnedMetrics(
     }
 }
 
+/**
+ * One pinned card: a short [value] in the large digits and the remaining facts in [detail]. [evidence]
+ * holds what the card read, so its confidence is that of the weakest fact it shows.
+ */
+private class PinnedContent(val value: String?, val detail: String?, val evidence: List<TelemetryEvidence?>)
+
+private fun pinnedContent(
+    context: Context,
+    reading: ChainPinnedReading,
+    metrics: Map<TelemetryMetricId, TelemetryMetric>,
+    usbOutputStatus: UsbOutputStatus,
+    unitDisplayMode: ChainUnitDisplayMode,
+): PinnedContent {
+    fun evidence(id: TelemetryMetricId) = metrics[id]?.evidence
+    fun text(id: TelemetryMetricId) = evidence(id)?.takeUnless { it is TelemetryEvidence.Unavailable }
+        ?.let { formatTelemetryReading(context, it.reading, unitDisplayMode) }
+    return when (reading) {
+        ChainPinnedReading.SOURCE -> {
+            // As in the Now notes: a lossless file is described by its bit depth, a lossy one by its bit rate.
+            val lossless = text(Metrics.SOURCE_BIT_DEPTH) != null
+            val details = listOf(if (lossless) Metrics.SOURCE_BIT_DEPTH else Metrics.SOURCE_AVERAGE_BITRATE, Metrics.SOURCE_SAMPLE_RATE)
+            PinnedContent(
+                value = text(Metrics.SOURCE_CODEC_LABEL),
+                detail = details.mapNotNull(::text).joinToString(" · ").ifEmpty { null },
+                evidence = (listOf(Metrics.SOURCE_CODEC_LABEL) + details).map(::evidence),
+            )
+        }
+        ChainPinnedReading.HANDOFF -> PinnedContent(
+            value = text(Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE),
+            detail = text(Metrics.PLAYBACK_AUDIO_TRACK_ENCODING),
+            evidence = listOf(Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE, Metrics.PLAYBACK_AUDIO_TRACK_ENCODING).map(::evidence),
+        )
+        ChainPinnedReading.OUTPUT -> outputContent(context, metrics, usbOutputStatus, unitDisplayMode)
+        ChainPinnedReading.UNDERRUNS -> PinnedContent(
+            value = text(Metrics.PLAYBACK_UNDERRUN_COUNT),
+            detail = null,
+            evidence = listOf(evidence(Metrics.PLAYBACK_UNDERRUN_COUNT)),
+        )
+    }
+}
+
+/**
+ * Where Android sends the audio: the reported Bluetooth codec, the strict USB format, or just the
+ * kind of route. Android shares no format after its mixer, so the other routes have no detail.
+ */
+private fun outputContent(
+    context: Context,
+    metrics: Map<TelemetryMetricId, TelemetryMetric>,
+    usbOutputStatus: UsbOutputStatus,
+    unitDisplayMode: ChainUnitDisplayMode,
+): PinnedContent {
+    val route = metrics[Metrics.ROUTE_SELECTED_SYSTEM_TYPE]?.evidence
+    val type = (route?.reading as? TelemetryReading.Text)?.value
+    return when {
+        type == null -> PinnedContent(null, null, listOf(route))
+        isBluetoothRouteType(type) -> {
+            val codec = metrics[Metrics.ROUTE_BLUETOOTH_CODEC]?.evidence
+            val configuration = metrics[Metrics.ROUTE_BLUETOOTH_CONFIGURATION]?.evidence
+            val name = bluetoothCodecName(codec)
+            if (name != null) {
+                PinnedContent(name, bluetoothCodecSettingsSummary(context, configuration), listOf(route, codec, configuration))
+            } else {
+                PinnedContent(context.getString(R.string.chain_pinned_output_bluetooth), bluetoothCodecUnavailableText(context, codec), listOf(route))
+            }
+        }
+        type == "wired_or_usb" -> PinnedContent(
+            value = context.getString(R.string.chain_pinned_output_wired),
+            detail = usbOutputStatus.takeIf { it.phase == UsbOutputPhase.ACTIVE }?.sinkFormat?.displayName
+                ?.let { context.getString(R.string.now_notes_output_format_bit_perfect, it) },
+            evidence = listOf(route),
+        )
+        type == "phone_speaker" -> PinnedContent(context.getString(R.string.chain_pinned_output_speaker), null, listOf(route))
+        else -> {
+            val name = metrics[Metrics.ROUTE_SELECTED_SYSTEM_NAME]?.evidence
+            PinnedContent(
+                value = name?.takeUnless { it is TelemetryEvidence.Unavailable }?.let { formatTelemetryReading(context, it.reading, unitDisplayMode) },
+                detail = null,
+                evidence = listOf(name),
+            )
+        }
+    }
+}
+
 @Composable
 private fun ChainPinnedCard(
-    id: TelemetryMetricId,
-    evidence: TelemetryEvidence?,
-    unitDisplayMode: ChainUnitDisplayMode,
+    reading: ChainPinnedReading,
+    content: PinnedContent,
     idle: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val reading = rememberedTelemetryReading(evidence?.reading, unitDisplayMode)
     val onSurface = MaterialTheme.colorScheme.onSurface
+    val read = content.evidence.filterNotNull()
     // Autosize changes only the font size, so the line height must follow it (em), and the box
     // is sized for the largest value at this font scale. Smaller values then shrink to fit the
     // width instead of reflowing the card at digit and unit boundaries.
     val valueHeight = with(LocalDensity.current) { PinnedValueSize.toDp() * PinnedValueLineHeight }
     Surface(
-        modifier = modifier.testTag("vesqen.chain.core.${id.value}"),
+        modifier = modifier
+            .semantics(mergeDescendants = true) {}
+            .testTag("vesqen.chain.pinned.${reading.tag}"),
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, LocalVesqenColors.current.hairline),
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = stringResource(reading.label),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
             BasicText(
-                text = if (idle || evidence == null) "—" else reading,
-                // A measured value is data, so it is sans like every other number (B spec §3).
-                style = MaterialTheme.typography.displayLarge.copy(
+                text = content.value?.takeUnless { idle } ?: "—",
+                // B §5: the page-title serif, the one serif that carries digits (owner, 2026-10-16).
+                style = MaterialTheme.typography.displayLarge.pageTitle().copy(
                     color = onSurface,
-                    fontFamily = VesqenDataStyle.fontFamily,
-                    fontWeight = VesqenDataStyle.fontWeight,
                     fontFeatureSettings = "tnum",
                     lineHeight = PinnedValueLineHeight.em,
                 ),
@@ -727,26 +844,34 @@ private fun ChainPinnedCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(valueHeight)
-                    .testTag("vesqen.chain.core-value.${id.value}"),
+                    .testTag("vesqen.chain.pinned-value.${reading.tag}"),
             )
+            // Always one line, so the cards of a row keep one height whether or not they have details.
             Text(
-                text = telemetryMetricLabel(context, id),
+                text = content.detail?.takeUnless { idle }.orEmpty(),
                 style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
-                minLines = 2,
+                maxLines = 1,
+                minLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("vesqen.chain.pinned-detail.${reading.tag}"),
             )
             Text(
                 text = when {
-                    idle -> stringResource(R.string.chain_idle_title)
-                    evidence == null -> stringResource(R.string.chain_sampling_starting_short)
-                    else -> telemetryConfidenceLabel(context, evidence.confidence)
+                    // The notice above already says nothing is playing (owner, 2026-10-16); the empty
+                    // line keeps the card's height.
+                    idle -> ""
+                    read.isEmpty() -> stringResource(R.string.chain_sampling_starting_short)
+                    // The weakest fact shown decides; one the card leaves out (an MP3 has no bit depth) does not.
+                    else -> telemetryConfidenceLabel(
+                        context,
+                        read.filterNot { it is TelemetryEvidence.Unavailable }.ifEmpty { read }.maxBy { it.confidence.ordinal }.confidence,
+                    )
                 },
                 style = evidenceStyle(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.testTag("vesqen.chain.core-evidence.${id.value}"),
+                modifier = Modifier.testTag("vesqen.chain.pinned-evidence.${reading.tag}"),
             )
         }
     }

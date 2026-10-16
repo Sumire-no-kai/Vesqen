@@ -436,6 +436,12 @@
     <string name="chain_unit_display_si">SI 単位（10 進）</string>
     <string name="chain_unit_display_raw">基本単位（換算なし）</string>
     <string name="chain_pinned_metrics">固定した指標</string>
+    <string name="chain_pinned_handoff">システムに渡す形式</string>
+    <string name="chain_pinned_output">出力</string>
+    <string name="chain_pinned_underruns">アンダーラン回数</string>
+    <string name="chain_pinned_output_speaker">スピーカー</string>
+    <string name="chain_pinned_output_wired">有線</string>
+    <string name="chain_pinned_output_bluetooth">Bluetooth</string>
     <string name="chain_pinned">固定済み</string>
     <string name="chain_pin">指標を固定</string>
     <string name="chain_unpin">固定を解除</string>
