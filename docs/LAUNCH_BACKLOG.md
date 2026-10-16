@@ -69,7 +69,7 @@
 
 | Issue | 还要做 |
 | --- | --- |
-| [#75](https://github.com/Sumire-no-kai/Vesqen/issues/75) | 增加繁体中文和日语界面；日语暂时没有审读人 |
+| [#75](https://github.com/Sumire-no-kai/Vesqen/issues/75) | 繁体中文和日语已合并（PR #131、#132）；日语还没有母语者审读，发布前决定是否带上 |
 | [#73](https://github.com/Sumire-no-kai/Vesqen/issues/73) | 先在测试手机上实验能否收到系统报告的蓝牙 codec，看结果再决定是否进 1.0 |
 | [#50](https://github.com/Sumire-no-kai/Vesqen/issues/50) | 曲库首页快速滑动：两台手机修复前后各三轮对比，加上大曲库压力测试（M3-R1） |
 | [#51](https://github.com/Sumire-no-kai/Vesqen/issues/51) | 8 小时有线播放已通过；还缺新系统上的关屏长播、2 小时 24/96、拔耳机和来电 |
