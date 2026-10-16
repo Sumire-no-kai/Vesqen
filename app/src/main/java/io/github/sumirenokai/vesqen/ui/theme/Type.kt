@@ -82,10 +82,11 @@ internal fun rememberTitleSerif(): FontFamily {
 internal val LocalVesqenSerif = staticCompositionLocalOf<FontFamily> { InstrumentSerif }
 
 /**
- * Serif is only for page titles and names: tracks, albums, artists and playlists (owner decision,
- * 2026-10-10). Group headings, dialogs, buttons, status titles and numbers stay sans, so a card
- * never mixes a Songti heading with sans rows. Names use this regular serif; page titles use
- * [pageTitle].
+ * Serif is only for page titles and header-size names: the track title in Now, album, artist and
+ * playlist page headers and the track details title (owner decisions, 2026-10-10 and 2026-10-16).
+ * Names at list size, group headings, dialogs, buttons, status titles and numbers stay sans, so a
+ * row never mixes the condensed serif, Songti and sans. Names use this regular serif; page titles
+ * use [pageTitle].
  */
 @Composable
 fun TextStyle.serif(): TextStyle = copy(fontFamily = LocalVesqenSerif.current, fontWeight = FontWeight.Normal)
