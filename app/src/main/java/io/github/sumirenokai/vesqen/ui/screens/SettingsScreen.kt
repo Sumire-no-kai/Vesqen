@@ -67,6 +67,7 @@ import io.github.sumirenokai.vesqen.ui.components.PaperDivider
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
+import io.github.sumirenokai.vesqen.ui.theme.TopLevelTitleAutoSize
 import io.github.sumirenokai.vesqen.ui.theme.pageTitle
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 import io.github.sumirenokai.vesqen.updates.AppUpdater
@@ -418,6 +419,7 @@ private fun SettingsTitle() {
                 style = (if (compact) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.displayMedium).pageTitle(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                autoSize = TopLevelTitleAutoSize.takeUnless { compact },
                 modifier = Modifier
                     .semantics { heading() }
                     .testTag("vesqen.settings.title"),

@@ -162,6 +162,7 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenDataStyle
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
+import io.github.sumirenokai.vesqen.ui.theme.TopLevelTitleAutoSize
 import io.github.sumirenokai.vesqen.ui.theme.pageTitle
 import java.util.Locale
 import kotlinx.coroutines.delay
@@ -394,6 +395,7 @@ private fun ChainHeader(
                 style = (if (compactTitle) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.displayMedium).pageTitle(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                autoSize = TopLevelTitleAutoSize.takeUnless { compactTitle },
                 modifier = Modifier
                     .weight(1f)
                     .testTag("vesqen.chain.title")

@@ -141,6 +141,7 @@ import io.github.sumirenokai.vesqen.ui.components.VesqenEmptyState
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
+import io.github.sumirenokai.vesqen.ui.theme.TopLevelTitleAutoSize
 import io.github.sumirenokai.vesqen.ui.theme.pageTitle
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.serif
@@ -1387,6 +1388,7 @@ private fun LibraryHeader(
                 style = (if (compactTitle) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.displayMedium).pageTitle(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                autoSize = TopLevelTitleAutoSize.takeUnless { compactTitle },
             )
             onToggleSearch?.let { toggle ->
                 IconButton(

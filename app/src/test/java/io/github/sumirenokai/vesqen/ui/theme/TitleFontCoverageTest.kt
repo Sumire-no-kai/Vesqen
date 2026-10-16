@@ -18,6 +18,7 @@ class TitleFontCoverageTest {
     private val cuts = mapOf(
         "font" to listOf("values", "values-zh-rCN"),
         "font-b+zh+Hant" to listOf("values-b+zh+Hant"),
+        "font-ja" to listOf("values-ja"),
     )
 
     @Test
