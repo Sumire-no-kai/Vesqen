@@ -960,7 +960,7 @@ private fun AlbumShelfItem(album: LibraryCollection, onClick: () -> Unit) {
         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
                 text = album.title.ifBlank { stringResource(R.string.unknown_album) },
-                style = MaterialTheme.typography.titleMedium.serif(),
+                style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1028,7 +1028,7 @@ private fun CollectionRow(
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.headlineSmall.serif(),
+                style = MaterialTheme.typography.titleLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

@@ -32,7 +32,7 @@ typography:
   title:
     fontFamily: "Instrument Serif, system serif (Songti where present)"
     fontWeight: 400
-    sizes: "34/38, 28/31 sp; names in lists and sheets 22/28, 21/25, 17/22 sp"
+    sizes: "34/38, 28/31 sp; album page and track details headers 22/28 sp; Now in compact landscape 21/25 sp"
     use: "names of music only"
   heading:
     fontFamily: "Instrument Sans, system sans for Chinese"
@@ -146,7 +146,8 @@ Labels on filled Moss buttons: 6.0:1 (white on `moss-deep`), 11.4:1 (`night` on 
 ## Typography
 
 - **Page titles** ("Library", "Chain", "Settings" and the pages opened from them) use a bundled Noto Serif SC SemiBold in both languages, so they read as titles above the names. The font is cut down to printable ASCII and the characters of the titles listed in `tools/title_font_strings.txt` (`tools/subset_title_font.py`, about 33 KB), so it looks the same on every Android version and phone. Code marks these with `pageTitle()`. Owner decision, 2026-10-10.
-- **Names of music** use Instrument Serif at weight 400, with the system serif as fallback so Chinese uses Songti where the phone has it (Android 10 and later; Android 8–9 fall back to the system sans): track titles in Now, lists, the mini player, track details and the Chain summary, and album, artist and playlist names. Code marks each of these with `serif()`.
+- **Names of music** use Instrument Serif at weight 400 only at header sizes, with the system serif as fallback so Chinese uses Songti where the phone has it (Android 10 and later; Android 8–9 fall back to the system sans): the track title in Now, the album, artist or playlist page header, and the track details title. Code marks each of these with `serif()`.
+- **Names at list size** use the sans, Instrument Sans Medium with the system sans for Chinese and Japanese: 17 sp in song rows and the album shelf, 18 sp in the mini player, and 19 sp in album, artist, folder, genre and playlist rows and the Chain summary. Instrument Serif is a condensed display face and reads poorly at these sizes, and one family per row treats Latin and CJK names alike. Owner decision, 2026-10-16, after a side-by-side test on the iQOO.
 - **Headings that are not names** use Instrument Sans at weight 500: Settings group titles, sheet and dialog titles, Chain section and status titles, empty-state titles. Owner decision, 2026-10-10: a card never pairs a Songti heading with sans rows.
 - **Body, labels and controls** use Instrument Sans; Chinese uses the system sans.
 - **Data** (times, counts, rates, measured values) uses Instrument Sans with tabular figures, so changing digits keep their width. Monospace is only for literal code: the JSON report preview and cookie names in the policy. Monospace never sets a value with a unit; it spread "96  kHz" apart.
@@ -169,7 +170,7 @@ Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hai
 
 ### Lists and rows
 
-- Track rows: 48 dp cover, one-line serif title, one-line "artist · album", play indicator on the current track, and a 48 dp overflow button. Rows are ruled by a bottom hairline.
+- Track rows: 48 dp cover, one-line sans title, one-line "artist · album", play indicator on the current track, and a 48 dp overflow button. Rows are ruled by a bottom hairline.
 - Settings rows: 56 dp, or 64 dp with a description. A value (version, On/Off) sits left of the chevron; above 130 % text it moves under the title so the title never squeezes into single letters.
 - Album detail rows: track number, title, duration and a 48 dp overflow button in a 48 dp row.
 

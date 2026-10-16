@@ -99,7 +99,6 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenDataStyle
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
-import io.github.sumirenokai.vesqen.ui.theme.serif
 
 /** The five stations of B's "current playback path" (spec §5), in signal order. */
 internal enum class ChainStation(@StringRes val label: Int, val tag: String) {
@@ -240,7 +239,7 @@ internal fun ChainNowPlaying(playback: PlaybackSnapshot) {
         )
         Text(
             text = playback.title.ifBlank { stringResource(R.string.unknown_title) },
-            style = MaterialTheme.typography.headlineSmall.serif(),
+            style = MaterialTheme.typography.titleLarge,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.testTag("vesqen.chain.current-source"),
