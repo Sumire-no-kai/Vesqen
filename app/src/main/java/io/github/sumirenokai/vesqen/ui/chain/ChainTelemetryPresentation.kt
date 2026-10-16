@@ -6,6 +6,7 @@ import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import io.github.sumirenokai.vesqen.telemetry.LDAC_NOMINAL_BITRATE_METHOD
 import io.github.sumirenokai.vesqen.telemetry.TelemetryConfidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetric
@@ -595,6 +596,7 @@ private val ESTIMATED_METHOD_LABEL_RESOURCES = mapOf(
     "media3.position_from_last_event" to R.string.chain_method_position_from_last_event,
     "audio_track.request_format_pcm_data_rate" to R.string.chain_method_pcm_data_rate,
     "processing.compare_decoder_input_and_audio_track_rates" to R.string.chain_method_rate_conversion,
+    LDAC_NOMINAL_BITRATE_METHOD to R.string.chain_method_ldac_nominal_bitrate,
 )
 
 private val SOURCE_LABEL_RESOURCES = mapOf(
@@ -611,6 +613,7 @@ private val SOURCE_LABEL_RESOURCES = mapOf(
     "android.build" to R.string.chain_source_android_build,
     "android.battery" to R.string.chain_source_android_battery,
     "android.audio_route" to R.string.chain_source_android_audio_route,
+    "android.bluetooth_codec_report" to R.string.chain_source_android_bluetooth_codec_report,
     "android.runtime" to R.string.chain_source_android_runtime,
     "android.system_media_route" to R.string.chain_source_android_system_media_route,
     "android.direct_playback_support" to R.string.chain_source_android_direct_capability,

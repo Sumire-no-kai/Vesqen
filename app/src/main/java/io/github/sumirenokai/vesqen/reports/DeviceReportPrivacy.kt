@@ -10,6 +10,8 @@ import io.github.sumirenokai.vesqen.audio.AudioOutputType
 import io.github.sumirenokai.vesqen.library.M1_AUDIO_FORMAT_MATRIX
 import io.github.sumirenokai.vesqen.playback.OutputDeclaration
 import io.github.sumirenokai.vesqen.playback.telemetryLabel
+import io.github.sumirenokai.vesqen.telemetry.LDAC_NOMINAL_BITRATE_METHOD
+import io.github.sumirenokai.vesqen.telemetry.LdacQuality
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetric
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog as Metrics
@@ -55,10 +57,22 @@ internal object DeviceReportVocabulary {
     val outputDeclarations = OutputDeclaration.entries.mapTo(sortedSetOf()) { it.telemetryLabel }
     val directModes = setOf("none", "offload", "offload_gapless", "bitstream")
     val mixerProfileTokens = setOf("default", "bit_perfect_capability")
+    /**
+     * Codec names Android reports (#73): the AOSP types and the vendor names seen on test phones.
+     * A name outside the list is withheld rather than exported as free text.
+     */
+    val bluetoothCodecNames = setOf(
+        "SBC", "AAC", "aptX", "aptX HD", "aptX Adaptive", "aptX Lossless", "LDAC", "LC3", "Opus",
+        "LHDC", "LHDC V2", "LHDC V3", "LHDC V4", "LHDC V5",
+    )
+    /** BluetoothCodecSettings.token(): sample rate, bit depth, channel mode and LDAC quality. */
+    val bluetoothConfigurationTokenPattern = Regex(
+        "[0-9]{4,6}hz|(16|24|32)bit|mono|stereo|" + LdacQuality.entries.joinToString("|") { it.token },
+    )
     val playbackStates = setOf("idle", "buffering", "ready", "ended")
-    val sources = setOf("library.metadata", "media3.analytics", "media3.decoder_counters", "media3.player", "media3.data_source", "media3.current_media_data_source", "media3.audio_track", "android.media_codec", "android.process", "android.runtime", "android.power", "android.build", "android.battery", "android.audio_route", "android.system_media_route", "android.direct_playback_support", "android.mixer_attributes", "android.usb_public_api", "vesqen.configuration", "vesqen.output_coordinator", "vesqen.external_output_verification")
+    val sources = setOf("library.metadata", "media3.analytics", "media3.decoder_counters", "media3.player", "media3.data_source", "media3.current_media_data_source", "media3.audio_track", "android.media_codec", "android.process", "android.runtime", "android.power", "android.build", "android.battery", "android.audio_route", "android.bluetooth_codec_report", "android.system_media_route", "android.direct_playback_support", "android.mixer_attributes", "android.usb_public_api", "vesqen.configuration", "vesqen.output_coordinator", "vesqen.external_output_verification")
     /** Calculation ids of Derived evidence and method ids of Estimated evidence. */
-    val calculations = setOf("decoder.path_from_public_runtime_facts", "processing.compare_decoder_input_and_audio_track_rates", "media3.position_from_last_event", "rate.data_source_bytes_per_window", "rate.current_media_bytes_per_window", "rate.decoder_input_buffers_per_window", "rate.decoder_output_buffers_per_window", "audio_track.request_format_pcm_data_rate", "rate.process_cpu_one_core", "power.whole_device_current_times_voltage", "library.cached_metadata", "library.filename_extension")
+    val calculations = setOf("decoder.path_from_public_runtime_facts", "processing.compare_decoder_input_and_audio_track_rates", "media3.position_from_last_event", "rate.data_source_bytes_per_window", "rate.current_media_bytes_per_window", "rate.decoder_input_buffers_per_window", "rate.decoder_output_buffers_per_window", "audio_track.request_format_pcm_data_rate", "rate.process_cpu_one_core", "power.whole_device_current_times_voltage", "library.cached_metadata", "library.filename_extension", LDAC_NOMINAL_BITRATE_METHOD)
     val operandNames = setOf("bytes.delta", "window.seconds", "cpu.delta_ms", "window.elapsed_ms", "counter.delta")
 
     fun encoding(value: String) = value in encodings || value.matches(encodingPattern)
@@ -274,6 +288,8 @@ internal object DeviceReportPrivacy {
                     it.matches(Regex("[0-9]{1,7}hz")) || it.matches(Regex("mask_0x[0-9a-f]{1,8}"))
             }
             "route.output_declaration" -> value in words.outputDeclarations
+            "route.bluetooth_codec" -> value in words.bluetoothCodecNames
+            "route.bluetooth_configuration" -> value.split(",").all(words.bluetoothConfigurationTokenPattern::matches)
             "playback.state" -> value in words.playbackStates
             else -> false
         }

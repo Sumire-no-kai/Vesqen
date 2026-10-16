@@ -267,6 +267,23 @@
       "bit_perfect_capability",
       "default"
     ],
+    "bluetoothCodecNames": [
+      "AAC",
+      "LC3",
+      "LDAC",
+      "LHDC",
+      "LHDC V2",
+      "LHDC V3",
+      "LHDC V4",
+      "LHDC V5",
+      "Opus",
+      "SBC",
+      "aptX",
+      "aptX Adaptive",
+      "aptX HD",
+      "aptX Lossless"
+    ],
+    "bluetoothConfigurationTokenPattern": "[0-9]{4,6}hz|(16|24|32)bit|mono|stereo|ldac_990kbps|ldac_660kbps|ldac_330kbps|ldac_adaptive_or_990kbps",
     "playbackStates": [
       "buffering",
       "ended",
@@ -276,6 +293,7 @@
     "sources": [
       "android.audio_route",
       "android.battery",
+      "android.bluetooth_codec_report",
       "android.build",
       "android.direct_playback_support",
       "android.media_codec",
@@ -298,6 +316,7 @@
     ],
     "calculations": [
       "audio_track.request_format_pcm_data_rate",
+      "bluetooth.ldac_quality_nominal_bitrate",
       "decoder.path_from_public_runtime_facts",
       "library.cached_metadata",
       "library.filename_extension",

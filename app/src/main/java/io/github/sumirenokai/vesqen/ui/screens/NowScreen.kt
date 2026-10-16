@@ -117,6 +117,7 @@ import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
 import io.github.sumirenokai.vesqen.playback.PlaybackProblem
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
+import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.telemetry.PlaybackTelemetry
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetric
@@ -124,9 +125,15 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricId
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricSelection
 import io.github.sumirenokai.vesqen.telemetry.TelemetryObservation
+import io.github.sumirenokai.vesqen.telemetry.TelemetryReading
+import io.github.sumirenokai.vesqen.telemetry.isBluetoothRouteType
+import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecNeedsPermission
+import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecSummary
+import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecUnavailableText
 import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
 import io.github.sumirenokai.vesqen.ui.chain.telemetryConfidenceLabel
 import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
+import io.github.sumirenokai.vesqen.ui.components.BluetoothCodecPermissionButton
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.components.PlaybackControls
 import io.github.sumirenokai.vesqen.ui.components.QueueSheet
@@ -151,9 +158,14 @@ private val NotesMetricIds = setOf(
     TelemetryMetricCatalog.SOURCE_CODEC_LABEL,
     TelemetryMetricCatalog.SOURCE_BIT_DEPTH,
     TelemetryMetricCatalog.SOURCE_SAMPLE_RATE,
+    TelemetryMetricCatalog.SOURCE_AVERAGE_BITRATE,
     TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_ENCODING,
     TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE,
     TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_NAME,
+    TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_TYPE,
+    TelemetryMetricCatalog.ROUTE_BLUETOOTH_CODEC,
+    TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURATION,
+    TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURED_BITRATE,
     TelemetryMetricCatalog.PLAYBACK_UNDERRUN_COUNT,
 )
 
@@ -943,16 +955,21 @@ private fun NowLinerNotesBody(
         val text = evidence.filterNot { it is TelemetryEvidence.Unavailable }
             .joinToString(" · ") { formatTelemetryReading(context, it.reading) }
             .ifBlank { formatTelemetryReading(context, null) }
-        // The weakest piece of evidence decides the row's confidence label.
-        val weakest = evidence.maxBy { it.confidence.ordinal }
+        // The weakest shown piece of evidence decides the row's confidence label; a value the row
+        // leaves out (an MP3 has no bit depth) does not make the whole row "unavailable".
+        val weakest = evidence.filterNot { it is TelemetryEvidence.Unavailable }.maxByOrNull { it.confidence.ordinal }
+            ?: evidence.maxBy { it.confidence.ordinal }
         return text to telemetryConfidenceLabel(context, weakest.confidence)
     }
 
+    // A lossless file is described by its bit depth; a lossy one by its average bit rate.
+    val lossy = value(TelemetryMetricCatalog.SOURCE_BIT_DEPTH).let { it == null || it is TelemetryEvidence.Unavailable }
     val source = row(
-        listOf(
+        listOfNotNull(
             TelemetryMetricCatalog.SOURCE_CODEC_LABEL,
             TelemetryMetricCatalog.SOURCE_BIT_DEPTH,
             TelemetryMetricCatalog.SOURCE_SAMPLE_RATE,
+            TelemetryMetricCatalog.SOURCE_AVERAGE_BITRATE.takeIf { lossy },
         ),
     )
     val audioTrack = row(
@@ -973,6 +990,29 @@ private fun NowLinerNotesBody(
     NotesRow(stringResource(R.string.chain_core_source), source, "source")
     NotesRow(stringResource(R.string.chain_core_output), audioTrack, "audio-track")
     NotesRow(stringResource(R.string.chain_core_route), route, "route")
+    val routeType = (value(TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_TYPE)?.reading as? TelemetryReading.Text)?.value
+    when {
+        routeType != null && isBluetoothRouteType(routeType) -> {
+            val codec = value(TelemetryMetricCatalog.ROUTE_BLUETOOTH_CODEC)
+            val configuration = value(TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURATION)
+            val summary = bluetoothCodecSummary(context, codec, configuration)
+            val text = summary ?: bluetoothCodecUnavailableText(context, codec) ?: formatTelemetryReading(context, null)
+            val confidence = if (summary != null) {
+                row(listOf(TelemetryMetricCatalog.ROUTE_BLUETOOTH_CODEC, TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURATION, TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURED_BITRATE)).second
+            } else {
+                ""
+            }
+            NotesRow(stringResource(R.string.now_notes_bluetooth_codec), text to confidence, "bluetooth-codec")
+            if (bluetoothCodecNeedsPermission(codec)) BluetoothCodecPermissionButton()
+        }
+        // Android shares no post-mixer format; only strict USB knows what reaches the DAC.
+        routeType == "wired_or_usb" -> {
+            val strictFormat = snapshot.usbOutputStatus.takeIf { it.phase == UsbOutputPhase.ACTIVE }?.sinkFormat?.displayName
+            val text = strictFormat?.let { stringResource(R.string.now_notes_output_format_bit_perfect, it) }
+                ?: stringResource(R.string.now_notes_output_format_hidden)
+            NotesRow(stringResource(R.string.now_notes_output_format), text to "", "output-format")
+        }
+    }
     HorizontalDivider(color = LocalVesqenColors.current.hairline)
     Column(
         modifier = Modifier.padding(vertical = VesqenSpacing.sm),

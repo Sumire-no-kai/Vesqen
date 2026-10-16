@@ -49,6 +49,8 @@ internal object DeviceReportContract {
                 "outputDeclarations" to words.outputDeclarations.sorted(),
                 "directModes" to words.directModes.sorted(),
                 "mixerProfileTokens" to words.mixerProfileTokens.sorted(),
+                "bluetoothCodecNames" to words.bluetoothCodecNames.sorted(),
+                "bluetoothConfigurationTokenPattern" to words.bluetoothConfigurationTokenPattern.pattern,
                 "playbackStates" to words.playbackStates.sorted(),
                 "sources" to words.sources.sorted(),
                 "calculations" to words.calculations.sorted(),

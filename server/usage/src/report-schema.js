@@ -11,6 +11,7 @@ const encodingPattern = matchesPattern(text.encodingPattern);
 const platformEncodingPattern = matchesPattern(text.platformEncodingPattern);
 const encoding = value => text.encodings.includes(value) || encodingPattern(value);
 const platformEncoding = value => text.platformEncodings.includes(value) || platformEncodingPattern(value);
+const bluetoothConfigurationToken = matchesPattern(text.bluetoothConfigurationTokenPattern);
 const unavailable = enums.telemetryUnavailableReason;
 const availability = oneOf(enums.errorHistoryAvailability);
 const finite = v => typeof v === 'number' && Number.isFinite(v);
@@ -36,6 +37,8 @@ function textReading(id, v) {
     case 'route.request_format_direct_modes': return v.split(',').every(x => text.directModes.includes(x));
     case 'route.anticipated_preferred_mixer_profile': return v.split(',').every(x => text.mixerProfileTokens.includes(x) || platformEncoding(x) || /^\d{1,7}hz$/.test(x) || /^mask_0x[0-9a-f]{1,8}$/.test(x));
     case 'route.output_declaration': return text.outputDeclarations.includes(v);
+    case 'route.bluetooth_codec': return text.bluetoothCodecNames.includes(v);
+    case 'route.bluetooth_configuration': return v.split(',').every(bluetoothConfigurationToken);
     case 'playback.state': return text.playbackStates.includes(v);
     default: return false;
   }
