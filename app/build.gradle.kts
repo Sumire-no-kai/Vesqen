@@ -302,7 +302,7 @@ androidComponents {
                 }
             })
             catalogDirectory.set(rootProject.layout.projectDirectory.dir("third-party-licenses"))
-            fontDirectory.set(layout.projectDirectory.dir("src/main/res/font"))
+            resourceDirectory.set(layout.projectDirectory.dir("src/main/res"))
             fontLicenseDirectory.set(layout.projectDirectory.dir("src/main/assets/licenses/fonts"))
         }
         variant.sources.assets?.addGeneratedSourceDirectory(

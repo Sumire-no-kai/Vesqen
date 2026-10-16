@@ -22,8 +22,9 @@ public abstract class GenerateThirdPartyLicenses extends DefaultTask {
     @InputDirectory @PathSensitive(PathSensitivity.RELATIVE)
     public abstract DirectoryProperty getCatalogDirectory();
 
+    /** The app's res directory; fonts are read from res/font and its qualified variants. */
     @InputDirectory @PathSensitive(PathSensitivity.RELATIVE)
-    public abstract DirectoryProperty getFontDirectory();
+    public abstract DirectoryProperty getResourceDirectory();
 
     @InputDirectory @PathSensitive(PathSensitivity.RELATIVE)
     public abstract DirectoryProperty getFontLicenseDirectory();
@@ -51,7 +52,7 @@ public abstract class GenerateThirdPartyLicenses extends DefaultTask {
         }
         LicenseCatalog.generate(
             getCatalogDirectory().get().getAsFile(), artifacts,
-            getFontDirectory().get().getAsFile(), getFontLicenseDirectory().get().getAsFile(),
+            getResourceDirectory().get().getAsFile(), getFontLicenseDirectory().get().getAsFile(),
             getOutputDirectory().file("licenses/third-party.xml").get().getAsFile()
         );
     }

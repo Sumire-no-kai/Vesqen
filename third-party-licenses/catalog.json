@@ -1473,7 +1473,7 @@
       "name": "Instrument Sans",
       "version": "1.000",
       "files": {
-        "instrument_sans.ttf": "b24f1812584816958afcf22e22d08e44318c5e51651e25d2438efdde389b33b1"
+        "font/instrument_sans.ttf": "b24f1812584816958afcf22e22d08e44318c5e51651e25d2438efdde389b33b1"
       },
       "licenses": [
         {
@@ -1489,8 +1489,8 @@
       "name": "Instrument Serif",
       "version": "1.000",
       "files": {
-        "instrument_serif_regular.ttf": "498efd461f6ddfcb7a111bf9a565709d2085d48201d501ead960d93e84ffbb88",
-        "instrument_serif_italic.ttf": "08939b8bdf534afec24ae0ef5e03f948940cd9a8fe08e7fecbad040e62327385"
+        "font/instrument_serif_regular.ttf": "498efd461f6ddfcb7a111bf9a565709d2085d48201d501ead960d93e84ffbb88",
+        "font/instrument_serif_italic.ttf": "08939b8bdf534afec24ae0ef5e03f948940cd9a8fe08e7fecbad040e62327385"
       },
       "licenses": [
         {
@@ -1506,12 +1506,28 @@
       "name": "Noto Serif SC",
       "version": "2.003",
       "files": {
-        "title_serif_semibold.otf": "54c30313f5d1344df5098c88dffcc9ce3f22abde5118c005d8cab9ea8b9dcd39"
+        "font/title_serif_semibold.otf": "54c30313f5d1344df5098c88dffcc9ce3f22abde5118c005d8cab9ea8b9dcd39"
       },
       "licenses": [
         {
           "name": "OFL-1.1",
           "file": "NotoSerifSC-OFL.txt",
+          "source": "https://github.com/notofonts/noto-cjk"
+        }
+      ],
+      "notices": []
+    },
+    {
+      "id": "font:NotoSerifTC",
+      "name": "Noto Serif TC",
+      "version": "2.003",
+      "files": {
+        "font-b+zh+Hant/title_serif_semibold.otf": "5cdcd22944c70aefd363f8fbcb47147314f4dcd07e2144d57febb9d33d0a0555"
+      },
+      "licenses": [
+        {
+          "name": "OFL-1.1",
+          "file": "NotoSerifTC-OFL.txt",
           "source": "https://github.com/notofonts/noto-cjk"
         }
       ],

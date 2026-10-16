@@ -97,6 +97,7 @@ fun VesqenTheme(
     CompositionLocalProvider(
         LocalVesqenColors provides if (darkTheme) DarkExtendedColors else LightExtendedColors,
         LocalVesqenSerif provides serif,
+        LocalVesqenPageTitle provides rememberPageTitleSerif(),
     ) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,
