@@ -801,7 +801,7 @@
     <string name="bluetooth_codec_permission_action">Bluetooth コーデックを表示</string>
     <string name="bluetooth_codec_permission_body">Vesqen は「付近のデバイス」権限を、Android が報告する Bluetooth コーデック情報の取得にのみ使用します。音楽の再生には、この権限は必要ありません。</string>
     <string name="bluetooth_ldac_adaptive_or_990">自動調整または 990 kbps</string>
-    <string name="chain_segment_bluetooth_reported">Android が報告したコーデック：%1$s。音声は非可逆圧縮されているか、圧縮方式が不明です。</string>
+    <string name="chain_segment_bluetooth_reported">Android が報告したコーデック：%1$s。コーデックによって、非可逆の場合と、可逆かどうか分からない場合があります。</string>
     <string name="chain_segment_bluetooth_reconnect">ヘッドホンを接続し直すと、Android が報告するコーデックがここに表示されます。</string>
     <string name="chain_segment_bluetooth_nominally_lossless">仕様上はロスレスに対応していますが、電波状況が悪い場合は非可逆圧縮に切り替わります。現在の動作モードは Vesqen では確認できません。</string>
     <string name="chain_source_android_bluetooth_codec_report">Android の Bluetooth コーデック情報</string>
