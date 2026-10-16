@@ -108,10 +108,11 @@ class ChainTelemetryPresentationTest {
     }
 
     @Test
-    fun `every evidence age plural exists in English and Chinese`() {
+    fun `every evidence age plural exists in every language`() {
         // #35: ages never count seconds, so there is no seconds plural to keep.
         val plurals = listOf("minutes", "hours", "days").map { "chain_updated_${it}_ago" }
-        for (path in listOf("src/main/res/values/strings.xml", "src/main/res/values-zh-rCN/strings.xml")) {
+        val languages = listOf("values", "values-zh-rCN", "values-b+zh+Hant")
+        for (path in languages.map { "src/main/res/$it/strings.xml" }) {
             val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(File(path))
             val nodes = document.getElementsByTagName("plurals")
             val defined = (0 until nodes.length).associate { index ->
