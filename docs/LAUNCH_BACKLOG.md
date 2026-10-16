@@ -63,15 +63,28 @@
 
 ## 1.0 正式版之前
 
-| Issue | 内容 |
+2026-10-16 所有者确定（[PRD](PRD.md) 末尾"2026-10-16 1.0 的范围"）：`1.0.0` 是 Google Play 正式版的第一版，GitHub 同时发布同一个版本；严格 USB 的设备矩阵写成公开限制，随 2.0 的 M7 完成（#53）；增加日语和繁体中文（#75）；链路页显示系统报告的蓝牙 codec（#73）。
+
+上线时间取决于 Play：2026-10-16 查看时封闭测试已满 12 人加入，连续 14 天后申请正式版，审核一般 7 天以内。申请表要写测试者反馈的总结。
+
+| Issue | 还要做 |
 | --- | --- |
-| [#50](https://github.com/Sumire-no-kai/Vesqen/issues/50) | 曲库首页快速滑动性能的双机前后对比（M3-R1） |
-| [#51](https://github.com/Sumire-no-kai/Vesqen/issues/51) | 长时播放与中断测试 |
-| [#52](https://github.com/Sumire-no-kai/Vesqen/issues/52) | 进程被杀后通过耳机键或系统媒体控制恢复播放队列 |
-| [#53](https://github.com/Sumire-no-kai/Vesqen/issues/53) | 决定 1.0 的版本号与对外定位 |
-| [#54](https://github.com/Sumire-no-kai/Vesqen/issues/54) | 仓库与文档整理：发版复审记录、远程分支、签名文档中的本机路径 |
-| [#73](https://github.com/Sumire-no-kai/Vesqen/issues/73) | 链路页显示系统报告的蓝牙 codec（可选证据） |
-| [#75](https://github.com/Sumire-no-kai/Vesqen/issues/75) | 评估增加日语等界面语言 |
+| [#75](https://github.com/Sumire-no-kai/Vesqen/issues/75) | 增加日语和繁体中文界面，日语找母语者审读 |
+| [#73](https://github.com/Sumire-no-kai/Vesqen/issues/73) | 链路页显示系统报告的蓝牙 codec。新权限、设备报告和隐私政策的改动先经所有者同意 |
+| [#50](https://github.com/Sumire-no-kai/Vesqen/issues/50) | 曲库首页快速滑动：两台手机修复前后各三轮对比，加上大曲库压力测试（M3-R1） |
+| [#51](https://github.com/Sumire-no-kai/Vesqen/issues/51) | 8 小时有线播放已通过；还缺新系统上的关屏长播、2 小时 24/96、拔耳机和来电 |
+| [#72](https://github.com/Sumire-no-kai/Vesqen/issues/72) | 蓝牙两段显示的真机记录：耳机和音箱各播一首 FLAC、一首 MP3，要用所有者的蓝牙设备 |
+| [#35](https://github.com/Sumire-no-kai/Vesqen/issues/35) | 按 beta.3 复核界面和文案（字号、深浅色、减少动效），加完整的 TalkBack |
+| [#54](https://github.com/Sumire-no-kai/Vesqen/issues/54) | 仓库与文档整理；删除 `codex/*` 远程分支前先问所有者 |
+| [#129](https://github.com/Sumire-no-kai/Vesqen/issues/129) | 在原生 Android（例如 Pixel）上验证耳机键恢复（#52） |
+
+发布 1.0 时：
+
+- 版本号改成 `1.0.0`（`versionCode` 13），写发布说明，重新签名，从 beta.3 做升级验收。
+- 正式通道第一次启用：官网 `updates/stable.json` 第一次填上版本；GitHub 发布不标预发布。
+- 发布说明、README、官网和 Play 商品详情写明严格 USB 的限制（#53）。
+- Play：商品详情去掉"测试版"那一段，发布到正式版，建议分阶段放量。
+- 官网下载区改成 Google Play 和 GitHub 两个入口，README 状态同步。
 
 ## 2.0 之前
 
@@ -97,16 +110,14 @@
 | --- | --- |
 | [#74](https://github.com/Sumire-no-kai/Vesqen/issues/74) | 评估上架 F-Droid 和 IzzyOnDroid（可能需要无统计、无更新器的构建） |
 
-## Google Play（暂缓，最早在 beta.2 之后）
+## Google Play
+
+封闭测试 2026-10-13 起用 beta.2，2026-10-16 更新为 beta.3。#44（商品详情）、#47（构建拆分）、#56（前台服务申报）已关闭。
 
 | Issue | 内容 |
 | --- | --- |
-| [#45](https://github.com/Sumire-no-kai/Vesqen/issues/45) | 在 Play Console 创建应用并完成 12 人、14 天封闭测试（含填写隐私政策网址） |
-| [#44](https://github.com/Sumire-no-kai/Vesqen/issues/44) | 商品详情与上架材料，见 [Google Play 上架材料](PLAY_LISTING.md) |
-| [#56](https://github.com/Sumire-no-kai/Vesqen/issues/56) | 前台服务申报（`mediaPlayback`，需要演示视频） |
-| [#46](https://github.com/Sumire-no-kai/Vesqen/issues/46) | 7 天试用与一次性应用内解锁（Play 构建） |
-| [#47](https://github.com/Sumire-no-kai/Vesqen/issues/47) | GitHub / Play 构建拆分（Billing 只进 Play 构建，自行更新只进 GitHub 构建） |
-| [#48](https://github.com/Sumire-no-kai/Vesqen/issues/48) | 确认 Billing 带入的 Google 日志组件，写进隐私政策和数据安全表单 |
+| [#45](https://github.com/Sumire-no-kai/Vesqen/issues/45) | 封闭测试 12 人连续 14 天，然后申请正式版 |
+| [#46](https://github.com/Sumire-no-kai/Vesqen/issues/46)、[#48](https://github.com/Sumire-no-kai/Vesqen/issues/48) | 应用内解锁和 Billing 组件的披露，随 2.0 |
 
 ## 依赖关系
 
