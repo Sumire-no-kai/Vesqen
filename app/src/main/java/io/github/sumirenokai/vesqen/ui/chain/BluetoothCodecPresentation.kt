@@ -13,20 +13,26 @@ import java.text.NumberFormat
  * no report. Bit rates are the LDAC tier's nominal ceiling; nothing here is a measured transport rate.
  */
 internal fun bluetoothCodecSummary(context: Context, codec: TelemetryEvidence?, configuration: TelemetryEvidence?): String? {
-    val name = (codec?.reading as? TelemetryReading.Text)?.value ?: return null
+    val name = bluetoothCodecName(codec) ?: return null
+    return listOfNotNull(name, bluetoothCodecSettingsSummary(context, configuration)).joinToString(" · ")
+}
+
+internal fun bluetoothCodecName(codec: TelemetryEvidence?): String? = (codec?.reading as? TelemetryReading.Text)?.value
+
+/** The settings part of [bluetoothCodecSummary], "96 kHz · 32-bit · 990 kbps", or null when none was reported. */
+internal fun bluetoothCodecSettingsSummary(context: Context, configuration: TelemetryEvidence?): String? {
     val settings = (configuration?.reading as? TelemetryReading.Text)?.value?.let(BluetoothCodecSettings::parse)
     val kilohertz = NumberFormat.getNumberInstance(context.resources.configuration.locales[0]).apply {
         maximumFractionDigits = 1
     }
     return listOfNotNull(
-        name,
         settings?.sampleRateHz?.let { context.getString(R.string.chain_unit_khz, kilohertz.format(it / 1_000.0)) },
         settings?.bitsPerSample?.let { context.getString(R.string.chain_unit_bits, it.toString()) },
         settings?.ldacQuality?.let { quality ->
             quality.nominalBitsPerSecond?.let { context.getString(R.string.chain_unit_kbps, (it / 1_000).toString()) }
                 ?: context.getString(R.string.bluetooth_ldac_adaptive_or_990)
         },
-    ).joinToString(" · ")
+    ).joinToString(" · ").ifEmpty { null }
 }
 
 /** Why there is no codec to show, in the listener's terms, or null when the route is not Bluetooth. */

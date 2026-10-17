@@ -127,6 +127,7 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetryEventKind
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEventSeverity
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetric
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog
+import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricId
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricSelection
 import io.github.sumirenokai.vesqen.telemetry.TelemetryReading
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySection
@@ -1209,8 +1210,9 @@ class VesqenAppTest {
             }
         }
 
+        // Each chip is one merged TalkBack stop, so its decorative cue icon exists only in the unmerged tree.
         listOf("route", "availability", "requested", "activity", "verified", "failure").forEach { cue ->
-            composeRule.onNodeWithTag("vesqen.output-status.cue.$cue").assertIsDisplayed()
+            composeRule.onNodeWithTag("vesqen.output-status.cue.$cue", useUnmergedTree = true).assertIsDisplayed()
         }
     }
 
@@ -3648,8 +3650,9 @@ class VesqenAppTest {
             .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
         composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
 
-        val coreRootTag = "vesqen.chain.core.${metricId.value}"
-        val coreValueTag = "vesqen.chain.core-value.${metricId.value}"
+        // The summary pins the underrun count; the advanced dashboard pins the buffer duration.
+        val coreRootTag = "vesqen.chain.pinned.underruns"
+        val coreValueTag = "vesqen.chain.pinned-value.underruns"
         val coreHeights = mutableSetOf<Int>()
         composeRule.onNodeWithTag("vesqen.chain.summary-list")
             .performScrollToNode(hasTestTag(coreRootTag))
@@ -3657,7 +3660,7 @@ class VesqenAppTest {
             telemetry.publish(bufferedDurationSnapshot(reading))
             val expected = formatTelemetryReading(
                 context,
-                TelemetryReading.Integer(reading, TelemetryUnit.MILLISECONDS),
+                TelemetryReading.Integer(reading, TelemetryUnit.COUNT),
                 unitDisplayMode,
             )
             waitForChainValue(coreValueTag, expected)
@@ -3937,23 +3940,28 @@ class VesqenAppTest {
         )
     }
 
-    private fun bufferedDurationSnapshot(valueMs: Long): TelemetrySnapshot {
+    /** [value] as the buffered duration in milliseconds and as the underrun count. */
+    private fun bufferedDurationSnapshot(value: Long): TelemetrySnapshot {
         val snapshot = chainTelemetrySnapshot()
         val epochMs = System.currentTimeMillis()
         val elapsedMs = SystemClock.elapsedRealtime()
+        fun metric(id: TelemetryMetricId, unit: TelemetryUnit) = TelemetryMetric(
+            id = id,
+            section = TelemetrySection.PLAYBACK,
+            evidence = TelemetryEvidence.Measured(
+                reading = TelemetryReading.Integer(value, unit),
+                source = TelemetryDataSource(TelemetrySourceId("test.telemetry")),
+                observedAtEpochMs = epochMs,
+                observedAtElapsedRealtimeMs = elapsedMs,
+            ),
+        )
+        val replaced = setOf(TelemetryMetricCatalog.PLAYBACK_ESTIMATED_TOTAL_BUFFERED_DURATION, TelemetryMetricCatalog.PLAYBACK_UNDERRUN_COUNT)
         return snapshot.copy(
             capturedAtEpochMs = epochMs,
             capturedAtElapsedRealtimeMs = elapsedMs,
-            metrics = snapshot.metrics + TelemetryMetric(
-                id = TelemetryMetricCatalog.PLAYBACK_ESTIMATED_TOTAL_BUFFERED_DURATION,
-                section = TelemetrySection.PLAYBACK,
-                evidence = TelemetryEvidence.Measured(
-                    reading = TelemetryReading.Integer(valueMs, TelemetryUnit.MILLISECONDS),
-                    source = TelemetryDataSource(TelemetrySourceId("test.telemetry")),
-                    observedAtEpochMs = epochMs,
-                    observedAtElapsedRealtimeMs = elapsedMs,
-                ),
-            ),
+            metrics = snapshot.metrics.filterNot { it.id in replaced } +
+                metric(TelemetryMetricCatalog.PLAYBACK_ESTIMATED_TOTAL_BUFFERED_DURATION, TelemetryUnit.MILLISECONDS) +
+                metric(TelemetryMetricCatalog.PLAYBACK_UNDERRUN_COUNT, TelemetryUnit.COUNT),
         )
     }
 

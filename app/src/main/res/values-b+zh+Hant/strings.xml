@@ -435,6 +435,12 @@
     <string name="chain_unit_display_si">SI 十進位</string>
     <string name="chain_unit_display_raw">原始基本單位</string>
     <string name="chain_pinned_metrics">置頂指標</string>
+    <string name="chain_pinned_handoff">交給系統</string>
+    <string name="chain_pinned_output">輸出</string>
+    <string name="chain_pinned_underruns">緩衝不足次數</string>
+    <string name="chain_pinned_output_speaker">喇叭</string>
+    <string name="chain_pinned_output_wired">有線</string>
+    <string name="chain_pinned_output_bluetooth">藍牙</string>
     <string name="chain_pinned">已置頂</string>
     <string name="chain_pin">置頂指標</string>
     <string name="chain_unpin">取消置頂</string>

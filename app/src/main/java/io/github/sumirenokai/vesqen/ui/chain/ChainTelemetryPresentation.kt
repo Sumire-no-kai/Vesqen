@@ -400,9 +400,14 @@ private fun formatTelemetryNumberAuto(context: Context, value: Double, unit: Tel
             context.getString(R.string.chain_unit_hz, formatNumber(context, value))
         }
         TelemetryUnit.BITS -> context.getString(R.string.chain_unit_bits, formatNumber(context, value))
-        TelemetryUnit.MILLISECONDS -> context.getString(R.string.chain_unit_ms, formatNumber(context, value))
+        // A buffer of 26,612 ms reads as 26.6 s; short latencies stay in milliseconds.
+        TelemetryUnit.MILLISECONDS -> if (absolute >= 1_000) {
+            context.getString(R.string.chain_unit_seconds, formatNumber(context, value / 1_000, maximumFractionDigits = 1))
+        } else {
+            context.getString(R.string.chain_unit_ms, formatNumber(context, value))
+        }
         TelemetryUnit.NANOSECONDS -> context.getString(R.string.chain_unit_ns, formatNumber(context, value))
-        TelemetryUnit.PERCENT -> context.getString(R.string.chain_unit_percent, formatNumber(context, value))
+        TelemetryUnit.PERCENT -> context.getString(R.string.chain_unit_percent, formatNumber(context, value, maximumFractionDigits = 1))
         TelemetryUnit.COUNT -> formatNumber(context, value)
         TelemetryUnit.COUNT_PER_SECOND -> context.getString(
             R.string.chain_unit_count_per_second,
@@ -527,10 +532,10 @@ internal fun formatSeconds(context: Context, seconds: Double): String = context.
     formatNumber(context, seconds),
 )
 
-private fun formatNumber(context: Context, value: Double): String = NumberFormat.getNumberInstance(
+private fun formatNumber(context: Context, value: Double, maximumFractionDigits: Int = 2): String = NumberFormat.getNumberInstance(
     context.resources.configuration.locales[0],
 ).run {
-    maximumFractionDigits = 2
+    this.maximumFractionDigits = maximumFractionDigits
     minimumFractionDigits = 0
     isGroupingUsed = true
     format(value)

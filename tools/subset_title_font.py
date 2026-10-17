@@ -7,8 +7,9 @@ Sources: Serif/SubsetOTF/{SC,TC,JP}/NotoSerif{SC,TC,JP}-SemiBold.otf from https:
 at 9b0f1436e455d902de067a2501422e5dc71ad16b (Noto Serif CJK 2.003, checked against the hashes in
 CUTS), SIL OFL 1.1. The source files stay outside the repository; only the cuts are bundled. Each
 source is recognized by its hash and writes its own cut: printable ASCII, for English titles and
-library names, plus every character of the string resources listed in title_font_strings.txt in
-that cut's languages. Android picks the cut through the font directory's language qualifier.
+library names, the em dash of an empty Chain value, plus every character of the string resources
+listed in title_font_strings.txt in that cut's languages. Android picks the cut through the font
+directory's language qualifier.
 Needs fontTools (pip install fonttools). After running it, update the cut's hash in
 third-party-licenses/catalog.json.
 """
@@ -32,6 +33,8 @@ CUTS = {
         ("Noto Serif JP SemiBold 2.003", "font-ja", ("values-ja",)),
 }
 OUTPUT_NAME = "title_serif_semibold.otf"
+# The Chain pinned cards show an em dash for a value they do not have.
+EM_DASH = 0x2014
 
 
 def title_keys():
@@ -62,7 +65,7 @@ def main():
         raise SystemExit("Source font is none of the pinned Noto Serif CJK 2.003 files; review it first")
     _, directory, locales = cut
     output = RES / directory / OUTPUT_NAME
-    characters = set(map(ord, title_text(locales))) | set(range(0x20, 0x7F))
+    characters = set(map(ord, title_text(locales))) | set(range(0x20, 0x7F)) | {EM_DASH}
     options = subset.Options()
     options.name_IDs = ["*"]
     options.name_languages = ["*"]

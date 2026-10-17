@@ -10,8 +10,8 @@ import org.w3c.dom.Element
 
 /**
  * The page-title fonts are subsets (tools/subset_title_font.py), one cut per font directory. A title
- * character its cut lacks would render in the system font, so a renamed or newly listed title must
- * come with regenerated fonts, and a new language with its own cut.
+ * or pinned Chain value character its cut lacks would render in the system font, so a renamed or newly
+ * listed string must come with regenerated fonts, and a new language with its own cut.
  */
 class TitleFontCoverageTest {
     // Font directory -> string directories whose titles it renders; mirrors CUTS in the script.
@@ -39,6 +39,7 @@ class TitleFontCoverageTest {
                 }
             }
             assertTrue("$directory lacks printable ASCII", (0x20..0x7E).all(covered::contains))
+            assertTrue("$directory lacks the em dash of an empty Chain value", 0x2014 in covered)
         }
     }
 
