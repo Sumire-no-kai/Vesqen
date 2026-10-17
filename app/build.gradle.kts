@@ -7,6 +7,7 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.baselineprofile)
 }
 
 val vesqenVersion = Properties().apply {
@@ -118,6 +119,26 @@ android {
     buildFeatures {
         buildConfig = true
         compose = true
+    }
+}
+
+// #50: one Baseline Profile and startup profile for both channels and the profile build type, kept in
+// src/main/generated/baselineProfiles. :baselineprofile records them on the GitHub release build;
+// regenerate with `./gradlew :app:generateBaselineProfile` (baselineprofile/README.md).
+baselineProfile {
+    mergeIntoMain = true
+    dexLayoutOptimization = true
+    variants {
+        create("githubRelease") { from(project(":baselineprofile")) }
+    }
+}
+androidComponents {
+    // The plugin copies `optimization.enable` from release into its nonMinified build types, and its
+    // `isMinifyEnabled = false` cannot turn R8 off, which would record obfuscated names.
+    finalizeDsl { android ->
+        android.buildTypes.matching { it.name.startsWith("nonMinified") }.configureEach {
+            optimization { enable = false }
+        }
     }
 }
 
@@ -361,6 +382,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.session)
+    implementation(libs.androidx.profileinstaller)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
