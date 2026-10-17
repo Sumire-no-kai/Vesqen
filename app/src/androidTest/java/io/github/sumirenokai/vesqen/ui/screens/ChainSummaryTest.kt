@@ -19,6 +19,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -33,15 +34,19 @@ import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
+import io.github.sumirenokai.vesqen.telemetry.TelemetryDataSource
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvent
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEventKind
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEventSeverity
+import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog as Metrics
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricId
 import io.github.sumirenokai.vesqen.telemetry.TelemetryPowerMode
 import io.github.sumirenokai.vesqen.telemetry.TelemetryReading
 import io.github.sumirenokai.vesqen.telemetry.TelemetryRefreshInterval
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot
+import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceId
+import io.github.sumirenokai.vesqen.telemetry.TelemetryUnavailableReason
 import io.github.sumirenokai.vesqen.telemetry.TelemetryUnit
 import io.github.sumirenokai.vesqen.ui.chain.ChainObservationState
 import io.github.sumirenokai.vesqen.ui.chain.ChainUnitDisplayMode
@@ -207,6 +212,92 @@ class ChainSummaryTest {
     }
 
     @Test
+    fun without_a_selected_route_type_the_anticipated_bluetooth_route_shows_the_codec() {
+        // Android 11–13 name the selected route without its type (#136 R4).
+        show(
+            FakeAppSegmentTelemetry.snapshot(
+                mapOf(
+                    Metrics.ROUTE_SELECTED_SYSTEM_TYPE to unavailable(TelemetryUnavailableReason.NOT_EXPOSED_BY_PLATFORM),
+                    Metrics.ROUTE_ANTICIPATED_TYPE to measured(TelemetryReading.Text("bluetooth_a2dp")),
+                    Metrics.ROUTE_BLUETOOTH_CODEC to measured(TelemetryReading.Text("LDAC")),
+                    Metrics.ROUTE_BLUETOOTH_CONFIGURATION to measured(TelemetryReading.Text("96000hz,32bit,stereo,ldac_990kbps")),
+                    Metrics.ROUTE_BLUETOOTH_CONFIGURED_BITRATE to TelemetryEvidence.Estimated(
+                        TelemetryReading.Integer(990_000, TelemetryUnit.BITS_PER_SECOND),
+                        TelemetryDataSource(TelemetrySourceId("android.bluetooth_codec_report")),
+                        CapturedAtMs,
+                        "bluetooth.ldac_quality_nominal_bitrate",
+                    ),
+                ),
+            ),
+        )
+
+        val reported = listOf(
+            "LDAC",
+            context.getString(R.string.chain_unit_khz, "96"),
+            context.getString(R.string.chain_unit_bits, "32"),
+        ).joinToString(" · ")
+        // No confidence label in the system part, so the estimated kbps stays out of it.
+        segment(SystemSegment).assertTextContains(context.getString(R.string.chain_segment_bluetooth_reported, reported), substring = true)
+        scrollTo("vesqen.chain.pinned")
+        pinned("value", ChainPinnedReading.OUTPUT).assertTextEquals("LDAC")
+        // The card shows the LDAC tier's nominal kbps, an estimate (PRD F6.5.2).
+        pinned("evidence", ChainPinnedReading.OUTPUT).assertTextEquals(string(R.string.chain_confidence_estimated))
+    }
+
+    @Test
+    fun without_a_selected_route_type_the_output_card_uses_the_anticipated_speaker() {
+        show(
+            FakeAppSegmentTelemetry.snapshot(
+                mapOf(
+                    Metrics.ROUTE_SELECTED_SYSTEM_TYPE to unavailable(TelemetryUnavailableReason.NOT_EXPOSED_BY_PLATFORM),
+                    Metrics.ROUTE_ANTICIPATED_TYPE to measured(TelemetryReading.Text("built_in_speaker")),
+                ),
+            ),
+        )
+
+        scrollTo("vesqen.chain.pinned")
+        pinned("value", ChainPinnedReading.OUTPUT).assertTextEquals(string(R.string.chain_pinned_output_speaker))
+    }
+
+    @Test
+    fun an_unnamed_vendor_codec_shows_its_settings_without_asking_to_reconnect() {
+        show(
+            snapshotWith(
+                Metrics.ROUTE_SELECTED_SYSTEM_TYPE to measured(TelemetryReading.Text("bluetooth")),
+                Metrics.ROUTE_BLUETOOTH_CODEC to unavailable(TelemetryUnavailableReason.NOT_EXPOSED_BY_PLATFORM),
+                Metrics.ROUTE_BLUETOOTH_CONFIGURATION to measured(TelemetryReading.Text("96000hz,24bit,stereo")),
+            ),
+        )
+
+        val summary = listOf(
+            string(R.string.bluetooth_codec_unnamed),
+            context.getString(R.string.chain_unit_khz, "96"),
+            context.getString(R.string.chain_unit_bits, "24"),
+        ).joinToString(" · ")
+        segment(SystemSegment).assertTextContains(context.getString(R.string.chain_segment_bluetooth_reported, summary), substring = true)
+        composeRule.onAllNodesWithText(string(R.string.chain_segment_bluetooth_reconnect), substring = true).assertCountEquals(0)
+        scrollTo("vesqen.chain.pinned")
+        pinned("value", ChainPinnedReading.OUTPUT).assertTextEquals(string(R.string.chain_pinned_output_bluetooth))
+        pinned("detail", ChainPinnedReading.OUTPUT).assertTextEquals(summary)
+    }
+
+    @Test
+    fun le_audio_is_not_told_to_reconnect_for_a_codec_report_it_never_gets() {
+        show(
+            snapshotWith(
+                Metrics.ROUTE_SELECTED_SYSTEM_TYPE to measured(TelemetryReading.Text("bluetooth")),
+                Metrics.ROUTE_ANTICIPATED_TYPE to measured(TelemetryReading.Text("ble_headset")),
+                Metrics.ROUTE_BLUETOOTH_CODEC to unavailable(TelemetryUnavailableReason.NOT_APPLICABLE),
+            ),
+        )
+
+        segment(SystemSegment).assertTextContains(string(R.string.chain_segment_bluetooth), substring = true)
+        composeRule.onAllNodesWithText(string(R.string.chain_segment_bluetooth_reconnect), substring = true).assertCountEquals(0)
+        scrollTo("vesqen.chain.pinned")
+        pinned("detail", ChainPinnedReading.OUTPUT).assertTextEquals("")
+    }
+
+    @Test
     fun pinned_metrics_state_the_cadence_lower_power_really_uses() {
         show(FakeAppSegmentTelemetry.snapshot(), powerMode = TelemetryPowerMode.LOW_POWER)
 
@@ -308,6 +399,11 @@ class ChainSummaryTest {
 
     private fun snapshot(vararg readings: Pair<TelemetryMetricId, TelemetryReading>): TelemetrySnapshot =
         FakeAppSegmentTelemetry.snapshot(readings.associate { (id, reading) -> id to measured(reading) })
+
+    private fun snapshotWith(vararg evidence: Pair<TelemetryMetricId, TelemetryEvidence>): TelemetrySnapshot =
+        FakeAppSegmentTelemetry.snapshot(evidence.toMap())
+
+    private fun unavailable(reason: TelemetryUnavailableReason) = TelemetryEvidence.Unavailable(reason, CapturedAtMs)
 
     private fun pinned(part: String, reading: ChainPinnedReading): SemanticsNodeInteraction =
         composeRule.onNodeWithTag("vesqen.chain.pinned-$part.${reading.tag}", useUnmergedTree = true)

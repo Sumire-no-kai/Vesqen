@@ -18,6 +18,26 @@ internal fun bluetoothTransportUnavailableReason(
     else TelemetryUnavailableReason.NOT_APPLICABLE
 }
 
+/** Bluetooth routes that never get an A2DP codec report: LE Audio, hearing aids and calls (SCO). */
+internal fun isNonA2dpBluetoothRouteType(type: String): Boolean =
+    type == "bluetooth_sco" || type == "ble_headset" || type == "ble_speaker" || type == "ble_broadcast" ||
+        type == "hearing_aid"
+
+/**
+ * [bluetoothTransportUnavailableReason] for the A2DP codec report. The selected route is often only
+ * "bluetooth", so the anticipated device tells LE Audio, hearing aids and SCO apart: they never get
+ * that report, and reconnecting would not bring one (#136 R5).
+ */
+internal fun bluetoothCodecRouteReason(selectedType: String?, anticipatedType: String?): TelemetryUnavailableReason {
+    val transport = bluetoothTransportUnavailableReason(selectedType, anticipatedType)
+    val nonA2dp = listOfNotNull(selectedType, anticipatedType).any(::isNonA2dpBluetoothRouteType)
+    return if (transport == TelemetryUnavailableReason.NOT_EXPOSED_BY_PLATFORM && nonA2dp) {
+        TelemetryUnavailableReason.NOT_APPLICABLE
+    } else {
+        transport
+    }
+}
+
 /**
  * Why Android's codec report cannot describe the current route, or null when it can. [routeReason]
  * is [bluetoothTransportUnavailableReason], which is NOT_EXPOSED_BY_PLATFORM only for a Bluetooth

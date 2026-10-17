@@ -126,11 +126,12 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricId
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricSelection
 import io.github.sumirenokai.vesqen.telemetry.TelemetryObservation
 import io.github.sumirenokai.vesqen.telemetry.TelemetryReading
-import io.github.sumirenokai.vesqen.telemetry.isBluetoothRouteType
+import io.github.sumirenokai.vesqen.ui.chain.OutputRouteKind
 import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecNeedsPermission
 import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecSummary
 import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecUnavailableText
 import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
+import io.github.sumirenokai.vesqen.ui.chain.outputRoute
 import io.github.sumirenokai.vesqen.ui.chain.telemetryConfidenceLabel
 import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
 import io.github.sumirenokai.vesqen.ui.components.BluetoothCodecPermissionButton
@@ -163,6 +164,7 @@ private val NotesMetricIds = setOf(
     TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE,
     TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_NAME,
     TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_TYPE,
+    TelemetryMetricCatalog.ROUTE_ANTICIPATED_TYPE,
     TelemetryMetricCatalog.ROUTE_BLUETOOTH_CODEC,
     TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURATION,
     TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURED_BITRATE,
@@ -988,9 +990,9 @@ private fun NowLinerNotesBody(
     NotesRow(stringResource(R.string.chain_core_source), source, "source")
     NotesRow(stringResource(R.string.chain_core_output), audioTrack, "audio-track")
     NotesRow(stringResource(R.string.chain_core_route), route, "route")
-    val routeType = (value(TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_TYPE)?.reading as? TelemetryReading.Text)?.value
+    val routeKind = outputRoute(metrics)?.kind
     when {
-        routeType != null && isBluetoothRouteType(routeType) -> {
+        routeKind == OutputRouteKind.BLUETOOTH -> {
             val codec = value(TelemetryMetricCatalog.ROUTE_BLUETOOTH_CODEC)
             val configuration = value(TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURATION)
             val summary = bluetoothCodecSummary(context, codec, configuration)
@@ -1004,7 +1006,7 @@ private fun NowLinerNotesBody(
             if (bluetoothCodecNeedsPermission(codec)) BluetoothCodecPermissionButton()
         }
         // Android shares no post-mixer format; only strict USB knows what reaches the DAC.
-        routeType == "wired_or_usb" -> {
+        routeKind == OutputRouteKind.WIRED -> {
             val strictFormat = snapshot.usbOutputStatus.takeIf { it.phase == UsbOutputPhase.ACTIVE }?.sinkFormat?.displayName
             val text = strictFormat?.let { stringResource(R.string.now_notes_output_format_bit_perfect, it) }
                 ?: stringResource(R.string.now_notes_output_format_hidden)
