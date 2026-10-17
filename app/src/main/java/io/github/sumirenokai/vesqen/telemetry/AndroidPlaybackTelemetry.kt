@@ -101,6 +101,8 @@ class AndroidPlaybackTelemetry internal constructor(
     private val decoderGenerations = DecoderGenerationRegistry<MediaSource.MediaPeriodId>()
     private val pendingDecoderCounters = linkedMapOf<MediaSource.MediaPeriodId, DecoderCounters>()
     private val pendingAudioTracks = linkedMapOf<MediaSource.MediaPeriodId, ObservedAudioTrack>()
+    /** Keyed by the input Format instance Media3 also reports through onAudioInputFormatChanged. */
+    private val decoderOutputs = ArrayDeque<ObservedDecoderOutput>()
     private val codecFlagResolver = CodecFlagResolver()
     private var sourceFacts: TelemetrySourceFacts? = null
     private var sourceObservedAt: TelemetryInstant? = null
@@ -272,6 +274,7 @@ class AndroidPlaybackTelemetry internal constructor(
                 decoderFlagsObservedAt = decoderFlagsObservedAt,
                 inputFormat = inputFormat,
                 inputFormatObservedAt = inputFormatObservedAt,
+                decoderOutput = inputFormat?.let { format -> decoderOutputs.lastOrNull { it.input === format } },
                 decoderCounters = liveCounters,
                 audioTrackConfig = audioTrackConfig,
                 audioTrackObservedAt = audioTrackObservedAt,
@@ -335,6 +338,7 @@ class AndroidPlaybackTelemetry internal constructor(
         val activeDecoderHardwareAccelerated = media.decoderHardwareAccelerated.takeIf { hasActivePlayback }
         val activeDecoderVendor = media.decoderVendor.takeIf { hasActivePlayback }
         val activeInputFormat = media.inputFormat.takeIf { hasActivePlayback }
+        val activeDecoderOutput = media.decoderOutput.takeIf { hasActivePlayback }
         val activeDecoderCounters = media.decoderCounters.takeIf { hasActivePlayback }
         val activeSink = media.audioTrackConfig.takeIf { hasActivePlayback }
         val activeReason = if (media.sessionId == null) {
@@ -552,19 +556,25 @@ class AndroidPlaybackTelemetry internal constructor(
         } else {
             TelemetryUnavailableReason.NOT_EXPOSED_BY_PLATFORM
         }
-        metrics.unavailable(
+        // What the decoder actually produced (#72), read by Vesqen's renderer from MediaCodec's
+        // output format; Media3 itself only reports the AudioTrack it then configures.
+        val decoderOutputSource = if (activeDecoderOutput?.output?.fromCodec == false) MEDIA3_ANALYTICS else ANDROID_CODEC
+        val decoderOutputInstant = activeDecoderOutput?.instant ?: raw.instant
+        val decoderOutputMissing = if (hasActivePlayback) TelemetryUnavailableReason.TEMPORARILY_UNAVAILABLE else decoderOutputReason
+        metrics.measuredIntegerOrUnavailable(
             TelemetryMetricCatalog.DECODER_OUTPUT_SAMPLE_RATE,
-            decoderOutputReason,
-            raw.instant,
-            MEDIA3_ANALYTICS,
-            "Media3 does not expose the decoder PCM output format separately from the audio sink",
+            activeDecoderOutput?.output?.sampleRateHz?.toLong(),
+            TelemetryUnit.HERTZ,
+            decoderOutputSource,
+            decoderOutputInstant,
+            decoderOutputMissing,
         )
-        metrics.unavailable(
+        metrics.measuredTextOrUnavailable(
             TelemetryMetricCatalog.DECODER_OUTPUT_ENCODING,
-            decoderOutputReason,
-            raw.instant,
-            MEDIA3_ANALYTICS,
-            "Media3 does not expose the decoder PCM output format separately from the audio sink",
+            activeDecoderOutput?.output?.pcmEncoding?.let(::audioEncodingName),
+            decoderOutputSource,
+            decoderOutputInstant,
+            decoderOutputMissing,
         )
         metrics.unavailable(
             TelemetryMetricCatalog.DECODER_OUTPUT_CHANNEL_CONFIG,
@@ -1697,6 +1707,21 @@ class AndroidPlaybackTelemetry internal constructor(
         }
     }
 
+    /**
+     * Called by Vesqen's audio renderer on the playback thread once the decoder's output format is
+     * known. Media3 hands the renderer the same input [Format] instance it reports through
+     * [onAudioInputFormatChanged], so each output is matched to its own item, also when the next
+     * item starts decoding early in a gapless transition.
+     */
+    internal fun onDecoderOutputFormat(input: Format, output: DecoderOutputFormat) {
+        val instant = clock.now()
+        synchronized(stateLock) {
+            decoderOutputs.removeAll { it.input === input }
+            decoderOutputs.addLast(ObservedDecoderOutput(input, output, instant))
+            while (decoderOutputs.size > MAX_DECODER_OUTPUTS) decoderOutputs.removeFirst()
+        }
+    }
+
     override fun onAudioInputFormatChanged(
         eventTime: AnalyticsListener.EventTime,
         format: Format,
@@ -2056,6 +2081,7 @@ class AndroidPlaybackTelemetry internal constructor(
     private companion object {
         const val MAX_RECENT_EVENTS = 128
         const val MAX_PERIOD_FACTS = 8
+        const val MAX_DECODER_OUTPUTS = 8
         val SOURCE_METADATA = TelemetryDataSource(TelemetrySourceId("library.metadata"))
         val MEDIA3_ANALYTICS = TelemetryDataSource(TelemetrySourceId("media3.analytics"))
         val MEDIA3_COUNTERS = TelemetryDataSource(TelemetrySourceId("media3.decoder_counters"))
@@ -2188,6 +2214,7 @@ private data class MediaTelemetrySnapshot(
     val decoderFlagsObservedAt: TelemetryInstant?,
     val inputFormat: Format?,
     val inputFormatObservedAt: TelemetryInstant?,
+    val decoderOutput: ObservedDecoderOutput?,
     val decoderCounters: DecoderCounterSnapshot?,
     val audioTrackConfig: AudioTrackFacts?,
     val audioTrackObservedAt: TelemetryInstant?,
@@ -2229,6 +2256,19 @@ private data class DecoderFlags(
 
 private data class ObservedFormat(
     val format: Format,
+    val instant: TelemetryInstant,
+)
+
+/** The PCM a decoder produced: MediaCodec's output format, or the stream when Media3 bypasses the codec. */
+internal data class DecoderOutputFormat(
+    val pcmEncoding: Int,
+    val sampleRateHz: Int?,
+    val fromCodec: Boolean,
+)
+
+private data class ObservedDecoderOutput(
+    val input: Format,
+    val output: DecoderOutputFormat,
     val instant: TelemetryInstant,
 )
 
