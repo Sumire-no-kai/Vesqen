@@ -23,6 +23,7 @@ GITHUB_PERMISSIONS = frozenset({
     "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
     "android.permission.WAKE_LOCK",
     "android.permission.MODIFY_AUDIO_SETTINGS",
+    "android.permission.BLUETOOTH_CONNECT",
     "android.permission.ACCESS_NETWORK_STATE",
     "android.permission.INTERNET",
     "android.permission.REQUEST_INSTALL_PACKAGES",

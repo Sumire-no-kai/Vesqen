@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+import xml.etree.ElementTree as ET
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -77,6 +78,21 @@ class GithubReleaseTest(unittest.TestCase):
         allowed = header + "".join(f"uses-permission: name='{permission}'\n" for permission in release.GITHUB_PERMISSIONS)
         with patch.object(release, "run", return_value=allowed):
             release.inspect_apk(Path("candidate.apk"), Path("tools"), metadata())
+
+    def test_allowlist_covers_every_permission_the_github_manifests_declare(self):
+        # The allowlist is enforced only on the built APK during a release, so a permission added to
+        # a manifest without it stopped only the release job (BLUETOOTH_CONNECT, #73). Library
+        # permissions reach both flavors and are caught earlier by the Play build's merged-manifest check.
+        root = Path(__file__).resolve().parents[2]
+        android_name = "{http://schemas.android.com/apk/res/android}name"
+        declared = {
+            element.get(android_name)
+            for manifest in ("app/src/main/AndroidManifest.xml", "app/src/github/AndroidManifest.xml")
+            for element in ET.parse(root / manifest).getroot()
+            if element.tag in ("uses-permission", "uses-permission-sdk-23")
+        }
+        self.assertTrue(declared)
+        self.assertEqual(set(), declared - release.GITHUB_PERMISSIONS)
 
     def test_tool_failure_does_not_expose_credentials(self):
         result = subprocess.CompletedProcess(["apksigner"], 1, "private-key-marker", "password-marker")
