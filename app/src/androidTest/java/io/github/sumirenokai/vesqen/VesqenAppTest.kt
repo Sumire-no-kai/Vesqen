@@ -1431,6 +1431,24 @@ class VesqenAppTest {
     }
 
     @Test
+    fun liner_notes_observe_telemetry_only_while_the_app_is_visible() {
+        // Open notes stay composed in the background; their observer must not keep the sampler running.
+        val telemetry = FakePlaybackTelemetry(chainTelemetrySnapshot())
+        render(state = activePlaybackState(), playbackTelemetry = telemetry)
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.notes-toggle").performClick()
+        composeRule.waitUntil(5_000) { telemetry.activeObservationCount == 1 }
+
+        composeRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        try {
+            composeRule.waitUntil(5_000) { telemetry.activeObservationCount == 0 }
+        } finally {
+            composeRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        }
+        composeRule.waitUntil(5_000) { telemetry.activeObservationCount == 1 }
+    }
+
+    @Test
     fun chain_observation_runs_only_while_visible_and_advanced_uses_saved_selection() {
         val telemetry = FakePlaybackTelemetry(chainTelemetrySnapshot())
         render(

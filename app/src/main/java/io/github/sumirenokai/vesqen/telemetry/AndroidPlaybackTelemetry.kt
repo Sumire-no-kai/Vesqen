@@ -313,6 +313,15 @@ class AndroidPlaybackTelemetry internal constructor(
         } else {
             null
         }
+        // Read before the capture time, because a snapshot may hold no evidence observed after it. A
+        // USB status or codec report arriving between the capture and a later snapshot build (each
+        // observer builds its own, possibly from a replayed sample) would otherwise make it invalid.
+        val usbOutputStatus = usbOutputStateRepository.snapshot()
+        val bluetoothCodec = BluetoothCodecSample(
+            supported = bluetoothCodecs.supported,
+            permissionGranted = bluetoothCodecs.permissionGranted,
+            report = bluetoothCodecs.current,
+        )
         val capturedAt = clock.now()
         return RawTelemetrySample(
             instant = capturedAt,
@@ -321,6 +330,8 @@ class AndroidPlaybackTelemetry internal constructor(
             systemRequested = demand.includeSystem,
             output = output,
             outputRequested = demand.includeOutput,
+            usbOutputStatus = usbOutputStatus,
+            bluetoothCodec = bluetoothCodec,
         )
     }
 
@@ -1014,7 +1025,7 @@ class AndroidPlaybackTelemetry internal constructor(
             )
         }
 
-        val usbOutputStatus = usbOutputStateRepository.snapshot()
+        val usbOutputStatus = raw.usbOutputStatus
         val usbOutputInstant = if (usbOutputStatus.generation > 0) {
             TelemetryInstant(
                 epochMs = usbOutputStatus.observedAtEpochMs,
@@ -1293,13 +1304,12 @@ class AndroidPlaybackTelemetry internal constructor(
      */
     private fun addBluetoothCodecMetrics(
         metrics: MutableMap<TelemetryMetricId, TelemetryMetric>,
+        sample: BluetoothCodecSample,
         routeReason: TelemetryUnavailableReason,
         instant: TelemetryInstant,
     ) {
-        val report = bluetoothCodecs.current
-        val reason = bluetoothCodecUnavailableReason(
-            routeReason, bluetoothCodecs.supported, bluetoothCodecs.permissionGranted, report,
-        )
+        val report = sample.report
+        val reason = bluetoothCodecUnavailableReason(routeReason, sample.supported, sample.permissionGranted, report)
         if (reason != null || report == null) {
             val detail = if (reason == TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT) {
                 "No codec report since Vesqen started; Android sends one when the headphones reconnect or the codec changes"
@@ -1472,7 +1482,7 @@ class AndroidPlaybackTelemetry internal constructor(
         val bluetoothReason = bluetoothTransportUnavailableReason(
             output.selectedSystemRouteType, output.anticipatedRouteType,
         )
-        addBluetoothCodecMetrics(metrics, bluetoothReason, output.observedAt)
+        addBluetoothCodecMetrics(metrics, raw.bluetoothCodec, bluetoothReason, output.observedAt)
         // Public AudioManager endpoints describe PCM-facing capabilities and Android has no
         // over-the-air counter, so nothing may be relabelled as the Bluetooth transport bitrate.
         metrics.unavailable(
@@ -2197,6 +2207,15 @@ private data class RawTelemetrySample(
     val systemRequested: Boolean,
     val output: OutputTelemetrySnapshot?,
     val outputRequested: Boolean,
+    val usbOutputStatus: UsbOutputStatus,
+    val bluetoothCodec: BluetoothCodecSample,
+)
+
+/** The codec state as of the capture: the last report, observed no later than [RawTelemetrySample.instant]. */
+private data class BluetoothCodecSample(
+    val supported: Boolean,
+    val permissionGranted: Boolean,
+    val report: BluetoothCodecReport?,
 )
 
 private data class MediaTelemetrySnapshot(
