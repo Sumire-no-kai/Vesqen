@@ -1243,4 +1243,9 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - 模拟器上前后两版交替各测三遍：按 profile 编译后，曲库冷启动后头 16 次甩动的 UI 线程 p50 从 5.92 降到 3.61 ms，超过 8 ms 的帧从 223/608 降到 122/571；设置 → 播放链路 → 返回（热）p90 从 11.56 降到 8.44 ms；冷启动中位数从 755 到 648 ms。完整表格和测量条件见 案例集 P06（[ENGINEERING_CASEBOOK.md](ENGINEERING_CASEBOOK.md)）。
 - 侧载安装后 ART 是 `verify`，要等系统后台编译才用上 profile；Play 安装时就编译；可调试的 Vesqen Test 不受影响。iQOO 上当天装的 Vesqen Profile 也还是 `verify`。
 - 验证：`:app:testDebugUnitTest :app:lintDebug :app:assembleDebug` 和两个渠道的设备测试编译通过（单元测试 GitHub 472、Play 434）；CI 的任务组合、两个渠道的 Release 和 Play AAB 通过，都带 profile；启动 `MainActivity` 的 `SpeakerChainLifecycleDeviceTest` 在 Android 16 模拟器上通过。
-- 还没做：iQOO 上的前后对比，要先得到所有者同意再装包。模拟器、系统镜像和 SDK 命令行工具用完后删除。
+- iQOO 9（Android 15，60 Hz，2112 首）上前后交替各三遍：
+  - 编译后曲库 UI 线程时间低约 10%，冷启动中位数从 303 到 288 ms；
+  - 曲库甩动加前加后都没有超过 16.7 ms 的帧；
+  - 设置 → 播放链路 → 返回每次切换都有一帧 25–67 ms，加不加 profile 都一样，要另外处理。
+  - 测完删除测试文件、重新扫描，装回原来的 Vesqen Profile，清空队列、收回权限、恢复成未编译状态。
+- 模拟器、系统镜像和 SDK 命令行工具用完后已删除，SDK 和 `~/.android` 恢复原样。
