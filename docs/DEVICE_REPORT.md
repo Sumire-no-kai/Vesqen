@@ -165,7 +165,8 @@ encoded paths and control characters. An opted-in basename is also withheld when
 contains a connected Bluetooth device's name. Raw telemetry
 text, source details, unavailability details, device names/keys and recent event
 history are never copied into the report. Unsupported text is explicitly redacted.
-Basic Build strings are checked separately; filtered values are null. They are not
+Basic Build strings are checked separately; filtered values are null. As in usage pings, a
+self-built ROM's `eng.`/`userdebug.` builder login is dropped from the build name. They are not
 cross-checked against route names: the built-in speaker route is named after the
 phone model. USB inventory
 keeps numeric capabilities and per-report ordinals, without device identifiers or

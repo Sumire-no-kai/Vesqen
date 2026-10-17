@@ -17,6 +17,7 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetryMetric
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog as Metrics
 import io.github.sumirenokai.vesqen.telemetry.TelemetryReading
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySection
+import io.github.sumirenokai.vesqen.usage.withoutBuilderLogin
 
 /**
  * Every text value a report may carry. Sets come from the producers wherever they are defined in
@@ -123,7 +124,7 @@ internal object DeviceReportPrivacy {
             "basic" to with(data.basic) { linkedMapOf(
                 "appVersion" to label(appVersion), "versionCode" to versionCode, "buildType" to label(buildType),
                 "manufacturer" to label(manufacturer), "model" to label(model), "androidVersion" to label(androidVersion),
-                "androidApi" to androidApi, "romBuild" to label(romBuild), "redactedValuesAreNull" to true,
+                "androidApi" to androidApi, "romBuild" to label(withoutBuilderLogin(romBuild)), "redactedValuesAreNull" to true,
             ) },
         )
         if (options.audioCapabilities) result["audioCapabilities"] = snapshot(data, capabilitiesOnly = true)

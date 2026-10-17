@@ -53,13 +53,19 @@ internal fun usageAttemptDue(now: Long, last: Long?): Boolean {
 
 /**
  * Device strings in the server's accepted alphabet (letters, digits, space and "._()+-", at most
- * 160), so an unusual ROM string is still counted. Self-built ROMs put the builder's login after
- * "eng." or "userdebug."; it is dropped.
+ * 160), so an unusual ROM string is still counted. The builder's login is dropped first.
  */
-internal fun usageText(raw: String): String = raw
-    .replace(Regex("(?i)\\b(eng|userdebug)\\.[A-Za-z0-9_-]+"), "$1")
+internal fun usageText(raw: String): String = withoutBuilderLogin(raw)
     .map { if (it.isLetterOrDigit() || it in " ._()+-") it else '_' }
     .joinToString("").trim().take(160).ifEmpty { "unknown" }
+
+/**
+ * Self-built ROMs put the builder's login after "eng." or "userdebug." in the build name. It is
+ * dropped wherever the build name leaves the device: usage pings and device reports.
+ */
+internal fun withoutBuilderLogin(raw: String): String = raw.replace(BUILDER_LOGIN, "$1")
+
+private val BUILDER_LOGIN = Regex("(?i)\\b(eng|userdebug)\\.[A-Za-z0-9_-]+")
 
 /** UTC and ISO Monday weeks are shared with the server. Only booleans leave the device. */
 internal fun usagePing(facts: UsageFacts, now: Long, preferences: UsagePreferences): UsagePing {

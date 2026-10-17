@@ -86,6 +86,13 @@ class DeviceReportGeneratorTest {
         assertFalse(DeviceReportGenerator.generate(data, DeviceReportOptions(true, true, true, true, true)).previewText.contains("Secret Headphones"))
     }
 
+    @Test fun `a self-built ROM's builder login is dropped from the build name as in usage pings`() {
+        val data = reportData().copy(basic = reportData().basic.copy(romBuild = "lineage_x-userdebug 14 AP2A eng.john.20240901"))
+        val report = DeviceReportGenerator.generate(data, DeviceReportOptions(false, false, false, false, false)).previewText
+        assertTrue(report.contains("\"romBuild\":\"lineage_x-userdebug 14 AP2A eng.20240901\""))
+        assertFalse(report.contains("john"))
+    }
+
     @Test fun `route names never null the model or ordinary file names`() {
         // AOSP names the built-in speaker route after Build.MODEL; "none" means no Bluetooth device.
         val data = reportData().copy(
