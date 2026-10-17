@@ -50,14 +50,18 @@ internal class AndroidUsageRuntime(
 private val usbAudioTypes = setOf(AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_ACCESSORY, AudioDeviceInfo.TYPE_USB_HEADSET)
 
 /**
- * System locales, the default subscription's SIM and network country, and from Android 11 every
- * slot's network country. Public country codes only: no phone-state permission or identifiers.
+ * System locales, the system time zone's country, the default subscription's SIM and network
+ * country, and from Android 11 every slot's network country. Public country codes only: no
+ * phone-state or location permission, no identifiers, and nothing here leaves the device.
  * Android 8-10 cannot read the other slots, so a second SIM there is covered by locale and network.
+ * The time zone covers Wi-Fi-only devices whose language names another country, such as a tablet
+ * in Germany set to US English (#136 R24). Wi-Fi's own country code is a system-only API.
  */
 private fun usageRegion(context: Context): UsageRegionPolicy {
     val locales = android.content.res.Resources.getSystem().configuration.locales
     val countries = buildList {
         (0 until locales.size()).mapTo(this) { locales[it].country }
+        timeZoneCountry(java.util.TimeZone.getDefault().id)?.let(::add)
         context.getSystemService(TelephonyManager::class.java)?.let { telephony ->
             telephonyCountry { telephony.simCountryIso }?.let(::add)
             telephonyCountry { telephony.networkCountryIso }?.let(::add)
@@ -69,6 +73,10 @@ private fun usageRegion(context: Context): UsageRegionPolicy {
     }
     return UsageRegionRules.evaluate(countries)
 }
+
+/** ICU's country for a tz ID; "001" for Etc zones, which [UsageRegionRules] ignores, and null for custom IDs. */
+internal fun timeZoneCountry(id: String): String? = try { android.icu.util.TimeZone.getRegion(id) }
+    catch (_: IllegalArgumentException) { null }
 
 private inline fun telephonyCountry(read: () -> String?): String? = try { read() }
     catch (_: SecurityException) { null }
