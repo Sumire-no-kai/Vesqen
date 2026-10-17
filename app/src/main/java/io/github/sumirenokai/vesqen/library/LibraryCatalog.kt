@@ -211,7 +211,7 @@ internal class AndroidLibraryCatalog(
         ) {
             store.migrateLegacyMediaStoreIdentities(mediaStore.legacyIdentityMappings(scanScope))
         }
-        val session = store.beginSourceScan(source.id)
+        val scan = store.beginMediaStoreScan()
         onProgress(
             LibraryScanProgress(
                 sourceId = source.id,
@@ -223,8 +223,8 @@ internal class AndroidLibraryCatalog(
             scope = scanScope,
             shouldPause = scanGate::isPaused,
         ) { candidate ->
-            if (!store.markSeenIfFingerprintMatches(session, candidate.remoteId, candidate.fingerprint)) {
-                store.upsertTrack(session, metadataReader.enrich(candidate))
+            if (!store.markSeenIfUnchanged(scan, candidate)) {
+                store.upsertMediaStoreTrack(scan, metadataReader.enrich(candidate))
             }
         }
         if (
@@ -236,7 +236,7 @@ internal class AndroidLibraryCatalog(
         }
         finishIteration(
             source = source,
-            session = session,
+            session = scan.session,
             iteration = iteration,
             generation = scanScope.generation,
             scannedMediaStoreVolumes = scanScope.volumeNames,
@@ -345,12 +345,17 @@ internal class AndroidLibraryCatalog(
         } else {
             emptyMap()
         }
+        val displacedDeviceTrackIds = if (includeDeviceLibrary) {
+            store.readDisplacedTrackIds()
+        } else {
+            emptySet()
+        }
         val hiddenDeviceTrackIds = deviceTrackLocations.asSequence()
             .filterNot { (_, contentUri) ->
                 mediaStoreTrackIsMounted(contentUri, mountedMediaStoreVolumes)
             }
             .map { it.key }
-            .toSet()
+            .toSet() + displacedDeviceTrackIds
         val visibleTracks = store.readTracks(visibleSourceIds).filterNot { track ->
             track.id in hiddenDeviceTrackIds
         }
