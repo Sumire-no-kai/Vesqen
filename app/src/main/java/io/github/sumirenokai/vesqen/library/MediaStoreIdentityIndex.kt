@@ -31,8 +31,9 @@ internal data class MediaStoreTrackPlan(
  * names the same file (#136 R9). Catalog IDs carry favorites, history, playlist positions and the
  * saved queue, so a row is kept only by the file it describes:
  *
- * - The same `_ID` stays on its row unless the file name, size and duration (by a second or more)
- *   all changed. A rename, a tag edit, or both keep the duration.
+ * - The same `_ID` stays on its row unless the path (folder and file name), size and duration (by
+ *   a second or more) all changed. A rename or move, a tag edit, or both keep the duration. The
+ *   folder counts because generic names such as `01.flac` repeat in every album folder.
  * - Otherwise, and for an `_ID` the catalog does not know, the candidate is attached to the one
  *   row not yet seen in this scan with the same volume, folder, file name and size. A file that
  *   was deleted and copied back therefore keeps its row too.
@@ -87,7 +88,7 @@ internal class MediaStoreIdentityIndex(rows: Collection<StoredTrackIdentity>) {
 internal const val SAME_FILE_DURATION_TOLERANCE_MS = 1_000L
 
 private fun StoredTrackIdentity.namesSameFileAs(candidate: LibraryTrackCandidate): Boolean =
-    fileName == candidate.fileName ||
+    (folderName == candidate.folderName && fileName == candidate.fileName) ||
         sizeBytes == candidate.sizeBytes ||
         abs(durationMs - candidate.durationMs) < SAME_FILE_DURATION_TOLERANCE_MS
 

@@ -731,6 +731,25 @@ class LibraryCatalogStoreTest {
     }
 
     @Test
+    fun aSameNamedSongInAnotherFolderDoesNotTakeOverTheRow() = withStore("library-rebuild-same-name") { store ->
+        val firstTrackOfA = songA.copy(fileName = "01.flac", folderName = "Music/Album A")
+        val firstTrackOfB = songB.copy(fileName = "01.flac", folderName = "Music/Album B")
+        store.scanMediaStore(firstTrackOfA.at(1), firstTrackOfB.at(2))
+        val a = store.tracksByTitle().getValue("A")
+        val b = store.tracksByTitle().getValue("B")
+        store.setFavorite(a.id, true)
+
+        store.scanMediaStore(firstTrackOfB.at(1), firstTrackOfA.at(2))
+
+        val after = store.tracksByTitle()
+        assertEquals(a.id, after.getValue("A").id)
+        assertEquals(firstTrackOfA.at(2).contentUri, after.getValue("A").contentUri)
+        assertTrue(after.getValue("A").isFavorite)
+        assertEquals(b.id, after.getValue("B").id)
+        assertFalse(after.getValue("B").isFavorite)
+    }
+
+    @Test
     fun aFileDeletedAndCopiedBackKeepsItsRow() = withStore("library-copy-back") { store ->
         store.scanMediaStore(songA.at(1), songB.at(2))
         val b = store.tracksByTitle().getValue("B")

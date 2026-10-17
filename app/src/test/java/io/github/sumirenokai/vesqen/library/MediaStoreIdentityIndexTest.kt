@@ -34,6 +34,38 @@ class MediaStoreIdentityIndexTest {
     }
 
     @Test
+    fun `a move to another folder keeps the row`() {
+        val index = MediaStoreIdentityIndex(listOf(row(1, mediaId = 1, songA)))
+
+        assertEquals(
+            MediaStoreTrackPlan(targetTrackId = 1),
+            index.plan(candidate(mediaId = 1, songA, folderName = "Music/Moved")),
+        )
+    }
+
+    @Test
+    fun `another song with the same file name in another folder is another file`() {
+        // Generic names repeat in every album folder, and a rebuild can shift numbers onto them.
+        val firstTrackOfA = songA.copy(fileName = "01.flac")
+        val firstTrackOfB = songB.copy(fileName = "01.flac")
+        val index = MediaStoreIdentityIndex(
+            listOf(
+                row(1, mediaId = 1, firstTrackOfA, folderName = "Music/Album A"),
+                row(2, mediaId = 2, firstTrackOfB, folderName = "Music/Album B"),
+            ),
+        )
+
+        assertEquals(
+            MediaStoreTrackPlan(targetTrackId = 2, displacedTrackId = 1),
+            index.plan(candidate(mediaId = 1, firstTrackOfB, folderName = "Music/Album B")),
+        )
+        assertEquals(
+            MediaStoreTrackPlan(targetTrackId = 1),
+            index.plan(candidate(mediaId = 2, firstTrackOfA, folderName = "Music/Album A")),
+        )
+    }
+
+    @Test
     fun `a tag edit keeps the row`() {
         val index = MediaStoreIdentityIndex(listOf(row(1, mediaId = 1, songA)))
 
