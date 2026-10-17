@@ -69,7 +69,7 @@
 
 | Issue | 还要做 |
 | --- | --- |
-| [#75](https://github.com/Sumire-no-kai/Vesqen/issues/75) | 繁体中文和日语已合并（PR #131、#132）。2026-10-17 所有者决定日语不随 1.0，母语者审读后在之后的小版本带上；撤下日语的提交等所有者放行 |
+| [#75](https://github.com/Sumire-no-kai/Vesqen/issues/75) | 繁体中文和日语已合并（PR #131、#132）。日语还没有母语者审读；2026-10-17 所有者决定日语代码先留在 master，1.0 带不带日语发版前再定 |
 | [#50](https://github.com/Sumire-no-kai/Vesqen/issues/50) | 曲库首页快速滑动：两台手机修复前后各三轮对比，加上大曲库压力测试（M3-R1）。2026-10-17 所有者反馈曲库甩动和设置里的页面切换仍明显卡；模拟器测量和原因见 issue，建议先加 Baseline Profile，再在 iQOO 上对比 |
 | [#51](https://github.com/Sumire-no-kai/Vesqen/issues/51) | 8 小时有线播放已通过；还缺新系统上的关屏长播、2 小时 24/96、拔耳机和来电 |
 | [#136](https://github.com/Sumire-no-kai/Vesqen/issues/136) | 1.0 代码审查（2026-10-17）：R1–R11、R24（加时区判断）、R32（设置页返回保持位置）已修；R9 在 Android 8.0 模拟器上真的清除媒体存储验证过，真机上没做；R12–R31 其余可以放到之后 |
@@ -80,6 +80,7 @@
 发布 1.0 时：
 
 - 版本号改成 `1.0.0`（`versionCode` 13），写发布说明，重新签名，从 beta.3 做升级验收。
+- 定下 1.0 带不带日语（#75）。不带的话，在发版提交里去掉 `values-ja`、`font-ja`、Noto Serif JP 的许可和目录条目，并同步 `locales_config.xml` 和相关测试；master 上的日语保留。
 - 服务端（`server/usage`）已在 2026-10-17 部署（版本 `8bae26bb`，master `ce31aed`），认识设备报告词表里新加的蓝牙编码字段（#73）；没有新的数据库迁移。之后如果服务端再有改动，发版前要再部署一次。官网隐私政策同步到 10 月 16 日版（`npm run sync-privacy`）。
 - 正式通道第一次启用：官网 `updates/stable.json` 第一次填上版本；GitHub 发布不标预发布。
 - 发布说明、README、官网和 Play 商品详情写明严格 USB 的限制（#53）。
