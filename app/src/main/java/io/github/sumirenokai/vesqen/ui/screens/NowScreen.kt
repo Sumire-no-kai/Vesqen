@@ -74,7 +74,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -111,6 +110,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
@@ -939,12 +939,13 @@ private fun NowLinerNotesBody(
     actions: NowActions,
 ) {
     val context = LocalContext.current
-    // Collected only while the notes are composed, so sampling follows this observer.
+    // Collected only while the notes are composed and the app is visible, so sampling follows this
+    // observer. Open notes stay composed in the background, which kept the sampler running there.
     val observed by remember(telemetry) {
         telemetry?.observe(
             TelemetryObservation(selection = TelemetryMetricSelection.Explicit(NotesMetricIds)),
         ) ?: kotlinx.coroutines.flow.emptyFlow<io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot>()
-    }.collectAsState(initial = null)
+    }.collectAsStateWithLifecycle(initialValue = null)
     val metrics = observed?.metrics.orEmpty().associateBy(TelemetryMetric::id)
     fun value(id: TelemetryMetricId) = metrics[id]?.evidence
     val collecting = stringResource(R.string.chain_sampling_starting_short)
