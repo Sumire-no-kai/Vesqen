@@ -330,6 +330,10 @@
     <string name="create">作成</string>
     <string name="cancel">キャンセル</string>
     <string name="delete_playlist">プレイリストを削除</string>
+    <string name="remove_folder_confirm_title">このフォルダの登録を解除しますか？</string>
+    <string name="remove_folder_confirm_body">「%1$s」の曲が Vesqen から外れ、お気に入り、再生回数、プレイリスト内の位置も消えます。スマートフォン上のファイルは削除されません。フォルダを登録し直しても、これらは戻りません。</string>
+    <string name="delete_playlist_confirm_title">「%1$s」を削除しますか？</string>
+    <string name="delete_playlist_confirm_body">プレイリストの曲はライブラリに残ります。</string>
     <string name="edit_playlist">プレイリストを編集</string>
     <string name="save">保存</string>
     <string name="add_to_playlist">プレイリストに追加</string>

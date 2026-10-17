@@ -334,6 +334,10 @@
     <string name="create">Create</string>
     <string name="cancel">Cancel</string>
     <string name="delete_playlist">Delete playlist</string>
+    <string name="remove_folder_confirm_title">Remove this folder?</string>
+    <string name="remove_folder_confirm_body">Vesqen forgets the songs in “%1$s”, along with their favorites, play counts and places in playlists. The files stay on your phone. Adding the folder again doesn’t bring these back.</string>
+    <string name="delete_playlist_confirm_title">Delete “%1$s”?</string>
+    <string name="delete_playlist_confirm_body">The songs stay in your library.</string>
     <string name="edit_playlist">Edit playlist</string>
     <string name="save">Save</string>
     <string name="add_to_playlist">Add to playlist</string>

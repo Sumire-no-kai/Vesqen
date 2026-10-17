@@ -329,6 +329,10 @@
     <string name="create">建立</string>
     <string name="cancel">取消</string>
     <string name="delete_playlist">刪除播放清單</string>
+    <string name="remove_folder_confirm_title">移除這個資料夾？</string>
+    <string name="remove_folder_confirm_body">Vesqen 會忘掉「%1$s」裡的歌曲，以及它們的收藏、播放次數和在播放清單中的位置。手機上的檔案不會被刪除。重新加入這個資料夾也找不回這些記錄。</string>
+    <string name="delete_playlist_confirm_title">刪除播放清單「%1$s」？</string>
+    <string name="delete_playlist_confirm_body">清單裡的歌曲仍會留在音樂庫中。</string>
     <string name="edit_playlist">編輯播放清單</string>
     <string name="save">儲存</string>
     <string name="add_to_playlist">加入播放清單</string>

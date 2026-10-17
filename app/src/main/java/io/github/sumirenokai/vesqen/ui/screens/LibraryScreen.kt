@@ -82,6 +82,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -98,6 +99,7 @@ import kotlinx.coroutines.withContext
 import io.github.sumirenokai.vesqen.library.LibraryTitleIndex
 import io.github.sumirenokai.vesqen.library.libraryTitleKeys
 import io.github.sumirenokai.vesqen.library.projectLibraryTitleOrder
+import io.github.sumirenokai.vesqen.ui.components.ConfirmDestructiveDialog
 import io.github.sumirenokai.vesqen.ui.components.LibraryAlphabetIndex
 import io.github.sumirenokai.vesqen.ui.components.LibraryTrackList
 import io.github.sumirenokai.vesqen.ui.components.hairlineBelow
@@ -1298,6 +1300,18 @@ private fun PlaylistEditDialog(
     onDelete: () -> Unit,
 ) {
     var name by remember(playlist.id) { mutableStateOf(playlist.name) }
+    var confirmingDelete by remember(playlist.id) { mutableStateOf(false) }
+    if (confirmingDelete) {
+        ConfirmDestructiveDialog(
+            title = stringResource(R.string.delete_playlist_confirm_title, playlist.name),
+            body = stringResource(R.string.delete_playlist_confirm_body),
+            confirmLabel = stringResource(R.string.delete_playlist),
+            onConfirm = onDelete,
+            onDismiss = { confirmingDelete = false },
+            tag = "vesqen.library.playlist.delete-confirm",
+        )
+        return
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.edit_playlist)) },
@@ -1316,7 +1330,11 @@ private fun PlaylistEditDialog(
         },
         dismissButton = {
             Row {
-                TextButton(onClick = onDelete) {
+                TextButton(
+                    onClick = { confirmingDelete = true },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("vesqen.library.playlist.delete"),
+                ) {
                     Icon(Icons.Filled.Delete, contentDescription = null)
                     Spacer(Modifier.width(VesqenSpacing.xxs))
                     Text(stringResource(R.string.delete_playlist))
@@ -1671,6 +1689,20 @@ private fun LibrarySourcesSheet(
     onAddLibraryFolder: () -> Unit,
     onRemove: (String) -> Unit,
 ) {
+    var pendingRemoval by remember { mutableStateOf<LibrarySource?>(null) }
+    pendingRemoval?.let { source ->
+        ConfirmDestructiveDialog(
+            title = stringResource(R.string.remove_folder_confirm_title),
+            body = stringResource(R.string.remove_folder_confirm_body, source.displayName),
+            confirmLabel = stringResource(R.string.remove_music_folder),
+            onConfirm = {
+                pendingRemoval = null
+                onRemove(source.id)
+            },
+            onDismiss = { pendingRemoval = null },
+            tag = "vesqen.library.source.remove-confirm",
+        )
+    }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag("vesqen.library.source-manager"),
@@ -1712,7 +1744,7 @@ private fun LibrarySourcesSheet(
                         }
                         TextButton(
                             enabled = !scanInProgress,
-                            onClick = { onRemove(source.id) },
+                            onClick = { pendingRemoval = source },
                             modifier = Modifier.testTag("vesqen.library.source.${source.id}.remove"),
                         ) {
                             Text(stringResource(R.string.remove_music_folder))

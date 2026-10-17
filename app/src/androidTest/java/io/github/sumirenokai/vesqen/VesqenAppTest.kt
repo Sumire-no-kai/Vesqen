@@ -70,6 +70,7 @@ import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.chain.AppSegmentMetricIds
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecordingState
+import io.github.sumirenokai.vesqen.library.LibraryPlaylist
 import io.github.sumirenokai.vesqen.library.LibraryScanProgress
 import io.github.sumirenokai.vesqen.library.LibraryScanState
 import io.github.sumirenokai.vesqen.library.LibrarySource
@@ -174,6 +175,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -666,9 +668,42 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.library.sources.manage").performClick()
         composeRule.onNodeWithTag("vesqen.library.source-manager").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.library.source.tree:test.remove").performClick()
+        // Removing a folder forgets its favorites, play counts and playlist entries, so it asks first.
+        composeRule.onNodeWithTag("vesqen.library.source.remove-confirm").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.library.source.remove-confirm.cancel").performClick()
+        composeRule.runOnIdle { assertNull(removedSourceId) }
+        composeRule.onNodeWithTag("vesqen.library.source.tree:test.remove").performClick()
+        composeRule.onNodeWithTag("vesqen.library.source.remove-confirm.confirm").performClick()
 
         composeRule.runOnIdle { assertEquals(folder.id, removedSourceId) }
         composeRule.onNodeWithTag("vesqen.library.source-manager").assertDoesNotExist()
+    }
+
+    @Test
+    fun deleting_a_playlist_asks_first() {
+        var deletedId: Long? = null
+        render(
+            state = VesqenUiState(
+                library = LibraryUiState(
+                    musicAccess = MusicAccess.GRANTED,
+                    tracks = sampleTracks,
+                    playlists = listOf(LibraryPlaylist(7, "Night", listOf(1L, 2L), 0, 0)),
+                ),
+            ),
+            onDeletePlaylist = { deletedId = it },
+        )
+
+        composeRule.onNodeWithTag("vesqen.library.mode.playlists").performScrollTo().performClick()
+        composeRule.onNodeWithText("Night").performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.edit_playlist)).performClick()
+        composeRule.onNodeWithTag("vesqen.library.playlist.delete").performClick()
+        composeRule.onNodeWithTag("vesqen.library.playlist.delete-confirm").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.library.playlist.delete-confirm.cancel").performClick()
+        composeRule.runOnIdle { assertNull(deletedId) }
+
+        composeRule.onNodeWithTag("vesqen.library.playlist.delete").performClick()
+        composeRule.onNodeWithTag("vesqen.library.playlist.delete-confirm.confirm").performClick()
+        composeRule.runOnIdle { assertEquals(7L, deletedId) }
     }
 
     @Test
@@ -3765,6 +3800,7 @@ class VesqenAppTest {
         onCreatePlaylist: (String) -> Unit = {},
         onRemoveLibraryFolder: (String) -> Unit = {},
         onResumeLibraryScan: () -> Unit = {},
+        onDeletePlaylist: (Long) -> Unit = {},
         containerWidth: Dp? = null,
         containerHeight: Dp = 720.dp,
         fontScale: Float? = null,
@@ -3801,6 +3837,7 @@ class VesqenAppTest {
                         onTrackSelected = {},
                         onPlayQueue = onPlayQueue,
                         onCreatePlaylist = onCreatePlaylist,
+                        onDeletePlaylist = onDeletePlaylist,
                         onPrevious = onPrevious,
                         onPlayPause = onPlayPause,
                         onRefreshPlaybackPosition = onRefreshPlaybackPosition,
