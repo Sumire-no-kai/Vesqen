@@ -656,6 +656,218 @@ class LibraryCatalogStoreTest {
         }
     }
 
+    @Test
+    fun mediaStoreRebuildThatSwapsIdsKeepsUserStateOnEachFile() = withStore("library-rebuild-swap") { store ->
+        store.scanMediaStore(songA.at(1), songB.at(2))
+        val before = store.tracksByTitle()
+        val a = before.getValue("A")
+        val b = before.getValue("B")
+        store.setFavorite(a.id, true)
+        store.recordPlayback(b.id, playedAtMs = 100)
+        store.recordPlayback(b.id, playedAtMs = 200)
+        val playlistId = requireNotNull(store.createPlaylist("Mix"))
+        store.addTrackToPlaylist(playlistId, b.id)
+        store.addTrackToPlaylist(playlistId, a.id)
+
+        store.scanMediaStore(songB.at(1), songA.at(2))
+
+        val after = store.tracksByTitle()
+        assertEquals(2, after.size)
+        assertEquals(a.id, after.getValue("A").id)
+        assertEquals(songA.at(2).contentUri, after.getValue("A").contentUri)
+        assertTrue(after.getValue("A").isFavorite)
+        assertEquals(b.id, after.getValue("B").id)
+        assertEquals(songB.at(1).contentUri, after.getValue("B").contentUri)
+        assertEquals(2, after.getValue("B").playCount)
+        assertEquals(listOf(b.id, a.id), store.readPlaylists().single().trackIds)
+        assertTrue(store.readDisplacedTrackIds().isEmpty())
+    }
+
+    @Test
+    fun anotherSongOnAReusedIdGetsANewRowWhileTheOldRowFollowsItsFile() = withStore("library-rebuild-reuse") { store ->
+        store.scanMediaStore(songA.at(1))
+        val a = store.tracksByTitle().getValue("A")
+        store.setFavorite(a.id, true)
+        val playlistId = requireNotNull(store.createPlaylist("Mix"))
+        store.addTrackToPlaylist(playlistId, a.id)
+
+        store.scanMediaStore(songC.at(1), songA.at(5))
+
+        val after = store.tracksByTitle()
+        assertEquals(a.id, after.getValue("A").id)
+        assertEquals(songA.at(5).contentUri, after.getValue("A").contentUri)
+        assertTrue(after.getValue("A").isFavorite)
+        assertFalse(after.getValue("C").id == a.id)
+        assertFalse(after.getValue("C").isFavorite)
+        assertEquals(listOf(a.id), store.readPlaylists().single().trackIds)
+    }
+
+    @Test
+    fun aDisplacedRowWhoseFileNeverReturnsIsPrunedByTheCompletedScan() = withStore("library-rebuild-prune") { store ->
+        store.scanMediaStore(songA.at(1))
+        val a = store.tracksByTitle().getValue("A")
+        store.setFavorite(a.id, true)
+        val playlistId = requireNotNull(store.createPlaylist("Mix"))
+        store.addTrackToPlaylist(playlistId, a.id)
+
+        store.scanMediaStore(songC.at(1))
+
+        val c = store.readTracks(listOf(LibrarySourceId.DEVICE)).single()
+        assertEquals("C", c.title)
+        assertFalse(c.id == a.id)
+        assertFalse(c.isFavorite)
+        assertTrue(store.readPlaylists().single().trackIds.isEmpty())
+    }
+
+    @Test
+    fun aRenameKeepsTheRow() = assertEditKeepsRow { it.copy(fileName = "renamed.flac") }
+
+    @Test
+    fun aTagEditKeepsTheRow() = assertEditKeepsRow { it.copy(title = "A (remaster)", sizeBytes = 12_345) }
+
+    @Test
+    fun aRenameTogetherWithATagEditKeepsTheRow() = assertEditKeepsRow {
+        it.copy(title = "A (remaster)", fileName = "renamed.flac", sizeBytes = 12_345, durationMs = 200_400)
+    }
+
+    @Test
+    fun aFileDeletedAndCopiedBackKeepsItsRow() = withStore("library-copy-back") { store ->
+        store.scanMediaStore(songA.at(1), songB.at(2))
+        val b = store.tracksByTitle().getValue("B")
+        store.setFavorite(b.id, true)
+
+        store.scanMediaStore(songA.at(1), songB.at(9))
+
+        val after = store.tracksByTitle()
+        assertEquals(2, after.size)
+        assertEquals(b.id, after.getValue("B").id)
+        assertEquals(songB.at(9).contentUri, after.getValue("B").contentUri)
+        assertTrue(after.getValue("B").isFavorite)
+    }
+
+    @Test
+    fun anAmbiguousMatchBecomesANewRow() = withStore("library-ambiguous-file") { store ->
+        // Before Android 10 a row records only its parent directory's name.
+        val first = songA.copy(folderName = "Album").at(1, volumeName = LEGACY_VOLUME)
+        val second = songA.copy(title = "A copy", folderName = "Album").at(2, volumeName = LEGACY_VOLUME)
+        store.scanMediaStore(first, second, volumeName = LEGACY_VOLUME)
+        store.readTracks(listOf(LibrarySourceId.DEVICE)).forEach { store.setFavorite(it.id, true) }
+        val previousIds = store.readTracks(listOf(LibrarySourceId.DEVICE)).map(AudioTrack::id).toSet()
+
+        store.scanMediaStore(
+            songA.copy(folderName = "Album").at(3, volumeName = LEGACY_VOLUME),
+            volumeName = LEGACY_VOLUME,
+        )
+
+        val track = store.readTracks(listOf(LibrarySourceId.DEVICE)).single()
+        assertFalse(track.id in previousIds)
+        assertFalse(track.isFavorite)
+    }
+
+    @Test
+    fun anInterruptedRebuildScanKeepsTheDisplacedRowUntilItsFileReturns() = withStore("library-rebuild-interrupted") { store ->
+        store.scanMediaStore(songA.at(1), songB.at(2))
+        val a = store.tracksByTitle().getValue("A")
+        val b = store.tracksByTitle().getValue("B")
+        store.setFavorite(a.id, true)
+
+        store.scanMediaStore(songB.at(1), complete = false)
+        store.markSourceInterrupted(LibrarySourceId.DEVICE)
+
+        val interrupted = store.readTracks(listOf(LibrarySourceId.DEVICE)).associateBy(AudioTrack::id)
+        assertEquals(setOf(a.id), store.readDisplacedTrackIds())
+        assertTrue(interrupted.getValue(a.id).isFavorite)
+        assertEquals(songB.at(1).contentUri, interrupted.getValue(b.id).contentUri)
+
+        store.scanMediaStore(songB.at(1), songA.at(2))
+
+        val after = store.tracksByTitle()
+        assertEquals(a.id, after.getValue("A").id)
+        assertEquals(songA.at(2).contentUri, after.getValue("A").contentUri)
+        assertTrue(after.getValue("A").isFavorite)
+        assertEquals(b.id, after.getValue("B").id)
+        assertTrue(store.readDisplacedTrackIds().isEmpty())
+    }
+
+    private fun assertEditKeepsRow(edit: (MediaStoreFile) -> MediaStoreFile) = withStore("library-edit") { store ->
+        store.scanMediaStore(songA.at(1))
+        val a = store.readTracks(listOf(LibrarySourceId.DEVICE)).single()
+        store.setFavorite(a.id, true)
+        val edited = edit(songA).at(1)
+
+        store.scanMediaStore(edited)
+
+        val track = store.readTracks(listOf(LibrarySourceId.DEVICE)).single()
+        assertEquals(a.id, track.id)
+        assertEquals(edited.title, track.title)
+        assertEquals(edited.fileName, track.fileName)
+        assertTrue(track.isFavorite)
+    }
+
+    private fun withStore(name: String, block: (LibraryCatalogStore) -> Unit) {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val databaseName = "$name-${System.nanoTime()}.db"
+        try {
+            LibraryCatalogStore(context, databaseName).use { store ->
+                store.ensureDeviceSource()
+                block(store)
+            }
+        } finally {
+            context.deleteDatabase(databaseName)
+        }
+    }
+
+    /** Runs the device scan the way `AndroidLibraryCatalog` does, without MediaStore or enrichment. */
+    private fun LibraryCatalogStore.scanMediaStore(
+        vararg candidates: LibraryTrackCandidate,
+        volumeName: String = PRIMARY_VOLUME,
+        complete: Boolean = true,
+    ) {
+        val scan = beginMediaStoreScan()
+        candidates.forEach { candidate ->
+            if (!markSeenIfUnchanged(scan, candidate)) upsertMediaStoreTrack(scan, candidate)
+        }
+        if (complete) {
+            completeMediaStoreScan(scan.session, generation = null, scannedVolumeNames = listOf(volumeName))
+        }
+    }
+
+    private fun LibraryCatalogStore.tracksByTitle(): Map<String, AudioTrack> =
+        readTracks(listOf(LibrarySourceId.DEVICE)).associateBy(AudioTrack::title)
+
+    private val songA = MediaStoreFile(title = "A", fileName = "a.flac", sizeBytes = 10_000, durationMs = 200_000)
+    private val songB = MediaStoreFile(title = "B", fileName = "b.flac", sizeBytes = 20_000, durationMs = 300_000)
+    private val songC = MediaStoreFile(title = "C", fileName = "c.flac", sizeBytes = 30_000, durationMs = 400_000)
+
+    private data class MediaStoreFile(
+        val title: String,
+        val fileName: String,
+        val sizeBytes: Long,
+        val durationMs: Long,
+        val folderName: String = "Music/Album",
+    ) {
+        fun at(mediaId: Long, volumeName: String = PRIMARY_VOLUME): LibraryTrackCandidate {
+            val contentUri = "content://media/$volumeName/audio/media/$mediaId"
+            return LibraryTrackCandidate(
+                remoteId = mediaStoreRemoteId(volumeName, mediaId),
+                contentUri = contentUri,
+                title = title,
+                artist = "Artist",
+                album = "Album",
+                durationMs = durationMs,
+                sizeBytes = sizeBytes,
+                fileName = fileName,
+                folderName = folderName,
+                fingerprint = libraryFingerprint(contentUri, title, fileName, sizeBytes, durationMs, folderName),
+            )
+        }
+    }
+
+    private companion object {
+        const val PRIMARY_VOLUME = "external_primary"
+        const val LEGACY_VOLUME = "external"
+    }
+
     private fun candidate(
         remoteId: String,
         title: String,

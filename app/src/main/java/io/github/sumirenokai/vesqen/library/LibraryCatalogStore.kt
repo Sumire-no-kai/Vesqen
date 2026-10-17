@@ -620,6 +620,107 @@ internal class LibraryCatalogStore(
         return matches
     }
 
+    /** Starts a device scan that keeps catalog IDs on files rather than on MediaStore `_ID`s. */
+    fun beginMediaStoreScan(): MediaStoreScanSession {
+        val session = beginSourceScan(LibrarySourceId.DEVICE)
+        val identities = readableDatabase.query(
+            TRACKS_TABLE,
+            arrayOf(
+                TRACK_ID,
+                TRACK_REMOTE_ID,
+                TRACK_CONTENT_URI,
+                TRACK_FOLDER_NAME,
+                TRACK_FILE_NAME,
+                TRACK_SIZE_BYTES,
+                TRACK_DURATION_MS,
+                TRACK_FINGERPRINT,
+            ),
+            "$TRACK_SOURCE_ID = ?",
+            arrayOf(LibrarySourceId.DEVICE),
+            null,
+            null,
+            null,
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(
+                        StoredTrackIdentity(
+                            trackId = cursor.getLong(0),
+                            remoteId = cursor.getString(1),
+                            contentUri = cursor.getString(2),
+                            folderName = cursor.getString(3),
+                            fileName = cursor.getString(4),
+                            sizeBytes = cursor.getLong(5),
+                            durationMs = cursor.getLong(6),
+                            fingerprint = cursor.getString(7),
+                        ),
+                    )
+                }
+            }
+        }
+        return MediaStoreScanSession(session, MediaStoreIdentityIndex(identities))
+    }
+
+    fun markSeenIfUnchanged(scan: MediaStoreScanSession, candidate: LibraryTrackCandidate): Boolean {
+        val trackId = scan.identities.unchangedTrackId(candidate) ?: return false
+        writableDatabase.update(
+            TRACKS_TABLE,
+            ContentValues().apply { put(TRACK_SEEN_EPOCH, scan.session.epoch) },
+            "$TRACK_ID = ?",
+            arrayOf(trackId.toString()),
+        )
+        return true
+    }
+
+    /**
+     * Writes a changed or new MediaStore row where [MediaStoreIdentityIndex] places it. Moving a
+     * displaced row aside and reusing its `_ID` happen in one transaction, so an interrupted scan
+     * leaves either both or neither.
+     */
+    fun upsertMediaStoreTrack(scan: MediaStoreScanSession, candidate: LibraryTrackCandidate) {
+        val plan = scan.identities.plan(candidate)
+        val values = candidate.toContentValues(scan.session)
+        writableDatabase.transaction {
+            plan.displacedTrackId?.let { trackId ->
+                val displaced = update(
+                    TRACKS_TABLE,
+                    ContentValues().apply {
+                        put(TRACK_REMOTE_ID, "$DISPLACED_MEDIASTORE_PREFIX$trackId")
+                    },
+                    "$TRACK_ID = ?",
+                    arrayOf(trackId.toString()),
+                )
+                check(displaced == 1) { "Cannot displace a missing catalog row" }
+            }
+            val targetTrackId = plan.targetTrackId
+            if (targetTrackId == null) {
+                values.put(TRACK_SOURCE_ID, scan.session.sourceId)
+                insertOrThrow(TRACKS_TABLE, null, values)
+            } else {
+                val updated = update(TRACKS_TABLE, values, "$TRACK_ID = ?", arrayOf(targetTrackId.toString()))
+                check(updated == 1) { "Cannot update a missing catalog row" }
+            }
+        }
+    }
+
+    /**
+     * Rows moved aside for another file whose own file has not reappeared. Their content URI now
+     * plays that other file, so they stay hidden until a scan reattaches or prunes them.
+     */
+    fun readDisplacedTrackIds(): Set<Long> = readableDatabase.query(
+        TRACKS_TABLE,
+        arrayOf(TRACK_ID),
+        "$TRACK_SOURCE_ID = ? AND $TRACK_REMOTE_ID GLOB ?",
+        arrayOf(LibrarySourceId.DEVICE, "$DISPLACED_MEDIASTORE_PREFIX*"),
+        null,
+        null,
+        null,
+    ).use { cursor ->
+        buildSet {
+            while (cursor.moveToNext()) add(cursor.getLong(0))
+        }
+    }
+
     fun upsertTrack(session: SourceScanSession, candidate: LibraryTrackCandidate) {
         val existing = readableDatabase.query(
             TRACKS_TABLE,
@@ -1071,6 +1172,7 @@ internal class LibraryCatalogStore(
         private const val TRACK_ARTWORK_REVISION = "artwork_revision"
         private const val TRACK_SEEN_EPOCH = "seen_epoch"
         private const val UNRESOLVED_LEGACY_MEDIASTORE_PREFIX = "legacy-unresolved:"
+        private const val DISPLACED_MEDIASTORE_PREFIX = "mediastore-displaced:"
 
         private const val PLAYLISTS_TABLE = "library_playlists"
         private const val PLAYLIST_ID = "playlist_id"
@@ -1140,6 +1242,11 @@ internal data class StoredLibrarySource(
 internal data class SourceScanSession(
     val sourceId: String,
     val epoch: Long,
+)
+
+internal class MediaStoreScanSession(
+    val session: SourceScanSession,
+    val identities: MediaStoreIdentityIndex,
 )
 
 private data class TrackMigrationState(
