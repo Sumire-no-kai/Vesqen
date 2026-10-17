@@ -63,7 +63,6 @@ class NowBackgroundRecompositionTest {
                             onPlayPause = {},
                             onNext = {},
                             onSeek = {},
-                            onPlayTrack = {},
                             onPlayQueueIndex = {},
                             onRemoveQueueItem = {},
                             onMoveQueueItem = { _, _ -> },

@@ -285,7 +285,6 @@ fun NowScreen(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onSeek: (Long) -> Unit,
-    onPlayTrack: (AudioTrack) -> Unit,
     onPlayQueueIndex: (Int) -> Unit,
     onRemoveQueueItem: (Int) -> Unit,
     onMoveQueueItem: (Int, Int) -> Unit,
@@ -437,10 +436,8 @@ fun NowScreen(
             track = currentTrack,
             onToggleFavorite = { onToggleFavorite(currentTrack.id, !currentTrack.isFavorite) },
             onDismiss = { showDetails = false },
-            onPlay = {
-                onPlayTrack(currentTrack)
-                showDetails = false
-            },
+            // The track is already playing; "Play" would replace the queue with the whole library.
+            onPlay = null,
         )
     }
     if (showQueue) {

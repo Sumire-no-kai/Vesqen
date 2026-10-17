@@ -1130,7 +1130,6 @@ private fun VesqenDestinationFrame(
                         onPlayPause = onPlayPause,
                         onNext = onNext,
                         onSeek = onSeek,
-                        onPlayTrack = onTrackSelected,
                         onPlayQueueIndex = onPlayQueueIndex,
                         onRemoveQueueItem = onRemoveQueueItem,
                         onMoveQueueItem = onMoveQueueItem,

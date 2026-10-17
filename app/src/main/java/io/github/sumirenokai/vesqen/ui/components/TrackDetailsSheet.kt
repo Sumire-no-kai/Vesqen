@@ -51,7 +51,8 @@ import io.github.sumirenokai.vesqen.ui.theme.serif
 fun TrackDetailsSheet(
     track: AudioTrack,
     onDismiss: () -> Unit,
-    onPlay: () -> Unit,
+    /** Null in Now, where the track is already playing and a new queue would replace the listener's. */
+    onPlay: (() -> Unit)?,
     playlists: List<LibraryPlaylist> = emptyList(),
     onToggleFavorite: (() -> Unit)? = null,
     onPlayNext: (() -> Unit)? = null,
@@ -123,8 +124,10 @@ fun TrackDetailsSheet(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
                 ) {
-                    Button(onClick = onPlay, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
-                        Text(stringResource(R.string.play_this_track), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    onPlay?.let { play ->
+                        Button(onClick = play, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
+                            Text(stringResource(R.string.play_this_track), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                     onToggleFavorite?.let { toggle ->
                         OutlinedButton(onClick = toggle, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {

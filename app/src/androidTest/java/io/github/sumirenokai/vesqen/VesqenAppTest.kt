@@ -2810,6 +2810,29 @@ class VesqenAppTest {
     }
 
     @Test
+    fun now_track_details_offer_no_play_action_that_would_replace_the_queue() {
+        // The track already plays in Now; "Play this track" there started the whole library as a new queue.
+        render(
+            state = grantedState(
+                tracks = sampleTracks,
+                playback = PlaybackSnapshot(
+                    isControllerReady = true,
+                    trackId = 1,
+                    title = "Dawn Signal",
+                    artist = "Mori",
+                    durationMs = 245_000,
+                ),
+            ),
+        )
+
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        openLinerNotes()
+        composeRule.onNodeWithTag("vesqen.now.info").performScrollTo().performClick()
+        composeRule.onNodeWithTag("vesqen.track-details").assertIsDisplayed()
+        composeRule.onAllNodesWithText(context.getString(R.string.play_this_track)).assertCountEquals(0)
+    }
+
+    @Test
     fun android_back_returns_from_now_and_contextual_chain_without_exiting_the_app() {
         render(
             state = grantedState(
