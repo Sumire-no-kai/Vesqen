@@ -70,7 +70,7 @@
 | Issue | 还要做 |
 | --- | --- |
 | [#75](https://github.com/Sumire-no-kai/Vesqen/issues/75) | 繁体中文和日语已合并（PR #131、#132）。日语还没有母语者审读；2026-10-17 所有者决定日语代码先留在 master，1.0 带不带日语发版前再定 |
-| [#50](https://github.com/Sumire-no-kai/Vesqen/issues/50) | 曲库首页快速滑动：两台手机修复前后各三轮对比，加上大曲库压力测试（M3-R1）。2026-10-17 所有者反馈曲库甩动和设置里的页面切换仍明显卡；模拟器测量和原因见 issue，建议先加 Baseline Profile，再在 iQOO 上对比 |
+| [#50](https://github.com/Sumire-no-kai/Vesqen/issues/50) | 曲库首页快速滑动：两台手机修复前后各三轮对比，加上大曲库压力测试（M3-R1）。2026-10-17 所有者反馈曲库甩动和设置里的页面切换仍明显卡。PR #140 加了 Baseline Profile 和 startup profile，未合并：模拟器上按 profile 编译后，曲库冷启动后头 16 次甩动的 UI 线程 p50 从 5.9 降到 3.6 ms，设置 → 播放链路 → 返回 p90 从 11.6 降到 8.4 ms。侧载安装要等系统后台编译才生效，可调试的 Vesqen Test 不受影响。还缺 iQOO 上的前后对比（装包前先问所有者） |
 | [#51](https://github.com/Sumire-no-kai/Vesqen/issues/51) | 8 小时有线播放已通过；还缺新系统上的关屏长播、2 小时 24/96、拔耳机和来电 |
 | [#136](https://github.com/Sumire-no-kai/Vesqen/issues/136) | 1.0 代码审查（2026-10-17）：R1–R11、R24（加时区判断）、R32（设置页返回保持位置）已修；R9 在 Android 8.0 模拟器上真的清除媒体存储验证过，真机上没做；R12–R31 其余可以放到之后 |
 | [#35](https://github.com/Sumire-no-kai/Vesqen/issues/35) | 按 beta.3 复核界面和文案（字号、深浅色、减少动效），加完整的 TalkBack |
