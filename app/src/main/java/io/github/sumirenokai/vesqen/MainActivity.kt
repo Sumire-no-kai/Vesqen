@@ -5,7 +5,12 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
 import io.github.sumirenokai.vesqen.ui.VesqenApp
 
@@ -19,7 +24,10 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) takePremiumRequest(intent)
         setContent {
             VesqenTheme {
-                VesqenApp(openPremiumRequest = premiumRequests.intValue)
+                // UiAutomator sees test tags as resource IDs; the Baseline Profile generator finds screens by them (#50).
+                Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
+                    VesqenApp(openPremiumRequest = premiumRequests.intValue)
+                }
             }
         }
     }
