@@ -70,7 +70,6 @@
 | Issue | 还要做 |
 | --- | --- |
 | [#75](https://github.com/Sumire-no-kai/Vesqen/issues/75) | 繁体中文和日语已合并（PR #131、#132）；日语还没有母语者审读，发布前决定是否带上 |
-| [#73](https://github.com/Sumire-no-kai/Vesqen/issues/73) | 链路页和链路注记显示系统报告的蓝牙编码，有线显示输出格式；实验通过，2026-10-16 决定进 1.0 |
 | [#50](https://github.com/Sumire-no-kai/Vesqen/issues/50) | 曲库首页快速滑动：两台手机修复前后各三轮对比，加上大曲库压力测试（M3-R1） |
 | [#51](https://github.com/Sumire-no-kai/Vesqen/issues/51) | 8 小时有线播放已通过；还缺新系统上的关屏长播、2 小时 24/96、拔耳机和来电 |
 | [#136](https://github.com/Sumire-no-kai/Vesqen/issues/136) | 1.0 代码审查（2026-10-17）：R1–R11 已修；R9（媒体库重建后用户数据挂错歌）在 PR #138，已合并（`a89fcbf`），iQOO 9 上的设备测试全部通过，还没在手机上真的清除媒体存储验证；R12–R31 可以放到之后 |
