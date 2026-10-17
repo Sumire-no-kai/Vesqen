@@ -441,12 +441,16 @@ fun VesqenAppContent(
     var returnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
     var playerReturnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
     var parentReturnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
-    val navigationState = VesqenNavigationState(
+    // Actions read the saved state when they run. The bar and the mini player get them as function
+    // references, which compare equal, so Compose keeps the first one; a copy of the state taken in
+    // that composition would make Now return to Library from every tab (#136 R8).
+    fun currentNavigation() = VesqenNavigationState(
         destination = VesqenDestination.valueOf(destinationName),
         returnDestination = VesqenDestination.valueOf(returnDestinationName),
         playerReturnDestination = VesqenDestination.valueOf(playerReturnDestinationName),
         parentReturnDestination = VesqenDestination.valueOf(parentReturnDestinationName),
     )
+    val navigationState = currentNavigation()
     val destination = navigationState.destination
     val hasFocusedPlayer = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
     val refreshFocusedPlayerPosition = shouldRefreshPlaybackPosition(destination, state.playback)
@@ -495,37 +499,37 @@ fun VesqenAppContent(
     }
 
     fun selectTopLevel(destination: VesqenDestination) {
-        applyNavigation(navigationState.selectTopLevel(destination))
+        applyNavigation(currentNavigation().selectTopLevel(destination))
     }
 
     fun openChain() {
-        applyNavigation(navigationState.openChain())
+        applyNavigation(currentNavigation().openChain())
     }
 
     val chainOpenedInContext = navigationState.chainOpenedInContext
 
     fun openAbout() {
-        applyNavigation(navigationState.openAbout())
+        applyNavigation(currentNavigation().openAbout())
     }
 
     fun openPrivacyPolicy() {
-        applyNavigation(navigationState.openPrivacyPolicy())
+        applyNavigation(currentNavigation().openPrivacyPolicy())
     }
 
     fun openLicenses() {
-        applyNavigation(navigationState.openLicenses())
+        applyNavigation(currentNavigation().openLicenses())
     }
 
     fun openUsageStatistics() {
-        applyNavigation(navigationState.openUsageStatistics())
+        applyNavigation(currentNavigation().openUsageStatistics())
     }
 
     fun openDeviceReport() {
-        applyNavigation(navigationState.openDeviceReport())
+        applyNavigation(currentNavigation().openDeviceReport())
     }
 
     fun openPremium() {
-        applyNavigation(navigationState.openPremium())
+        applyNavigation(currentNavigation().openPremium())
     }
 
     LaunchedEffect(openPremiumRequest) {
@@ -591,7 +595,7 @@ fun VesqenAppContent(
     }
 
     fun navigateBack() {
-        applyNavigation(navigationState.back())
+        applyNavigation(currentNavigation().back())
     }
 
     BackHandler(enabled = destination != VesqenDestination.LIBRARY) {

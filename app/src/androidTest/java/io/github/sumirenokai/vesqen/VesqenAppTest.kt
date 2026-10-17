@@ -2868,6 +2868,24 @@ class VesqenAppTest {
     }
 
     @Test
+    fun leaving_now_returns_to_the_tab_it_was_opened_from() {
+        // The bar and the mini player once kept a navigation copy from the first composition, so
+        // Now returned to Library from every tab (#136 R8).
+        render(state = activePlaybackState())
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.nav.now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.back").assertIsDisplayed()
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag("vesqen.nav.settings").assertIsSelected()
+
+        composeRule.onNodeWithTag("vesqen.nav.chain").performClick()
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.back").performClick()
+        composeRule.onNodeWithTag("vesqen.nav.chain").assertIsSelected()
+    }
+
+    @Test
     fun android_back_returns_from_now_and_contextual_chain_without_exiting_the_app() {
         render(
             state = grantedState(
