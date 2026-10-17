@@ -73,7 +73,7 @@
 | [#73](https://github.com/Sumire-no-kai/Vesqen/issues/73) | 链路页和链路注记显示系统报告的蓝牙编码，有线显示输出格式；实验通过，2026-10-16 决定进 1.0 |
 | [#50](https://github.com/Sumire-no-kai/Vesqen/issues/50) | 曲库首页快速滑动：两台手机修复前后各三轮对比，加上大曲库压力测试（M3-R1） |
 | [#51](https://github.com/Sumire-no-kai/Vesqen/issues/51) | 8 小时有线播放已通过；还缺新系统上的关屏长播、2 小时 24/96、拔耳机和来电 |
-| [#136](https://github.com/Sumire-no-kai/Vesqen/issues/136) | 1.0 代码审查（2026-10-17）：R1–R8、R10、R11 已修；R9（媒体库重建后用户数据挂错歌）方案待所有者确认；R12–R31 可以放到之后 |
+| [#136](https://github.com/Sumire-no-kai/Vesqen/issues/136) | 1.0 代码审查（2026-10-17）：R1–R8、R10、R11 已修；R9（媒体库重建后用户数据挂错歌）已定方案（按文件名、大小、时长核对编号，见 issue），待实现；R12–R31 可以放到之后 |
 | [#35](https://github.com/Sumire-no-kai/Vesqen/issues/35) | 按 beta.3 复核界面和文案（字号、深浅色、减少动效），加完整的 TalkBack |
 | [#54](https://github.com/Sumire-no-kai/Vesqen/issues/54) | 仓库与文档整理；删除 `codex/*` 远程分支前先问所有者 |
 | [#129](https://github.com/Sumire-no-kai/Vesqen/issues/129) | 在原生 Android（例如 Pixel）上验证耳机键恢复（#52） |
