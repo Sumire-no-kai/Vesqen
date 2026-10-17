@@ -94,6 +94,7 @@
 | [#49](https://github.com/Sumire-no-kai/Vesqen/issues/49) | 真实 DAC 矩阵与外部数字逐样本验证（BIT-PERFECT VERIFIED） |
 | [#71](https://github.com/Sumire-no-kai/Vesqen/issues/71) | M7 高级 USB 引擎：没有官方 bit-perfect 通道的手机也能严格直出 |
 | [#65](https://github.com/Sumire-no-kai/Vesqen/issues/65) | 严格 USB：16 位音源补零后送入 24 位 bit-perfect 通道 |
+| [#139](https://github.com/Sumire-no-kai/Vesqen/issues/139) | 曲库：媒体库重建后匹配不唯一的旧记录先隐藏保留，让用户选择归哪首歌或丢掉（#136 R9 的后续） |
 
 2.0 开始收费（2026-10-13 所有者决定），以下随 2.0 完成：
 
