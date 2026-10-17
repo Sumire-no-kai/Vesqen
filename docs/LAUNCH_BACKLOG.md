@@ -69,13 +69,13 @@
 
 | Issue | 还要做 |
 | --- | --- |
-| [#75](https://github.com/Sumire-no-kai/Vesqen/issues/75) | 繁体中文和日语已合并（PR #131、#132）；日语还没有母语者审读，发布前决定是否带上 |
-| [#50](https://github.com/Sumire-no-kai/Vesqen/issues/50) | 曲库首页快速滑动：两台手机修复前后各三轮对比，加上大曲库压力测试（M3-R1） |
+| [#75](https://github.com/Sumire-no-kai/Vesqen/issues/75) | 繁体中文和日语已合并（PR #131、#132）。2026-10-17 所有者决定日语不随 1.0，母语者审读后在之后的小版本带上；撤下日语的提交等所有者放行 |
+| [#50](https://github.com/Sumire-no-kai/Vesqen/issues/50) | 曲库首页快速滑动：两台手机修复前后各三轮对比，加上大曲库压力测试（M3-R1）。2026-10-17 所有者反馈曲库甩动和设置里的页面切换仍明显卡；模拟器测量和原因见 issue，建议先加 Baseline Profile，再在 iQOO 上对比 |
 | [#51](https://github.com/Sumire-no-kai/Vesqen/issues/51) | 8 小时有线播放已通过；还缺新系统上的关屏长播、2 小时 24/96、拔耳机和来电 |
-| [#136](https://github.com/Sumire-no-kai/Vesqen/issues/136) | 1.0 代码审查（2026-10-17）：R1–R11 已修；R9（媒体库重建后用户数据挂错歌）在 PR #138，已合并（`a89fcbf`），iQOO 9 上的设备测试全部通过，还没在手机上真的清除媒体存储验证；R12–R31 可以放到之后 |
+| [#136](https://github.com/Sumire-no-kai/Vesqen/issues/136) | 1.0 代码审查（2026-10-17）：R1–R11、R24（加时区判断）、R32（设置页返回保持位置）已修；R9 在 Android 8.0 模拟器上真的清除媒体存储验证过，真机上没做；R12–R31 其余可以放到之后 |
 | [#35](https://github.com/Sumire-no-kai/Vesqen/issues/35) | 按 beta.3 复核界面和文案（字号、深浅色、减少动效），加完整的 TalkBack |
-| [#54](https://github.com/Sumire-no-kai/Vesqen/issues/54) | 仓库与文档整理；删除 `codex/*` 远程分支前先问所有者 |
-| [#129](https://github.com/Sumire-no-kai/Vesqen/issues/129) | 在原生 Android（例如 Pixel）上验证耳机键恢复（#52） |
+| [#54](https://github.com/Sumire-no-kai/Vesqen/issues/54) | 仓库与文档整理；`codex/*` 远程分支按所有者 2026-10-17 的决定保留不动 |
+| [#129](https://github.com/Sumire-no-kai/Vesqen/issues/129) | 耳机键恢复（#52）在 Android 8.0 和 16 的原生模拟器上能用；测试机上是厂商按键白名单，写进已知限制。是否关闭由所有者决定 |
 
 发布 1.0 时：
 
