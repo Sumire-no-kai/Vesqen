@@ -1146,29 +1146,35 @@ private fun VesqenDestinationFrame(
                         modifier = destinationModifier,
                     )
 
-                    VesqenDestination.SETTINGS -> SettingsScreen(
-                        outputStatus = state.playback.usbOutputStatus,
-                        outputModeSelectionEnabled = state.playback.canSetUsbOutputMode,
-                        outputVerification = state.playback.outputVerification,
-                        verificationRegistryState = verificationRegistryState,
-                        verificationImportResult = verificationImportResult,
-                        onSetUsbOutputMode = onSetUsbOutputMode,
-                        onExplainStrictUsbUnavailable = onExplainStrictUsbUnavailable,
-                        onOpenPlaybackChain = onOpenChain,
-                        onImportVerificationRegistry = onImportVerificationRegistry,
-                        onOpenAbout = onOpenAbout,
-                        onOpenPrivacyPolicy = onOpenPrivacyPolicy,
-                        onOpenLicenses = onOpenLicenses,
-                        appUpdater = appUpdater,
-                        usageStatistics = usageStatistics,
-                        onOpenUsageStatistics = onOpenUsageStatistics,
-                        deviceReportAvailable = deviceReporter != null,
-                        onOpenDeviceReport = onOpenDeviceReport,
-                        versionName = versionName,
-                        modifier = destinationModifier,
-                        premiumAccess = premiumAccess,
-                        onOpenPremium = onOpenPremium,
-                    )
+                    // Like Library, Settings keeps its list position while About, the policy or the
+                    // licenses are open, so Back lands on the row that opened them.
+                    VesqenDestination.SETTINGS -> destinationStateHolder.SaveableStateProvider(
+                        key = VesqenDestination.SETTINGS.name,
+                    ) {
+                        SettingsScreen(
+                            outputStatus = state.playback.usbOutputStatus,
+                            outputModeSelectionEnabled = state.playback.canSetUsbOutputMode,
+                            outputVerification = state.playback.outputVerification,
+                            verificationRegistryState = verificationRegistryState,
+                            verificationImportResult = verificationImportResult,
+                            onSetUsbOutputMode = onSetUsbOutputMode,
+                            onExplainStrictUsbUnavailable = onExplainStrictUsbUnavailable,
+                            onOpenPlaybackChain = onOpenChain,
+                            onImportVerificationRegistry = onImportVerificationRegistry,
+                            onOpenAbout = onOpenAbout,
+                            onOpenPrivacyPolicy = onOpenPrivacyPolicy,
+                            onOpenLicenses = onOpenLicenses,
+                            appUpdater = appUpdater,
+                            usageStatistics = usageStatistics,
+                            onOpenUsageStatistics = onOpenUsageStatistics,
+                            deviceReportAvailable = deviceReporter != null,
+                            onOpenDeviceReport = onOpenDeviceReport,
+                            versionName = versionName,
+                            modifier = destinationModifier,
+                            premiumAccess = premiumAccess,
+                            onOpenPremium = onOpenPremium,
+                        )
+                    }
 
                     VesqenDestination.CHAIN -> ChainScreen(
                         snapshot = state.playback,

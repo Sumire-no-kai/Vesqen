@@ -772,6 +772,19 @@ class VesqenAppTest {
     }
 
     @Test
+    fun settings_keeps_its_position_after_a_detail_page() {
+        // Settings once lost its saved list state while a detail page was open, so Back always
+        // returned to the top of the list.
+        render(grantedState())
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.footer"))
+        composeRule.onNodeWithTag("vesqen.settings.licenses").performClick()
+        composeRule.onNodeWithTag("vesqen.licenses").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.licenses.back").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.footer").assertIsDisplayed()
+    }
+
+    @Test
     fun settings_update_card_follows_each_update_state() {
         val release = UpdateRelease(
             versionName = "1.0.0-beta.3",
