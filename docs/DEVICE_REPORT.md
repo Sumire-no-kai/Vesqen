@@ -176,8 +176,11 @@ The Bluetooth codec Android reports (#73, source `android.bluetooth_codec_report
 is exported as `route.bluetooth_codec`, only when the name is in
 `bluetoothCodecNames`, and `route.bluetooth_configuration`, only when every token
 matches `bluetoothConfigurationTokenPattern` (sample rate, bit depth, channel mode,
-LDAC quality). Another name is redacted. The device that sent the report is never
-recorded. The server validates against the same contract, so it must be deployed
+LDAC quality). Another name is redacted. A report whose codec has no public name
+(vendor codecs before Android 15) exports `route.bluetooth_codec` as unavailable with
+`NOT_EXPOSED_BY_PLATFORM` and keeps its configuration; LE Audio, hearing-aid and SCO routes,
+which never get an A2DP report, export it as `NOT_APPLICABLE` (#136 R5). Both reasons are
+already in the contract. The device that sent the report is never recorded. The server validates against the same contract, so it must be deployed
 with the new `contracts/device-report` before an app that sends these values ships.
 
 Telemetry confidence, timestamps, known provenance IDs, dependency IDs, numeric

@@ -71,7 +71,6 @@ import io.github.sumirenokai.vesqen.chain.AppSegmentCheck
 import io.github.sumirenokai.vesqen.chain.AppSegmentCondition
 import io.github.sumirenokai.vesqen.chain.AppSegmentMetricIds
 import io.github.sumirenokai.vesqen.chain.AppSegmentStatus
-import io.github.sumirenokai.vesqen.chain.RouteKind
 import io.github.sumirenokai.vesqen.chain.SegmentReason
 import io.github.sumirenokai.vesqen.chain.SourceCompression
 import io.github.sumirenokai.vesqen.chain.assessAppSegment
@@ -84,12 +83,12 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetryUnavailableReason
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog as Metrics
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricId
 import io.github.sumirenokai.vesqen.telemetry.TelemetryPowerMode
-import io.github.sumirenokai.vesqen.telemetry.TelemetryReading
 import io.github.sumirenokai.vesqen.telemetry.TelemetryRefreshInterval
-import io.github.sumirenokai.vesqen.telemetry.isBluetoothRouteType
 import io.github.sumirenokai.vesqen.ui.chain.ChainObservationState
 import io.github.sumirenokai.vesqen.ui.chain.ChainUnitDisplayMode
+import io.github.sumirenokai.vesqen.ui.chain.OutputRouteKind
 import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecIsNominallyLossless
+import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecIsUnnamed
 import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecName
 import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecNeedsPermission
 import io.github.sumirenokai.vesqen.ui.chain.bluetoothCodecSettingsSummary
@@ -99,6 +98,7 @@ import io.github.sumirenokai.vesqen.ui.chain.describesLastPlayback
 import io.github.sumirenokai.vesqen.ui.chain.effectiveTelemetryRefreshInterval
 import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
 import io.github.sumirenokai.vesqen.ui.chain.isTelemetrySnapshotStale
+import io.github.sumirenokai.vesqen.ui.chain.outputRoute
 import io.github.sumirenokai.vesqen.ui.chain.telemetryConfidenceLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetryEvidenceMethod
 import io.github.sumirenokai.vesqen.ui.chain.telemetryEvidenceSource
@@ -151,6 +151,7 @@ private val ChainPinnedMetricIds = setOf(
     Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE,
     Metrics.PLAYBACK_AUDIO_TRACK_ENCODING,
     Metrics.ROUTE_SELECTED_SYSTEM_TYPE,
+    Metrics.ROUTE_ANTICIPATED_TYPE,
     Metrics.ROUTE_SELECTED_SYSTEM_NAME,
     Metrics.PLAYBACK_UNDERRUN_COUNT,
 )
@@ -387,7 +388,9 @@ private fun ChainPath(
                         body = systemSegmentText(assessment, metrics),
                         tag = "vesqen.chain.segment.system",
                         hairline = hairline,
-                        footer = if (assessment?.route == RouteKind.BLUETOOTH && bluetoothCodecNeedsPermission(codec)) {
+                        footer = if (assessment != null && outputRoute(metrics)?.kind == OutputRouteKind.BLUETOOTH &&
+                            bluetoothCodecNeedsPermission(codec)
+                        ) {
                             { BluetoothCodecPermissionButton() }
                         } else {
                             null
@@ -623,10 +626,16 @@ private fun appSegmentVerdict(assessment: AppSegmentAssessment?, waiting: Boolea
  */
 @Composable
 private fun systemSegmentText(assessment: AppSegmentAssessment?, metrics: Map<TelemetryMetricId, TelemetryMetric>): String? {
-    if (assessment?.route != RouteKind.BLUETOOTH) return null
+    if (assessment == null || outputRoute(metrics)?.kind != OutputRouteKind.BLUETOOTH) return null
     val context = LocalContext.current
     val codec = metrics[Metrics.ROUTE_BLUETOOTH_CODEC]?.evidence
-    val summary = bluetoothCodecSummary(context, codec, metrics[Metrics.ROUTE_BLUETOOTH_CONFIGURATION]?.evidence)
+    // No confidence label here, so the LDAC tier's estimated kbps stays in the card and the notes.
+    val summary = bluetoothCodecSummary(
+        context,
+        codec,
+        metrics[Metrics.ROUTE_BLUETOOTH_CONFIGURATION]?.evidence,
+        includeNominalBitrate = false,
+    )
     return when {
         summary == null -> listOfNotNull(
             stringResource(R.string.chain_segment_bluetooth),
@@ -768,28 +777,38 @@ private fun outputContent(
     usbOutputStatus: UsbOutputStatus,
     unitDisplayMode: ChainUnitDisplayMode,
 ): PinnedContent {
-    val route = metrics[Metrics.ROUTE_SELECTED_SYSTEM_TYPE]?.evidence
-    val type = (route?.reading as? TelemetryReading.Text)?.value
-    return when {
-        type == null -> PinnedContent(null, null, listOf(route))
-        isBluetoothRouteType(type) -> {
+    val route = outputRoute(metrics)
+    return when (route?.kind) {
+        OutputRouteKind.BLUETOOTH -> {
             val codec = metrics[Metrics.ROUTE_BLUETOOTH_CODEC]?.evidence
             val configuration = metrics[Metrics.ROUTE_BLUETOOTH_CONFIGURATION]?.evidence
+            // The LDAC kbps is an estimate; with its evidence the card says so (PRD F6.5.2, #136 R5).
+            val bitrate = metrics[Metrics.ROUTE_BLUETOOTH_CONFIGURED_BITRATE]?.evidence
             val name = bluetoothCodecName(codec)
-            if (name != null) {
-                PinnedContent(name, bluetoothCodecSettingsSummary(context, configuration), listOf(route, codec, configuration))
-            } else {
-                PinnedContent(context.getString(R.string.chain_pinned_output_bluetooth), bluetoothCodecUnavailableText(context, codec), listOf(route))
+            val bluetooth = context.getString(R.string.chain_pinned_output_bluetooth)
+            when {
+                name != null -> PinnedContent(
+                    name,
+                    bluetoothCodecSettingsSummary(context, configuration),
+                    listOf(route.evidence, codec, configuration, bitrate),
+                )
+                bluetoothCodecIsUnnamed(codec, configuration) -> PinnedContent(
+                    bluetooth,
+                    bluetoothCodecSummary(context, codec, configuration),
+                    listOf(route.evidence, configuration, bitrate),
+                )
+                else -> PinnedContent(bluetooth, bluetoothCodecUnavailableText(context, codec), listOf(route.evidence))
             }
         }
-        type == "wired_or_usb" -> PinnedContent(
+        OutputRouteKind.WIRED -> PinnedContent(
             value = context.getString(R.string.chain_pinned_output_wired),
             detail = usbOutputStatus.takeIf { it.phase == UsbOutputPhase.ACTIVE }?.sinkFormat?.displayName
                 ?.let { context.getString(R.string.now_notes_output_format_bit_perfect, it) },
-            evidence = listOf(route),
+            evidence = listOf(route.evidence),
         )
-        type == "phone_speaker" -> PinnedContent(context.getString(R.string.chain_pinned_output_speaker), null, listOf(route))
-        else -> {
+        OutputRouteKind.SPEAKER -> PinnedContent(context.getString(R.string.chain_pinned_output_speaker), null, listOf(route.evidence))
+        // Another kind of route, or none known: the route's own name.
+        OutputRouteKind.OTHER, null -> {
             val name = metrics[Metrics.ROUTE_SELECTED_SYSTEM_NAME]?.evidence
             PinnedContent(
                 value = name?.takeUnless { it is TelemetryEvidence.Unavailable }?.let { formatTelemetryReading(context, it.reading, unitDisplayMode) },

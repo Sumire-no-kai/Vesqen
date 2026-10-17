@@ -12,15 +12,35 @@ import java.text.NumberFormat
  * "LDAC · 96 kHz · 32-bit · 990 kbps" from the codec Android reported (#73), or null when there is
  * no report. Bit rates are the LDAC tier's nominal ceiling; nothing here is a measured transport rate.
  */
-internal fun bluetoothCodecSummary(context: Context, codec: TelemetryEvidence?, configuration: TelemetryEvidence?): String? {
-    val name = bluetoothCodecName(codec) ?: return null
-    return listOfNotNull(name, bluetoothCodecSettingsSummary(context, configuration)).joinToString(" · ")
+internal fun bluetoothCodecSummary(
+    context: Context,
+    codec: TelemetryEvidence?,
+    configuration: TelemetryEvidence?,
+    includeNominalBitrate: Boolean = true,
+): String? {
+    val name = bluetoothCodecName(codec)
+        ?: context.getString(R.string.bluetooth_codec_unnamed).takeIf { bluetoothCodecIsUnnamed(codec, configuration) }
+        ?: return null
+    return listOfNotNull(name, bluetoothCodecSettingsSummary(context, configuration, includeNominalBitrate)).joinToString(" · ")
 }
+
+/** A report whose codec has no public name (a vendor codec before Android 15) but whose settings were read. */
+internal fun bluetoothCodecIsUnnamed(codec: TelemetryEvidence?, configuration: TelemetryEvidence?): Boolean =
+    (codec as? TelemetryEvidence.Unavailable)?.reason == TelemetryUnavailableReason.NOT_EXPOSED_BY_PLATFORM &&
+        configuration?.reading is TelemetryReading.Text
 
 internal fun bluetoothCodecName(codec: TelemetryEvidence?): String? = (codec?.reading as? TelemetryReading.Text)?.value
 
-/** The settings part of [bluetoothCodecSummary], "96 kHz · 32-bit · 990 kbps", or null when none was reported. */
-internal fun bluetoothCodecSettingsSummary(context: Context, configuration: TelemetryEvidence?): String? {
+/**
+ * The settings part of [bluetoothCodecSummary], "96 kHz · 32-bit · 990 kbps", or null when none was
+ * reported. The kbps is the LDAC tier's nominal ceiling, an estimate: leave it out where no
+ * confidence label is shown.
+ */
+internal fun bluetoothCodecSettingsSummary(
+    context: Context,
+    configuration: TelemetryEvidence?,
+    includeNominalBitrate: Boolean = true,
+): String? {
     val settings = (configuration?.reading as? TelemetryReading.Text)?.value?.let(BluetoothCodecSettings::parse)
     val kilohertz = NumberFormat.getNumberInstance(context.resources.configuration.locales[0]).apply {
         maximumFractionDigits = 1
@@ -28,7 +48,7 @@ internal fun bluetoothCodecSettingsSummary(context: Context, configuration: Tele
     return listOfNotNull(
         settings?.sampleRateHz?.let { context.getString(R.string.chain_unit_khz, kilohertz.format(it / 1_000.0)) },
         settings?.bitsPerSample?.let { context.getString(R.string.chain_unit_bits, it.toString()) },
-        settings?.ldacQuality?.let { quality ->
+        settings?.ldacQuality?.takeIf { includeNominalBitrate }?.let { quality ->
             quality.nominalBitsPerSecond?.let { context.getString(R.string.chain_unit_kbps, (it / 1_000).toString()) }
                 ?: context.getString(R.string.bluetooth_ldac_adaptive_or_990)
         },

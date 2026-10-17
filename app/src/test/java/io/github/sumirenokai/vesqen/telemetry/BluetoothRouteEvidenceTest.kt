@@ -27,6 +27,20 @@ class BluetoothRouteEvidenceTest {
             bluetoothTransportUnavailableReason(null, "ble_headset"))
     }
 
+    @Test fun codecReportsApplyOnlyToClassicBluetooth() {
+        // A coarse "bluetooth" selected route with an A2DP device, or no specific prediction, can get a report.
+        assertEquals(TelemetryUnavailableReason.NOT_EXPOSED_BY_PLATFORM, bluetoothCodecRouteReason("bluetooth", "bluetooth_a2dp"))
+        assertEquals(TelemetryUnavailableReason.NOT_EXPOSED_BY_PLATFORM, bluetoothCodecRouteReason("bluetooth", null))
+        // LE Audio, hearing aids and calls never get one, so nobody is told to reconnect.
+        for (type in listOf("ble_headset", "ble_speaker", "ble_broadcast", "hearing_aid", "bluetooth_sco")) {
+            assertEquals(TelemetryUnavailableReason.NOT_APPLICABLE, bluetoothCodecRouteReason("bluetooth", type))
+            assertEquals(TelemetryUnavailableReason.NOT_APPLICABLE, bluetoothCodecRouteReason(null, type))
+        }
+        // Other routes keep the transport reason.
+        assertEquals(TelemetryUnavailableReason.NOT_APPLICABLE, bluetoothCodecRouteReason("phone_speaker", "bluetooth_a2dp"))
+        assertEquals(TelemetryUnavailableReason.TEMPORARILY_UNAVAILABLE, bluetoothCodecRouteReason(null, null))
+    }
+
     @Test fun endpointNamesArePrivateAndNewMetricsParticipateInProbeDemand() {
         assertEquals(TelemetryExportPolicy.REDACT_TEXT,
             TelemetryMetricCatalog.descriptor(TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONNECTED_NAMES).exportPolicy)

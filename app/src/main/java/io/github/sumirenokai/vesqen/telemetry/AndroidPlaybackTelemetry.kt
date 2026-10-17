@@ -1326,13 +1326,20 @@ class AndroidPlaybackTelemetry internal constructor(
             return
         }
         val at = report.receivedAt
-        metrics.measuredTextOrUnavailable(
-            TelemetryMetricCatalog.ROUTE_BLUETOOTH_CODEC,
-            report.codecName,
-            ANDROID_BLUETOOTH_CODEC,
-            at,
-            TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT,
-        )
+        val codecName = report.codecName?.takeIf(String::isNotBlank)
+        if (codecName != null) {
+            metrics.measuredText(TelemetryMetricCatalog.ROUTE_BLUETOOTH_CODEC, codecName, ANDROID_BLUETOOTH_CODEC, at)
+        } else {
+            // A report arrived, so reconnecting would not help: before Android 15 vendor codecs
+            // (aptX Adaptive, LHDC) have no public name. Their settings are still shown (#136 R5).
+            metrics.unavailable(
+                TelemetryMetricCatalog.ROUTE_BLUETOOTH_CODEC,
+                TelemetryUnavailableReason.NOT_EXPOSED_BY_PLATFORM,
+                at,
+                ANDROID_BLUETOOTH_CODEC,
+                "Android reported the settings of a codec without its name",
+            )
+        }
         metrics.measuredTextOrUnavailable(
             TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURATION,
             report.settings.token(),
@@ -1482,7 +1489,12 @@ class AndroidPlaybackTelemetry internal constructor(
         val bluetoothReason = bluetoothTransportUnavailableReason(
             output.selectedSystemRouteType, output.anticipatedRouteType,
         )
-        addBluetoothCodecMetrics(metrics, raw.bluetoothCodec, bluetoothReason, output.observedAt)
+        addBluetoothCodecMetrics(
+            metrics,
+            raw.bluetoothCodec,
+            bluetoothCodecRouteReason(output.selectedSystemRouteType, output.anticipatedRouteType),
+            output.observedAt,
+        )
         // Public AudioManager endpoints describe PCM-facing capabilities and Android has no
         // over-the-air counter, so nothing may be relabelled as the Bluetooth transport bitrate.
         metrics.unavailable(

@@ -834,6 +834,7 @@
     <string name="bluetooth_codec_permission_action">Show Bluetooth codec</string>
     <string name="bluetooth_codec_permission_body">Vesqen uses the Nearby devices permission only to read the codec Android reports. Playback doesn’t need it.</string>
     <string name="bluetooth_ldac_adaptive_or_990">adaptive or 990 kbps</string>
+    <string name="bluetooth_codec_unnamed">Unnamed codec</string>
     <string name="chain_segment_bluetooth_reported">Android reports %1$s. Lossy or unknown, depending on the codec.</string>
     <string name="chain_segment_bluetooth_reconnect">Reconnect your headphones and the codec Android reports appears here.</string>
     <string name="chain_segment_bluetooth_nominally_lossless">Nominally lossless; it falls back to lossy on a weak signal, and Vesqen can’t tell which mode is in use.</string>

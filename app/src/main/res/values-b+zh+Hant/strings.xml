@@ -810,6 +810,7 @@
     <string name="bluetooth_codec_permission_action">顯示藍牙編碼</string>
     <string name="bluetooth_codec_permission_body">Vesqen 只用「鄰近裝置」權限讀取系統回報的藍牙編碼，播放不需要這項權限。</string>
     <string name="bluetooth_ldac_adaptive_or_990">自適應或 990 kbps</string>
+    <string name="bluetooth_codec_unnamed">未命名的編碼</string>
     <string name="chain_segment_bluetooth_reported">系統回報的編碼：%1$s。有損或未知，取決於這個編碼。</string>
     <string name="chain_segment_bluetooth_reconnect">重新連接耳機後，這裡會顯示系統回報的編碼。</string>
     <string name="chain_segment_bluetooth_nominally_lossless">標稱支援無損，訊號不好時會退回有損，Vesqen 無法確認目前處於哪種模式。</string>
