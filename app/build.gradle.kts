@@ -199,8 +199,10 @@ abstract class CheckPrivacyPolicyFinalTask : DefaultTask() {
             }
         }
         stringResources.files.forEach { strings ->
-            val url = urlPattern.find(strings.readText())?.groupValues?.get(1)?.trim().orEmpty()
-            if (!url.startsWith("https://")) {
+            val url = urlPattern.find(strings.readText())?.groupValues?.get(1)?.trim()
+            // A translation without its own address uses the default one, which must have it.
+            if (url == null && strings.parentFile.name != "values") return@forEach
+            if (url == null || !url.startsWith("https://")) {
                 problems += "${strings.parentFile.name}/${strings.name} has no https privacy_policy_url"
             }
         }
@@ -219,10 +221,8 @@ val checkPrivacyPolicyFinal by tasks.registering(CheckPrivacyPolicyFinalTask::cl
     group = "verification"
     description = "Reject release bundles whose privacy policy is a draft or has no web address."
     policies.from(privacyPolicyFiles)
-    stringResources.from(
-        layout.projectDirectory.file("src/main/res/values/strings.xml"),
-        layout.projectDirectory.file("src/main/res/values-zh-rCN/strings.xml"),
-    )
+    // Every language: Japanese and Traditional Chinese override the address too.
+    stringResources.from(fileTree("src/main/res") { include("values*/strings.xml") })
 }
 
 // Every Release artifact of either flavor requires the same finalized privacy policy.
