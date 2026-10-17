@@ -1870,6 +1870,8 @@ class VesqenAppTest {
 
     @Test
     fun chain_path_keeps_station_facts_in_one_column_and_aged_evidence_on_one_line_at_130_percent_text() {
+        // Evidence two minutes old needs two minutes of uptime; a freshly booted device waits for it.
+        SystemClock.sleep((121_000 - SystemClock.elapsedRealtime()).coerceAtLeast(0))
         val epochMs = System.currentTimeMillis()
         val elapsedMs = SystemClock.elapsedRealtime() - 120_000
         val source = TelemetryDataSource(TelemetrySourceId("test.telemetry"))
