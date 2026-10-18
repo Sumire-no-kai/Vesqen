@@ -1098,7 +1098,7 @@ private fun AlbumPage(
                 modifier = Modifier
                     .padding(horizontal = 14.dp)
                     .fillMaxWidth()
-                    .background(card, RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+                    .background(card, RoundedCornerShape(topStart = VesqenRadii.surface, topEnd = VesqenRadii.surface))
                     .padding(start = VesqenSpacing.md, end = VesqenSpacing.md, top = 18.dp, bottom = VesqenSpacing.sm),
                 verticalAlignment = Alignment.Bottom,
                 horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
@@ -1134,8 +1134,9 @@ private fun AlbumPage(
                 Modifier
                     .padding(horizontal = 14.dp)
                     .fillMaxWidth()
-                    .height(VesqenSpacing.sm)
-                    .background(card, RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp)),
+                    // At least as tall as the corner radius, or the shape shrinks the corners to fit.
+                    .height(VesqenRadii.surface)
+                    .background(card, RoundedCornerShape(bottomStart = VesqenRadii.surface, bottomEnd = VesqenRadii.surface)),
             )
         }
     }
@@ -1501,6 +1502,8 @@ private fun DeviceMusicAccessNotice(
                     modifier = Modifier
                         .heightIn(min = 48.dp)
                         .testTag("vesqen.permission.request"),
+                    // Flush with the notice's right edge, so the press state takes its corners.
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
                     contentPadding = PaddingValues(horizontal = VesqenSpacing.sm),
                 ) {
                     Text(
@@ -1787,7 +1790,9 @@ private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit, r
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
                 .testTag("vesqen.library.search"),
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
+            // A pill, so the 48 dp clear button on the right sits on the end's centre and its
+            // press circle follows the field's curve.
+            shape = androidx.compose.foundation.shape.CircleShape,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
             BasicTextField(
@@ -1807,7 +1812,8 @@ private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit, r
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
-                            .padding(start = VesqenSpacing.sm),
+                            // Puts the 20 dp icon's centre 24 dp in, on the left end's centre.
+                            .padding(start = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
@@ -1896,6 +1902,8 @@ private fun NotificationNotice(onOpenNotificationSettings: () -> Unit) {
                     modifier = Modifier
                         .heightIn(min = 48.dp)
                         .testTag("vesqen.library.notifications.settings"),
+                    // Flush with the notice's right edge, so the press state takes its corners.
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
                     contentPadding = PaddingValues(horizontal = VesqenSpacing.sm),
                 ) {
                     Text(
