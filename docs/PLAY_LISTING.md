@@ -221,7 +221,7 @@ Google Play 上的第一个测试版本。
 | 每一类的回答 | 收集，不分享（Cloudflare 作为服务提供方代为处理，Google 不算作分享）；不是临时处理；可选；用途只选“分析” |
 | 不勾选 | 位置、个人信息、设备或其他 ID（不发送任何 ID）、音频文件（从不上传音频）以及其他类型 |
 
-1.0 加入 Play 结算（#46、#48）后，按实际收集的数据重新填写。
+Play 结算（#46、#48）随 2.0 加入（2026-10-13 决定，见[商业模式](MONETIZATION.md)），加入后按实际收集的数据重新填写。beta.3 的崩溃报告（#113）属于已申报的“崩溃日志”，没有改表。发 1.0 之前对照这张表再核对一遍：#73 给设备报告加了系统报告的蓝牙编码字段。
 
 前台服务申报的说明（控制台用英文填写）：
 
@@ -254,5 +254,5 @@ If the service were deferred or stopped, the music would stop as soon as the use
 - **自动保护**：Protected with Play → Automatic protection 里只有 Installer check（默认开启）。它在 Play 下发的 APK 里加本地检查，从其他来源装了 Play 版时提示去 Play 安装，不联网、不发数据。“Share app telemetry with Google” 开关属于防篡改保护，只对部分 Play 合作伙伴开放，本账号没有这一项（2026-10-13 核对）。以后如果出现，开启前先和所有者确认，并同步改隐私政策和数据安全表单。改了自动保护设置后，要重新上传 AAB 才生效。
 - **开发者验证**：Android developer verification 页面里，`io.github.sumirenokai.vesqen` 为 Registered，应用签名密钥 `74:3E:96:FC:…:62:93` 为 Verified（2026-10-13 核对）。GitHub 版用同一把密钥，所以也已覆盖。列表里另外 3 把是 Play 生成的密钥，包括已弃用的 `F7:8F:…:C6:E3`，不影响。
 - **顺序**：商品详情 → 封闭测试轨道和测试者 → Play 应用签名和上传 AAB → 前台服务申报 → 送审。审核通过、测试者加入后，14 天从那时开始计算。
-- **进度**：2026-10-13 第一次送审（封闭测试 `11 (1.0.0-beta.2)`、商品详情、应用内容、商店设置）当天通过，封闭测试轨道 Active，178 个国家/地区。前台服务申报的演示视频是 YouTube 不公开视频。测试者在名单里之后，用 Android 上的 Play 链接或网页链接 `https://play.google.com/apps/testing/io.github.sumirenokai.vesqen` 加入。当天加入人数为 0，名单 2 人。
+- **进度**：2026-10-13 第一次送审（封闭测试 `11 (1.0.0-beta.2)`、商品详情、应用内容、商店设置）当天通过，封闭测试轨道 Active，178 个国家/地区。前台服务申报的演示视频是 YouTube 不公开视频。测试者在名单里之后，用 Android 上的 Play 链接或网页链接 `https://play.google.com/apps/testing/io.github.sumirenokai.vesqen` 加入。当天加入人数为 0，名单 2 人。2026-10-16：名单 14 人，上午 Play 显示 11 人加入；beta.3（`12`）和商品详情“测试版”段落的修改当天审核通过。同一天晚些时候 Play 后台显示已满 12 人加入，只剩连续 14 天，最早 2026-10-30 申请正式版。Play 里的测试反馈为 0 条，申请时要总结测试者反馈，测试期间要收集并记录。
 - **版本审核的警告**：Play 提示“包含原生代码但没有上传调试符号”。包里唯一的原生库是 AndroidX Compose 图形库自带的 `libandroidx.graphics.path.so`，发布时已经去掉了符号；Vesqen 自己没有 NDK 代码，所以没有可上传的符号，这条警告可以忽略。

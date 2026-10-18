@@ -4,6 +4,8 @@
 
 ## 当前冻结候选
 
+2026-10-18 注：这一节是 beta.1 时的记录。之后发布了 `1.0.0-beta.2` / `11`（2026-10-12 GitHub，2026-10-13 起 Play 封闭测试）和 `1.0.0-beta.3` / `12`（2026-10-16，GitHub 和 Play 封闭测试）。下一个版本是 `1.0.0` / `13`，步骤见[发布路线与待办](LAUNCH_BACKLOG.md)的“发布 1.0 时”。三套签名身份没有变。
+
 - 版本：`1.0.0-beta.1` / versionCode `10`。这是通向首个稳定版 `1.0.0` 的首个公开 Beta，不代表稳定版已经验收。
 - Verification issuer：`vesqen.output_verification.2026_01`；固定 SPKI SHA-256 为 `35619e5cc562b23282aa5bce0aa4e6ba6221e40b97522d96d91ea5c07daf0db4`。私钥位于仓库外，且不复用 APK 更新签名。
 - Application signing：`vesqen-app-signing-v1`；证书 SHA-256 为 `74:3E:96:FC:B7:1D:C5:81:88:49:68:19:A0:01:A2:7C:D8:8D:90:91:62:C5:AE:92:9C:87:BF:A2:9A:B8:62:93`。它将用于 GitHub APK，并在首次 Play App Signing 配置时作为同一应用身份导入。
@@ -75,18 +77,18 @@
 - [ ] `version.properties` 使用经审阅的 SemVer 与递增 versionCode；release notes 与 About 一致。
 - [ ] JDK 25 下 unit、Python 工具测试、lint、Debug/Profile/Release、instrumentation compile 通过；CI 通过。
 - [x] Application signing、Play upload 和 verification issuer 为三个独立身份；两份 Android PKCS12 的 Keychain 密码回读、别名查找、私钥 CSR 签名和公共指纹核对通过，公共证书已入库，私钥与密码未进入仓库。
-- [ ] Application signing 与 Play upload 私钥均完成受控加密离线备份和恢复核验；2026-09-21 已完成第一份可移动介质 AES-256 加密副本及只读恢复验证，第二份独立副本和异机密码保管仍待完成。Play App Signing 导入后，Play 应用签名证书与 GitHub APK 证书一致，上传证书保持独立。
+- [x] Application signing 与 Play upload 私钥均完成受控加密离线备份和恢复核验：2026-09-21 完成第一份可移动介质 AES-256 加密副本及只读恢复验证，2026-10-01 完成第二、三份副本和异机密码保管。2026-10-13 Play App Signing 导入后核对过：Play 应用签名证书与 GitHub APK 证书一致，上传证书保持独立（见[发布签名记录](RELEASE_SIGNING.md)）。
 - [ ] 候选 APK/Bundle 使用预期发布签名，证书指纹和 base APK SHA-256 记录；keystore、alias 和密码不进入仓库或日志。
 - [ ] 专用 verification issuer 与 APK 更新签名相互独立；应用固定受审阅的 issuer 公钥和稳定 `keyId`，私钥不进入仓库。未配置 issuer 的构建必须明确拒绝 registry，不能回退信任 APK signer。
 - [ ] 若已有公开版本，从该版本执行保留数据升级；若为首次公开发布，记录无上一公开版本，并用同一长期签名的前后候选验证升级。核对曲库稳定 ID、收藏、历史、歌单、手动排序、SAF grant、队列 checkpoint、输出模式和 registry；不以卸载重装替代升级。现有 Debug/Profile 使用开发签名，不能视为新生产签名的直接升级来源，也不能卸载用户数据来规避签名不匹配。
 - [ ] 新装、升级、系统回收/重启、存储不可用与回滚限制分别记录；数据库或持久格式变化另做兼容审查。
 - [ ] EN/ZH、窄屏/横屏/大字、深浅主题、减少动效、触控目标、对比度与 TalkBack 的适用矩阵通过或公开列限。
-- [ ] Privacy：最终合并 Manifest 不含 INTERNET（适用于不含 Billing 的构建；含 Billing 的构建见[商业模式](MONETIZATION.md)）；如依赖声明 ACCESS_NETWORK_STATE，准确说明它只用于查询网络连接状态。无后台上传新增。Release 不提供诊断启用、录制或导出入口；Debug/Internal 导出仍须显式操作并按策略脱敏。
+- [ ] Privacy：最终合并 Manifest 不含 INTERNET（适用于不含 Billing 的构建；含 Billing 的构建见[商业模式](MONETIZATION.md)）；如依赖声明 ACCESS_NETWORK_STATE，准确说明它只用于查询网络连接状态。无后台上传新增。Release 不提供诊断启用、录制或导出入口；Debug/Internal 导出仍须显式操作并按策略脱敏。（2026-10-18 注：“不含 INTERNET”只适用于 beta.1。beta.2 起按所有者 2026-10-01 的决定申请联网权限，用于可以关闭的匿名统计、用户选择上传的设备报告和 GitHub 版检查更新，说明见隐私政策。）
 - [ ] 支持范围、无需开启日志的问题复现步骤、已知限制和回退方式写入发布页；不得要求 Release 用户寻找隐藏诊断开关。
 - [x] 无外部数字 VERIFIED 组合时发布受限 Beta 的决定已获用户确认（2026-09-10）；第二款 DAC 缺失公开列限。标题/文案不得暗示 M4 完成，原始 M4 验收门禁继续保留。
 - [x] 商业模式已确认（2026-09-23）：免费下载 + 应用内试用 + 一次性应用内买断；应用在 Play 上永久免费是已知晓的单向决定。
 - [ ] `1.0.0-beta.1` 以免费应用上传；Release 合并 Manifest 不含 Billing 库、`com.android.vending.BILLING` 或付费墙代码。
-- [ ] 封闭测试至少 12 名测试者连续加入满 14 天并获得正式版权限；测试人数和起止日期已记录。
+- [ ] 封闭测试至少 12 名测试者连续加入满 14 天并获得正式版权限；测试人数和起止日期已记录。2026-10-16 已满 12 人加入，最早 2026-10-30 满 14 天（#45）。
 - [ ] `./gradlew :app:checkPrivacyPolicyFinal` 通过：应用内隐私政策为定稿全文，中英文网页地址已填写（#36、#38、#43）。`bundleRelease` 会自动执行这项检查；GitHub APK 发布前需要手动执行。
 - [ ] 合并、tag、远端 release、商店/分发上传和用户采用分别确认，不从本地构建或 CI 自动推断。
 
@@ -104,7 +106,7 @@
 
 ## 发布 Code Review 预备
 
-本节只锁定下一轮审查入口，尚未执行审查，也不代表任何检查项已通过。
+2026-10-01 已按本节执行：审查 `c6dd340..7cf506a`（PR #29、#55 和隐私政策网址），报告 6 项。最严重的一项作为 beta.1 冻结例外在 PR #61（#60）修复，其余 5 项记在 #62，留到 beta.2；经过见[开发日志](DEVELOPMENT_LOG.md)“2026-10-01 · 封板前的代码审查与第二个冻结例外”。再早的 2026-09-16 复审，发现由 PR #29 关闭。1.0 的代码审查在 2026-10-17 另做，发现和修复记在 #136。下面的步骤留作以后审查的参考。
 
 1. 以上一次完整发版复审的实现提交 `c6dd340` 为 delta 起点，首先审查 `c6dd340..HEAD`，再对发布高风险不变量做定向回看。
 2. 高风险顺序固定为：严格 USB fail-closed 与证据声明、`PlaybackService`/Controller 连接与队列恢复、`LibraryCatalog` 扫描清理与升级保留、签名验证 registry、Release 诊断关闭/权限/混淆、关键页面可操作性。

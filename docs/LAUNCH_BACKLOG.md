@@ -41,22 +41,17 @@
 - [#119](https://github.com/Sumire-no-kai/Vesqen/issues/119)（PR #121）：试用计时、权益状态、第一次打开严格 USB 时的说明，以及设置里的"高级功能"。收费开关关闭，不计时，也不锁功能；文案写"2.0 之前免费"。
 - [#118](https://github.com/Sumire-no-kai/Vesqen/issues/118)（PR #122）：beta.2 审查的遗留问题。
 - [#120](https://github.com/Sumire-no-kai/Vesqen/issues/120) 的 App 和服务端部分（PR #123、#124、#127）：激活码格式、签发工具、App 验证和输入（只在调试版出现）、服务端发码和作废、激活链接放在 `vesqen-api.sumirenokai.com`。Worker 已在 2026-10-13 部署，销售保持关闭。
+- [#113](https://github.com/Sumire-no-kai/Vesqen/issues/113)（PR #125，2026-10-13）：崩溃后下次打开时询问是否发送错误报告。
 - [#52](https://github.com/Sumire-no-kai/Vesqen/issues/52)（PR #126）：进程被结束后，按耳机或蓝牙的播放键恢复队列并播放。两台测试手机上按键都没有到达 Vesqen，发布说明不列为新功能，跟进在 [#129](https://github.com/Sumire-no-kai/Vesqen/issues/129)。
 - 首次使用的三处界面修正。所有者在 Play 版上发现，直接提交（`0df5828` 到 `9a4e6f2`）：
   - 开屏的使用统计页：答复固定在第一屏，只有说明文字在放不下时滚动；
   - 没有授权的空曲库：主按钮改为"允许访问设备音乐"，"添加音乐文件夹"改为次要按钮；
   - 列表原本在最顶上时，扫描后仍停在最顶上。
 
-还要做：
-
-| Issue | 内容 |
-| --- | --- |
-| [#113](https://github.com/Sumire-no-kai/Vesqen/issues/113) | 崩溃后下次打开时询问是否发送错误报告（PR #125，等所有者审隐私政策） |
-
-发版前：
+发版前（2026-10-16 发布时都已完成，见 [beta.3 发布说明](releases/1.0.0-beta.3.md)开头的清单）：
 
 - 真机验收上面已经合并的内容：2026-10-14 完成，界面测试在 iQOO 上全部通过，签名草稿在 Honor 上从 beta.2 升级并保留数据（`docs/M4_DEVICE_ACCEPTANCE.md`）。
-- beta.3 是用户第一次通过应用内更新器升级，要完整测一遍从 beta.2 升到 beta.3。
+- beta.3 是用户第一次通过应用内更新器升级，要完整测一遍从 beta.2 升到 beta.3：2026-10-16 发布后在 Honor 上通过。
 - 发布说明写上这三处修正和"高级功能"的说明，写明"2.0 之前免费"；耳机键恢复只写进已知限制（#129）。
 - 官网同步加一句收费说明（官网 `docs/SITE_PLAN.md`）。
 - Play Console 商品详情里"测试版"那一段换成 [`PLAY_LISTING.md`](PLAY_LISTING.md) 的新文字（"从 2.0 起……"）。旧文字写的是 1.0 收费，已经上传过（所有者 2026-10-13 要求 beta.3 上线时提醒）。
@@ -71,11 +66,10 @@
 | --- | --- |
 | [#75](https://github.com/Sumire-no-kai/Vesqen/issues/75) | 繁体中文和日语已合并（PR #131、#132）。日语还没有母语者审读；2026-10-17 所有者决定日语代码先留在 master，1.0 带不带日语发版前再定 |
 | [#50](https://github.com/Sumire-no-kai/Vesqen/issues/50) | 曲库首页快速滑动：两台手机修复前后各三轮对比，加上大曲库压力测试（M3-R1）。2026-10-17 所有者反馈曲库甩动和设置里的页面切换仍明显卡。2026-10-18 合并了 PR #140（Baseline Profile）、#141（去掉逐首比较曲目的开销）和 #142（设置页在子页面下保持组合）。iQOO（60 Hz，2112 首）上：编译后曲库 UI 线程时间低约 10%、冷启动快约 5%，曲库甩动在帧预算内；设置 ↔ 播放链路的切换开始前有一帧停顿，回设置的这一帧编译后从 39 降到 21 ms，超过 33 ms 的切换从 68/90 降到 50/90。还剩：进链路的那一帧仍约 42 ms；Honor 还没做前后对比；发 1.0 前重新生成 Baseline Profile |
-| [#51](https://github.com/Sumire-no-kai/Vesqen/issues/51) | 8 小时有线播放已通过；还缺新系统上的关屏长播、2 小时 24/96、拔耳机和来电 |
+| [#51](https://github.com/Sumire-no-kai/Vesqen/issues/51) | 8 小时有线播放已通过；还缺新系统上的关屏长播（音量不为 0）、2 小时 24/96，以及中断：拔耳机、来电、蓝牙断连。严格播放 8 小时要接 DAC。按 #51 的验收标准，没做的项目写进商品详情和发布页的限制 |
 | [#136](https://github.com/Sumire-no-kai/Vesqen/issues/136) | 1.0 代码审查（2026-10-17）：R1–R11、R24（加时区判断）、R32（设置页返回保持位置）已修；R9 在 Android 8.0 模拟器上真的清除媒体存储验证过，真机上没做；R12–R31 其余可以放到之后 |
 | [#143](https://github.com/Sumire-no-kai/Vesqen/issues/143) | 2026-10-18 代码审查（10 月 17–18 日的改动）：1.0 前要修 Q1–Q5（R9 时长相近的歌接走旧记录、媒体库没建完时扫描删掉全部设备歌曲、隐私政策没写时区、从设置打开的链路再点标签会重建、Baseline Profile 规则已过期）；Q6–Q19 可以放到之后 |
 | [#35](https://github.com/Sumire-no-kai/Vesqen/issues/35) | 按 beta.3 复核界面和文案（字号、深浅色、减少动效），加完整的 TalkBack |
-| [#54](https://github.com/Sumire-no-kai/Vesqen/issues/54) | 仓库与文档整理；`codex/*` 远程分支按所有者 2026-10-17 的决定保留不动 |
 | [#129](https://github.com/Sumire-no-kai/Vesqen/issues/129) | 耳机键恢复（#52）在 Android 8.0 和 16 的原生模拟器上能用；测试机上是厂商按键白名单，写进已知限制。是否关闭由所有者决定 |
 
 发布 1.0 时：
@@ -85,8 +79,9 @@
 - 定下 1.0 带不带日语（#75）。不带的话，在发版提交里去掉 `values-ja`、`font-ja`、Noto Serif JP 的许可和目录条目，并同步 `locales_config.xml` 和相关测试；master 上的日语保留。
 - 服务端（`server/usage`）已在 2026-10-17 部署（版本 `8bae26bb`，master `ce31aed`），认识设备报告词表里新加的蓝牙编码字段（#73）；没有新的数据库迁移。之后如果服务端再有改动，发版前要再部署一次。官网隐私政策同步到 10 月 16 日版（`npm run sync-privacy`）。
 - 正式通道第一次启用：官网 `updates/stable.json` 第一次填上版本；GitHub 发布不标预发布。
-- 发布说明、README、官网和 Play 商品详情写明严格 USB 的限制（#53）。
+- 发布说明、README、官网和 Play 商品详情写明严格 USB 的限制（#53）。发布说明的已知限制还要写上：耳机键恢复（#129）；严格模式下切歌时无缝播放会断开，修复前列为限制（#136 R17）。
 - Play：商品详情去掉"测试版"那一段，发布到正式版，建议分阶段放量。
+- Play 数据安全表单：对照 [`PLAY_LISTING.md`](PLAY_LISTING.md) 第 5 节核对一遍。表单按 beta.2 填写，之后 #73 给设备报告加了系统报告的蓝牙编码字段。
 - 官网下载区改成 Google Play 和 GitHub 两个入口，README 状态同步。
 
 ## 2.0 之前

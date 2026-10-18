@@ -27,9 +27,11 @@ vivo（iQOO V2171A，Android 15）上的额外步骤，2026-09-30 实测：
 - 2026-10-03 验收（`master` 的 `VesqenAppTest`，75 项，全程无人工操作）：iQOO V2171A（Android 15）启动宿主一次，74 项通过，没有跨应用提示，也没有冻结记录；Honor STF-AL00（Android 9）的宿主记录为“不需要启动”，67 项通过。两台手机上的失败都与同一台手机上的 `master` 基线一致：track-details 底部留白（两台都有），以及 Honor 640 dp 屏上 7 项链路页滚动与触摸用例，与这次修复无关。
 - 替换测试机上原有的构建前，先把原 APK 取回主机，测试后装回并核对哈希，再卸载测试包。备份放在 `build/qa/device-backups/`：它被 git 忽略，也不会像系统临时目录那样在重启后被清空。2026-10-01 曾因备份放在临时目录、重启后丢失，只能用同一提交重新构建来恢复，结果大小相同但哈希不同。
 
-### beta.2 存储隔离验收（#66，待执行）
+### beta.2 存储隔离验收（#66，2026-10-07 已执行）
 
 在真实应用预先保存严格 USB 模式、含重复曲目的队列、当前队列位置、播放进度、随机与循环模式。停止真实应用播放后，经所有者同意，在隔离宿主运行 StrictUsbSpeakerDeviceTest、SpeakerPlaybackDeviceTest、SpeakerChainLifecycleDeviceTest、RealLosslessDeviceTest。重新打开真实应用，逐项核对原状态不变。测试崩溃或超时后也应不变；隔离包的数据可另行清理，但不清理真实应用。外部音源夹具及报告改用隔离包的私有路径。此方案不隔离音频路由、系统音量等设备全局状态，执行前仍需协调设备使用。
+
+2026-10-07 在 iQOO V2171A（Android 15）上执行，所有者同意。基准是当时正式版 beta.1 的状态：队列第 97 项暂停在 0:32，顺序播放，系统输出。隔离宿主里 `StrictUsbSpeakerDeviceTest` 和 `SpeakerPlaybackDeviceTest#playbackSwitchSeekPauseAndObserverRelease` 通过；`SpeakerPlaybackDeviceTest#samplingComparisonSoak` 和 `SpeakerChainLifecycleDeviceTest` 运行 5 分钟时被强制停止，当作测试中途被杀的情形。之后直接打开、再冷启动正式版，曲目、队列位置、进度、播放顺序和输出模式都和基准一致。和上面的步骤比少了两处：为了不改动正式版里在用的数据，没有预先设严格 USB 和含重复曲目的队列；没有布置外部音源，`RealLosslessDeviceTest` 没跑。所有者接受这两处差别，#66 已关闭。
 
 ## 功能矩阵
 

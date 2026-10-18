@@ -216,9 +216,9 @@ An earlier read/write raw image passed its same-session checks but changed hash
 and became unmountable after the first physical-volume eject/reinsert cycle. It
 was quarantined under an explicit invalid filename and is not a backup. The
 read-only image documented above was rebuilt from the original local PKCS12
-files and passed the stronger post-remount recovery check. This is one verified
-copy, not completion of the backup gate: a second independent encrypted copy
-and separate off-device password custody remain required.
+files and passed the stronger post-remount recovery check. At the time it was
+the only verified copy; the second and third copies and off-device password
+custody followed on 2026-10-01 (see the status list above).
 
 Do not publish a signed release until at least two controlled encrypted backup
 copies of the application keystore have been created and independently restored
