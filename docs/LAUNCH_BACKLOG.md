@@ -68,14 +68,14 @@
 | [#50](https://github.com/Sumire-no-kai/Vesqen/issues/50) | 曲库首页快速滑动：两台手机修复前后各三轮对比，加上大曲库压力测试（M3-R1）。2026-10-17 所有者反馈曲库甩动和设置里的页面切换仍明显卡。2026-10-18 合并了 PR #140（Baseline Profile）、#141（去掉逐首比较曲目的开销）和 #142（设置页在子页面下保持组合）。iQOO（60 Hz，2112 首）上：编译后曲库 UI 线程时间低约 10%、冷启动快约 5%，曲库甩动在帧预算内；设置 ↔ 播放链路的切换开始前有一帧停顿，回设置的这一帧编译后从 39 降到 21 ms，超过 33 ms 的切换从 68/90 降到 50/90。还剩：进链路的那一帧仍约 42 ms；Honor 还没做前后对比；发 1.0 前重新生成 Baseline Profile |
 | [#51](https://github.com/Sumire-no-kai/Vesqen/issues/51) | 8 小时有线播放已通过；还缺新系统上的关屏长播（音量不为 0）、2 小时 24/96，以及中断：拔耳机、来电、蓝牙断连。严格播放 8 小时要接 DAC。按 #51 的验收标准，没做的项目写进商品详情和发布页的限制 |
 | [#136](https://github.com/Sumire-no-kai/Vesqen/issues/136) | 1.0 代码审查（2026-10-17）：R1–R11、R24（加时区判断）、R32（设置页返回保持位置）已修；R9 在 Android 8.0 模拟器上真的清除媒体存储验证过，真机上没做；R12–R31 其余可以放到之后 |
-| [#143](https://github.com/Sumire-no-kai/Vesqen/issues/143) | 2026-10-18 代码审查（10 月 17–18 日的改动）：1.0 前要修 Q1–Q5（R9 时长相近的歌接走旧记录、媒体库没建完时扫描删掉全部设备歌曲、隐私政策没写时区、从设置打开的链路再点标签会重建、Baseline Profile 规则已过期）；Q6–Q19 可以放到之后 |
+| [#143](https://github.com/Sumire-no-kai/Vesqen/issues/143) | 2026-10-18 代码审查（10 月 17–18 日的改动）：1.0 前要修的 Q1–Q6 都已修好（Q1、Q2、Q6 是 PR #144，Q3 `d31bbd6`，Q4 `f372289`，Q5 重新生成 profile `f1c8655`）；新发现 Q20（迷你播放条按钮点击区域 40 dp，设备测试在 master 上失败）待处理；Q7–Q19 可以放到之后 |
 | [#35](https://github.com/Sumire-no-kai/Vesqen/issues/35) | 按 beta.3 复核界面和文案（字号、深浅色、减少动效），加完整的 TalkBack |
 | [#129](https://github.com/Sumire-no-kai/Vesqen/issues/129) | 耳机键恢复（#52）在 Android 8.0 和 16 的原生模拟器上能用；测试机上是厂商按键白名单，写进已知限制。是否关闭由所有者决定 |
 
 发布 1.0 时：
 
 - 版本号改成 `1.0.0`（`versionCode` 13），写发布说明，重新签名，从 beta.3 做升级验收。
-- 在最新的 master 上按 `baselineprofile/README.md` 重新生成 Baseline Profile，提交后再打版本（#50、#143 Q5）。现在的 profile 生成于 #142 和 10-18 的界面改动之前，`VesqenApp.kt` 结构和 `AlbumArtwork` 的参数变了以后，有一部分规则对不上。
+- 在最新的 master 上按 `baselineprofile/README.md` 重新生成 Baseline Profile，提交后再打版本（#50、#143 Q5）。2026-10-18 已在 `69e9226` 上重新生成（`f1c8655`）；之后界面或热路径再有改动，发版前还要再生成一次。现在的 profile 生成于 #142 和 10-18 的界面改动之前，`VesqenApp.kt` 结构和 `AlbumArtwork` 的参数变了以后，有一部分规则对不上。
 - 定下 1.0 带不带日语（#75）。不带的话，在发版提交里去掉 `values-ja`、`font-ja`、Noto Serif JP 的许可和目录条目，并同步 `locales_config.xml` 和相关测试；master 上的日语保留。
 - 服务端（`server/usage`）已在 2026-10-17 部署（版本 `8bae26bb`，master `ce31aed`），认识设备报告词表里新加的蓝牙编码字段（#73）；没有新的数据库迁移。之后如果服务端再有改动，发版前要再部署一次。官网隐私政策同步到最新版（10 月 18 日，加了时区信号，#143 Q3；`npm run sync-privacy`）。
 - 正式通道第一次启用：官网 `updates/stable.json` 第一次填上版本；GitHub 发布不标预发布。
