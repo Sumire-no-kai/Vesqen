@@ -58,7 +58,7 @@ rounded:
   album: "4dp"
   control: "12dp"
   surface: "16dp"
-  mini-player: "14dp"
+  mini-player: "32dp"
   pill: "999dp"
 spacing:
   xxs: "4dp"
@@ -76,7 +76,7 @@ components:
     minHeight: "56dp, 64dp with a description"
     separator: "1dp hairline, inset 16dp"
   mini-player:
-    height: "72dp"
+    height: "64dp"
     rounded: "{rounded.mini-player}"
     elevation: "6dp warm shadow, 1dp hairline"
   compact-navigation:
@@ -184,7 +184,8 @@ Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hai
 
 ### Mini-player
 
-- A 72 dp paper-raised card floating 4 dp above the navigation: cover, title, artist, previous, play/pause, next. The non-button area opens Now.
+- A 64 dp paper-raised capsule floating 4 dp above the navigation: cover, title, artist, previous, play/pause, next. The non-button area opens Now.
+- Inner curves share a centre with the capsule ends, 32 dp in from each end: the 44 dp cover is round (the one place a cover is not a 4 dp square), the open-Now press state is a pill inset 4 dp, and the next button sits on the right-hand centre. Previous, play/pause and next draw 40 dp circles inside 48 dp targets. Owner decision, 2026-10-17.
 - Above 150 % text only the title shows; the artist is still read out by TalkBack.
 
 ### Now
@@ -291,6 +292,6 @@ Vesqen's voice is plain, concrete and calm. It tells people what happened and wh
 
 - Don't add feeds, recommendations, social features or ads.
 - Don't imitate a recognisable streaming app.
-- Don't use near-white blocks to separate rows, icons in tinted rounded squares, equal-size card grids, gradient text, side-stripe accents or card radii above 16 dp.
+- Don't use near-white blocks to separate rows, icons in tinted rounded squares, equal-size card grids, gradient text, side-stripe accents or card radii above 16 dp. The mini-player capsule is the one exception.
 - Don't show live counters that tick every second.
 - Don't use music notes, headphones, play triangles, vinyl, waveforms or checkmarks as the mark.

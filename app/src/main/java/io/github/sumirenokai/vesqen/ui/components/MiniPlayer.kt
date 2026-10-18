@@ -1,7 +1,8 @@
 package io.github.sumirenokai.vesqen.ui.components
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.sp
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
@@ -41,7 +42,7 @@ import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 
-internal val MiniPlayerHeight = 72.dp
+internal val MiniPlayerHeight = 64.dp
 
 @Composable
 fun MiniPlayer(
@@ -55,13 +56,15 @@ fun MiniPlayer(
 ) {
     val title = snapshot.title.ifBlank { stringResource(R.string.unknown_title) }
     val artist = snapshot.artist.ifBlank { stringResource(R.string.unknown_artist) }
-    // B · Paper & Sound: a paper-raised card with 14 dp corners, an ink hairline edge and a soft warm
-    // shadow. It keeps the PRD F3 content (artist line, previous / play / next); the output claim
-    // stays in Now's liner notes and Chain.
+    // B · Paper & Sound: a paper-raised capsule with an ink hairline edge and a soft warm shadow. It
+    // keeps the PRD F3 content (artist line, previous / play / next); the output claim stays in Now's
+    // liner notes and Chain.
+    // Every curve inside shares a centre with the capsule ends (32 dp in from either end): the round
+    // cover and the open-Now pill on the left, the next button on the right.
     val colors = LocalVesqenColors.current
-    val shape = RoundedCornerShape(14.dp)
-    // #35: above 150 % text the two lines no longer fit the fixed 72 dp card. The title stays and
-    // the artist is still read out with it.
+    val shape = CircleShape
+    // #35: above 150 % text the two lines no longer fit the 56 dp content height. The title stays
+    // and the artist is still read out with it.
     val titleOnly = LocalDensity.current.fontScale > 1.5f
     val openNowLabel = stringResource(R.string.open_now_playing)
     Surface(
@@ -77,7 +80,7 @@ fun MiniPlayer(
         tonalElevation = 0.dp,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+            modifier = Modifier.padding(start = 4.dp, top = 4.dp, end = 8.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(
@@ -85,10 +88,18 @@ fun MiniPlayer(
                     .weight(1f)
                     .heightIn(min = 56.dp)
                     .testTag("vesqen.mini-player.open-now")
-                    .clickable(onClickLabel = openNowLabel, onClick = onOpenNow),
+                    .clip(CircleShape)
+                    .clickable(onClickLabel = openNowLabel, onClick = onOpenNow)
+                    // The end inset keeps an ellipsized title clear of the pill's curve.
+                    .padding(start = 6.dp, end = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AlbumArtwork(track = currentTrack, targetSize = 44.dp, modifier = Modifier.size(44.dp))
+                AlbumArtwork(
+                    track = currentTrack,
+                    targetSize = 44.dp,
+                    modifier = Modifier.size(44.dp),
+                    shape = CircleShape,
+                )
                 Spacer(Modifier.width(12.dp))
                 Column(
                     modifier = Modifier.weight(1f),
@@ -112,7 +123,7 @@ fun MiniPlayer(
                 }
             }
             IconButton(
-                modifier = Modifier.size(48.dp).testTag("vesqen.mini-player.previous"),
+                modifier = Modifier.testTag("vesqen.mini-player.previous"),
                 onClick = onPrevious,
                 enabled = snapshot.isControllerReady && snapshot.canSkipPrevious,
             ) {
@@ -123,10 +134,10 @@ fun MiniPlayer(
                 )
             }
             FilledIconButton(
-                modifier = Modifier.size(48.dp).testTag("vesqen.mini-player.play-pause"),
+                modifier = Modifier.testTag("vesqen.mini-player.play-pause"),
                 onClick = onPlayPause,
                 enabled = snapshot.isControllerReady,
-                shape = androidx.compose.foundation.shape.CircleShape,
+                shape = CircleShape,
             ) {
                 Icon(
                     imageVector = if (snapshot.showsPauseAction) Icons.Filled.Pause else Icons.Filled.PlayArrow,
@@ -135,7 +146,7 @@ fun MiniPlayer(
                 )
             }
             IconButton(
-                modifier = Modifier.size(48.dp).testTag("vesqen.mini-player.next"),
+                modifier = Modifier.testTag("vesqen.mini-player.next"),
                 onClick = onNext,
                 enabled = snapshot.isControllerReady && snapshot.canSkipNext,
             ) {

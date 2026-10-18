@@ -10,6 +10,8 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertHeightIsEqualTo
+import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertCountEquals
@@ -3012,7 +3014,13 @@ class VesqenAppTest {
             containerWidth = 320.dp,
         )
 
-        composeRule.onNodeWithTag("vesqen.mini-player").assertHeightIsEqualTo(72.dp)
+        composeRule.onNodeWithTag("vesqen.mini-player").assertHeightIsEqualTo(64.dp)
+        // The controls draw 40 dp circles; their touch targets must stay 48 dp.
+        listOf("previous", "play-pause", "next").forEach { control ->
+            composeRule.onNodeWithTag("vesqen.mini-player.$control")
+                .assertWidthIsAtLeast(48.dp)
+                .assertHeightIsAtLeast(48.dp)
+        }
         composeRule.onAllNodesWithText(context.getString(R.string.system_mixed)).assertCountEquals(0)
     }
 
