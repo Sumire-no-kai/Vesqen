@@ -18,6 +18,8 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.unit.sp
 import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
 import io.github.sumirenokai.vesqen.ui.components.rememberAlbumBackground
@@ -874,6 +876,8 @@ private fun CollectionList(
     onCollectionSelected: (LibraryCollection) -> Unit,
     onCreatePlaylist: (() -> Unit)?,
 ) {
+    // Shared by every row, as in LibraryTrackList: a painter per row drew its own icon bitmap.
+    val chevron = rememberVectorPainter(Icons.AutoMirrored.Outlined.KeyboardArrowRight)
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = VesqenSpacing.xs, bottom = VesqenSpacing.md),
@@ -928,6 +932,7 @@ private fun CollectionList(
                 mode = mode,
                 collection = collection,
                 onClick = { onCollectionSelected(collection) },
+                chevron = chevron,
             )
         }
     }
@@ -983,6 +988,7 @@ private fun CollectionRow(
     mode: LibraryBrowseMode,
     collection: LibraryCollection,
     onClick: () -> Unit,
+    chevron: Painter,
 ) {
     val title = collection.title.ifBlank {
         stringResource(
@@ -1044,7 +1050,7 @@ private fun CollectionRow(
             )
         }
         Icon(
-            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            painter = chevron,
             contentDescription = null,
             modifier = Modifier.size(20.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1070,6 +1076,8 @@ private fun AlbumPage(
     val meta = remember(artist, album.tracks) {
         listOfNotNull(artist, nowFormatSummary(album.tracks.firstOrNull())).joinToString(" · ")
     }
+    // Shared by every row, as in LibraryTrackList: a painter per row drew its own icon bitmap.
+    val moreIcon = rememberVectorPainter(Icons.Filled.MoreVert)
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("vesqen.library.album"),
         contentPadding = PaddingValues(bottom = VesqenSpacing.md),
@@ -1123,6 +1131,7 @@ private fun AlbumPage(
                 isCurrent = track.id == playback.trackId,
                 onPlay = { onPlayQueue(album.tracks, index) },
                 onMore = { onTrackMore(track) },
+                moreIcon = moreIcon,
                 modifier = Modifier
                     .padding(horizontal = 14.dp)
                     .background(card)
@@ -1149,6 +1158,7 @@ private fun AlbumTrackRow(
     isCurrent: Boolean,
     onPlay: () -> Unit,
     onMore: () -> Unit,
+    moreIcon: Painter,
     modifier: Modifier = Modifier,
 ) {
     val title = track.title.ifBlank { stringResource(R.string.unknown_title) }
@@ -1190,7 +1200,7 @@ private fun AlbumTrackRow(
             // #35: 48 dp like every other touch target; the 48 dp album row already fits it.
             modifier = Modifier.size(48.dp).testTag("vesqen.library.track.${track.id}.more"),
         ) {
-            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.more_track_actions, title))
+            Icon(moreIcon, contentDescription = stringResource(R.string.more_track_actions, title))
         }
     }
 }

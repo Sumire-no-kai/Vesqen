@@ -19,6 +19,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,6 +38,7 @@ fun TrackRow(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     trailingContent: (@Composable () -> Unit)? = null,
+    moreIcon: Painter = rememberVectorPainter(Icons.Filled.MoreVert),
 ) {
     val title = track.title.ifBlank { stringResource(R.string.unknown_title) }
     val subtitle = androidx.compose.runtime.remember(track.artist, track.album) { track.displaySubtitle() }
@@ -83,7 +86,7 @@ fun TrackRow(
             onClick = onMore,
         ) {
             Icon(
-                imageVector = Icons.Filled.MoreVert,
+                painter = moreIcon,
                 contentDescription = stringResource(R.string.more_track_actions, title),
             )
         }
