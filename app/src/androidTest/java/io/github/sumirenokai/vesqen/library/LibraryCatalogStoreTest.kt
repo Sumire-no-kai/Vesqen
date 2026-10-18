@@ -403,11 +403,16 @@ class LibraryCatalogStoreTest {
                     scannedVolumeNames = listOf("external_primary", "1234-5678"),
                 )
 
+                // The card's file is gone, but its favorite, play and playlist place are kept on a
+                // hidden row that the file reattaches if it comes back (#143 Q2).
+                assertEquals(setOf(card.id), store.readDisplacedTrackIds())
                 assertEquals(
                     listOf("Primary"),
-                    store.readTracks(listOf(source.id)).map(AudioTrack::title),
+                    store.readTracks(listOf(source.id))
+                        .filterNot { it.id in store.readDisplacedTrackIds() }
+                        .map(AudioTrack::title),
                 )
-                assertTrue(store.readPlaylists().single().trackIds.isEmpty())
+                assertEquals(listOf(card.id), store.readPlaylists().single().trackIds)
             }
         } finally {
             context.deleteDatabase(databaseName)
@@ -703,8 +708,9 @@ class LibraryCatalogStoreTest {
     }
 
     @Test
-    fun aDisplacedRowWhoseFileNeverReturnsIsPrunedByTheCompletedScan() = withStore("library-rebuild-prune") { store ->
-        store.scanMediaStore(songA.at(1))
+    fun aDisplacedRowWithUserDataStaysHiddenUntilItsFileReturns() = withStore("library-rebuild-hidden") { store ->
+        // A completed scan once pruned it with its favorite and playlist place (#143 Q2).
+        store.scanMediaStore(songA.at(1), songB.at(2))
         val a = store.tracksByTitle().getValue("A")
         store.setFavorite(a.id, true)
         val playlistId = requireNotNull(store.createPlaylist("Mix"))
@@ -712,11 +718,44 @@ class LibraryCatalogStoreTest {
 
         store.scanMediaStore(songC.at(1))
 
-        val c = store.readTracks(listOf(LibrarySourceId.DEVICE)).single()
-        assertEquals("C", c.title)
-        assertFalse(c.id == a.id)
-        assertFalse(c.isFavorite)
-        assertTrue(store.readPlaylists().single().trackIds.isEmpty())
+        assertEquals(setOf(a.id), store.readDisplacedTrackIds())
+        // B had no user data, so its row is pruned as before.
+        assertEquals(setOf("A", "C"), store.readTracks(listOf(LibrarySourceId.DEVICE)).map(AudioTrack::title).toSet())
+        assertFalse(store.tracksByTitle().getValue("C").isFavorite)
+        assertEquals(listOf(a.id), store.readPlaylists().single().trackIds)
+
+        store.scanMediaStore(songC.at(1), songA.at(9))
+
+        val back = store.tracksByTitle().getValue("A")
+        assertEquals(a.id, back.id)
+        assertEquals(songA.at(9).contentUri, back.contentUri)
+        assertTrue(back.isFavorite)
+        assertTrue(store.readDisplacedTrackIds().isEmpty())
+        assertEquals(listOf(a.id), store.readPlaylists().single().trackIds)
+    }
+
+    @Test
+    fun aScanOfAClearedMediaStoreKeepsUserDataUntilTheFilesAreListedAgain() = withStore("library-cleared") { store ->
+        // Media Storage cleared and Vesqen opened before MediaStore lists the files again (#143 Q2).
+        store.scanMediaStore(songA.at(1), songB.at(2), songC.at(3))
+        val before = store.tracksByTitle()
+        store.setFavorite(before.getValue("A").id, true)
+        store.recordPlayback(before.getValue("B").id, playedAtMs = 100)
+
+        store.scanMediaStore()
+
+        assertEquals(setOf(before.getValue("A").id, before.getValue("B").id), store.readDisplacedTrackIds())
+        assertFalse(store.readTracks(listOf(LibrarySourceId.DEVICE)).any { it.title == "C" })
+
+        store.scanMediaStore(songA.at(4), songB.at(5), songC.at(6))
+
+        val after = store.tracksByTitle()
+        assertEquals(before.getValue("A").id, after.getValue("A").id)
+        assertTrue(after.getValue("A").isFavorite)
+        assertEquals(before.getValue("B").id, after.getValue("B").id)
+        assertEquals(1, after.getValue("B").playCount)
+        assertFalse(after.getValue("C").id == before.getValue("C").id)
+        assertTrue(store.readDisplacedTrackIds().isEmpty())
     }
 
     @Test
@@ -778,9 +817,12 @@ class LibraryCatalogStoreTest {
             volumeName = LEGACY_VOLUME,
         )
 
-        val track = store.readTracks(listOf(LibrarySourceId.DEVICE)).single()
+        val hidden = store.readDisplacedTrackIds()
+        val track = store.readTracks(listOf(LibrarySourceId.DEVICE)).single { it.id !in hidden }
         assertFalse(track.id in previousIds)
         assertFalse(track.isFavorite)
+        // Neither old row is attached to the new file; their favorites wait on hidden rows (#143 Q2).
+        assertEquals(previousIds, hidden)
     }
 
     @Test

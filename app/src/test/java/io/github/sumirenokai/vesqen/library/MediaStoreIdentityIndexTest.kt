@@ -200,6 +200,98 @@ class MediaStoreIdentityIndexTest {
         assertNull(index.unchangedTrackId(candidate(mediaId = 2, songA)))
     }
 
+    @Test
+    fun `the exact file wins over a near duration on the same _ID`() {
+        // Two songs within a second of each other swap _IDs in a rebuild (#143 Q1).
+        val x = TestFile(fileName = "x.flac", sizeBytes = 10_000, durationMs = 200_000)
+        val y = TestFile(fileName = "y.flac", sizeBytes = 20_000, durationMs = 200_400)
+        val index = MediaStoreIdentityIndex(listOf(row(1, mediaId = 1, x), row(2, mediaId = 2, y)))
+
+        assertEquals(
+            MediaStoreTrackPlan(targetTrackId = 2, displacedTrackId = 1),
+            index.plan(candidate(mediaId = 1, y)),
+        )
+        assertEquals(
+            MediaStoreTrackPlan(targetTrackId = 1),
+            index.plan(candidate(mediaId = 3, x)),
+        )
+    }
+
+    @Test
+    fun `a near duration does not take a row whose file is still listed under another _ID`() {
+        // y is new and gets x's old _ID; x itself is renumbered later in the scan (#143 Q1).
+        val x = TestFile(fileName = "x.flac", sizeBytes = 10_000, durationMs = 200_000)
+        val y = TestFile(fileName = "y.flac", sizeBytes = 20_000, durationMs = 200_400)
+        val index = MediaStoreIdentityIndex(
+            rows = listOf(row(1, mediaId = 1, x)),
+            listedFiles = listOf(listed(mediaId = 1, y), listed(mediaId = 3, x)),
+        )
+
+        assertEquals(
+            MediaStoreTrackPlan(targetTrackId = null, displacedTrackId = 1),
+            index.plan(candidate(mediaId = 1, y)),
+        )
+        assertEquals(
+            MediaStoreTrackPlan(targetTrackId = 1),
+            index.plan(candidate(mediaId = 3, x)),
+        )
+    }
+
+    @Test
+    fun `an unchanged path and size on the same _ID keep the row even beside an identical copy`() {
+        // Before Android 10 two album folders can share their last name, so a copied album lists
+        // the same folder, name and size twice.
+        val copy = row(2, mediaId = 2, songA, folderName = "CD1", volumeName = "external")
+        val index = MediaStoreIdentityIndex(
+            rows = listOf(row(1, mediaId = 1, songA, folderName = "CD1", volumeName = "external"), copy),
+            listedFiles = listOf(
+                listed(mediaId = 1, songA, folderName = "CD1", volumeName = "external"),
+                listed(mediaId = 2, songA, folderName = "CD1", volumeName = "external"),
+            ),
+            pathIdentifiesFile = false,
+        )
+
+        assertEquals(
+            MediaStoreTrackPlan(targetTrackId = 1),
+            index.plan(candidate(mediaId = 1, songA, folderName = "CD1", volumeName = "external", fingerprint = "retagged")),
+        )
+    }
+
+    @Test
+    fun `a rename keeps the row while the old name is no longer listed`() {
+        val renamed = songA.copy(fileName = "renamed.flac")
+        val index = MediaStoreIdentityIndex(
+            rows = listOf(row(1, mediaId = 1, songA)),
+            listedFiles = listOf(listed(mediaId = 1, renamed)),
+        )
+
+        assertEquals(MediaStoreTrackPlan(targetTrackId = 1), index.plan(candidate(mediaId = 1, renamed)))
+    }
+
+    @Test
+    fun `before Android 10 the same folder and file name alone do not keep a row`() {
+        // The folder is only the parent directory's name there, so Album A/CD1/01.flac and
+        // Album B/CD1/01.flac look alike (#143 Q6).
+        val firstOfA = TestFile(fileName = "01.flac", sizeBytes = 10_000, durationMs = 200_000)
+        val firstOfB = TestFile(fileName = "01.flac", sizeBytes = 20_000, durationMs = 300_000)
+        fun legacyIndex() = MediaStoreIdentityIndex(
+            rows = listOf(row(1, mediaId = 1, firstOfA, folderName = "CD1", volumeName = "external")),
+            pathIdentifiesFile = false,
+        )
+
+        assertEquals(
+            MediaStoreTrackPlan(targetTrackId = null, displacedTrackId = 1),
+            legacyIndex().plan(candidate(mediaId = 1, firstOfB, folderName = "CD1", volumeName = "external")),
+        )
+        // A tag edit still keeps its row there: the duration matches.
+        assertEquals(
+            MediaStoreTrackPlan(targetTrackId = 1),
+            legacyIndex().plan(
+                candidate(mediaId = 1, firstOfA.copy(sizeBytes = 12_345), folderName = "CD1", volumeName = "external"),
+            ),
+        )
+    }
+
     private data class TestFile(
         val fileName: String,
         val sizeBytes: Long,
@@ -240,6 +332,19 @@ class MediaStoreIdentityIndexTest {
         fileName = file.fileName,
         folderName = folderName,
         fingerprint = fingerprint,
+    )
+
+    private fun listed(
+        mediaId: Long,
+        file: TestFile,
+        folderName: String = "Music/Album",
+        volumeName: String = "external_primary",
+    ) = ListedMediaStoreFile(
+        remoteId = mediaStoreRemoteId(volumeName, mediaId),
+        contentUri = "content://media/$volumeName/audio/media/$mediaId",
+        folderName = folderName,
+        fileName = file.fileName,
+        sizeBytes = file.sizeBytes,
     )
 
     private fun fingerprint(volumeName: String, mediaId: Long, file: TestFile) =

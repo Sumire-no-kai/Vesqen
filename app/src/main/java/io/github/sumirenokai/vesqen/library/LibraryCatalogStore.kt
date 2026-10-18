@@ -620,8 +620,14 @@ internal class LibraryCatalogStore(
         return matches
     }
 
-    /** Starts a device scan that keeps catalog IDs on files rather than on MediaStore `_ID`s. */
-    fun beginMediaStoreScan(): MediaStoreScanSession {
+    /**
+     * Starts a device scan that keeps catalog IDs on files rather than on MediaStore `_ID`s.
+     * [listedFiles] is what MediaStore lists at the start; see [MediaStoreIdentityIndex].
+     */
+    fun beginMediaStoreScan(
+        listedFiles: Collection<ListedMediaStoreFile> = emptyList(),
+        pathIdentifiesFile: Boolean = true,
+    ): MediaStoreScanSession {
         val session = beginSourceScan(LibrarySourceId.DEVICE)
         val identities = readableDatabase.query(
             TRACKS_TABLE,
@@ -658,7 +664,7 @@ internal class LibraryCatalogStore(
                 }
             }
         }
-        return MediaStoreScanSession(session, MediaStoreIdentityIndex(identities))
+        return MediaStoreScanSession(session, MediaStoreIdentityIndex(identities, listedFiles, pathIdentifiesFile))
     }
 
     fun markSeenIfUnchanged(scan: MediaStoreScanSession, candidate: LibraryTrackCandidate): Boolean {
@@ -704,8 +710,9 @@ internal class LibraryCatalogStore(
     }
 
     /**
-     * Rows moved aside for another file whose own file has not reappeared. Their content URI now
-     * plays that other file, so they stay hidden until a scan reattaches or prunes them.
+     * Rows moved aside for another file whose own file has not reappeared, and rows with user data
+     * whose file a completed scan did not find. Their content URI no longer plays their file, so
+     * they stay hidden until a scan reattaches them; only rows without user data are pruned.
      */
     fun readDisplacedTrackIds(): Set<Long> = readableDatabase.query(
         TRACKS_TABLE,
@@ -802,9 +809,21 @@ internal class LibraryCatalogStore(
                 add(session.epoch.toString())
                 if (prunePatterns != null) addAll(prunePatterns)
             }.toTypedArray()
+            if (prunePatterns != null) {
+                // A cleared or half-rebuilt MediaStore lists nothing yet for files it still holds,
+                // and a completed scan cannot tell. Rows with favorites, plays or playlist places are
+                // therefore hidden like displaced rows instead of deleted, and their file reattaches
+                // them by folder, name and size when it is listed again (#143 Q2).
+                database.execSQL(
+                    "UPDATE $TRACKS_TABLE SET $TRACK_REMOTE_ID = '$DISPLACED_MEDIASTORE_PREFIX' || $TRACK_ID " +
+                        "WHERE $pruneSelection AND $TRACK_REMOTE_ID NOT GLOB '$DISPLACED_MEDIASTORE_PREFIX*' " +
+                        "AND $HOLDS_USER_STATE",
+                    pruneArguments,
+                )
+            }
             database.delete(
                 TRACKS_TABLE,
-                pruneSelection,
+                if (prunePatterns != null) "$pruneSelection AND NOT $HOLDS_USER_STATE" else pruneSelection,
                 pruneArguments,
             )
             check(updateCompletedSource(database, session.sourceId, generation) == 1) {
@@ -1185,6 +1204,9 @@ internal class LibraryCatalogStore(
         private const val PLAYLIST_ITEM_TRACK_ID = "track_id"
         private const val PLAYLIST_ITEM_POSITION = "position"
         private const val PLAYLIST_ITEM_ADDED_AT_MS = "added_at_ms"
+        /** Favorites, listening history or a playlist place: what a scan must never delete. */
+        private const val HOLDS_USER_STATE = "($TRACK_IS_FAVORITE != 0 OR $TRACK_PLAY_COUNT > 0 OR " +
+            "$TRACK_LAST_PLAYED_AT_MS > 0 OR $TRACK_ID IN (SELECT $PLAYLIST_ITEM_TRACK_ID FROM $PLAYLIST_ITEMS_TABLE))"
 
         private val SOURCE_COLUMNS = arrayOf(
             SOURCE_ID,

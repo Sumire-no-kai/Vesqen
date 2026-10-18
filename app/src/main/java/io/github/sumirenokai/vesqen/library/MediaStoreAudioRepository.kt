@@ -101,6 +101,51 @@ internal class MediaStoreAudioRepository(
         return identitiesByLegacyId.values.filterNotNull()
     }
 
+    /** Before Android 10 MediaStore exposes only the parent directory's name as the folder. */
+    val pathIdentifiesFile: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+
+    /**
+     * Every audio file [scanTracks] will offer, read before it starts: the identity index needs to
+     * know whether a row's own file is still listed under another `_ID` (#143 Q1).
+     */
+    suspend fun listFiles(scope: MediaStoreScanScope): List<ListedMediaStoreFile> {
+        val scanContext = currentCoroutineContext()
+        val projection = buildList {
+            add(MediaStore.Audio.Media._ID)
+            add(MediaStore.Audio.Media.SIZE)
+            add(MediaStore.Audio.Media.DISPLAY_NAME)
+            @Suppress("DEPRECATION")
+            add(if (pathIdentifiesFile) MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Audio.Media.DATA)
+        }.toTypedArray()
+        return buildList {
+            for (volumeName in scope.volumeNames) {
+                scanContext.ensureActive()
+                val audioCollection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    MediaStore.Audio.Media.getContentUri(volumeName)
+                } else {
+                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                }
+                val cursor = contentResolver.query(audioCollection, projection, TRACK_SELECTION, null, null)
+                    ?: throw IllegalStateException("MediaStore returned no cursor for volume $volumeName")
+                cursor.use {
+                    while (cursor.moveToNext()) {
+                        val id = cursor.getLong(0)
+                        val path = cursor.getString(3).orEmpty()
+                        add(
+                            ListedMediaStoreFile(
+                                remoteId = mediaStoreRemoteId(volumeName, id),
+                                contentUri = ContentUris.withAppendedId(audioCollection, id).toString(),
+                                folderName = if (pathIdentifiesFile) path.trimEnd('/') else legacyMediaFolderName(path),
+                                fileName = cursor.getString(2).orEmpty(),
+                                sizeBytes = cursor.getLong(1),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     suspend fun scanTracks(
         scope: MediaStoreScanScope,
         shouldPause: () -> Boolean,
@@ -130,7 +175,7 @@ internal class MediaStoreAudioRepository(
                 add(MediaStore.Audio.Media.DATA)
             }
         }.toTypedArray()
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} > 0"
+        val selection = TRACK_SELECTION
         val sortOrder = "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
 
         var processedTrackCount = 0
@@ -325,3 +370,5 @@ internal fun legacyMediaFolderName(dataPath: String): String {
 
 private const val LEGACY_EXTERNAL_VOLUME_NAME = "external"
 private const val MEDIA_STORE_CONTENT_PREFIX = "content://media/"
+private const val TRACK_SELECTION =
+    "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} > 0"
