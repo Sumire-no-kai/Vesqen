@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -43,6 +44,7 @@ fun AlbumArtwork(
     fallbackContainerColor: Color? = null,
     showFallback: Boolean = true,
     loadedArtworkModifier: Modifier = Modifier,
+    shape: Shape = AlbumArtworkShape,
 ) {
     val density = LocalDensity.current
     if (targetSize != null) {
@@ -57,6 +59,7 @@ fun AlbumArtwork(
             fallbackContainerColor = fallbackContainerColor,
             showFallback = showFallback,
             loadedArtworkModifier = loadedArtworkModifier,
+            shape = shape,
         )
     } else {
         BoxWithConstraints(modifier = modifier) {
@@ -71,6 +74,7 @@ fun AlbumArtwork(
                 fallbackContainerColor = fallbackContainerColor,
                 showFallback = showFallback,
                 loadedArtworkModifier = loadedArtworkModifier,
+                shape = shape,
             )
         }
     }
@@ -85,6 +89,7 @@ private fun AlbumArtworkContent(
     fallbackContainerColor: Color?,
     showFallback: Boolean,
     loadedArtworkModifier: Modifier,
+    shape: Shape,
 ) {
     val appContext = LocalContext.current.applicationContext
     val loader = remember(appContext) { AlbumArtworkLoader(appContext) }
@@ -99,7 +104,6 @@ private fun AlbumArtworkContent(
         }
     }
     val bitmap by bitmapState
-    val shape = remember { RoundedCornerShape(VesqenRadii.album) }
 
     Surface(
         modifier = modifier,
@@ -126,6 +130,8 @@ private fun AlbumArtworkContent(
         }
     }
 }
+
+private val AlbumArtworkShape = RoundedCornerShape(VesqenRadii.album)
 
 private val ArtworkLoadDispatcher = Dispatchers.IO.limitedParallelism(2)
 

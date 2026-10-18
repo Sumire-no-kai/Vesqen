@@ -837,7 +837,7 @@ private fun ChainPinnedCard(
         modifier = modifier
             .semantics(mergeDescendants = true) {}
             .testTag("vesqen.chain.pinned.${reading.tag}"),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(VesqenRadii.surface),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, LocalVesqenColors.current.hairline),
     ) {

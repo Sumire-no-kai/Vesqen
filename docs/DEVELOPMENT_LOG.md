@@ -1234,6 +1234,31 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
   - 真机上"ライブラリ"在 360 dp 宽的手机上放不下、被截断。现在三个顶层页的标题放不下时，从 32 sp 逐级缩小，最小到 21 sp。
 - 列表字体（`d1f6bde`）：所有者反映列表里的英文曲名"左右扁"，一行里的字体也不统一。Instrument Serif 是窄体的展示字体，列表、专辑栏、迷你播放条和链路摘要里的名字改用无衬线体，衬线体只留给页标题和大号的名字。改前改后在 iQOO 上截图对比，所有者选了改后。
 
+## 2026-10-17 · Baseline Profile（#50，PR #140）
+
+- 所有者反馈曲库快速甩动和设置里的页面切换仍明显卡。应用只带各个库自带的 profile，自己的代码在侧载后要靠解释执行和 JIT。
+- PR #140 加了 `:baselineprofile` 模块（baselineprofile 插件和 Macrobenchmark 1.5.0）。它在 Android 16 模拟器上录冷启动到曲库、曲库和专辑列表甩动、专辑播放后的正在播放和链路、设置页及其子页面，生成 `app/src/main/generated/baselineProfiles` 下的 Baseline Profile（31,262 条规则）和 startup profile（22,077 条）。两个渠道和 profile 构建共用；`profileinstaller` 写明 1.4.1。
+- 生成时发现 AGP 9 的 `optimization.enable` 会让插件的 nonMinified 构建照样跑 R8，录到混淆名，已在 `finalizeDsl` 里关掉。`MainActivity` 打开 `testTagsAsResourceId`，供 UiAutomator 按测试标签找控件。
+- `tools/measure_library_scroll.py` 每个动作后读一次 framestats，输出 UI 线程时间的汇总，新增设置页滚动、设置 → 播放链路 → 返回和 `--warmup`；`tools/generate_scroll_library.py` 生成 2000 个短 WAV 的测试曲库。
+- 模拟器上前后两版交替各测三遍：按 profile 编译后，曲库冷启动后头 16 次甩动的 UI 线程 p50 从 5.92 降到 3.61 ms，超过 8 ms 的帧从 223/608 降到 122/571；设置 → 播放链路 → 返回（热）p90 从 11.56 降到 8.44 ms；冷启动中位数从 755 到 648 ms。完整表格和测量条件见 案例集 P06（[ENGINEERING_CASEBOOK.md](ENGINEERING_CASEBOOK.md)）。
+- 侧载安装后 ART 是 `verify`，要等系统后台编译才用上 profile；Play 安装时就编译；可调试的 Vesqen Test 不受影响。iQOO 上当天装的 Vesqen Profile 也还是 `verify`。
+- 验证：`:app:testDebugUnitTest :app:lintDebug :app:assembleDebug` 和两个渠道的设备测试编译通过（单元测试 GitHub 472、Play 434）；CI 的任务组合、两个渠道的 Release 和 Play AAB 通过，都带 profile；启动 `MainActivity` 的 `SpeakerChainLifecycleDeviceTest` 在 Android 16 模拟器上通过。
+- iQOO 9（Android 15，60 Hz，2112 首）上前后交替各三遍：
+  - 编译后曲库 UI 线程时间低约 10%，冷启动中位数从 303 到 288 ms；
+  - 曲库甩动加前加后都没有超过 16.7 ms 的帧；
+  - 设置 → 播放链路 → 返回每次切换都有一帧 25–67 ms，加不加 profile 都一样，要另外处理。
+  - 测完删除测试文件、重新扫描，装回原来的 Vesqen Profile，清空队列、收回权限、恢复成未编译状态。
+- 模拟器、系统镜像和 SDK 命令行工具用完后已删除，SDK 和 `~/.android` 恢复原样。
+
+## 2026-10-18 · 设置 ↔ 播放链路切换的第一帧（#50）
+
+- 先确认：长帧发生在动画开始之前，是停顿，不是动画跳帧（案例集 P07）。
+- 用 simpleperf 只看长帧里的主线程，在 R8 构建上找到一处实际开销：每次启动刷新曲库后，Compose 每次重组页面框架都要把曲目列表逐首比较一遍。`updateLibrary` 现在遇到内容相同的新列表时沿用旧列表。
+- iQOO 9（2112 首）交替各三遍：按 profile 编译后主线程指令数少 6.6%，未编译少 2.2%。每次切换最长帧的变化在 0–3 ms，在两遍之间的波动以内。最初记的 33.4 → 30.8 ms 统计有误，把链路页一秒后的刷新也算成了切换，已在案例集 P07 更正。
+- 试过让页标题先按最大字号排版：在 R8 构建上只少了约 1% 的指令，没有保留。
+- 剩下约 40 ms 是一次组合整页的成本（进链路约 41 ms，回设置约 35 ms）。所有者同意试的"设置页在子页面下保持组合"见 #142。
+- 测量后手机已恢复：删除测试文件，装回原来的 Vesqen Profile，清空队列、收回权限、恢复成未编译。
+
 ## 2026-10-18 · 设置页在子页面下保持组合（#50）
 
 - 所有者同意试一下：设置页在播放链路、关于、开源许可、隐私政策、Pro 页打开时保持组合，返回时不再重新组合整页。被盖住时不摆放、语义清空；转场动画保持原样。Pro 页在激活变化时刷新 Pro 状态，因为设置页不再随返回重新组合。

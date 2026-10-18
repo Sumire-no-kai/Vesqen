@@ -7,6 +7,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -24,10 +26,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -99,12 +104,21 @@ fun OutputStatusChip(
     val label = outputDeclarationLabel(declaration)
     val description = stringResource(R.string.output_status_label)
     val openChainLabel = if (onClick == null) null else stringResource(R.string.open_playback_chain)
+    // The 48 dp touch area is taller than the pill, so the press state is drawn on the pill itself
+    // instead of as a square-cornered box around it.
+    val interactionSource = remember { MutableInteractionSource() }
     val touchTarget = if (onClick == null) {
         Modifier
     } else {
         Modifier
             .defaultMinSize(minHeight = 48.dp)
-            .clickable(role = Role.Button, onClickLabel = openChainLabel, onClick = onClick)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                role = Role.Button,
+                onClickLabel = openChainLabel,
+                onClick = onClick,
+            )
     }
     val visualSpec = outputStatusVisualSpec(declaration)
     val colors = MaterialTheme.colorScheme
@@ -155,6 +169,11 @@ fun OutputStatusChip(
         contentAlignment = Alignment.Center,
     ) {
         Surface(
+            modifier = if (onClick == null) {
+                Modifier
+            } else {
+                Modifier.clip(CircleShape).indication(interactionSource, ripple())
+            },
             shape = CircleShape,
             color = containerColor,
             contentColor = contentColor,
