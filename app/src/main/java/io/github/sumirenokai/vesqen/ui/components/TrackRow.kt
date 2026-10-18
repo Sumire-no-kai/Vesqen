@@ -39,6 +39,7 @@ fun TrackRow(
     enabled: Boolean = true,
     trailingContent: (@Composable () -> Unit)? = null,
     moreIcon: Painter = rememberVectorPainter(Icons.Filled.MoreVert),
+    artworkFallback: Painter = rememberTwinPathsPainter(),
 ) {
     val title = track.title.ifBlank { stringResource(R.string.unknown_title) }
     val subtitle = androidx.compose.runtime.remember(track.artist, track.album) { track.displaySubtitle() }
@@ -52,7 +53,7 @@ fun TrackRow(
             .clickable(enabled = enabled, onClick = onPlay),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AlbumArtwork(track = track, targetSize = 48.dp, modifier = Modifier.size(48.dp))
+        AlbumArtwork(track = track, targetSize = 48.dp, modifier = Modifier.size(48.dp), fallbackPainter = artworkFallback)
         Spacer(Modifier.width(12.dp))
         Column(
             modifier = Modifier.weight(1f),

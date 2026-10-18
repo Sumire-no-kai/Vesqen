@@ -104,6 +104,7 @@ import io.github.sumirenokai.vesqen.library.projectLibraryTitleOrder
 import io.github.sumirenokai.vesqen.ui.components.ConfirmDestructiveDialog
 import io.github.sumirenokai.vesqen.ui.components.LibraryAlphabetIndex
 import io.github.sumirenokai.vesqen.ui.components.LibraryTrackList
+import io.github.sumirenokai.vesqen.ui.components.rememberTwinPathsPainter
 import io.github.sumirenokai.vesqen.ui.components.hairlineBelow
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.rememberCoroutineScope
@@ -876,8 +877,11 @@ private fun CollectionList(
     onCollectionSelected: (LibraryCollection) -> Unit,
     onCreatePlaylist: (() -> Unit)?,
 ) {
-    // Shared by every row, as in LibraryTrackList: a painter per row drew its own icon bitmap.
+    // Shared by every row, as in LibraryTrackList: a painter per row drew its own icon bitmap, and
+    // the fallback cover is one picture per size instead of strokes in every row.
     val chevron = rememberVectorPainter(Icons.AutoMirrored.Outlined.KeyboardArrowRight)
+    val rowFallback = rememberTwinPathsPainter()
+    val shelfFallback = rememberTwinPathsPainter()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = VesqenSpacing.xs, bottom = VesqenSpacing.md),
@@ -893,7 +897,7 @@ private fun CollectionList(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     items(shelf, key = { "shelf:${it.key}" }) { album ->
-                        AlbumShelfItem(album = album, onClick = { onCollectionSelected(album) })
+                        AlbumShelfItem(album = album, onClick = { onCollectionSelected(album) }, fallback = shelfFallback)
                     }
                 }
             }
@@ -933,6 +937,7 @@ private fun CollectionList(
                 collection = collection,
                 onClick = { onCollectionSelected(collection) },
                 chevron = chevron,
+                fallback = rowFallback,
             )
         }
     }
@@ -949,7 +954,7 @@ private fun LibrarySectionLabel(text: String) {
 }
 
 @Composable
-private fun AlbumShelfItem(album: LibraryCollection, onClick: () -> Unit) {
+private fun AlbumShelfItem(album: LibraryCollection, onClick: () -> Unit, fallback: Painter) {
     val shadow = LocalVesqenColors.current.shadow
     Column(
         modifier = Modifier
@@ -964,6 +969,7 @@ private fun AlbumShelfItem(album: LibraryCollection, onClick: () -> Unit) {
             modifier = Modifier
                 .size(AlbumShelfCover)
                 .shadow(2.dp, RoundedCornerShape(VesqenRadii.album), ambientColor = shadow, spotColor = shadow),
+            fallbackPainter = fallback,
         )
         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
@@ -989,6 +995,7 @@ private fun CollectionRow(
     collection: LibraryCollection,
     onClick: () -> Unit,
     chevron: Painter,
+    fallback: Painter,
 ) {
     val title = collection.title.ifBlank {
         stringResource(
@@ -1030,7 +1037,7 @@ private fun CollectionRow(
     ) {
         if (mode == LibraryBrowseMode.ALBUMS) {
             collection.tracks.firstOrNull()?.let { track ->
-                AlbumArtwork(track = track, targetSize = 48.dp, modifier = Modifier.size(48.dp))
+                AlbumArtwork(track = track, targetSize = 48.dp, modifier = Modifier.size(48.dp), fallbackPainter = fallback)
                 Spacer(Modifier.width(VesqenSpacing.sm))
             }
         }

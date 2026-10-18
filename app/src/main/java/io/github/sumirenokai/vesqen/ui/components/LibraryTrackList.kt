@@ -72,11 +72,13 @@ internal fun LibraryTrackList(
     val edgePx = with(LocalDensity.current) { 64.dp.toPx() }
     val speedPx = with(LocalDensity.current) { 1000.dp.toPx() }
     val handleAreaPx = with(LocalDensity.current) { (48.dp + VesqenSpacing.md).toPx() }
-    // One painter per icon for the whole list. A vector painter renders into its own bitmap, so a
-    // painter per row allocated, drew and uploaded a new bitmap for every row a fling brought in
-    // (#50). The rows draw the same icon at the same size, so they share the cached bitmap.
+    // One painter per icon and one for the fallback cover, shared by the whole list. A vector
+    // painter renders into its own bitmap, so a painter per row allocated, drew and uploaded a new
+    // bitmap for every row a fling brought in (#50). The rows draw the same icon at the same size,
+    // so they share the cached bitmap.
     val moreIcon = rememberVectorPainter(Icons.Filled.MoreVert)
     val dragIcon = rememberVectorPainter(Icons.Filled.DragHandle)
+    val artworkFallback = rememberTwinPathsPainter()
     val upLabel = stringResource(R.string.move_up)
     val downLabel = stringResource(R.string.move_down)
 
@@ -200,6 +202,7 @@ internal fun LibraryTrackList(
                         onMore = { onTrackMore(track) },
                         enabled = !editing,
                         moreIcon = moreIcon,
+                        artworkFallback = artworkFallback,
                         trailingContent = if (!editing) null else {
                             {
                                 Icon(dragIcon, stringResource(R.string.drag_track_order),
