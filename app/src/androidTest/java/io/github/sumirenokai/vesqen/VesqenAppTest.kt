@@ -12,6 +12,7 @@ import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertWidthIsAtLeast
+import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertCountEquals
@@ -3022,6 +3023,27 @@ class VesqenAppTest {
                 .assertHeightIsAtLeast(48.dp)
         }
         composeRule.onAllNodesWithText(context.getString(R.string.system_mixed)).assertCountEquals(0)
+    }
+
+    @Test
+    fun mini_player_stops_growing_on_wide_windows() {
+        render(
+            state = grantedState(
+                tracks = sampleTracks,
+                playback = PlaybackSnapshot(
+                    isControllerReady = true,
+                    trackId = 1,
+                    title = "Dawn Signal",
+                    artist = "Mori",
+                    hasPrevious = true,
+                    hasNext = true,
+                ),
+            ),
+            containerWidth = 1000.dp,
+            containerHeight = 600.dp,
+        )
+
+        composeRule.onNodeWithTag("vesqen.mini-player").assertWidthIsEqualTo(560.dp)
     }
 
     @Test

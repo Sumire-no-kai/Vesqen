@@ -161,6 +161,8 @@ Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hai
 
 **The no-near-white-block rule.** Never place near-white fills inside a paper card or on paper to separate rows; use hairlines. A row's state shows in its label colour, not in a filled block.
 
+**The concentric rule.** A rounded shape inside another one shares its corner centres: inner radius = outer radius minus the inset. A control or press state flush with an edge takes the container's own corners, and a press state is clipped to the shape it belongs to, never drawn as a square box around it. Once the inset reaches the outer radius the rule no longer applies, as with a chip 18 dp inside a 16 dp card. Cards use the tokens (16 dp surface, 12 dp control); no in-between radii. Owner request, 2026-10-18.
+
 ## Components
 
 ### Buttons
@@ -178,6 +180,7 @@ Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hai
 
 - Text tabs (Songs, Albums, Artists, Folders, Genres, Playlists) scroll horizontally; the selected tab is ink at weight 600 with a Moss underline.
 - Header actions: search, sort, Favorites (heart) and a menu for adding folders and rescanning.
+- The search field is a 48 dp pill: the search icon and the clear button sit on the centres of its ends.
 - **A–Z index:** a 24 dp strip along the right edge, 11 dp letters, missing letters at 25 %, the selected letter in Moss. Dragging shows a 56 dp letter bubble beside the finger that takes no layout space. Windows under 420 dp tall, text above 120 % and TalkBack get an "A–Z" button that opens a letter picker with 48 dp rows instead. Shown only in unfiltered Songs sorted by title.
 - Favorites and playlists show an Edit order action only when there is something to reorder (two or more songs). Reordering uses a 48 dp drag handle and Move up / Move down accessibility actions.
 - Until the catalog has been read once, the library shows loading rows, never the empty state.
@@ -186,6 +189,7 @@ Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hai
 
 - A 64 dp paper-raised capsule floating 4 dp above the navigation: cover, title, artist, previous, play/pause, next. The non-button area opens Now.
 - Inner curves share a centre with the capsule ends, 32 dp in from each end: the 44 dp cover is round (the one place a cover is not a 4 dp square), the open-Now press state is a pill inset 4 dp, and the next button sits on the right-hand centre. Previous, play/pause and next draw 40 dp circles inside 48 dp targets. Owner decision, 2026-10-17.
+- At most 560 dp wide; on wider windows it stays centred instead of stretching edge to edge.
 - Above 150 % text only the title shows; the artist is still read out by TalkBack.
 
 ### Now

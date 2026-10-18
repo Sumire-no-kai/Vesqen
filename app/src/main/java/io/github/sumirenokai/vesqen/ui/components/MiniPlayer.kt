@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -44,6 +45,9 @@ import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 
 internal val MiniPlayerHeight = 64.dp
 
+// On wide windows the capsule stops growing and stays centred instead of stretching edge to edge.
+internal val MiniPlayerMaxWidth = 560.dp
+
 @Composable
 fun MiniPlayer(
     snapshot: PlaybackSnapshot,
@@ -69,6 +73,7 @@ fun MiniPlayer(
     val openNowLabel = stringResource(R.string.open_now_playing)
     Surface(
         modifier = modifier
+            .widthIn(max = MiniPlayerMaxWidth)
             .fillMaxWidth()
             .height(MiniPlayerHeight)
             .shadow(6.dp, shape, ambientColor = colors.shadow, spotColor = colors.shadow)

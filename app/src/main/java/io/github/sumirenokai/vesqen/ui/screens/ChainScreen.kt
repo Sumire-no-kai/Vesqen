@@ -83,6 +83,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -1599,13 +1600,16 @@ private fun ChainMetricCard(
         null
     }
 
+    val shape = RoundedCornerShape(12.dp)
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("vesqen.chain.metric.${metricId.value}")
+            // The click sits outside the Surface's own clip, so clip it to the card's corners.
+            .clip(shape)
             .clickable(onClickLabel = evidenceAction) { evidenceExpanded = !evidenceExpanded }
             .semantics(mergeDescendants = true) {},
-        shape = RoundedCornerShape(12.dp),
+        shape = shape,
         color = if (pinned) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(
@@ -2196,7 +2200,7 @@ private fun ChainCustomizerMetricRow(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = VesqenSpacing.xs, vertical = VesqenSpacing.xxs),
+            modifier = Modifier.padding(VesqenSpacing.xxs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // #35: the box and its label are one control, so TalkBack names the metric it toggles
@@ -2205,6 +2209,8 @@ private fun ChainCustomizerMetricRow(
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(min = 48.dp)
+                    // Inset 4 dp in a 12 dp box: an 8 dp press shape keeps the corners concentric.
+                    .clip(RoundedCornerShape(VesqenRadii.control - VesqenSpacing.xxs))
                     .toggleable(
                         value = selected,
                         enabled = selectionEnabled,
