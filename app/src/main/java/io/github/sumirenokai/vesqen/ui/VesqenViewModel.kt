@@ -356,7 +356,8 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private inline fun updateLibrary(transform: (LibraryUiState) -> LibraryUiState) {
-        uiState = uiState.copy(library = transform(uiState.library))
+        val current = uiState.library
+        uiState = uiState.copy(library = transform(current).keepingEqualTracks(current))
     }
 
     private fun restoreCatalogThenRefresh() {
@@ -459,6 +460,15 @@ private fun LibraryCatalogSnapshot.pausedProgress(): LibraryScanProgress? = sour
         isPaused = true,
     )
 }
+
+/**
+ * Keeps the previous track list when a reload finds the same tracks, as every start does when the
+ * refresh follows the cached catalog. Compose compares the list with equals where it is a remember
+ * key or a parameter, and keeps the old list when they are equal, so an equal new list makes every
+ * later check compare the whole library track by track (#50).
+ */
+internal fun LibraryUiState.keepingEqualTracks(previous: LibraryUiState): LibraryUiState =
+    if (tracks !== previous.tracks && tracks == previous.tracks) copy(tracks = previous.tracks) else this
 
 /** Applies authoritative history fields while preserving every playback/catalog identity field. */
 internal fun applyPlaybackHistoryUpdates(
