@@ -6,7 +6,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.sp
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,17 +27,22 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonColors
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
@@ -88,49 +97,62 @@ fun MiniPlayer(
             modifier = Modifier.padding(start = 4.dp, top = 4.dp, end = 8.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
+            val openNowInteraction = remember { MutableInteractionSource() }
+            Box(
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(min = 56.dp)
                     .testTag("vesqen.mini-player.open-now")
-                    .clip(CircleShape)
-                    .clickable(onClickLabel = openNowLabel, onClick = onOpenNow)
-                    // The end inset keeps an ellipsized title clear of the pill's curve.
-                    .padding(start = 6.dp, end = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .clickable(
+                        interactionSource = openNowInteraction,
+                        indication = null,
+                        onClickLabel = openNowLabel,
+                        onClick = onOpenNow,
+                    ),
+                contentAlignment = Alignment.CenterStart,
             ) {
-                AlbumArtwork(
-                    track = currentTrack,
-                    targetSize = 44.dp,
-                    modifier = Modifier.size(44.dp),
-                    shape = CircleShape,
-                )
-                Spacer(Modifier.width(12.dp))
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(1.dp),
+                // The press state is a pill behind the cover and the text. Clipping the content to the
+                // pill instead cut the ends of two lines at large text sizes (#143 Q12), and the inset
+                // that kept the title clear of the curve cost 8 dp of title width (#143 Q13).
+                Box(Modifier.matchParentSize().clip(CircleShape).indication(openNowInteraction, ripple()))
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, lineHeight = 21.sp),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        // On the title itself, so TalkBack reads "title, artist" once instead of the title twice.
-                        modifier = if (titleOnly) Modifier.semantics { contentDescription = "$title, $artist" } else Modifier,
+                    AlbumArtwork(
+                        track = currentTrack,
+                        targetSize = 44.dp,
+                        modifier = Modifier.size(44.dp),
+                        shape = CircleShape,
                     )
-                    if (!titleOnly) Text(
-                        text = artist,
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(1.dp),
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, lineHeight = 21.sp),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            // On the title itself, so TalkBack reads "title, artist" once instead of the title twice.
+                            modifier = if (titleOnly) Modifier.semantics { contentDescription = "$title, $artist" } else Modifier,
+                        )
+                        if (!titleOnly) Text(
+                            text = artist,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
-            IconButton(
+            MiniPlayerControl(
                 modifier = Modifier.testTag("vesqen.mini-player.previous"),
                 onClick = onPrevious,
                 enabled = snapshot.isControllerReady && snapshot.canSkipPrevious,
+                colors = IconButtonDefaults.iconButtonColors(),
             ) {
                 Icon(
                     imageVector = Icons.Filled.SkipPrevious,
@@ -138,11 +160,11 @@ fun MiniPlayer(
                     modifier = Modifier.size(20.dp),
                 )
             }
-            FilledIconButton(
+            MiniPlayerControl(
                 modifier = Modifier.testTag("vesqen.mini-player.play-pause"),
                 onClick = onPlayPause,
                 enabled = snapshot.isControllerReady,
-                shape = CircleShape,
+                colors = IconButtonDefaults.filledIconButtonColors(),
             ) {
                 Icon(
                     imageVector = if (snapshot.showsPauseAction) Icons.Filled.Pause else Icons.Filled.PlayArrow,
@@ -150,10 +172,11 @@ fun MiniPlayer(
                     modifier = Modifier.size(22.dp),
                 )
             }
-            IconButton(
+            MiniPlayerControl(
                 modifier = Modifier.testTag("vesqen.mini-player.next"),
                 onClick = onNext,
                 enabled = snapshot.isControllerReady && snapshot.canSkipNext,
+                colors = IconButtonDefaults.iconButtonColors(),
             ) {
                 Icon(
                     imageVector = Icons.Filled.SkipNext,
@@ -161,6 +184,49 @@ fun MiniPlayer(
                     modifier = Modifier.size(20.dp),
                 )
             }
+        }
+    }
+}
+
+/**
+ * A 40 dp circle inside a 48 dp clickable (#143 Q20). Material's IconButton clicks and reports its
+ * accessibility bounds at the 40 dp it draws and leaves the rest of the target to the touch layer's
+ * expansion, so TalkBack, accessibility checks and some input paths saw a 40 dp button.
+ */
+@Composable
+private fun MiniPlayerControl(
+    onClick: () -> Unit,
+    enabled: Boolean,
+    colors: IconButtonColors,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled,
+                role = Role.Button,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(if (enabled) colors.containerColor else colors.disabledContainerColor)
+                // From the centre, so the ripple sits in the circle wherever the 48 dp target is pressed.
+                .indication(interactionSource, ripple(bounded = false, radius = 20.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            CompositionLocalProvider(
+                LocalContentColor provides if (enabled) colors.contentColor else colors.disabledContentColor,
+                content = content,
+            )
         }
     }
 }

@@ -3062,6 +3062,56 @@ class VesqenAppTest {
         composeRule.onAllNodesWithText(context.getString(R.string.system_mixed)).assertCountEquals(0)
     }
 
+    // The mini player on the smallest and common phone widths, a tablet width and large text: the
+    // controls keep real 48 dp targets side by side and the title keeps room to read (#143 Q20, Q13).
+    // The title gets the capsule width minus 218 dp of fixed parts (insets, cover, gap, three 48 dp
+    // controls), so these minimums sit a few dp under that and fail if the title is squeezed again.
+    @Test
+    fun mini_player_fits_a_320dp_window_at_200_percent_text() = assertMiniPlayerFits(320.dp, 2f, minTitleWidth = 64.dp)
+
+    @Test
+    fun mini_player_fits_a_360dp_window_at_130_percent_text() = assertMiniPlayerFits(360.dp, 1.3f, minTitleWidth = 104.dp)
+
+    @Test
+    fun mini_player_fits_a_411dp_window_at_default_text() = assertMiniPlayerFits(411.dp, 1f, minTitleWidth = 156.dp)
+
+    @Test
+    fun mini_player_fits_a_600dp_window_at_default_text() = assertMiniPlayerFits(600.dp, 1f, minTitleWidth = 200.dp)
+
+    private fun assertMiniPlayerFits(width: Dp, fontScale: Float, minTitleWidth: Dp) {
+        val title = "A deliberately long local track title"
+        render(
+            state = grantedState(
+                tracks = sampleTracks,
+                playback = PlaybackSnapshot(
+                    isControllerReady = true,
+                    trackId = 1,
+                    title = title,
+                    artist = "A deliberately long local artist name",
+                    hasPrevious = true,
+                    hasNext = true,
+                ),
+            ),
+            containerWidth = width,
+            containerHeight = 720.dp,
+            fontScale = fontScale,
+        )
+
+        val player = composeRule.onNodeWithTag("vesqen.mini-player").fetchSemanticsNode().boundsInRoot
+        var previousRight = composeRule.onNodeWithTag("vesqen.mini-player.open-now").fetchSemanticsNode().boundsInRoot.right
+        listOf("previous", "play-pause", "next").forEach { control ->
+            val bounds = composeRule.onNodeWithTag("vesqen.mini-player.$control")
+                .assertWidthIsAtLeast(48.dp)
+                .assertHeightIsAtLeast(48.dp)
+                .fetchSemanticsNode()
+                .boundsInRoot
+            assertTrue("$control overlaps the control before it at $width", bounds.left >= previousRight - 0.5f)
+            previousRight = bounds.right
+        }
+        assertTrue("The next button leaves the mini player at $width", previousRight <= player.right + 0.5f)
+        composeRule.onNodeWithText(title, useUnmergedTree = true).assertWidthIsAtLeast(minTitleWidth)
+    }
+
     @Test
     fun mini_player_stops_growing_on_wide_windows() {
         render(

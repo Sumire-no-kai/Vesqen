@@ -105,7 +105,9 @@ fun OutputStatusChip(
     val description = stringResource(R.string.output_status_label)
     val openChainLabel = if (onClick == null) null else stringResource(R.string.open_playback_chain)
     // The 48 dp touch area is taller than the pill, so the press state is drawn on the pill itself
-    // instead of as a square-cornered box around it.
+    // instead of as a square-cornered box around it. It grows from the pill's centre: a press is
+    // reported in the touch area's coordinates, which put a touch-point ripple about 10 dp below
+    // the finger (#143 Q14).
     val interactionSource = remember { MutableInteractionSource() }
     val touchTarget = if (onClick == null) {
         Modifier
@@ -172,7 +174,7 @@ fun OutputStatusChip(
             modifier = if (onClick == null) {
                 Modifier
             } else {
-                Modifier.clip(CircleShape).indication(interactionSource, ripple())
+                Modifier.clip(CircleShape).indication(interactionSource, ripple(bounded = false))
             },
             shape = CircleShape,
             color = containerColor,
