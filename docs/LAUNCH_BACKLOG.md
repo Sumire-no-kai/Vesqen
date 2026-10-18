@@ -81,8 +81,7 @@
 发布 1.0 时：
 
 - 版本号改成 `1.0.0`（`versionCode` 13），写发布说明，重新签名，从 beta.3 做升级验收。
-- 按 `baselineprofile/README.md` 重新生成 Baseline Profile（#50）。现在的 profile 生成于 #142 和 10-18 的界面改动之前，`VesqenApp.kt` 结构变了以后有一部分规则对不上。
-- 在最新的 master 上重新生成 Baseline Profile（`baselineprofile/README.md`），提交后再打版本（#143 Q5）。
+- 在最新的 master 上按 `baselineprofile/README.md` 重新生成 Baseline Profile，提交后再打版本（#50、#143 Q5）。现在的 profile 生成于 #142 和 10-18 的界面改动之前，`VesqenApp.kt` 结构和 `AlbumArtwork` 的参数变了以后，有一部分规则对不上。
 - 定下 1.0 带不带日语（#75）。不带的话，在发版提交里去掉 `values-ja`、`font-ja`、Noto Serif JP 的许可和目录条目，并同步 `locales_config.xml` 和相关测试；master 上的日语保留。
 - 服务端（`server/usage`）已在 2026-10-17 部署（版本 `8bae26bb`，master `ce31aed`），认识设备报告词表里新加的蓝牙编码字段（#73）；没有新的数据库迁移。之后如果服务端再有改动，发版前要再部署一次。官网隐私政策同步到 10 月 16 日版（`npm run sync-privacy`）。
 - 正式通道第一次启用：官网 `updates/stable.json` 第一次填上版本；GitHub 发布不标预发布。
