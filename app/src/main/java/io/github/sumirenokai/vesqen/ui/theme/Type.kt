@@ -2,6 +2,7 @@ package io.github.sumirenokai.vesqen.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.text.modifiers.TextAutoSizeLayoutScope
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -9,7 +10,9 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ExperimentalTextApi
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -17,6 +20,9 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.Typeface
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import io.github.sumirenokai.vesqen.R
@@ -126,7 +132,38 @@ fun TextStyle.pageTitle(): TextStyle = copy(fontFamily = LocalVesqenPageTitle.cu
  * ライブラリ does on a 360 dp phone. Pass it only at the display size; it would enlarge a compact
  * title.
  */
-val TopLevelTitleAutoSize = TextAutoSize.StepBased(minFontSize = 21.sp, maxFontSize = 32.sp, stepSize = 1.sp)
+val TopLevelTitleAutoSize: TextAutoSize = LargestFirstAutoSize(minFontSize = 21.sp, maxFontSize = 32.sp, stepSize = 1.sp)
+
+/**
+ * [TextAutoSize.StepBased] that tries [maxFontSize] first. The step search lays text out five or
+ * six times even when it fits at the largest size, as page titles and Chain's pinned readings
+ * almost always do, and opening a page runs it in the frame before the transition starts (#50).
+ * Text that fits gets [maxFontSize]; other text gets the step search's size. (The step search
+ * counts its steps in pixels, so above font scale 1.0 it can stop just below [maxFontSize] even
+ * when that fits.)
+ */
+internal data class LargestFirstAutoSize(
+    val minFontSize: TextUnit,
+    val maxFontSize: TextUnit,
+    val stepSize: TextUnit,
+) : TextAutoSize {
+    private val search = TextAutoSize.StepBased(minFontSize, maxFontSize, stepSize)
+
+    override fun TextAutoSizeLayoutScope.getFontSize(constraints: Constraints, text: AnnotatedString): TextUnit =
+        if (performLayout(constraints, text, maxFontSize).fits()) maxFontSize
+        else with(search) { getFontSize(constraints, text) }
+}
+
+/** The overflow test of Compose's StepBased (foundation 1.10): clipped text, or a cut-off ellipsis. */
+private fun TextLayoutResult.fits(): Boolean = when {
+    layoutInput.overflow == TextOverflow.Clip || layoutInput.overflow == TextOverflow.Visible ->
+        !didOverflowWidth && !didOverflowHeight
+    lineCount == 0 -> true
+    lineCount == 1 -> !isLineEllipsized(0)
+    layoutInput.overflow == TextOverflow.Ellipsis -> !isLineEllipsized(lineCount - 1)
+    // Start and middle ellipses only apply to one line; on more lines the text is clipped.
+    else -> !didOverflowWidth && !didOverflowHeight
+}
 
 // The display styles are the serif big names and, through [pageTitle], page titles; headline and
 // title styles are sans.

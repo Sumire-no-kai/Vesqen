@@ -195,7 +195,7 @@ fun ChainScreen(
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     var preferences by remember(preferencesRepository) {
-        mutableStateOf(preferencesRepository.load().normalized())
+        mutableStateOf(preferencesRepository.load())
     }
     val history = remember {
         ChainMetricHistoryBuffer(maximumDurationMs = preferences.historyLength.milliseconds)
