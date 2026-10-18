@@ -1132,16 +1132,16 @@
       "notices": []
     },
     {
-      "id": "androidx.profileinstaller:profileinstaller:1.4.0",
+      "id": "androidx.profileinstaller:profileinstaller:1.4.1",
       "name": "Profile Installer",
-      "version": "1.4.0",
-      "sha256": "d502141fcce902430f62b674c32aecd0f75262e7ee2cd15c74adb617cd13130a",
-      "pomSource": "https://dl.google.com/dl/android/maven2/androidx/profileinstaller/profileinstaller/1.4.0/profileinstaller-1.4.0.pom",
+      "version": "1.4.1",
+      "sha256": "b519f9317ded1e2c1c2993038c0692e30da326ca99097d9331ff2d3a5861a428",
+      "pomSource": "https://dl.google.com/dl/android/maven2/androidx/profileinstaller/profileinstaller/1.4.1/profileinstaller-1.4.1.pom",
       "licenses": [
         {
           "name": "Apache-2.0",
           "file": "texts/809fa1ed21450f59.txt",
-          "source": "androidx.profileinstaller:profileinstaller:1.4.0!/META-INF/androidx/profileinstaller/profileinstaller/LICENSE.txt"
+          "source": "androidx.profileinstaller:profileinstaller:1.4.1!/META-INF/androidx/profileinstaller/profileinstaller/LICENSE.txt"
         }
       ],
       "notices": []
