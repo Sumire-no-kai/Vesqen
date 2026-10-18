@@ -211,7 +211,7 @@ internal class AndroidLibraryCatalog(
         ) {
             store.migrateLegacyMediaStoreIdentities(mediaStore.legacyIdentityMappings(scanScope))
         }
-        val scan = store.beginMediaStoreScan()
+        val scan = store.beginMediaStoreScan(mediaStore.listFiles(scanScope), mediaStore.pathIdentifiesFile)
         onProgress(
             LibraryScanProgress(
                 sourceId = source.id,
