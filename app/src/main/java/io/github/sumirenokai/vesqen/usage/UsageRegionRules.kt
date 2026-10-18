@@ -18,16 +18,21 @@ object UsageRegionRules {
     )
 
     /**
-     * [countries] holds every signal the device exposes: system locales and each SIM or network
-     * country it can read. Any consent country asks first; no readable country asks too.
+     * [countries] holds the system locales and each SIM or network country the device can read.
+     * Any consent country asks first; no readable country asks too. [timeZoneCountry] can only add
+     * a reason to ask first: a time zone elsewhere never makes an otherwise unreadable device
+     * default-on (#143 Q3).
      */
-    fun evaluate(countries: Collection<String>): UsageRegionPolicy {
-        val normalized = countries.map { it.trim().uppercase(Locale.ROOT) }
-            .map { if (it == "UK") "GB" else it }.filter { it.matches(Regex("[A-Z]{2}")) }
+    fun evaluate(countries: Collection<String>, timeZoneCountry: String? = null): UsageRegionPolicy {
+        if (timeZoneCountry?.let(::normalize) in explicitConsentCountries) return UsageRegionPolicy.EXPLICIT_CONSENT
+        val normalized = countries.mapNotNull(::normalize)
         return when {
             normalized.any(explicitConsentCountries::contains) -> UsageRegionPolicy.EXPLICIT_CONSENT
             normalized.isEmpty() -> UsageRegionPolicy.REGION_UNAVAILABLE
             else -> UsageRegionPolicy.DEFAULT_ENABLED
         }
     }
+
+    private fun normalize(country: String): String? = country.trim().uppercase(Locale.ROOT)
+        .let { if (it == "UK") "GB" else it }.takeIf { it.matches(Regex("[A-Z]{2}")) }
 }

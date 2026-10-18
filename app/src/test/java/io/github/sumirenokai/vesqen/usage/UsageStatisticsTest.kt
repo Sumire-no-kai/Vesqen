@@ -37,6 +37,19 @@ class UsageStatisticsTest {
         listOf("CH", "BR", "US", "JP").forEach { assertFalse(UsageRegionRules.explicitConsentCountries.contains(it)) }
     }
 
+    @Test fun theTimeZoneOnlyAddsAReasonToAskFirst() {
+        // A US-English tablet with no SIM in Germany, Ireland or the UK asks first (#136 R24).
+        listOf("DE", "ie", "uk", "CN").forEach {
+            assertEquals(it, UsageRegionPolicy.EXPLICIT_CONSENT, UsageRegionRules.evaluate(listOf("US"), it))
+        }
+        assertEquals(UsageRegionPolicy.EXPLICIT_CONSENT, UsageRegionRules.evaluate(listOf("DE"), "US"))
+        assertEquals(UsageRegionPolicy.DEFAULT_ENABLED, UsageRegionRules.evaluate(listOf("US"), "US"))
+        // A time zone elsewhere does not turn an unreadable device default-on (#143 Q3).
+        assertEquals(UsageRegionPolicy.REGION_UNAVAILABLE, UsageRegionRules.evaluate(emptyList(), "US"))
+        assertEquals(UsageRegionPolicy.REGION_UNAVAILABLE, UsageRegionRules.evaluate(listOf(""), "001"))
+        assertEquals(UsageRegionPolicy.DEFAULT_ENABLED, UsageRegionRules.evaluate(listOf("US"), null))
+    }
+
     @Test fun utcIsoWeekMonthAndYearBoundariesOnlyProduceBooleans() {
         val now = at("2027-01-01T12:00:00Z")
         val ping = usagePing(facts, now, ready.copy(lastAttemptEpochMs = at("2026-12-31T12:00:00Z")))

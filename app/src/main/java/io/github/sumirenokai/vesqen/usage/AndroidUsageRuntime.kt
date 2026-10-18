@@ -55,13 +55,13 @@ private val usbAudioTypes = setOf(AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceIn
  * phone-state or location permission, no identifiers, and nothing here leaves the device.
  * Android 8-10 cannot read the other slots, so a second SIM there is covered by locale and network.
  * The time zone covers Wi-Fi-only devices whose language names another country, such as a tablet
- * in Germany set to US English (#136 R24). Wi-Fi's own country code is a system-only API.
+ * in Germany set to US English (#136 R24); it only ever adds a reason to ask first (#143 Q3).
+ * Wi-Fi's own country code is a system-only API.
  */
 private fun usageRegion(context: Context): UsageRegionPolicy {
     val locales = android.content.res.Resources.getSystem().configuration.locales
     val countries = buildList {
         (0 until locales.size()).mapTo(this) { locales[it].country }
-        timeZoneCountry(java.util.TimeZone.getDefault().id)?.let(::add)
         context.getSystemService(TelephonyManager::class.java)?.let { telephony ->
             telephonyCountry { telephony.simCountryIso }?.let(::add)
             telephonyCountry { telephony.networkCountryIso }?.let(::add)
@@ -71,8 +71,12 @@ private fun usageRegion(context: Context): UsageRegionPolicy {
             }
         }
     }
-    return UsageRegionRules.evaluate(countries)
+    return usageRegionFor(countries, java.util.TimeZone.getDefault().id)
 }
+
+/** The decision for locale and telephony [countries] plus the system time zone [timeZoneId]. */
+internal fun usageRegionFor(countries: Collection<String>, timeZoneId: String): UsageRegionPolicy =
+    UsageRegionRules.evaluate(countries, timeZoneCountry(timeZoneId))
 
 /** ICU's country for a tz ID; "001" for Etc zones, which [UsageRegionRules] ignores, and null for custom IDs. */
 internal fun timeZoneCountry(id: String): String? = try { android.icu.util.TimeZone.getRegion(id) }

@@ -20,7 +20,10 @@ Norway, the UK, mainland China and South Korea (owner decision 2026-10-07 after 
 #70 review; Hong Kong, Macao and Taiwan keep their own codes). Its inputs are the system locales, the default subscription's SIM
 and network country, and from Android 11 every slot's network country
 (`getNetworkCountryIso(slot)`). A match in any of them requires consent; when none
-is readable, the user is asked as well. A dual-SIM phone is treated like any other:
+is readable, the user is asked as well. The system time zone's country (ICU's
+`TimeZone.getRegion`) is read too, but it can only add a reason to ask first: a time
+zone elsewhere never makes an otherwise unreadable device default-on (#136 R24,
+#143 Q3). A dual-SIM phone is treated like any other:
 owner decision 2026-10-04, since most phones in China and South-East Asia are
 dual-SIM. Android 8–10 cannot read the other slot, so there a second SIM is covered
 by locale and network only. SIM identifiers, subscription lists, phone permissions,
