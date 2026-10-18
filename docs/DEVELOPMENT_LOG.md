@@ -1273,4 +1273,4 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - 每一行的"更多"图标原来各画一张位图再上传，现在同一个图标在整个列表里共用一个 Painter；曲库行的"更多"按钮不再给每一行提前建水波纹。
 - Honor 交替各三遍：编译后超过 16.7 ms 的帧 13.7% → 2.8%，RenderThread 中位 13.9 → 10.4 ms；未编译 13.6% → 3.2%。iQOO 9 上 RenderThread 指令数少 29%，主线程少 10%。
 - 文字测量（每行约 2–3 ms）没有动：换系统字体没有变化，去掉行高会改变外观。
-- 测量用的 Vesqen Rowcost（`.rowcost` 后缀的 Play profile 构建）已从两台手机卸载；iQOO 上删除了测试 WAV，MediaStore 和原来的 112 首一致。Honor 上的 2000 个测试 WAV 留给另一个 #50 会话测量，测完再删。
+- 测量用的 Vesqen Rowcost（`.rowcost` 后缀的 Play profile 构建）已从两台手机卸载；两台手机上的测试 WAV 和它们在 MediaStore 里的记录都已删除，iQOO 和原来的 112 首、Honor 和原来的 106 首逐条一致。
