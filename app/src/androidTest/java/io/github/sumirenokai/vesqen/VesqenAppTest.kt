@@ -467,6 +467,21 @@ class VesqenAppTest {
     }
 
     @Test
+    fun tapping_the_chain_tab_over_settings_keeps_its_way_back() {
+        // Re-selecting Chain opened from Settings once dropped its back arrow and rebuilt the page
+        // (#143 Q4).
+        render(grantedState())
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        composeRule.onNodeWithTag("vesqen.chain.back").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.nav.chain").assertIsSelected().performClick()
+        composeRule.onNodeWithTag("vesqen.chain.back").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("vesqen.nav.settings").assertIsSelected()
+    }
+
+    @Test
     fun empty_library_without_access_makes_allowing_access_the_main_action() {
         var accessRequests = 0
         var addFolderCalls = 0

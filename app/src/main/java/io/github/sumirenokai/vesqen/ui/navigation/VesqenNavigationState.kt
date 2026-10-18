@@ -17,6 +17,9 @@ data class VesqenNavigationState(
 ) {
     fun selectTopLevel(destination: VesqenDestination): VesqenNavigationState {
         require(!destination.isSecondaryDetail) { "$destination is not a top-level destination" }
+        // Tapping the tab that is already shown changes nothing. Chain opened from Settings keeps its
+        // way back, and the Settings stack is not torn down to show the same page again (#143 Q4).
+        if (destination == this.destination) return this
         val playerOrigin = this.destination.takeIf {
             it != VesqenDestination.NOW && !it.isSecondaryDetail
         } ?: playerReturnDestination.takeIf { !it.isSecondaryDetail }

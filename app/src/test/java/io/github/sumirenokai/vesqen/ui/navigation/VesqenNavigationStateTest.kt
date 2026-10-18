@@ -165,6 +165,18 @@ class VesqenNavigationStateTest {
     }
 
     @Test
+    fun `tapping the tab that is already shown changes nothing`() {
+        // Re-selecting Chain over Settings once dropped its way back and rebuilt the page (#143 Q4).
+        val chainOverSettings = VesqenNavigationState().selectTopLevel(VesqenDestination.SETTINGS).openChain()
+        assertEquals(chainOverSettings, chainOverSettings.selectTopLevel(VesqenDestination.CHAIN))
+        assertTrue(chainOverSettings.selectTopLevel(VesqenDestination.CHAIN).settingsUnderneath)
+        assertEquals(VesqenDestination.SETTINGS, chainOverSettings.selectTopLevel(VesqenDestination.CHAIN).back().destination)
+
+        val nowFromChain = VesqenNavigationState().selectTopLevel(VesqenDestination.CHAIN).selectTopLevel(VesqenDestination.NOW)
+        assertEquals(nowFromChain, nowFromChain.selectTopLevel(VesqenDestination.NOW))
+    }
+
+    @Test
     fun `pages opened elsewhere do not have settings underneath`() {
         val library = VesqenNavigationState()
 
