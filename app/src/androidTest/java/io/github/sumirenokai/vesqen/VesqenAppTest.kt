@@ -271,6 +271,28 @@ class VesqenAppTest {
     }
 
     @Test
+    fun settings_shows_pro_unlocked_after_a_code_is_activated_on_the_pro_page() {
+        val codes = FakeActivationCodes(valid = "ABCDE-FGHJK")
+        val premium = PremiumAccess(
+            MemoryPremiumStore(TrialRecord(startedAtEpochMs = 0, latestSeenEpochMs = 0)),
+            enforced = true,
+            isUnlocked = { codes.state.value is ActivationState.Active },
+        )
+        render(grantedState(), premiumAccess = premium, activationCodes = codes)
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.premium")
+            .assertTextContains(context.getString(R.string.settings_premium_trial_ended))
+        composeRule.onNodeWithTag("vesqen.settings.premium").performClick()
+        composeRule.onNodeWithTag("vesqen.premium").performScrollToNode(hasTestTag("vesqen.premium.activation.input"))
+        composeRule.onNodeWithTag("vesqen.premium.activation.input").performTextInput("abcde fghjk")
+        composeRule.onNodeWithTag("vesqen.premium.activation.activate").performClick()
+        composeRule.onNodeWithTag("vesqen.premium.back").performClick()
+        // #50: Settings stayed composed under the Pro page, so it must follow the activation itself.
+        composeRule.onNodeWithTag("vesqen.settings.premium")
+            .assertTextContains(context.getString(R.string.settings_premium_unlocked))
+    }
+
+    @Test
     fun an_activation_code_is_entered_on_the_pro_page_and_then_shown_for_copying() {
         val codes = FakeActivationCodes(valid = "ABCDE-FGHJK")
         render(grantedState(), premiumAccess = PremiumAccess(MemoryPremiumStore(), enforced = false), activationCodes = codes)

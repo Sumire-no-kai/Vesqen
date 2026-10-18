@@ -58,8 +58,10 @@ fun PremiumScreen(
     modifier: Modifier = Modifier,
     activationCodes: ActivationCodes? = null,
 ) {
-    // Days left move with the date, so read the clock again whenever the page opens.
-    LaunchedEffect(premiumAccess) { premiumAccess.refresh() }
+    // Days left move with the date, so read the clock again whenever the page opens. A new
+    // activation counts at once: Settings, kept under this page (#50), shows the same state.
+    val activation = activationCodes?.state?.collectAsStateWithLifecycle()?.value
+    LaunchedEffect(premiumAccess, activation) { premiumAccess.refresh() }
     val state by premiumAccess.state.collectAsStateWithLifecycle()
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(

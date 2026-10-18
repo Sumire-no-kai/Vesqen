@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen.ui.navigation
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -146,6 +147,34 @@ class VesqenNavigationStateTest {
             .openChain()
 
         assertEquals(true, chain.chainOpenedInContext)
+    }
+
+    @Test
+    fun `settings stays underneath the pages opened from it`() {
+        val settings = VesqenNavigationState().selectTopLevel(VesqenDestination.SETTINGS)
+
+        assertFalse(settings.settingsUnderneath)
+        assertTrue(settings.openChain().settingsUnderneath)
+        assertTrue(settings.openAbout().settingsUnderneath)
+        assertTrue(settings.openAbout().openPrivacyPolicy().settingsUnderneath)
+        assertTrue(settings.openLicenses().settingsUnderneath)
+        assertTrue(settings.openPremium().settingsUnderneath)
+        assertFalse(settings.openAbout().back().settingsUnderneath)
+        // Pro features over a nested detail open from Settings, so Settings is underneath them too.
+        assertTrue(VesqenNavigationState().openAbout().openPrivacyPolicy().openPremium().settingsUnderneath)
+    }
+
+    @Test
+    fun `pages opened elsewhere do not have settings underneath`() {
+        val library = VesqenNavigationState()
+
+        assertFalse(library.selectTopLevel(VesqenDestination.CHAIN).settingsUnderneath)
+        assertFalse(library.openAbout().settingsUnderneath)
+        assertFalse(library.openDeviceReport().settingsUnderneath)
+        assertFalse(library.selectTopLevel(VesqenDestination.NOW).openChain().settingsUnderneath)
+        assertFalse(
+            library.selectTopLevel(VesqenDestination.SETTINGS).selectTopLevel(VesqenDestination.NOW).settingsUnderneath,
+        )
     }
 
     @Test

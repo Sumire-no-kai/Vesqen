@@ -58,6 +58,13 @@ data class VesqenNavigationState(
     val chainOpenedInContext: Boolean
         get() = destination == VesqenDestination.CHAIN && returnDestination != VesqenDestination.LIBRARY
 
+    /** True when the page on top was opened from Settings, directly or through another detail. */
+    val settingsUnderneath: Boolean
+        get() = destination != VesqenDestination.SETTINGS && (
+            returnDestination == VesqenDestination.SETTINGS ||
+                (returnDestination.isSecondaryDetail && parentReturnDestination == VesqenDestination.SETTINGS)
+            )
+
     fun openAbout(): VesqenNavigationState = openDetail(VesqenDestination.ABOUT)
 
     fun openPrivacyPolicy(): VesqenNavigationState = openDetail(VesqenDestination.PRIVACY_POLICY)

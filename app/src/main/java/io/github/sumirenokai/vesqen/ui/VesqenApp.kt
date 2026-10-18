@@ -16,6 +16,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -28,7 +29,9 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -45,6 +48,7 @@ import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,11 +61,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.isSpecified
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -507,6 +514,7 @@ fun VesqenAppContent(
     }
 
     val chainOpenedInContext = navigationState.chainOpenedInContext
+    val settingsUnderneath = navigationState.settingsUnderneath
 
     fun openAbout() {
         applyNavigation(currentNavigation().openAbout())
@@ -627,6 +635,7 @@ fun VesqenAppContent(
                 destinationStateHolder = destinationStateHolder,
                 showNavigation = false,
                 chainOpenedInContext = chainOpenedInContext,
+                settingsUnderneath = settingsUnderneath,
                 motionPolicy = appliedMotionPolicy,
                 playbackTelemetry = playbackTelemetry,
                 chainPreferencesRepository = appliedChainPreferencesRepository,
@@ -699,6 +708,7 @@ fun VesqenAppContent(
             destinationStateHolder = destinationStateHolder,
             showNavigation = true,
             chainOpenedInContext = chainOpenedInContext,
+            settingsUnderneath = settingsUnderneath,
             motionPolicy = appliedMotionPolicy,
             playbackTelemetry = playbackTelemetry,
             chainPreferencesRepository = appliedChainPreferencesRepository,
@@ -766,6 +776,200 @@ fun VesqenAppContent(
     }
 }
 
+/** The transition between destinations, also used between Settings and the pages opened from it. */
+private fun destinationTransform(
+    initial: VesqenDestination,
+    target: VesqenDestination,
+    motionPolicy: VesqenMotionPolicy,
+    playerExpandContentMillis: Int,
+    playerReturnContentMillis: Int,
+): ContentTransform {
+    // Now and Chain are neighbouring tabs; moving between them is a sideways step,
+    // not the player rising from or settling into the mini-player.
+    val opensFocusedPlayer = target == VesqenDestination.NOW &&
+        initial != VesqenDestination.CHAIN && !initial.isSecondaryDetail
+    val closesFocusedPlayer = initial == VesqenDestination.NOW &&
+        target != VesqenDestination.CHAIN && !target.isSecondaryDetail
+    return when {
+        motionPolicy.reduceMotion -> {
+            fadeIn(animationSpec = tween(motionPolicy.stateChangeMillis)) togetherWith
+                fadeOut(animationSpec = tween(motionPolicy.stateChangeMillis))
+        }
+
+        opensFocusedPlayer -> {
+            (fadeIn(
+                animationSpec = tween(
+                    durationMillis = playerExpandContentMillis,
+                    delayMillis = motionPolicy.playerHandoffDelayMillis,
+                    easing = FocusedPlayerEasing,
+                ),
+            ) + slideInVertically(
+                animationSpec = tween(
+                    durationMillis = playerExpandContentMillis,
+                    delayMillis = motionPolicy.playerHandoffDelayMillis,
+                    easing = FocusedPlayerEasing,
+                ),
+                initialOffsetY = { height -> height / 4 },
+            ) + scaleIn(
+                initialScale = .94f,
+                animationSpec = tween(
+                    durationMillis = playerExpandContentMillis,
+                    delayMillis = motionPolicy.playerHandoffDelayMillis,
+                    easing = FocusedPlayerEasing,
+                ),
+            )) togetherWith
+                (fadeOut(
+                    animationSpec = tween(
+                        durationMillis = motionPolicy.stateChangeMillis,
+                        easing = FocusedPlayerEasing,
+                    ),
+                ) + slideOutVertically(
+                    animationSpec = tween(
+                        durationMillis = motionPolicy.stateChangeMillis,
+                        easing = FocusedPlayerEasing,
+                    ),
+                    targetOffsetY = { height -> -height / 24 },
+                ) + scaleOut(
+                    targetScale = .99f,
+                    animationSpec = tween(
+                        durationMillis = motionPolicy.stateChangeMillis,
+                        easing = FocusedPlayerEasing,
+                    ),
+                ))
+        }
+
+        closesFocusedPlayer -> {
+            (fadeIn(
+                animationSpec = tween(
+                    durationMillis = playerReturnContentMillis,
+                    delayMillis = motionPolicy.playerReturnRevealDelayMillis,
+                    easing = FocusedPlayerEasing,
+                ),
+            ) + slideInVertically(
+                animationSpec = tween(
+                    durationMillis = playerReturnContentMillis,
+                    delayMillis = motionPolicy.playerReturnRevealDelayMillis,
+                    easing = FocusedPlayerEasing,
+                ),
+                initialOffsetY = { height -> -height / 28 },
+            ) + scaleIn(
+                initialScale = .99f,
+                animationSpec = tween(
+                    durationMillis = playerReturnContentMillis,
+                    delayMillis = motionPolicy.playerReturnRevealDelayMillis,
+                    easing = FocusedPlayerEasing,
+                ),
+            )) togetherWith
+                (fadeOut(
+                    animationSpec = tween(
+                        durationMillis = motionPolicy.playerCollapseMillis -
+                            motionPolicy.playerHandoffDelayMillis,
+                        easing = FocusedPlayerEasing,
+                    ),
+                ) + slideOutVertically(
+                    animationSpec = tween(
+                        durationMillis = motionPolicy.playerCollapseMillis,
+                        easing = FocusedPlayerEasing,
+                    ),
+                    targetOffsetY = { height -> height / 4 },
+                ) + scaleOut(
+                    targetScale = .94f,
+                    animationSpec = tween(
+                        durationMillis = motionPolicy.playerCollapseMillis,
+                        easing = FocusedPlayerEasing,
+                    ),
+                ))
+        }
+
+        else -> {
+            val returning = target.navigationOrder < initial.navigationOrder
+            val direction = if (returning) -1 else 1
+            val duration = motionPolicy.playerExpandMillis
+            (fadeIn(animationSpec = tween(duration)) +
+                slideInHorizontally(animationSpec = tween(duration)) {
+                    it * direction / if (returning) 12 else 4
+                }) togetherWith
+                (fadeOut(animationSpec = tween(duration)) +
+                    slideOutHorizontally(animationSpec = tween(duration)) {
+                        -it * direction / if (returning) 4 else 12
+                    })
+        }
+    }.apply {
+        // Keep the retreating surface above its destination so the incoming opaque
+        // page cannot cover the player's collapse or a detail's return animation.
+        targetContentZIndex = when {
+            target.isSecondaryDetail -> 2f + target.detailDepth
+            target == VesqenDestination.CHAIN -> 3f
+            target == VesqenDestination.NOW -> 2f
+            target == VesqenDestination.SETTINGS -> 1f
+            else -> 0f
+        }
+    }
+}
+
+/** The last page the Settings stack showed, so the stack leaves as that page. */
+private class SettingsStackPage(var destination: VesqenDestination = VesqenDestination.SETTINGS)
+
+/**
+ * Settings with the page opened from it on top (#50). Settings stays composed while covered, so
+ * Back reveals it instead of composing it again. Covered and still, it is not placed (not drawn,
+ * not touchable) and its semantics are cleared, so TalkBack and tests do not find it under the page.
+ * Both layers move as the destination transition did.
+ */
+@Composable
+private fun SettingsStack(
+    page: VesqenDestination,
+    motionPolicy: VesqenMotionPolicy,
+    transform: (VesqenDestination, VesqenDestination) -> ContentTransform,
+    content: @Composable (VesqenDestination) -> Unit,
+) {
+    val covering = page.takeUnless { it == VesqenDestination.SETTINGS }
+    val cover = updateTransition(covering, label = "vesqen.settings-cover")
+    val millis = if (motionPolicy.reduceMotion) motionPolicy.stateChangeMillis else motionPolicy.playerExpandMillis
+    val alpha by cover.animateFloat({ tween(millis) }, label = "vesqen.settings-alpha") { top ->
+        if (top == null) 1f else 0f
+    }
+    // Settings moves as the destination transition moved it: a twelfth left under a detail, a
+    // quarter right under Chain, the tab to its left.
+    val shift by cover.animateFloat({ tween(millis) }, label = "vesqen.settings-shift") { top ->
+        when {
+            top == null || motionPolicy.reduceMotion -> 0f
+            top.navigationOrder > VesqenDestination.SETTINGS.navigationOrder -> -1f / 12
+            else -> 1f / 4
+        }
+    }
+    val hidden = cover.currentState != null && cover.targetState != null
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .then(if (hidden) Modifier.clearAndSetSemantics {} else Modifier)
+                .layout { measurable, constraints ->
+                    val placeable = measurable.measure(constraints)
+                    layout(placeable.width, placeable.height) {
+                        if (!hidden) placeable.place(0, 0)
+                    }
+                }
+                .graphicsLayer {
+                    this.alpha = alpha
+                    translationX = shift * size.width
+                },
+        ) {
+            content(VesqenDestination.SETTINGS)
+        }
+        AnimatedContent(
+            targetState = covering,
+            modifier = Modifier.fillMaxSize(),
+            transitionSpec = {
+                // No size animation: the empty state over Settings must not make the page grow in.
+                transform(initialState ?: VesqenDestination.SETTINGS, targetState ?: VesqenDestination.SETTINGS) using null
+            },
+            label = "vesqen-settings-page",
+        ) { top ->
+            if (top != null) content(top)
+        }
+    }
+}
+
 @Composable
 private fun VesqenDestinationFrame(
     state: VesqenUiState,
@@ -773,6 +977,7 @@ private fun VesqenDestinationFrame(
     destinationStateHolder: SaveableStateHolder,
     showNavigation: Boolean,
     chainOpenedInContext: Boolean,
+    settingsUnderneath: Boolean,
     motionPolicy: VesqenMotionPolicy,
     playbackTelemetry: PlaybackTelemetry?,
     chainPreferencesRepository: ChainDashboardPreferencesRepository,
@@ -936,134 +1141,7 @@ private fun VesqenDestinationFrame(
                 }
             },
         ) { innerPadding ->
-            AnimatedContent(
-                targetState = destination,
-                modifier = Modifier.fillMaxSize(),
-                transitionSpec = {
-                    // Now and Chain are neighbouring tabs; moving between them is a sideways step,
-                    // not the player rising from or settling into the mini-player.
-                    val opensFocusedPlayer = targetState == VesqenDestination.NOW &&
-                        initialState != VesqenDestination.CHAIN && !initialState.isSecondaryDetail
-                    val closesFocusedPlayer = initialState == VesqenDestination.NOW &&
-                        targetState != VesqenDestination.CHAIN && !targetState.isSecondaryDetail
-                    when {
-                        motionPolicy.reduceMotion -> {
-                            fadeIn(animationSpec = tween(motionPolicy.stateChangeMillis)) togetherWith
-                                fadeOut(animationSpec = tween(motionPolicy.stateChangeMillis))
-                        }
-
-                        opensFocusedPlayer -> {
-                            (fadeIn(
-                                animationSpec = tween(
-                                    durationMillis = playerExpandContentMillis,
-                                    delayMillis = motionPolicy.playerHandoffDelayMillis,
-                                    easing = FocusedPlayerEasing,
-                                ),
-                            ) + slideInVertically(
-                                animationSpec = tween(
-                                    durationMillis = playerExpandContentMillis,
-                                    delayMillis = motionPolicy.playerHandoffDelayMillis,
-                                    easing = FocusedPlayerEasing,
-                                ),
-                                initialOffsetY = { height -> height / 4 },
-                            ) + scaleIn(
-                                initialScale = .94f,
-                                animationSpec = tween(
-                                    durationMillis = playerExpandContentMillis,
-                                    delayMillis = motionPolicy.playerHandoffDelayMillis,
-                                    easing = FocusedPlayerEasing,
-                                ),
-                            )) togetherWith
-                                (fadeOut(
-                                    animationSpec = tween(
-                                        durationMillis = motionPolicy.stateChangeMillis,
-                                        easing = FocusedPlayerEasing,
-                                    ),
-                                ) + slideOutVertically(
-                                    animationSpec = tween(
-                                        durationMillis = motionPolicy.stateChangeMillis,
-                                        easing = FocusedPlayerEasing,
-                                    ),
-                                    targetOffsetY = { height -> -height / 24 },
-                                ) + scaleOut(
-                                    targetScale = .99f,
-                                    animationSpec = tween(
-                                        durationMillis = motionPolicy.stateChangeMillis,
-                                        easing = FocusedPlayerEasing,
-                                    ),
-                                ))
-                        }
-
-                        closesFocusedPlayer -> {
-                            (fadeIn(
-                                animationSpec = tween(
-                                    durationMillis = playerReturnContentMillis,
-                                    delayMillis = motionPolicy.playerReturnRevealDelayMillis,
-                                    easing = FocusedPlayerEasing,
-                                ),
-                            ) + slideInVertically(
-                                animationSpec = tween(
-                                    durationMillis = playerReturnContentMillis,
-                                    delayMillis = motionPolicy.playerReturnRevealDelayMillis,
-                                    easing = FocusedPlayerEasing,
-                                ),
-                                initialOffsetY = { height -> -height / 28 },
-                            ) + scaleIn(
-                                initialScale = .99f,
-                                animationSpec = tween(
-                                    durationMillis = playerReturnContentMillis,
-                                    delayMillis = motionPolicy.playerReturnRevealDelayMillis,
-                                    easing = FocusedPlayerEasing,
-                                ),
-                            )) togetherWith
-                                (fadeOut(
-                                    animationSpec = tween(
-                                        durationMillis = motionPolicy.playerCollapseMillis -
-                                            motionPolicy.playerHandoffDelayMillis,
-                                        easing = FocusedPlayerEasing,
-                                    ),
-                                ) + slideOutVertically(
-                                    animationSpec = tween(
-                                        durationMillis = motionPolicy.playerCollapseMillis,
-                                        easing = FocusedPlayerEasing,
-                                    ),
-                                    targetOffsetY = { height -> height / 4 },
-                                ) + scaleOut(
-                                    targetScale = .94f,
-                                    animationSpec = tween(
-                                        durationMillis = motionPolicy.playerCollapseMillis,
-                                        easing = FocusedPlayerEasing,
-                                    ),
-                                ))
-                        }
-
-                        else -> {
-                            val returning = targetState.navigationOrder < initialState.navigationOrder
-                            val direction = if (returning) -1 else 1
-                            val duration = motionPolicy.playerExpandMillis
-                            (fadeIn(animationSpec = tween(duration)) +
-                                slideInHorizontally(animationSpec = tween(duration)) {
-                                    it * direction / if (returning) 12 else 4
-                                }) togetherWith
-                                (fadeOut(animationSpec = tween(duration)) +
-                                    slideOutHorizontally(animationSpec = tween(duration)) {
-                                        -it * direction / if (returning) 4 else 12
-                                    })
-                        }
-                    }.apply {
-                        // Keep the retreating surface above its destination so the incoming opaque
-                        // page cannot cover the player's collapse or a detail's return animation.
-                        targetContentZIndex = when {
-                            targetState.isSecondaryDetail -> 2f + targetState.detailDepth
-                            targetState == VesqenDestination.CHAIN -> 3f
-                            targetState == VesqenDestination.NOW -> 2f
-                            targetState == VesqenDestination.SETTINGS -> 1f
-                            else -> 0f
-                        }
-                    }
-                },
-                label = "vesqen-destination",
-            ) { activeDestination ->
+            val destinationPage: @Composable (VesqenDestination) -> Unit = { activeDestination ->
                 // During destination transitions keep the outgoing focused player edge-to-edge until
                 // it fades out. Applying the incoming Library padding here would flash a white inset.
                 // In portrait the player stops above the bar, which already includes the system
@@ -1229,6 +1307,42 @@ private fun VesqenDestinationFrame(
                             modifier = destinationModifier,
                         )
                     }
+                }
+            }
+            // Settings and the pages opened from it are one destination here, so Settings stays
+            // composed under them and Back reveals it instead of composing it again (#50).
+            val inSettingsStack = destination == VesqenDestination.SETTINGS || settingsUnderneath
+            val lastSettingsStackPage = remember { SettingsStackPage() }
+            if (inSettingsStack) SideEffect { lastSettingsStackPage.destination = destination }
+            val settingsStackPage = if (inSettingsStack) destination else lastSettingsStackPage.destination
+            AnimatedContent(
+                targetState = if (inSettingsStack) VesqenDestination.SETTINGS else destination,
+                modifier = Modifier.fillMaxSize(),
+                transitionSpec = {
+                    // The stack enters and leaves as the page it shows.
+                    fun shown(state: VesqenDestination) =
+                        if (state == VesqenDestination.SETTINGS) settingsStackPage else state
+                    destinationTransform(
+                        shown(initialState),
+                        shown(targetState),
+                        motionPolicy,
+                        playerExpandContentMillis,
+                        playerReturnContentMillis,
+                    )
+                },
+                label = "vesqen-destination",
+            ) { activeDestination ->
+                if (activeDestination == VesqenDestination.SETTINGS) {
+                    SettingsStack(
+                        page = settingsStackPage,
+                        motionPolicy = motionPolicy,
+                        transform = { initial, target ->
+                            destinationTransform(initial, target, motionPolicy, playerExpandContentMillis, playerReturnContentMillis)
+                        },
+                        content = destinationPage,
+                    )
+                } else {
+                    destinationPage(activeDestination)
                 }
             }
         }
