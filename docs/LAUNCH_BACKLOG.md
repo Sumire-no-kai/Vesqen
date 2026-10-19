@@ -69,7 +69,6 @@
 | [#136](https://github.com/Sumire-no-kai/Vesqen/issues/136) | 1.0 代码审查（2026-10-17）：R1–R11、R24（加时区判断）、R32（设置页返回保持位置）已修；R9 在 Android 8.0 模拟器上真的清除媒体存储验证过，真机上没做；R12–R31 其余可以放到之后 |
 | [#143](https://github.com/Sumire-no-kai/Vesqen/issues/143) | 2026-10-18 代码审查（10 月 17–18 日的改动）：1.0 前要修的 Q1–Q6 都已修好（Q1、Q2、Q6 是 PR #144，Q3 `d31bbd6`，Q4 `f372289`，Q5 重新生成 profile `f1c8655`）；Q20（迷你播放条按钮的点击区域只有 40 dp）和 Q12–Q14 也已修好（`e08b3d2`）；Q7–Q11、Q15–Q19 可以放到之后 |
 | [#35](https://github.com/Sumire-no-kai/Vesqen/issues/35) | 按 beta.3 复核界面和文案（字号、深浅色、减少动效），加完整的 TalkBack |
-| [#129](https://github.com/Sumire-no-kai/Vesqen/issues/129) | 耳机键恢复（#52）在 Android 8.0 和 16 的原生模拟器上能用；测试机上是厂商按键白名单，写进已知限制。是否关闭由所有者决定 |
 
 发布 1.0 时：
 
@@ -77,7 +76,7 @@
 - 在最新的 master 上按 `baselineprofile/README.md` 重新生成 Baseline Profile，提交后再打版本（#50、#143 Q5）。2026-10-18 已在 `69e9226` 上重新生成（`f1c8655`）。之后的 `e08b3d2` 给迷你播放条加了 `MiniPlayerControl`，profile 里还没有它的规则；界面或热路径再有改动也一样，发版前在最终的 master 上再生成一次。
 - 服务端（`server/usage`）已在 2026-10-17 部署（版本 `8bae26bb`，master `ce31aed`），认识设备报告词表里新加的蓝牙编码字段（#73）；没有新的数据库迁移。之后如果服务端再有改动，发版前要再部署一次。官网隐私政策同步到最新版（10 月 18 日，加了时区信号，#143 Q3；`npm run sync-privacy`）。
 - 正式通道第一次启用：官网 `updates/stable.json` 第一次填上版本；GitHub 发布不标预发布。
-- 发布说明、README、官网和 Play 商品详情写明严格 USB 的限制（#53）。发布说明的已知限制还要写上：耳机键恢复（#129）；严格模式下切歌时无缝播放会断开，修复前列为限制（#136 R17）。
+- 发布说明、README、官网和 Play 商品详情写明严格 USB 的限制（#53）。发布说明的已知限制还要写上：耳机键恢复（#129，2026-10-19 所有者决定只写进已知限制，issue 已关闭）；严格模式下切歌时无缝播放会断开，修复前列为限制（#136 R17）。
 - Play：商品详情去掉"测试版"那一段，发布到正式版，建议分阶段放量。
 - Play 数据安全表单：对照 [`PLAY_LISTING.md`](PLAY_LISTING.md) 第 5 节核对一遍。表单按 beta.2 填写，之后 #73 给设备报告加了系统报告的蓝牙编码字段。
 - 官网下载区改成 Google Play 和 GitHub 两个入口，README 状态同步。
