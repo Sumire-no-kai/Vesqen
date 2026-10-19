@@ -68,6 +68,7 @@
 | [#51](https://github.com/Sumire-no-kai/Vesqen/issues/51) | 8 小时有线播放已通过；还缺新系统上的关屏长播（音量不为 0）、2 小时 24/96，以及中断：拔耳机、来电、蓝牙断连。严格播放 8 小时要接 DAC。按 #51 的验收标准，没做的项目写进商品详情和发布页的限制 |
 | [#136](https://github.com/Sumire-no-kai/Vesqen/issues/136) | 1.0 代码审查（2026-10-17）：R1–R11、R24（加时区判断）、R32（设置页返回保持位置）已修；R9 在 Android 8.0 模拟器上真的清除媒体存储验证过，真机上没做；R12–R31 其余可以放到之后 |
 | [#143](https://github.com/Sumire-no-kai/Vesqen/issues/143) | 2026-10-18 代码审查（10 月 17–18 日的改动）：1.0 前要修的 Q1–Q6 都已修好（Q1、Q2、Q6 是 PR #144，Q3 `d31bbd6`，Q4 `f372289`，Q5 重新生成 profile `f1c8655`）；Q20（迷你播放条按钮的点击区域只有 40 dp）和 Q12–Q14 也已修好（`e08b3d2`）；Q7–Q11、Q15–Q19 可以放到之后 |
+| 赞助入口 | 2026-10-19 所有者决定：GitHub 版"关于"页加"支持开发"（Buy Me a Coffee），Play 版不加（Play 付款政策不允许应用内引导到其他付款方式）。所有者先把 BMC 页面改成 Sumire Studio / Vesqen 的名称，新链接到了再接入。官网、README 和发布说明同步放链接。见 [`MONETIZATION.md`](MONETIZATION.md) 的"GitHub 优先" |
 | [#35](https://github.com/Sumire-no-kai/Vesqen/issues/35) | 按 beta.3 复核界面和文案（字号、深浅色、减少动效），加完整的 TalkBack |
 
 发布 1.0 时：
