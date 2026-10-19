@@ -7,7 +7,7 @@
 - 实现进度：M1 交互与 M2 Audio Proof 已进入实现候选；Android 9 Honor 与 Android 15 iQOO 已取得真实无损音源、界面和扬声器自动化证据，详见 M1/M2_DEVICE_ACCEPTANCE。M2 尚未完整关闭：真实外设、其余系统/格式/适配矩阵、高频性能及转场体验仍开放。Library 首页快滑的具体定位与修复已纳入 M3 正式交付门禁；M3 可开始软件开发，需求和验收步骤见 M3_IMPLEMENTATION_PLAN。
 - 产品形态：Android 本地音乐播放器
 - 开源许可证：Apache License 2.0
-- 最低安装版本：Android 8.0（API 26，产品支持基线）
+- 最低安装版本：Android 8.0（API 26，产品支持基线）；2026-10-19 所有者决定从 1.0 起提高到 Android 9.0（API 28），见 #149
 - 核心直出目标：Android 14+（API 34）官方 USB bit-perfect 能力
 - 项目创建基线：`compileSdk 36`、`targetSdk 36`；后续随稳定工具链和 Google Play 要求升级
 
@@ -507,7 +507,7 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 
 ### 10.5 兼容性
 
-- 最低 Android 8.0（API 26）。
+- 最低 Android 8.0（API 26）；从 1.0 起改为 Android 9.0（API 28），2026-10-19 所有者决定（#149）。8.x 设备停在 beta.3。
 - API 26 是 Vesqen 的产品与维护基线，不是 Android USB Host 或官方 bit-perfect API 的共同最低版本。
 - Android USB Host API 从 API 12 提供；Vesqen 仍不因此下调最低安装版本。
 - Media3 1.9.0 及之后版本最低为 API 23，因此与 API 26 基线兼容。
