@@ -1,7 +1,6 @@
 package io.github.sumirenokai.vesqen.ui.components
 
 import android.graphics.Bitmap
-import android.os.Build
 import android.util.LruCache
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.CubicBezierEasing
@@ -71,7 +70,7 @@ internal fun rememberAlbumBackground(
 /** Scales the cover so its longest side is at most 64 px and returns its ARGB pixels. */
 private fun Bitmap.samplePixels(): IntArray {
     // Platform thumbnails may be hardware bitmaps, whose pixels cannot be read directly.
-    val readable = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && config == Bitmap.Config.HARDWARE) {
+    val readable = if (config == Bitmap.Config.HARDWARE) {
         copy(Bitmap.Config.ARGB_8888, false)
     } else {
         this

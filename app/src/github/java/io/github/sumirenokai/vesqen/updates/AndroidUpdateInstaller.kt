@@ -111,22 +111,16 @@ internal class AndroidUpdateInstaller(private val context: Context) : UpdateInst
     }
 
     private fun signatureFlags(archive: Boolean = false): Int {
-        @Suppress("DEPRECATION")
-        val legacy = PackageManager.GET_SIGNATURES
-        if (Build.VERSION.SDK_INT < 28) return legacy
         // Android 9's getPackageArchiveInfo collects certificates only when GET_SIGNATURES is
-        // present. Also request SigningInfo so we compare current signers, not rotation history.
-        return PackageManager.GET_SIGNING_CERTIFICATES or
-            if (archive && Build.VERSION.SDK_INT == 28) legacy else 0
+        // present. Request SigningInfo too, so we compare current signers, not rotation history.
+        @Suppress("DEPRECATION")
+        val legacy = if (archive && Build.VERSION.SDK_INT == 28) PackageManager.GET_SIGNATURES else 0
+        return PackageManager.GET_SIGNING_CERTIFICATES or legacy
     }
 
     private fun PackageInfo.identity(): ApkIdentity {
-        val signatures = if (Build.VERSION.SDK_INT >= 28) signingInfo?.apkContentsSigners else {
-            @Suppress("DEPRECATION") signatures
-        }
-        return ApkIdentity(packageName, if (Build.VERSION.SDK_INT >= 28) longVersionCode else {
-            @Suppress("DEPRECATION") versionCode.toLong()
-        }, signatures.orEmpty().map { signature ->
+        val signatures = signingInfo?.apkContentsSigners
+        return ApkIdentity(packageName, longVersionCode, signatures.orEmpty().map { signature ->
             MessageDigest.getInstance("SHA-256").digest(signature.toByteArray()).joinToString("") { "%02x".format(it) }
         }.toSet())
     }

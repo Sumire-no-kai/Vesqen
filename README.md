@@ -41,7 +41,7 @@ A state is never promoted to a stronger one. An active path is not called verifi
   `74:3E:96:FC:B7:1D:C5:81:88:49:68:19:A0:01:A2:7C:D8:8D:90:91:62:C5:AE:92:9C:87:BF:A2:9A:B8:62:93`.
   You can check it with `apksigner verify --print-certs`. GitHub and Google Play builds use the same signing key, so an update from either source keeps your library.
 - **Google Play:** closed testing first, and the public listing follows after the test. To join, email vesqen@sumirenokai.com with the Google account address you use on Google Play; you need to keep the test version installed for 14 days. The Play version is updated by Google Play, and the GitHub version updates itself.
-- **Requirements:** Android 8.0 or later. Strict USB output needs Android 14 or later and a compatible USB DAC.
+- **Requirements:** Android 9.0 or later. Strict USB output needs Android 14 or later and a compatible USB DAC.
 
 ## Privacy
 
@@ -66,7 +66,7 @@ Each release lists its own limitations in the release notes. Known bugs and plan
 
 ## Building from source
 
-You need JDK 25 and Android SDK Platform 36. The Gradle wrapper provides Gradle 9.5.0 and Android Gradle Plugin 9.3.2. `minSdk` is 26, `compileSdk` and `targetSdk` are 36, and the application ID is `io.github.sumirenokai.vesqen`.
+You need JDK 25 and Android SDK Platform 36. The Gradle wrapper provides Gradle 9.5.0 and Android Gradle Plugin 9.3.2. `minSdk` is 28, `compileSdk` and `targetSdk` are 36, and the application ID is `io.github.sumirenokai.vesqen`.
 
 ```bash
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug

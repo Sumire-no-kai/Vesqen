@@ -512,7 +512,7 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 - Android USB Host API 从 API 12 提供；Vesqen 仍不因此下调最低安装版本。
 - Media3 1.9.0 及之后版本最低为 API 23，因此与 API 26 基线兼容。
 - 项目创建时使用 `compileSdk 36` 和 `targetSdk 36`；API 34 音频调用必须通过版本隔离实现，不能在低版本路径直接加载。
-- 核心测试覆盖至少 Android 8/9、Android 13、Android 14 和当前稳定 Android 版本。
+- 核心测试覆盖至少 Android 9（1.0 起的最低版本）、Android 13、Android 14 和当前稳定 Android 版本。
 - USB bit-perfect 官方路径只在 API 34+ 暴露，而且还要 ROM/HAL 实际提供 bit-perfect mixer attribute，部分厂商系统没有提供。
 - API 26–33，以及没有官方路径的 API 34+ 设备，默认提供普通系统播放；严格 USB 直出只有在未来高级 USB 引擎完成后才可能增加。
 - 启动时的 API level 检测只选择候选策略；最终决策还必须绑定 USB DAC、ROM/HAL 能力、权限、源格式和可选模块状态。

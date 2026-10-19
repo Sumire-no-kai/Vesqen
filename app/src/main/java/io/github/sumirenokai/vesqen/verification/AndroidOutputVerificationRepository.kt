@@ -236,11 +236,7 @@ private class AndroidOutputVerificationRuntimeIdentityProvider(
         val source = requireNotNull(context.applicationInfo.sourceDir) { "Base APK path is unavailable" }
         return OutputVerificationRuntimeIdentity(
             appVersionName = requireNotNull(packageInfo.versionName),
-            appVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                packageInfo.longVersionCode
-            } else {
-                packageInfo.versionCode.toLong()
-            },
+            appVersionCode = packageInfo.longVersionCode,
             baseApkSha256 = File(source).inputStream().use(::sha256),
             deviceManufacturer = Build.MANUFACTURER,
             deviceModel = Build.MODEL,

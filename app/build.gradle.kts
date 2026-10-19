@@ -59,7 +59,7 @@ android {
         buildConfigField("String", "SERVICE_SWITCH_URL", "\"https://vesqen.sumirenokai.com/service/status.json\"")
         buildConfigField("boolean", "PREMIUM_ENFORCED", premiumEnforced)
         applicationId = "io.github.sumirenokai.vesqen"
-        minSdk = 26
+        minSdk = 28
         targetSdk = 36
         versionCode = vesqenVersionCode
         versionName = vesqenVersionName
