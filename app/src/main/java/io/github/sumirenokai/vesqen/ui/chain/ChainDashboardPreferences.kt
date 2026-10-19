@@ -92,6 +92,7 @@ data class ChainDashboardPreferences(
 }
 
 interface ChainDashboardPreferencesRepository {
+    /** The saved preferences, already [normalized][ChainDashboardPreferences.normalized]. */
     fun load(): ChainDashboardPreferences
 
     fun save(preferences: ChainDashboardPreferences)
@@ -110,7 +111,13 @@ class ChainDashboardPreferencesStore private constructor(
         context.applicationContext.getSharedPreferences(preferencesName, Context.MODE_PRIVATE),
     )
 
-    override fun load(): ChainDashboardPreferences = ChainDashboardPreferences(
+    // Chain reads its preferences while composing the page in the frame that opens it (#50); parse
+    // the stored strings once and keep what this store last read or wrote.
+    private var loaded: ChainDashboardPreferences? = null
+
+    override fun load(): ChainDashboardPreferences = loaded ?: read().also { loaded = it }
+
+    private fun read(): ChainDashboardPreferences = ChainDashboardPreferences(
         refreshInterval = preferences.enumValue(KEY_REFRESH_INTERVAL, TelemetryRefreshInterval.ONE_SECOND),
         powerMode = preferences.enumValue(KEY_POWER_MODE, TelemetryPowerMode.STANDARD),
         derivedWindow = preferences.enumValue(KEY_DERIVED_WINDOW, ChainDerivedWindow.FIVE_SECONDS),
@@ -125,6 +132,7 @@ class ChainDashboardPreferencesStore private constructor(
 
     override fun save(preferences: ChainDashboardPreferences) {
         val normalized = preferences.normalized()
+        loaded = normalized
         this.preferences.edit {
             putString(KEY_REFRESH_INTERVAL, normalized.refreshInterval.name)
             putString(KEY_POWER_MODE, normalized.powerMode.name)

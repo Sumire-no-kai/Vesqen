@@ -31,7 +31,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
@@ -107,6 +106,7 @@ import io.github.sumirenokai.vesqen.ui.chain.telemetryMetricLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetrySnapshotMaxAgeMs
 import io.github.sumirenokai.vesqen.ui.components.BluetoothCodecPermissionButton
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
+import io.github.sumirenokai.vesqen.ui.theme.LargestFirstAutoSize
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
@@ -859,7 +859,7 @@ private fun ChainPinnedCard(
                 ),
                 maxLines = 1,
                 softWrap = false,
-                autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = PinnedValueSize, stepSize = 1.sp),
+                autoSize = PinnedValueAutoSize,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(valueHeight)
@@ -903,9 +903,17 @@ private fun ChainPinnedCard(
 @Composable
 private fun evidenceStyle() = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp)
 
-/** B §5: pinned values are 34 px serif digits. */
+/** B §5: pinned values are 34 px serif digits; their box is sized for that. */
 private val PinnedValueSize = 34.sp
 private const val PinnedValueLineHeight = 1.15f
+
+/**
+ * A line of this serif is about 1.44 em tall, so no value above about 27 sp fits the box, and the
+ * cards have shown 27 sp since B §5 landed; the owner kept that size (2026-10-18). Starting the size
+ * search there lays a value out once when it fits, instead of five or six times in the frame that
+ * opens Chain (#50).
+ */
+internal val PinnedValueAutoSize = LargestFirstAutoSize(minFontSize = 12.sp, maxFontSize = 27.sp, stepSize = 1.sp)
 
 /** B §5: a full-width row between two hairlines. */
 @Composable
