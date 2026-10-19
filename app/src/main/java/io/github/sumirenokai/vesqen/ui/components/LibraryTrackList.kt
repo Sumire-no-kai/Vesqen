@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -31,6 +32,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -70,6 +72,13 @@ internal fun LibraryTrackList(
     val edgePx = with(LocalDensity.current) { 64.dp.toPx() }
     val speedPx = with(LocalDensity.current) { 1000.dp.toPx() }
     val handleAreaPx = with(LocalDensity.current) { (48.dp + VesqenSpacing.md).toPx() }
+    // One painter per icon and one for the fallback cover, shared by the whole list. A vector
+    // painter renders into its own bitmap, so a painter per row allocated, drew and uploaded a new
+    // bitmap for every row a fling brought in (#50). The rows draw the same icon at the same size,
+    // so they share the cached bitmap.
+    val moreIcon = rememberVectorPainter(Icons.Filled.MoreVert)
+    val dragIcon = rememberVectorPainter(Icons.Filled.DragHandle)
+    val artworkFallback = rememberTwinPathsPainter()
     val upLabel = stringResource(R.string.move_up)
     val downLabel = stringResource(R.string.move_down)
 
@@ -192,9 +201,11 @@ internal fun LibraryTrackList(
                         onPlay = { onTrackSelected(track) },
                         onMore = { onTrackMore(track) },
                         enabled = !editing,
+                        moreIcon = moreIcon,
+                        artworkFallback = artworkFallback,
                         trailingContent = if (!editing) null else {
                             {
-                                Icon(Icons.Filled.DragHandle, stringResource(R.string.drag_track_order),
+                                Icon(dragIcon, stringResource(R.string.drag_track_order),
                                     Modifier.size(48.dp).testTag("vesqen.library.drag.${track.id}")
                                         .padding(12.dp),
                                 )

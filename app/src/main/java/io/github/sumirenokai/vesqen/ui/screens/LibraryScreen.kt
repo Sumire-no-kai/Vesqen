@@ -18,6 +18,8 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.unit.sp
 import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
 import io.github.sumirenokai.vesqen.ui.components.rememberAlbumBackground
@@ -102,6 +104,7 @@ import io.github.sumirenokai.vesqen.library.projectLibraryTitleOrder
 import io.github.sumirenokai.vesqen.ui.components.ConfirmDestructiveDialog
 import io.github.sumirenokai.vesqen.ui.components.LibraryAlphabetIndex
 import io.github.sumirenokai.vesqen.ui.components.LibraryTrackList
+import io.github.sumirenokai.vesqen.ui.components.rememberTwinPathsPainter
 import io.github.sumirenokai.vesqen.ui.components.hairlineBelow
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.rememberCoroutineScope
@@ -874,6 +877,11 @@ private fun CollectionList(
     onCollectionSelected: (LibraryCollection) -> Unit,
     onCreatePlaylist: (() -> Unit)?,
 ) {
+    // Shared by every row, as in LibraryTrackList: a painter per row drew its own icon bitmap, and
+    // the fallback cover is one picture per size instead of strokes in every row.
+    val chevron = rememberVectorPainter(Icons.AutoMirrored.Outlined.KeyboardArrowRight)
+    val rowFallback = rememberTwinPathsPainter()
+    val shelfFallback = rememberTwinPathsPainter()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = VesqenSpacing.xs, bottom = VesqenSpacing.md),
@@ -889,7 +897,7 @@ private fun CollectionList(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     items(shelf, key = { "shelf:${it.key}" }) { album ->
-                        AlbumShelfItem(album = album, onClick = { onCollectionSelected(album) })
+                        AlbumShelfItem(album = album, onClick = { onCollectionSelected(album) }, fallback = shelfFallback)
                     }
                 }
             }
@@ -928,6 +936,8 @@ private fun CollectionList(
                 mode = mode,
                 collection = collection,
                 onClick = { onCollectionSelected(collection) },
+                chevron = chevron,
+                fallback = rowFallback,
             )
         }
     }
@@ -944,7 +954,7 @@ private fun LibrarySectionLabel(text: String) {
 }
 
 @Composable
-private fun AlbumShelfItem(album: LibraryCollection, onClick: () -> Unit) {
+private fun AlbumShelfItem(album: LibraryCollection, onClick: () -> Unit, fallback: Painter) {
     val shadow = LocalVesqenColors.current.shadow
     Column(
         modifier = Modifier
@@ -959,6 +969,7 @@ private fun AlbumShelfItem(album: LibraryCollection, onClick: () -> Unit) {
             modifier = Modifier
                 .size(AlbumShelfCover)
                 .shadow(2.dp, RoundedCornerShape(VesqenRadii.album), ambientColor = shadow, spotColor = shadow),
+            fallbackPainter = fallback,
         )
         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
@@ -983,6 +994,8 @@ private fun CollectionRow(
     mode: LibraryBrowseMode,
     collection: LibraryCollection,
     onClick: () -> Unit,
+    chevron: Painter,
+    fallback: Painter,
 ) {
     val title = collection.title.ifBlank {
         stringResource(
@@ -1024,7 +1037,7 @@ private fun CollectionRow(
     ) {
         if (mode == LibraryBrowseMode.ALBUMS) {
             collection.tracks.firstOrNull()?.let { track ->
-                AlbumArtwork(track = track, targetSize = 48.dp, modifier = Modifier.size(48.dp))
+                AlbumArtwork(track = track, targetSize = 48.dp, modifier = Modifier.size(48.dp), fallbackPainter = fallback)
                 Spacer(Modifier.width(VesqenSpacing.sm))
             }
         }
@@ -1044,7 +1057,7 @@ private fun CollectionRow(
             )
         }
         Icon(
-            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            painter = chevron,
             contentDescription = null,
             modifier = Modifier.size(20.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1070,6 +1083,8 @@ private fun AlbumPage(
     val meta = remember(artist, album.tracks) {
         listOfNotNull(artist, nowFormatSummary(album.tracks.firstOrNull())).joinToString(" · ")
     }
+    // Shared by every row, as in LibraryTrackList: a painter per row drew its own icon bitmap.
+    val moreIcon = rememberVectorPainter(Icons.Filled.MoreVert)
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("vesqen.library.album"),
         contentPadding = PaddingValues(bottom = VesqenSpacing.md),
@@ -1123,6 +1138,7 @@ private fun AlbumPage(
                 isCurrent = track.id == playback.trackId,
                 onPlay = { onPlayQueue(album.tracks, index) },
                 onMore = { onTrackMore(track) },
+                moreIcon = moreIcon,
                 modifier = Modifier
                     .padding(horizontal = 14.dp)
                     .background(card)
@@ -1149,6 +1165,7 @@ private fun AlbumTrackRow(
     isCurrent: Boolean,
     onPlay: () -> Unit,
     onMore: () -> Unit,
+    moreIcon: Painter,
     modifier: Modifier = Modifier,
 ) {
     val title = track.title.ifBlank { stringResource(R.string.unknown_title) }
@@ -1190,7 +1207,7 @@ private fun AlbumTrackRow(
             // #35: 48 dp like every other touch target; the 48 dp album row already fits it.
             modifier = Modifier.size(48.dp).testTag("vesqen.library.track.${track.id}.more"),
         ) {
-            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.more_track_actions, title))
+            Icon(moreIcon, contentDescription = stringResource(R.string.more_track_actions, title))
         }
     }
 }
