@@ -69,7 +69,7 @@
 | [#136](https://github.com/Sumire-no-kai/Vesqen/issues/136) | 1.0 代码审查（2026-10-17）：R1–R11、R24（加时区判断）、R32（设置页返回保持位置）已修；R9 在 Android 8.0 模拟器上真的清除媒体存储验证过，真机上没做；R12–R31 其余可以放到之后 |
 | [#143](https://github.com/Sumire-no-kai/Vesqen/issues/143) | 2026-10-18 代码审查（10 月 17–18 日的改动）：1.0 前要修的 Q1–Q6 都已修好（Q1、Q2、Q6 是 PR #144，Q3 `d31bbd6`，Q4 `f372289`，Q5 重新生成 profile `f1c8655`）；Q20（迷你播放条按钮的点击区域只有 40 dp）和 Q12–Q14 也已修好（`e08b3d2`）；Q7–Q11、Q15–Q19 可以放到之后 |
 | [#149](https://github.com/Sumire-no-kai/Vesqen/issues/149) | 从 1.0 起最低支持 Android 9.0（API 28），2026-10-19 所有者决定：`minSdk` 26 → 28，清掉过时的版本判断，更新 PRD、README、Play 商品详情和官网的系统要求；8.x 设备停在 beta.3，GitHub 更新器按 `minimumAndroidApi` 自动不推送 |
-| 赞助入口 | 2026-10-19 所有者决定：GitHub 版"关于"页加"支持开发"（Buy Me a Coffee），Play 版不加（Play 付款政策不允许应用内引导到其他付款方式）。所有者先把 BMC 页面改成 Sumire Studio / Vesqen 的名称，新链接到了再接入。官网、README 和发布说明同步放链接。见 [`MONETIZATION.md`](MONETIZATION.md) 的"GitHub 优先" |
+| [#151](https://github.com/Sumire-no-kai/Vesqen/issues/151) | 赞助入口。2026-10-19 所有者决定：GitHub 版"关于"页加"支持开发"（Buy Me a Coffee），Play 版不加（Play 付款政策不允许应用内引导到其他付款方式）。2026-10-20：BMC 用户名改不了，沿用 `buymeacoffee.com/edward_lee`（页面内容已改成 Sumire Studio / Vesqen）；另加偶尔的提示，写明支持用在哪里。隐私政策加了对应说明（10 月 20 日版），发版时同步到官网。见 [`MONETIZATION.md`](MONETIZATION.md) 的"GitHub 优先" |
 | [#35](https://github.com/Sumire-no-kai/Vesqen/issues/35) | 按 beta.3 复核界面和文案（字号、深浅色、减少动效），加完整的 TalkBack |
 
 发布 1.0 时：

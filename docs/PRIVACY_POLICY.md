@@ -1,7 +1,7 @@
 # Vesqen Privacy Policy
 
 - Effective date: September 26, 2026
-- Last updated: October 18, 2026
+- Last updated: October 20, 2026
 
 This policy explains what information the Vesqen Android app handles, where that information stays, what the app sends over the network, and what we receive when you contact us or join a test. It applies to every build of Vesqen we distribute, including Google Play and GitHub Releases, and to the Vesqen website.
 
@@ -67,6 +67,7 @@ Only reading your music is essential. If you refuse notifications, folder access
 
 - **Android media controls.** While music plays, Vesqen gives Android the current track's title, artist, album, artwork and playback position for the notification and lock-screen controls. Android may pass this to devices and services you connect or authorize, such as Bluetooth car audio, watches or voice assistants. Only Android's system components, and apps you have allowed to read notifications or control media (such as a smartwatch app), can connect to Vesqen's playback session. Other apps on your phone cannot.
 - **Moving to a new phone.** Vesqen does not move its data to a new phone. Your library, favorites, playlists, play counts and last-played times, queue, settings and output verification records stay only on your old phone. On the new phone, you need to allow Vesqen to read your audio files again, or add your music folders again. Vesqen turns off Android cloud backup, so this data is not backed up to Google Drive, and it asks Android not to copy this data during device-to-device transfer. Some phone makers' transfer tools may not follow this request and may still copy the app's data to the new phone.
+- **Supporting development.** The GitHub version has a Support development link in About, and now and then it asks whether you would like to support Vesqen. Both only open our Buy Me a Coffee page in your browser; Vesqen itself sends nothing. To decide when to ask, the app keeps on your device how many times it has asked, when it last asked and whether you chose not to be asked again. The version from Google Play has neither.
 - **Network features.** The app uses the network only for usage statistics, device report uploads and, in the GitHub version, update checks, including the status file and downloads that belong to them. The next three sections describe them.
 
 ## Usage statistics
@@ -97,6 +98,7 @@ Only reading your music is essential. If you refuse notifications, folder access
 - **Statistics and reports.** From usage statistics we see only daily totals. From device reports we see the reports you upload, for the 7 days we keep them.
 - **Closed testing.** If you join a test of Vesqen on Google Play, the email address of your Google account is added to the test's tester list in Google Play Console, so Google can give you access. We also see any feedback you send through Google Play. We use this only to run the test.
 - **Purchases.** Vesqen has no in-app purchases yet. If a later version adds one, we will update this policy before that version is released.
+- **Support through Buy Me a Coffee.** If you support Vesqen on Buy Me a Coffee, Buy Me a Coffee shows us your name or display name, email address, message, and the amount and date, as its privacy policy describes. Stripe processes the payment, and we never see your card number. By default your name and message also appear on our Buy Me a Coffee page; you can change this in your Buy Me a Coffee settings. Support unlocks nothing in the app. We use this information only to keep a record of support and to reply if you write to us.
 - **Google Play statistics.** Google may give us aggregated statistics about installs and app stability, including crash reports from people who have chosen to share usage and diagnostics data with Google. We use them only to find and fix problems.
 - **GitHub downloads.** If you download Vesqen from GitHub, in a browser or through the app's update check, GitHub's privacy statement applies to that download.
 

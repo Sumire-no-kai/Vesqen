@@ -14,14 +14,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.support.supportDevelopmentUrl
 import io.github.sumirenokai.vesqen.ui.components.PaperCard
 import io.github.sumirenokai.vesqen.ui.components.PaperDivider
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
@@ -29,6 +35,7 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 /**
  * B · Paper & Sound About (#35): the mark and one plain sentence, the facts in one card, then
  * what stays on this phone. #39: nothing is backed up or moved to a new phone, so the page says so.
+ * The GitHub build adds "Support development" to the facts (Buy Me a Coffee); the Play build cannot.
  */
 @Composable
 fun AboutScreen(
@@ -38,6 +45,8 @@ fun AboutScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    var browserUnavailable by rememberSaveable { mutableStateOf(false) }
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             modifier = Modifier
@@ -85,6 +94,23 @@ fun AboutScreen(
                         title = stringResource(R.string.about_license),
                         value = stringResource(R.string.about_license_value),
                     )
+                    supportDevelopmentUrl?.let { url ->
+                        PaperDivider()
+                        SettingsRow(
+                            title = stringResource(R.string.about_support),
+                            value = stringResource(R.string.about_support_value),
+                            onClick = { browserUnavailable = !openInBrowser(context, url) },
+                            modifier = Modifier.testTag("vesqen.about.support"),
+                        )
+                        if (browserUnavailable) {
+                            Text(
+                                text = stringResource(R.string.privacy_policy_no_browser),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.xs),
+                            )
+                        }
+                    }
                 }
             }
             item {

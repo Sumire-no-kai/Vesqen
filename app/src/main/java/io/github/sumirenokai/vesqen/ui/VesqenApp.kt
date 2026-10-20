@@ -94,6 +94,8 @@ import io.github.sumirenokai.vesqen.reports.CrashPrompt
 import io.github.sumirenokai.vesqen.reports.DeviceReportOptions
 import io.github.sumirenokai.vesqen.reports.DeviceReporter
 import io.github.sumirenokai.vesqen.service.ServiceState
+import io.github.sumirenokai.vesqen.support.SupportPrompt
+import io.github.sumirenokai.vesqen.support.supportDevelopmentUrl
 import io.github.sumirenokai.vesqen.telemetry.PlaybackTelemetry
 import io.github.sumirenokai.vesqen.ui.chain.ChainDashboardPreferencesRepository
 import io.github.sumirenokai.vesqen.ui.chain.ChainDashboardPreferencesStore
@@ -122,6 +124,7 @@ import io.github.sumirenokai.vesqen.ui.screens.SettingsScreen
 import io.github.sumirenokai.vesqen.ui.screens.StrictOutputIntroductionDialog
 import io.github.sumirenokai.vesqen.ui.screens.UsageIntroductionScreen
 import io.github.sumirenokai.vesqen.ui.screens.UsageStatisticsScreen
+import io.github.sumirenokai.vesqen.ui.screens.openInBrowser
 import io.github.sumirenokai.vesqen.ui.screens.usageIntroductionDue
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
@@ -273,7 +276,10 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
     // #70: the statistics explanation comes first whenever the runtime requires it.
     val usageSnapshot by application.usageStatistics.snapshot.collectAsStateWithLifecycle()
     val serviceStatus by application.serviceStatus.collectAsStateWithLifecycle()
+    // #151: an open that began with the statistics introduction asks nothing more.
+    var usageIntroductionShown by rememberSaveable { mutableStateOf(false) }
     if (usageIntroductionDue(usageSnapshot)) {
+        SideEffect { usageIntroductionShown = true }
         UsageIntroductionScreen(application.usageStatistics)
         return
     }
@@ -353,6 +359,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
         activationCodes = application.activationCodes,
         openPremiumRequest = openPremiumRequest,
         crashPrompt = application.crashPrompt,
+        supportPrompt = application.supportPrompt.takeUnless { usageIntroductionShown },
     )
 }
 
@@ -420,6 +427,8 @@ fun VesqenAppContent(
     /** Each increase opens the Pro features page, as after an activation link (#120). */
     openPremiumRequest: Int = 0,
     crashPrompt: CrashPrompt? = null,
+    supportPrompt: SupportPrompt? = null,
+    supportUrl: String? = supportDevelopmentUrl,
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     var showStrictUsbUnavailable by rememberSaveable { mutableStateOf(false) }
@@ -552,11 +561,28 @@ fun VesqenAppContent(
     // #113: after a crash or ANR, ask once. The statistics introduction, when due, comes first.
     val crashPromptDue = crashPrompt?.due?.collectAsStateWithLifecycle()?.value == true
     var showCrashPrompt by rememberSaveable { mutableStateOf(false) }
+    var askedThisOpen by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(crashPromptDue, deviceReporter) {
         if (crashPromptDue && deviceReporter != null) {
             showCrashPrompt = true
+            askedThisOpen = true
             // Marked once it is on screen, so the same crash is never asked about again.
             crashPrompt?.markShown()
+        }
+    }
+
+    // #151: now and then the GitHub build asks for support, only in an open that asks nothing else:
+    // it waits until the crash records are read, and an open with the crash question is left alone.
+    val crashPromptChecked = crashPrompt?.checked?.collectAsStateWithLifecycle()?.value ?: true
+    val supportPromptDue = supportPrompt?.due?.collectAsStateWithLifecycle()?.value == true
+    var showSupportPrompt by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(supportPrompt) { supportPrompt?.check() }
+    LaunchedEffect(supportPromptDue, crashPromptChecked, crashPromptDue) {
+        val crashQuestionComing = crashPromptDue && deviceReporter != null
+        if (supportPromptDue && supportUrl != null && crashPromptChecked && !crashQuestionComing && !askedThisOpen) {
+            showSupportPrompt = true
+            askedThisOpen = true
+            supportPrompt?.markShown()
         }
     }
 
@@ -574,6 +600,23 @@ fun VesqenAppContent(
             },
             // Closed without an answer: not asked again, and the records stay until they expire.
             onDismiss = { showCrashPrompt = false },
+        )
+    } else if (showSupportPrompt && supportUrl != null) {
+        val context = LocalContext.current
+        SupportPromptDialog(
+            onSupport = {
+                openInBrowser(context, supportUrl).also { opened ->
+                    if (opened) {
+                        showSupportPrompt = false
+                        supportPrompt?.finish()
+                    }
+                }
+            },
+            onLater = { showSupportPrompt = false },
+            onNever = {
+                showSupportPrompt = false
+                supportPrompt?.finish()
+            },
         )
     } else if (showStrictIntroduction && premiumAccess != null) {
         StrictOutputIntroductionDialog(

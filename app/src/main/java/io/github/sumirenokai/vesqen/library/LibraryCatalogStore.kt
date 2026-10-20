@@ -409,6 +409,12 @@ internal class LibraryCatalogStore(
             }
         }
 
+    /** #151: plays counted across the library. Rows with plays survive scans, so the total only grows. */
+    fun totalPlayCount(): Long =
+        readableDatabase.rawQuery("SELECT COALESCE(SUM($TRACK_PLAY_COUNT), 0) FROM $TRACKS_TABLE", null).use { cursor ->
+            if (cursor.moveToFirst()) cursor.getLong(0) else 0
+        }
+
     fun readPlaylists(): List<LibraryPlaylist> {
         val database = readableDatabase
         val playlists = database.query(

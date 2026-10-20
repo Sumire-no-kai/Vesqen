@@ -91,6 +91,8 @@ class LibraryCatalogStoreTest {
                     store.recordPlayback(trackId, playedAtMs = 200),
                 )
                 assertNull(store.recordPlayback(trackId + 999, playedAtMs = 300))
+                // #151: the support question counts plays across the library.
+                assertEquals(2L, store.totalPlayCount())
             }
         } finally {
             context.deleteDatabase(databaseName)

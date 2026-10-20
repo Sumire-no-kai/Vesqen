@@ -234,6 +234,13 @@
     <string name="about_version_value">%1$s (%2$d)</string>
     <string name="about_license">License</string>
     <string name="about_license_value">Apache-2.0</string>
+    <string name="about_support">Support development</string>
+    <string name="about_support_value" translatable="false">Buy Me a Coffee</string>
+    <string name="support_prompt_title">Support Vesqen\'s development</string>
+    <string name="support_prompt_body">Vesqen 1.x is free and has no ads. If it is useful to you, you can support it on Buy Me a Coffee. The support goes into the next stage of development:\n\n• Vesqen\'s own USB output engine, so phones without an official bit-perfect path can still send audio unchanged to a USB DAC.\n• Low-level work to make playback right on more phones and DACs: buying test devices, then testing and fixing them one by one.\n\nSupport is voluntary and does not unlock any features.</string>
+    <string name="support_prompt_support">Support</string>
+    <string name="support_prompt_later">Later</string>
+    <string name="support_prompt_never">Don\'t ask again</string>
     <string name="about_developer">Developer</string>
     <string name="about_developer_value">Sumire Studio</string>
     <string name="about_data_title">Your data</string>

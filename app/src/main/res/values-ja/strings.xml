@@ -231,6 +231,12 @@
     <string name="about_version_value">%1$s（%2$d）</string>
     <string name="about_license">ライセンス</string>
     <string name="about_license_value">Apache-2.0</string>
+    <string name="about_support">開発を支援</string>
+    <string name="support_prompt_title">Vesqen の開発を支援</string>
+    <string name="support_prompt_body">Vesqen 1.x は無料で、広告もありません。役に立っていれば、Buy Me a Coffee で支援していただけます。支援は次の開発に使います。\n\n• 独自の USB 出力エンジン：公式の bit-perfect 経路がないスマートフォンでも、音声をそのまま USB DAC に送れるようにします。\n• より多くのスマートフォンと DAC への低レベルの対応：テスト用の機器を購入し、1 台ずつテストして修正します。\n\n支援は任意で、どの機能もロック解除されません。</string>
+    <string name="support_prompt_support">支援する</string>
+    <string name="support_prompt_later">後で</string>
+    <string name="support_prompt_never">今後表示しない</string>
     <string name="about_developer">開発者</string>
     <string name="about_developer_value">Sumire Studio</string>
     <string name="about_data_title">データについて</string>

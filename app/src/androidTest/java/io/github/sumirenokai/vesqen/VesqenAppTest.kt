@@ -34,6 +34,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -98,6 +99,7 @@ import io.github.sumirenokai.vesqen.premium.PremiumAccess
 import io.github.sumirenokai.vesqen.premium.PremiumStore
 import io.github.sumirenokai.vesqen.premium.TrialRecord
 import io.github.sumirenokai.vesqen.reports.CrashPrompt
+import io.github.sumirenokai.vesqen.support.SupportPrompt
 import io.github.sumirenokai.vesqen.reports.DeviceReportArtifact
 import io.github.sumirenokai.vesqen.reports.DeviceReportDelivery
 import io.github.sumirenokai.vesqen.reports.DeviceReportFailure
@@ -1190,6 +1192,109 @@ class VesqenAppTest {
         composeRule.runOnIdle { assertEquals(0, crash.shown) }
     }
 
+    @Test
+    fun the_support_question_says_what_support_pays_for_and_later_closes_it() {
+        val support = FakeSupportPrompt(due = true)
+        render(grantedState(), supportPrompt = support, supportUrl = UnopenableSupportUrl)
+
+        composeRule.onNodeWithTag("vesqen.support-prompt").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.support_prompt_title)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.support_prompt_body)).assertIsDisplayed()
+        composeRule.runOnIdle {
+            assertEquals(1, support.checks)
+            // Counted as soon as it is on screen, so leaving the app does not ask again at once.
+            assertEquals(1, support.shown)
+        }
+        composeRule.onNodeWithTag("vesqen.support-prompt.later")
+            .assertTextEquals(context.getString(R.string.support_prompt_later)).performClick()
+
+        composeRule.onNodeWithTag("vesqen.support-prompt").assertDoesNotExist()
+        composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
+        composeRule.runOnIdle {
+            assertEquals(1, support.shown)
+            assertEquals(0, support.finished)
+        }
+    }
+
+    @Test
+    fun dont_ask_again_ends_the_support_question() {
+        val support = FakeSupportPrompt(due = true)
+        render(grantedState(), supportPrompt = support, supportUrl = UnopenableSupportUrl)
+
+        composeRule.onNodeWithTag("vesqen.support-prompt.never")
+            .assertTextEquals(context.getString(R.string.support_prompt_never)).performClick()
+
+        composeRule.onNodeWithTag("vesqen.support-prompt").assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals(1, support.finished) }
+    }
+
+    @Test
+    fun support_without_a_browser_keeps_the_question_and_says_so() {
+        val support = FakeSupportPrompt(due = true)
+        render(grantedState(), supportPrompt = support, supportUrl = UnopenableSupportUrl)
+
+        composeRule.onNodeWithTag("vesqen.support-prompt.support")
+            .assertTextEquals(context.getString(R.string.support_prompt_support)).performClick()
+
+        composeRule.onNodeWithTag("vesqen.support-prompt").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.support-prompt.no-browser")
+            .assertTextEquals(context.getString(R.string.privacy_policy_no_browser)).assertIsDisplayed()
+        composeRule.runOnIdle { assertEquals(0, support.finished) }
+    }
+
+    @Test
+    fun the_support_question_waits_until_the_crash_records_are_read() {
+        val crash = FakeCrashPrompt(due = false, checked = false)
+        val support = FakeSupportPrompt(due = true)
+        render(grantedState(), deviceReporter = FakeDeviceReporter(), crashPrompt = crash,
+            supportPrompt = support, supportUrl = UnopenableSupportUrl)
+        composeRule.onNodeWithTag("vesqen.support-prompt").assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals(0, support.shown) }
+
+        composeRule.runOnIdle { crash.emitChecked() }
+        composeRule.onNodeWithTag("vesqen.support-prompt").assertIsDisplayed()
+    }
+
+    @Test
+    fun an_open_with_the_crash_question_does_not_also_ask_for_support() {
+        val crash = FakeCrashPrompt(due = true)
+        val support = FakeSupportPrompt(due = true)
+        render(grantedState(), deviceReporter = FakeDeviceReporter(), crashPrompt = crash,
+            supportPrompt = support, supportUrl = UnopenableSupportUrl)
+
+        composeRule.onNodeWithTag("vesqen.crash-prompt").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.support-prompt").assertDoesNotExist()
+        composeRule.onNodeWithTag("vesqen.crash-prompt.decline").performClick()
+
+        composeRule.onNodeWithTag("vesqen.crash-prompt").assertDoesNotExist()
+        composeRule.onNodeWithTag("vesqen.support-prompt").assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals(0, support.shown) }
+    }
+
+    @Test
+    fun without_a_support_link_the_support_question_is_not_asked() {
+        // The Play build has no link (Google Play's Payments policy).
+        val support = FakeSupportPrompt(due = true)
+        render(grantedState(), supportPrompt = support, supportUrl = null)
+        composeRule.onNodeWithTag("vesqen.support-prompt").assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals(0, support.shown) }
+    }
+
+    @Test
+    fun support_question_buttons_keep_whole_labels_at_200_percent_text() {
+        render(grantedState(), supportPrompt = FakeSupportPrompt(due = true),
+            supportUrl = UnopenableSupportUrl, fontScale = 2f)
+
+        composeRule.onNodeWithTag("vesqen.support-prompt").assertIsDisplayed()
+        listOf(R.string.support_prompt_support, R.string.support_prompt_later, R.string.support_prompt_never)
+            .forEach { assertSingleCompleteLine(context.getString(it)) }
+        assertFooterActionsDoNotOverlap(
+            "vesqen.support-prompt.support",
+            "vesqen.support-prompt.later",
+            "vesqen.support-prompt.never",
+        )
+    }
+
     private fun openDeviceReport() {
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
         composeRule.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.device-report"))
@@ -1221,6 +1326,29 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.about.back").performClick()
         composeRule.onNodeWithTag("vesqen.settings").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.nav.settings").assertIsSelected()
+    }
+
+    @Test
+    fun only_the_github_build_offers_support_development_in_about() {
+        render(grantedState())
+
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.about"))
+        composeRule.onNodeWithTag("vesqen.settings.about").performClick()
+
+        // Google Play's Payments policy does not allow a link to another payment method (2026-10-19).
+        if (BuildConfig.FLAVOR == "github") {
+            composeRule.onNodeWithTag("vesqen.about").performScrollToNode(hasTestTag("vesqen.about.support"))
+            composeRule.onNodeWithTag("vesqen.about.support")
+                .assert(hasText(context.getString(R.string.about_support)))
+                .assert(hasText(context.getString(R.string.about_support_value)))
+                .assert(hasClickAction())
+                .assertIsDisplayed()
+        } else {
+            composeRule.onAllNodesWithTag("vesqen.about.support").assertCountEquals(0)
+            composeRule.onAllNodesWithText(context.getString(R.string.about_support_value)).assertCountEquals(0)
+        }
     }
 
     @Test
@@ -3973,6 +4101,8 @@ class VesqenAppTest {
         premiumAccess: PremiumAccess? = null,
         activationCodes: ActivationCodes? = null,
         crashPrompt: CrashPrompt? = null,
+        supportPrompt: SupportPrompt? = null,
+        supportUrl: String? = null,
     ) {
         composeRule.setContent {
             VesqenTheme(darkTheme = darkTheme) {
@@ -4015,6 +4145,8 @@ class VesqenAppTest {
                         deviceReporter = deviceReporter,
                         reportUploadAvailable = reportUploadAvailable,
                         crashPrompt = crashPrompt,
+                        supportPrompt = supportPrompt,
+                        supportUrl = supportUrl,
                     )
                 }
                 val renderWithinSize: @Composable () -> Unit = {
@@ -4216,9 +4348,12 @@ class VesqenAppTest {
 }
 
 /** Counts what the app shell asks of the crash question; no files or records behind it. */
-private class FakeCrashPrompt(due: Boolean) : CrashPrompt {
+private class FakeCrashPrompt(due: Boolean, checked: Boolean = true) : CrashPrompt {
     private val mutableDue = MutableStateFlow(due)
     override val due: StateFlow<Boolean> = mutableDue.asStateFlow()
+    private val mutableChecked = MutableStateFlow(checked)
+    override val checked: StateFlow<Boolean> = mutableChecked.asStateFlow()
+    fun emitChecked() { mutableChecked.value = true }
     var shown = 0
         private set
     var declined = 0
@@ -4226,6 +4361,24 @@ private class FakeCrashPrompt(due: Boolean) : CrashPrompt {
     fun emit(value: Boolean) { mutableDue.value = value }
     override fun markShown() { shown++; mutableDue.value = false }
     override fun decline() { declined++; mutableDue.value = false }
+}
+
+/** No app handles this scheme, so "Support" reports that no browser could open it. */
+private const val UnopenableSupportUrl = "vesqen-test-unopenable://support"
+
+/** Counts what the app shell asks of the support question; no preferences or library behind it. */
+private class FakeSupportPrompt(due: Boolean) : SupportPrompt {
+    private val mutableDue = MutableStateFlow(due)
+    override val due: StateFlow<Boolean> = mutableDue.asStateFlow()
+    var checks = 0
+        private set
+    var shown = 0
+        private set
+    var finished = 0
+        private set
+    override fun check() { checks++ }
+    override fun markShown() { shown++; mutableDue.value = false }
+    override fun finish() { finished++ }
 }
 
 private class MemoryPremiumStore(private var trial: TrialRecord = TrialRecord()) : PremiumStore {
