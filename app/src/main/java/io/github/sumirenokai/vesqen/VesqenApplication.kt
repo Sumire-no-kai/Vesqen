@@ -3,9 +3,11 @@ package io.github.sumirenokai.vesqen
 import android.app.Activity
 import android.app.Application
 import android.content.Context
+import android.database.sqlite.SQLiteException
 import android.os.Bundle
 import io.github.sumirenokai.vesqen.diagnostics.AndroidDiagnosticRecordingStore
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
+import io.github.sumirenokai.vesqen.library.LibraryCatalogStore
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryRecorder
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStateRepository
@@ -14,6 +16,10 @@ import io.github.sumirenokai.vesqen.premium.ActivationState
 import io.github.sumirenokai.vesqen.premium.AndroidPremiumStore
 import io.github.sumirenokai.vesqen.premium.createActivationCodes
 import io.github.sumirenokai.vesqen.premium.PremiumAccess
+import io.github.sumirenokai.vesqen.support.AndroidSupportPromptStore
+import io.github.sumirenokai.vesqen.support.SupportPrompt
+import io.github.sumirenokai.vesqen.support.SupportPromptRuntime
+import io.github.sumirenokai.vesqen.support.supportDevelopmentUrl
 import io.github.sumirenokai.vesqen.telemetry.AndroidPlaybackTelemetry
 import io.github.sumirenokai.vesqen.telemetry.PlaybackTelemetry
 import io.github.sumirenokai.vesqen.verification.AndroidOutputVerificationRepository
@@ -83,6 +89,24 @@ class VesqenApplication : Application() {
     /** #113: asks once after a crash or ANR; sending still goes through [deviceReporter]. */
     val crashPrompt: io.github.sumirenokai.vesqen.reports.CrashPrompt
         get() = deviceReportRuntime.crashes
+
+    /** #151: the GitHub build's occasional support question; null in a build without a support link. */
+    val supportPrompt: SupportPrompt? by lazy {
+        if (supportDevelopmentUrl == null) return@lazy null
+        SupportPromptRuntime(
+            applicationScope,
+            AndroidSupportPromptStore(this),
+            installedAtEpochMs = { packageManager.getPackageInfo(packageName, 0).firstInstallTime },
+            totalPlays = ::totalLibraryPlays,
+        )
+    }
+
+    /** A library that cannot be read counts no plays, so the support question waits for a later open. */
+    private fun totalLibraryPlays(): Long = try {
+        LibraryCatalogStore(this).use { it.totalPlayCount() }
+    } catch (_: SQLiteException) {
+        0
+    }
 
     val outputVerificationRepository: OutputVerificationRepository by lazy {
         AndroidOutputVerificationRepository(this)

@@ -18,6 +18,9 @@ interface CrashPrompt {
     /** True when a crash or ANR happened after the question was last asked. */
     val due: StateFlow<Boolean>
 
+    /** True once [due] reflects the saved records, so a later question can tell none is coming (#151). */
+    val checked: StateFlow<Boolean>
+
     /** The question is on screen. The crashes it covers are never offered again. */
     fun markShown()
 
@@ -38,6 +41,8 @@ internal class CrashReportRuntime(
 ) : CrashPrompt {
     private val mutableDue = MutableStateFlow(false)
     override val due: StateFlow<Boolean> = mutableDue.asStateFlow()
+    private val mutableChecked = MutableStateFlow(false)
+    override val checked: StateFlow<Boolean> = mutableChecked.asStateFlow()
     private val availability = AtomicReference(CrashHistoryAvailability.AVAILABLE)
     private val pendingThrough = AtomicReference<Long?>(null)
 
@@ -52,6 +57,8 @@ internal class CrashReportRuntime(
                 pendingThrough.set(newest)
                 mutableDue.value = newest != null
             }
+            // Unreadable storage asks nothing, which is an answer too.
+            mutableChecked.value = true
         }
     }
 

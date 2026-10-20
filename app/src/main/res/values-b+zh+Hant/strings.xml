@@ -231,6 +231,12 @@
     <string name="about_version_value">%1$s（%2$d）</string>
     <string name="about_license">開放原始碼授權</string>
     <string name="about_license_value">Apache-2.0</string>
+    <string name="about_support">支持開發</string>
+    <string name="support_prompt_title">支持 Vesqen 的開發</string>
+    <string name="support_prompt_body">Vesqen 1.x 免費，沒有廣告。如果它對你有用，可以在 Buy Me a Coffee 上支持一下。這些支持會用在接下來的開發上：\n\n• 自研 USB 輸出引擎：讓沒有官方 bit-perfect 通道的手機，也能把音訊原樣送到 USB DAC。\n• 從底層適配更多手機和 DAC：購買測試裝置，逐台測試和修正。\n\n支持是自願的，不會解鎖任何功能。</string>
+    <string name="support_prompt_support">前往支持</string>
+    <string name="support_prompt_later">以後再說</string>
+    <string name="support_prompt_never">不再提示</string>
     <string name="about_developer">開發者</string>
     <string name="about_developer_value">Sumire Studio</string>
     <string name="about_data_title">你的資料</string>

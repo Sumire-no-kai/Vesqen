@@ -245,7 +245,7 @@ private fun loadPolicy(assets: AssetManager, path: String): PolicyDocumentState 
 }
 
 /** Returns false when no installed app can show web pages, so the screen can say so. */
-private fun openInBrowser(context: Context, url: String): Boolean = try {
+internal fun openInBrowser(context: Context, url: String): Boolean = try {
     context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
     true
 } catch (_: ActivityNotFoundException) {
