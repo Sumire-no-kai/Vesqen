@@ -11,7 +11,7 @@ Vesqen is an offline music player for Android. It plays the music stored on your
 
 [Website](https://vesqen.sumirenokai.com) · [Privacy policy](https://vesqen.sumirenokai.com/privacy/) · [Support](https://vesqen.sumirenokai.com/support/)
 
-> **Status:** `1.0.0-beta.3`, the third public beta, is out on [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0-beta.3). The Google Play version is in a closed test, and [testers are welcome](#download). Read the [known limitations](#known-limitations) before relying on strict USB output.
+> **Status:** `1.0.0-beta.3`, the third public beta, is out on [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0-beta.3). The Google Play version is in a closed test and will be listed once Google approves it. Read the [known limitations](#known-limitations) before relying on strict USB output.
 
 ## What Vesqen does
 
@@ -40,7 +40,7 @@ A state is never promoted to a stronger one. An active path is not called verifi
 - **GitHub Releases:** each [release](https://github.com/Sumire-no-kai/Vesqen/releases) has a signed APK and its SHA-256. The application signing certificate SHA-256 is
   `74:3E:96:FC:B7:1D:C5:81:88:49:68:19:A0:01:A2:7C:D8:8D:90:91:62:C5:AE:92:9C:87:BF:A2:9A:B8:62:93`.
   You can check it with `apksigner verify --print-certs`. GitHub and Google Play builds use the same signing key, so an update from either source keeps your library.
-- **Google Play:** closed testing first, and the public listing follows after the test. To join, email vesqen@sumirenokai.com with the Google account address you use on Google Play; you need to keep the test version installed for 14 days. The Play version is updated by Google Play, and the GitHub version updates itself.
+- **Google Play:** in a closed test; the public listing follows once Google approves it. The Play version is updated by Google Play, and the GitHub version updates itself.
 - **Requirements:** Android 9.0 or later. Strict USB output needs Android 14 or later and a compatible USB DAC.
 
 ## Privacy

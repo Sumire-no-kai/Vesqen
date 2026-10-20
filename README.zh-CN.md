@@ -11,7 +11,7 @@ Vesqen 是一款 Android 离线音乐播放器，播放你手机里的音乐，�
 
 [官网](https://vesqen.sumirenokai.com/zh/) · [隐私政策](https://vesqen.sumirenokai.com/zh/privacy/) · [支持](https://vesqen.sumirenokai.com/zh/support/)
 
-> **当前状态：** 第三个公开测试版 `1.0.0-beta.3` 已在 [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0-beta.3) 发布。Google Play 版正在封闭测试，[欢迎报名](#下载)。依赖严格 USB 输出之前，请先看[已知限制](#已知限制)。
+> **当前状态：** 第三个公开测试版 `1.0.0-beta.3` 已在 [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0-beta.3) 发布。Google Play 版正在封闭测试，Google 批准后会公开上架。依赖严格 USB 输出之前，请先看[已知限制](#已知限制)。
 
 ## 功能
 
@@ -40,7 +40,7 @@ Vesqen 是一款 Android 离线音乐播放器，播放你手机里的音乐，�
 - **GitHub Releases**：每个[版本](https://github.com/Sumire-no-kai/Vesqen/releases)都附有签名的 APK 和它的 SHA-256。应用签名证书的 SHA-256 为
   `74:3E:96:FC:B7:1D:C5:81:88:49:68:19:A0:01:A2:7C:D8:8D:90:91:62:C5:AE:92:9C:87:BF:A2:9A:B8:62:93`，
   可以用 `apksigner verify --print-certs` 核对。GitHub 和 Google Play 的版本使用同一把签名密钥，从任一渠道更新都会保留你的曲库。
-- **Google Play**：先做封闭测试，测试结束后再正式上架。想参加测试的话，把你在 Google Play 上用的 Google 账号邮箱发到 vesqen@sumirenokai.com，测试版需要连续保留 14 天。Play 版由 Google Play 负责更新，GitHub 版由应用自己更新。
+- **Google Play**：正在封闭测试，Google 批准后公开上架。Play 版由 Google Play 负责更新，GitHub 版由应用自己更新。
 - **系统要求**：Android 9.0 及以上。严格 USB 输出需要 Android 14 及以上和兼容的 USB DAC。
 
 ## 隐私
