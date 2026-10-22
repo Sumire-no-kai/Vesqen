@@ -979,20 +979,31 @@ private fun NowLinerNotesBody(
     )
     val routeEvidence = value(TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_NAME)
     val underruns = value(TelemetryMetricCatalog.PLAYBACK_UNDERRUN_COUNT)
-    val route = if (routeEvidence != null && underruns != null && underruns !is TelemetryEvidence.Unavailable) {
-        stringResource(
+    val output = outputRoute(metrics)
+    val routeKind = output?.kind
+    // The output by kind, named as the Chain page's Output card names it; the system's own route
+    // name ("Phone") only stands in for other kinds of route (#35).
+    val outputName = when (routeKind) {
+        OutputRouteKind.SPEAKER -> stringResource(R.string.chain_pinned_output_speaker)
+        OutputRouteKind.WIRED -> stringResource(R.string.chain_pinned_output_wired)
+        OutputRouteKind.BLUETOOTH -> stringResource(R.string.chain_pinned_output_bluetooth)
+        OutputRouteKind.OTHER, null -> routeEvidence?.takeUnless { it is TelemetryEvidence.Unavailable }
+            ?.let { formatTelemetryReading(context, it.reading) }
+    }
+    val outputEvidence = output?.evidence ?: routeEvidence
+    val route = when {
+        outputName == null -> row(listOf(TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_NAME))
+        underruns != null && underruns !is TelemetryEvidence.Unavailable -> stringResource(
             R.string.now_notes_route_underruns,
-            formatTelemetryReading(context, routeEvidence.reading),
+            outputName,
             formatTelemetryReading(context, underruns.reading),
-        ) to row(listOf(TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_NAME, TelemetryMetricCatalog.PLAYBACK_UNDERRUN_COUNT)).second
-    } else {
-        row(listOf(TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_NAME))
+        ) to telemetryConfidenceLabel(context, listOfNotNull(outputEvidence, underruns).maxBy { it.confidence.ordinal }.confidence)
+        else -> outputName to (outputEvidence?.let { telemetryConfidenceLabel(context, it.confidence) } ?: "")
     }
 
     NotesRow(stringResource(R.string.chain_core_source), source, "source")
     NotesRow(stringResource(R.string.chain_core_output), audioTrack, "audio-track")
     NotesRow(stringResource(R.string.chain_core_route), route, "route")
-    val routeKind = outputRoute(metrics)?.kind
     when {
         routeKind == OutputRouteKind.BLUETOOTH -> {
             val codec = value(TelemetryMetricCatalog.ROUTE_BLUETOOTH_CODEC)

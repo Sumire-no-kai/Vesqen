@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -93,100 +94,110 @@ fun MiniPlayer(
         border = BorderStroke(1.dp, colors.hairline),
         tonalElevation = 0.dp,
     ) {
-        Row(
-            modifier = Modifier.padding(start = 4.dp, top = 4.dp, end = 8.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val openNowInteraction = remember { MutableInteractionSource() }
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 56.dp)
-                    .testTag("vesqen.mini-player.open-now")
-                    .clickable(
-                        interactionSource = openNowInteraction,
-                        indication = null,
-                        onClickLabel = openNowLabel,
-                        onClick = onOpenNow,
-                    ),
-                contentAlignment = Alignment.CenterStart,
+        // #35: on a narrow capsule with large text the title kept one letter. There, Previous steps
+        // aside for the title; it stays in Now.
+        val fontScale = LocalDensity.current.fontScale
+        BoxWithConstraints {
+            val showPrevious = maxWidth >= MiniPlayerPreviousMinWidth || fontScale < MiniPlayerPreviousMaxFontScale
+            Row(
+                modifier = Modifier.padding(start = 4.dp, top = 4.dp, end = 8.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                // The press state is a pill behind the cover and the text. Clipping the content to the
-                // pill instead cut the ends of two lines at large text sizes (#143 Q12), and the inset
-                // that kept the title clear of the curve cost 8 dp of title width (#143 Q13).
-                Box(Modifier.matchParentSize().clip(CircleShape).indication(openNowInteraction, ripple()))
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                val openNowInteraction = remember { MutableInteractionSource() }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 56.dp)
+                        .testTag("vesqen.mini-player.open-now")
+                        .clickable(
+                            interactionSource = openNowInteraction,
+                            indication = null,
+                            onClickLabel = openNowLabel,
+                            onClick = onOpenNow,
+                        ),
+                    contentAlignment = Alignment.CenterStart,
                 ) {
-                    AlbumArtwork(
-                        track = currentTrack,
-                        targetSize = 44.dp,
-                        modifier = Modifier.size(44.dp),
-                        shape = CircleShape,
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(1.dp),
+                    // The press state is a pill behind the cover and the text. Clipping the content to the
+                    // pill instead cut the ends of two lines at large text sizes (#143 Q12), and the inset
+                    // that kept the title clear of the curve cost 8 dp of title width (#143 Q13).
+                    Box(Modifier.matchParentSize().clip(CircleShape).indication(openNowInteraction, ripple()))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(start = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, lineHeight = 21.sp),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            // On the title itself, so TalkBack reads "title, artist" once instead of the title twice.
-                            modifier = if (titleOnly) Modifier.semantics { contentDescription = "$title, $artist" } else Modifier,
+                        AlbumArtwork(
+                            track = currentTrack,
+                            targetSize = 44.dp,
+                            modifier = Modifier.size(44.dp),
+                            shape = CircleShape,
                         )
-                        if (!titleOnly) Text(
-                            text = artist,
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(1.dp),
+                        ) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, lineHeight = 21.sp),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                // On the title itself, so TalkBack reads "title, artist" once instead of the title twice.
+                                modifier = if (titleOnly) Modifier.semantics { contentDescription = "$title, $artist" } else Modifier,
+                            )
+                            if (!titleOnly) Text(
+                                text = artist,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
-            }
-            MiniPlayerControl(
-                modifier = Modifier.testTag("vesqen.mini-player.previous"),
-                onClick = onPrevious,
-                enabled = snapshot.isControllerReady && snapshot.canSkipPrevious,
-                colors = IconButtonDefaults.iconButtonColors(),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.SkipPrevious,
-                    contentDescription = stringResource(R.string.previous),
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            MiniPlayerControl(
-                modifier = Modifier.testTag("vesqen.mini-player.play-pause"),
-                onClick = onPlayPause,
-                enabled = snapshot.isControllerReady,
-                colors = IconButtonDefaults.filledIconButtonColors(),
-            ) {
-                Icon(
-                    imageVector = if (snapshot.showsPauseAction) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = stringResource(if (snapshot.showsPauseAction) R.string.pause else R.string.play),
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-            MiniPlayerControl(
-                modifier = Modifier.testTag("vesqen.mini-player.next"),
-                onClick = onNext,
-                enabled = snapshot.isControllerReady && snapshot.canSkipNext,
-                colors = IconButtonDefaults.iconButtonColors(),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.SkipNext,
-                    contentDescription = stringResource(R.string.next),
-                    modifier = Modifier.size(20.dp),
-                )
+                if (showPrevious) MiniPlayerControl(
+                    modifier = Modifier.testTag("vesqen.mini-player.previous"),
+                    onClick = onPrevious,
+                    enabled = snapshot.isControllerReady && snapshot.canSkipPrevious,
+                    colors = IconButtonDefaults.iconButtonColors(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.SkipPrevious,
+                        contentDescription = stringResource(R.string.previous),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                MiniPlayerControl(
+                    modifier = Modifier.testTag("vesqen.mini-player.play-pause"),
+                    onClick = onPlayPause,
+                    enabled = snapshot.isControllerReady,
+                    colors = IconButtonDefaults.filledIconButtonColors(),
+                ) {
+                    Icon(
+                        imageVector = if (snapshot.showsPauseAction) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = stringResource(if (snapshot.showsPauseAction) R.string.pause else R.string.play),
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+                MiniPlayerControl(
+                    modifier = Modifier.testTag("vesqen.mini-player.next"),
+                    onClick = onNext,
+                    enabled = snapshot.isControllerReady && snapshot.canSkipNext,
+                    colors = IconButtonDefaults.iconButtonColors(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.SkipNext,
+                        contentDescription = stringResource(R.string.next),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
         }
     }
 }
+
+/** Below this capsule width, at [MiniPlayerPreviousMaxFontScale] text or more, Previous is left out. */
+internal val MiniPlayerPreviousMinWidth = 340.dp
+internal const val MiniPlayerPreviousMaxFontScale = 1.5f
 
 /**
  * A 40 dp circle inside a 48 dp clickable (#143 Q20). Material's IconButton clicks and reports its

@@ -193,13 +193,14 @@ Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hai
 - Inner curves share a centre with the capsule ends, 32 dp in from each end: the 44 dp cover is round (the one place a cover is not a 4 dp square), the open-Now press state is a pill inset 4 dp, and the next button sits on the right-hand centre. Previous, play/pause and next draw 40 dp circles inside 48 dp targets. Owner decision, 2026-10-17.
 - At most 560 dp wide; on wider windows it stays centred instead of stretching edge to edge.
 - Above 150 % text only the title shows; the artist is still read out by TalkBack.
+- On a capsule narrower than 340 dp at 150 % text or more, Previous is left out so the title keeps room; Previous stays in Now. Owner decision, 2026-10-22 (#35).
 
 ### Now
 
 - **Focus mode.** With a track, Now takes the whole window: the bottom bar and the rail yield, and the top-left collapse button or Android Back returns to where Now was opened. Without a track, Now shows its empty state with the navigation.
 - Top bar: collapse, "Now" with the queue position, the orientation toggle when the phone can rotate, and the queue.
 - Cover as wide as the content, up to 360 dp, shrinking to 164 dp while the liner notes are open; under 64 dp it is dropped rather than squeezed. Then the serif title, "artist — album", progress, transport (playback order, previous, play/pause, next, favorite) and the liner notes. Height the cover cannot use is shared above and below the cover, so the transport and the liner notes sit at the bottom on tall phones.
-- **Liner notes:** collapsed to one summary line ("FLAC 24/96 · SYSTEM MIXED"); open, they list 01 Source file, 02 AudioTrack and 03 Route and stability with each value and its confidence, then the evidence chip, its explanation, Output mode and Track information. The step numbers are the liner-notes metaphor of the B design, not section numbering.
+- **Liner notes:** collapsed to one summary line ("FLAC 24/96 · SYSTEM MIXED"); open, they list 01 Source file, 02 Sent to Android and 03 Output and stability with each value and its confidence, then the evidence chip, its explanation, Output mode and Track information. The step numbers are the liner-notes metaphor of the B design, not section numbering. Rows 02 and 03 use the Chain page's names: "Sent to Android" for the AudioTrack format, and the output by kind (Speaker, Wired, Bluetooth) rather than Android's route name such as "Phone". Owner decision, 2026-10-22 (#35).
 - Landscape is a separate composition: cover or liner notes on the left, identity and controls on the right, system bars hidden.
 - The page never scrolls; only the open liner notes scroll inside their own region.
 
@@ -280,7 +281,7 @@ Vesqen's voice is plain, concrete and calm. It tells people what happened and wh
 - **Touch targets:** 48 dp minimum for every control, including overflow buttons in dense rows and each A–Z picker row.
 - **Labels:** every control has a name TalkBack reads. A checkbox and its label are one toggleable control; icon buttons have content descriptions; state uses state descriptions ("Now playing", "Expanded") rather than colour. The current track's row says "Playing" or "Paused" itself: TalkBack skips a marker icon's description inside a merged row (2026-10-22, TalkBack 16).
 - **Grouping:** a row reads as one unit (title, subtitle, value); custom actions cover reordering (Move up, Move down) instead of drag-only gestures.
-- **Text scaling:** layouts hold at 100, 130, 150 and 200 % and at 320 dp width. Rules above say what changes: settings values move under titles above 130 %, navigation labels stop at 130 %, the mini-player drops the artist above 150 %, the A–Z strip becomes a picker above 120 %.
+- **Text scaling:** layouts hold at 100, 130, 150 and 200 % and at 320 dp width. Rules above say what changes: settings values move under titles above 130 %, navigation labels stop at 130 %, the mini-player drops the artist above 150 % and Previous on a narrow capsule, the A–Z strip becomes a picker above 120 %.
 - **No mid-word breaks:** when a label would not fit, the layout moves it instead of breaking a word. Paired buttons sit side by side only while both labels fit and otherwise stack (`EqualButtons`); a note beside a value, such as the confidence in the liner notes, moves under the value; a count next to header buttons gets its own line (Queue).
 - **Contrast:** see the colour table; disabled controls may drop below 4.5:1, nothing else may.
 - **Motion:** honour the system animation setting (reduced-motion fallbacks above).

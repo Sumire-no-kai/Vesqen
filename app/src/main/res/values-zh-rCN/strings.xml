@@ -303,8 +303,8 @@
     <string name="player_use_system_output">切换为系统输出</string>
     <string name="player_keep_strict_output">保留严格模式</string>
     <string name="chain_core_source">01 · 源文件</string>
-    <string name="chain_core_output">02 · AudioTrack</string>
-    <string name="chain_core_route">03 · 路由与稳定性</string>
+    <string name="chain_core_output">02 · 交给系统</string>
+    <string name="chain_core_route">03 · 输出与稳定性</string>
     <string name="unavailable">不可用</string>
     <string name="library_songs">歌曲</string>
     <string name="library_albums">专辑</string>

@@ -2785,6 +2785,42 @@ class VesqenAppTest {
     }
 
     @Test
+    fun liner_notes_name_the_output_as_the_chain_page_does() {
+        val snapshot = chainTelemetrySnapshot()
+        val source = TelemetryDataSource(TelemetrySourceId("test.telemetry"))
+        fun measured(id: TelemetryMetricId, section: TelemetrySection, reading: TelemetryReading) = TelemetryMetric(
+            id = id,
+            section = section,
+            evidence = TelemetryEvidence.Measured(
+                reading = reading,
+                source = source,
+                observedAtEpochMs = snapshot.capturedAtEpochMs,
+                observedAtElapsedRealtimeMs = snapshot.capturedAtElapsedRealtimeMs,
+            ),
+        )
+        val telemetry = FakePlaybackTelemetry(
+            snapshot.copy(
+                metrics = snapshot.metrics + listOf(
+                    measured(TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_TYPE, TelemetrySection.ROUTE, TelemetryReading.Text("phone_speaker")),
+                    measured(TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_NAME, TelemetrySection.ROUTE, TelemetryReading.Text("Phone")),
+                    measured(TelemetryMetricCatalog.PLAYBACK_UNDERRUN_COUNT, TelemetrySection.PLAYBACK, TelemetryReading.Integer(0, TelemetryUnit.COUNT)),
+                ),
+            ),
+        )
+        render(state = activePlaybackState(), playbackTelemetry = telemetry)
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        openLinerNotes()
+
+        // #35: the notes named this output "Phone", Android's route name, where Chain says "Speaker".
+        composeRule.onNodeWithTag("vesqen.now.notes.route").performScrollTo()
+            .assert(hasText(context.getString(R.string.chain_core_route), substring = true))
+            .assert(hasText(context.getString(R.string.chain_pinned_output_speaker), substring = true))
+            .assert(hasText("Phone", substring = true).not())
+        composeRule.onNodeWithTag("vesqen.now.notes.audio-track")
+            .assert(hasText(context.getString(R.string.chain_core_output), substring = true))
+    }
+
+    @Test
     fun liner_notes_shrink_the_cover_keep_transport_visible_and_back_closes_them() {
         render(
             grantedState(
@@ -3263,8 +3299,10 @@ class VesqenAppTest {
     // controls keep real 48 dp targets side by side and the title keeps room to read (#143 Q20, Q13).
     // The title gets the capsule width minus 218 dp of fixed parts (insets, cover, gap, three 48 dp
     // controls), so these minimums sit a few dp under that and fail if the title is squeezed again.
+    // #35: at 320 dp and 200 % that left one letter, so Previous steps aside and the title gains 48 dp.
     @Test
-    fun mini_player_fits_a_320dp_window_at_200_percent_text() = assertMiniPlayerFits(320.dp, 2f, minTitleWidth = 64.dp)
+    fun mini_player_fits_a_320dp_window_at_200_percent_text() =
+        assertMiniPlayerFits(320.dp, 2f, minTitleWidth = 110.dp, showsPrevious = false)
 
     @Test
     fun mini_player_fits_a_360dp_window_at_130_percent_text() = assertMiniPlayerFits(360.dp, 1.3f, minTitleWidth = 104.dp)
@@ -3275,7 +3313,7 @@ class VesqenAppTest {
     @Test
     fun mini_player_fits_a_600dp_window_at_default_text() = assertMiniPlayerFits(600.dp, 1f, minTitleWidth = 200.dp)
 
-    private fun assertMiniPlayerFits(width: Dp, fontScale: Float, minTitleWidth: Dp) {
+    private fun assertMiniPlayerFits(width: Dp, fontScale: Float, minTitleWidth: Dp, showsPrevious: Boolean = true) {
         val title = "A deliberately long local track title"
         render(
             state = grantedState(
@@ -3296,7 +3334,8 @@ class VesqenAppTest {
 
         val player = composeRule.onNodeWithTag("vesqen.mini-player").fetchSemanticsNode().boundsInRoot
         var previousRight = composeRule.onNodeWithTag("vesqen.mini-player.open-now").fetchSemanticsNode().boundsInRoot.right
-        listOf("previous", "play-pause", "next").forEach { control ->
+        if (!showsPrevious) composeRule.onAllNodesWithTag("vesqen.mini-player.previous").assertCountEquals(0)
+        listOfNotNull("previous".takeIf { showsPrevious }, "play-pause", "next").forEach { control ->
             val bounds = composeRule.onNodeWithTag("vesqen.mini-player.$control")
                 .assertWidthIsAtLeast(48.dp)
                 .assertHeightIsAtLeast(48.dp)
