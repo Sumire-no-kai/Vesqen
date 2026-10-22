@@ -67,18 +67,11 @@ fun QueueSheet(
                 .padding(bottom = VesqenSpacing.md),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.queue),
-                        style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.semantics { heading() },
-                    )
-                    Text(
-                        text = pluralStringResource(R.plurals.library_song_total, snapshot.queue.size, snapshot.queue.size),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Text(
+                    text = stringResource(R.string.queue),
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                )
                 TextButton(
                     onClick = {
                         onClearQueue()
@@ -92,6 +85,12 @@ fun QueueSheet(
                     Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close))
                 }
             }
+            // On its own line, so the buttons beside the title never squeeze the count into two (#35).
+            Text(
+                text = pluralStringResource(R.plurals.library_song_total, snapshot.queue.size, snapshot.queue.size),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             if (!snapshot.isControllerReady) {
                 Text(
                     text = stringResource(R.string.playback_controls_connecting),

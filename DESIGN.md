@@ -174,12 +174,14 @@ Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hai
 
 - Track rows: 48 dp cover, one-line sans title, one-line "artist · album", play indicator on the current track, and a 48 dp overflow button. Rows are ruled by a bottom hairline.
 - Settings rows: 56 dp, or 64 dp with a description. A value (version, On/Off) sits left of the chevron; above 130 % text it moves under the title so the title never squeezes into single letters.
-- Album detail rows: track number, title, duration and a 48 dp overflow button in a 48 dp row.
+- Album detail rows: track number, title, duration and a 48 dp overflow button in a 48 dp row. The number column is at least 20 dp and widens with large text; "01" never wraps.
+- Folder rows: the folder's own name is the title; the second line is the track count, then the path above the folder ("3 tracks · Music/Demo"), so a narrow row never cuts off the part that tells folders apart.
 
 ### Library
 
 - Text tabs (Songs, Albums, Artists, Folders, Genres, Playlists) scroll horizontally; the selected tab is ink at weight 600 with a Moss underline.
 - Header actions: search, sort, Favorites (heart) and a menu for adding folders and rescanning.
+- **Sort menu:** the current order gets a trailing check and a selected state; the A–Z index switch sits above the orders, set apart by a divider.
 - The search field is a 48 dp pill: the search icon and the clear button sit on the centres of its ends.
 - **A–Z index:** a 24 dp strip along the right edge, 11 dp letters, missing letters at 25 %, the selected letter in Moss. Dragging shows a 56 dp letter bubble beside the finger that takes no layout space. Windows under 420 dp tall, text above 120 % and TalkBack get an "A–Z" button that opens a letter picker with 48 dp rows instead. Shown only in unfiltered Songs sorted by title.
 - Favorites and playlists show an Edit order action only when there is something to reorder (two or more songs). Reordering uses a 48 dp drag handle and Move up / Move down accessibility actions.
@@ -276,9 +278,10 @@ Vesqen's voice is plain, concrete and calm. It tells people what happened and wh
 ## Accessibility
 
 - **Touch targets:** 48 dp minimum for every control, including overflow buttons in dense rows and each A–Z picker row.
-- **Labels:** every control has a name TalkBack reads. A checkbox and its label are one toggleable control; icon buttons have content descriptions; state uses state descriptions ("Now playing", "Expanded") rather than colour.
+- **Labels:** every control has a name TalkBack reads. A checkbox and its label are one toggleable control; icon buttons have content descriptions; state uses state descriptions ("Now playing", "Expanded") rather than colour. The current track's row says "Playing" or "Paused" itself: TalkBack skips a marker icon's description inside a merged row (2026-10-22, TalkBack 16).
 - **Grouping:** a row reads as one unit (title, subtitle, value); custom actions cover reordering (Move up, Move down) instead of drag-only gestures.
 - **Text scaling:** layouts hold at 100, 130, 150 and 200 % and at 320 dp width. Rules above say what changes: settings values move under titles above 130 %, navigation labels stop at 130 %, the mini-player drops the artist above 150 %, the A–Z strip becomes a picker above 120 %.
+- **No mid-word breaks:** when a label would not fit, the layout moves it instead of breaking a word. Paired buttons sit side by side only while both labels fit and otherwise stack (`EqualButtons`); a note beside a value, such as the confidence in the liner notes, moves under the value; a count next to header buttons gets its own line (Queue).
 - **Contrast:** see the colour table; disabled controls may drop below 4.5:1, nothing else may.
 - **Motion:** honour the system animation setting (reduced-motion fallbacks above).
 

@@ -120,22 +120,16 @@ fun TrackDetailsSheet(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
-                ) {
+                // Side by side while both labels fit; large text or a narrow window stacks them (#35).
+                EqualButtons(Modifier.fillMaxWidth()) {
                     onPlay?.let { play ->
-                        Button(onClick = play, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
-                            Text(stringResource(R.string.play_this_track), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Button(onClick = play, modifier = Modifier.heightIn(min = 52.dp)) {
+                            Text(stringResource(R.string.play_this_track))
                         }
                     }
                     onToggleFavorite?.let { toggle ->
-                        OutlinedButton(onClick = toggle, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
-                            Text(
-                                stringResource(if (track.isFavorite) R.string.remove_favorite else R.string.favorite),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                        OutlinedButton(onClick = toggle, modifier = Modifier.heightIn(min = 52.dp)) {
+                            Text(stringResource(if (track.isFavorite) R.string.remove_favorite else R.string.favorite))
                         }
                     }
                 }

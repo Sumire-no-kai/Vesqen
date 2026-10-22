@@ -335,7 +335,8 @@
     <string name="library_recently_added">Recently added</string>
     <string name="library_all_albums">All albums</string>
     <string name="create_playlist">Create playlist</string>
-    <string name="no_playlists_body">Create a playlist to organise tracks from your local library.</string>
+    <string name="no_playlists_title">No playlists yet</string>
+    <string name="no_playlists_body">Create a playlist to organize tracks from your local library.</string>
     <string name="empty_playlist_body">This playlist is empty. Add tracks from a song’s details.</string>
     <string name="playlist_name">Playlist name</string>
     <string name="create">Create</string>
@@ -375,7 +376,7 @@
     <string name="detail_bit_depth">Bit depth</string>
     <string name="detail_channels">Channels</string>
     <string name="detail_bitrate">Bitrate</string>
-    <string name="track_disc_value">%1$d / disc %2$d</string>
+    <string name="track_disc_value">Track %1$d, disc %2$d</string>
     <string name="sample_rate_value">%1$.1f kHz</string>
     <string name="bit_depth_value">%1$d-bit</string>
     <plurals name="channel_count_value">

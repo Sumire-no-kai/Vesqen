@@ -36,13 +36,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
@@ -54,6 +52,7 @@ import io.github.sumirenokai.vesqen.reports.DeviceReportState
 import io.github.sumirenokai.vesqen.reports.DeviceReporter
 import io.github.sumirenokai.vesqen.ui.components.PaperCard
 import io.github.sumirenokai.vesqen.ui.components.PaperDivider
+import io.github.sumirenokai.vesqen.ui.components.EqualButtons
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 
 /** One preview item holds about this many characters, so long reports stay fast to scroll. */
@@ -299,31 +298,6 @@ private fun ReportActions(state: DeviceReportState, uploadAvailable: Boolean, de
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-}
-
-/**
- * Equal-width buttons side by side while every label fits on one line. Otherwise each button takes
- * a full line, so large text or a narrow window never breaks a label mid-word (#118).
- */
-@Composable
-private fun EqualButtons(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Layout(content, modifier) { buttons, constraints ->
-        val gap = VesqenSpacing.sm.roundToPx()
-        val width = constraints.maxWidth
-        val share = (width - gap * (buttons.size - 1)) / buttons.size
-        val sideBySide = buttons.all { it.maxIntrinsicWidth(constraints.maxHeight) <= share }
-        val placeables = buttons.map { it.measure(Constraints.fixedWidth(if (sideBySide) share else width)) }
-        val height = if (sideBySide) placeables.maxOf { it.height }
-            else placeables.sumOf { it.height } + gap * (placeables.size - 1)
-        layout(width, height) {
-            var x = 0
-            var y = 0
-            placeables.forEach { button ->
-                button.placeRelative(x, y)
-                if (sideBySide) x += share + gap else y += button.height + gap
-            }
-        }
     }
 }
 

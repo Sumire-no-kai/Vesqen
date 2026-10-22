@@ -29,6 +29,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -1049,21 +1051,24 @@ private fun NowLinerNotesBody(
     }
 }
 
+// The confidence note sits at the end of the row while it fits; otherwise it moves under the value,
+// so large text never squeezes the step label until a word breaks in the middle (#35).
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NotesRow(step: String, valueAndConfidence: Pair<String, String>, tag: String) {
     Column(Modifier.fillMaxWidth()) {
         HorizontalDivider(color = LocalVesqenColors.current.hairline.copy(alpha = .1f))
-        Row(
+        FlowRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 42.dp)
                 .padding(vertical = VesqenSpacing.xxs)
                 .semantics(mergeDescendants = true) {}
                 .testTag("vesqen.now.notes.$tag"),
-            verticalAlignment = Alignment.CenterVertically,
+            itemVerticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.sm),
         ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(
                     text = step,
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, letterSpacing = .08.em),
@@ -1077,7 +1082,7 @@ private fun NotesRow(step: String, valueAndConfidence: Pair<String, String>, tag
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.End,
-                    modifier = Modifier.widthIn(max = 140.dp),
+                    modifier = Modifier.weight(1f),
                 )
             }
         }

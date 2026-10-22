@@ -28,6 +28,8 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
@@ -49,13 +51,16 @@ fun TrackRow(
     val title = track.title.ifBlank { stringResource(R.string.unknown_title) }
     val subtitle = androidx.compose.runtime.remember(track.artist, track.album) { track.displaySubtitle() }
         .ifBlank { stringResource(R.string.unknown_artist) }
+    val playbackState = if (!isCurrent) null else stringResource(if (isPlaying) R.string.playing else R.string.paused)
     Row(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 72.dp)
             .testTag("vesqen.library.track.${track.id}")
             // TalkBack reads the merged title and subtitle; a row description on top would repeat them.
-            .clickable(enabled = enabled, onClick = onPlay),
+            // TalkBack skipped the play marker's description, so the current row states it itself (#35).
+            .clickable(enabled = enabled, onClick = onPlay)
+            .semantics { playbackState?.let { stateDescription = it } },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AlbumArtwork(track = track, targetSize = 48.dp, modifier = Modifier.size(48.dp), fallbackPainter = artworkFallback)
@@ -82,7 +87,7 @@ fun TrackRow(
         if (isCurrent) {
             Icon(
                 imageVector = Icons.Filled.PlayArrow,
-                contentDescription = stringResource(if (isPlaying) R.string.playing else R.string.paused),
+                contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(24.dp),
             )

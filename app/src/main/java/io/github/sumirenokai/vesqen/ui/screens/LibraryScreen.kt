@@ -58,6 +58,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
@@ -70,7 +71,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.platform.LocalDensity
@@ -83,6 +84,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButton
@@ -122,7 +124,9 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
@@ -539,7 +543,7 @@ fun LibraryScreen(
                     )
 
                     browseMode == LibraryBrowseMode.PLAYLISTS && state.playlists.isEmpty() -> VesqenEmptyState(
-                        title = stringResource(R.string.library_playlists),
+                        title = stringResource(R.string.no_playlists_title),
                         body = stringResource(R.string.no_playlists_body),
                         actionLabel = stringResource(R.string.create_playlist),
                         onAction = { showCreatePlaylist = true },
@@ -841,14 +845,18 @@ private fun LibrarySortButton(
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.custom_track_order)) },
                     onClick = { onCustomOrder(); showSortMenu = false },
-                    leadingIcon = if (customOrderActive) { { Icon(Icons.Filled.MusicNote, null) } } else null,
+                    trailingIcon = if (customOrderActive) { { Icon(Icons.Filled.Check, null) } } else null,
+                    modifier = Modifier.semantics { selected = customOrderActive },
                 )
             }
+            // The index switch is a display option, so a line sets it apart from the orders. The
+            // current order gets a trailing check, which leaves every label on the same edge (#35).
             if (showAlphabetOption) {
                 DropdownMenuItem(
                     text = { Text(stringResource(if (alphabetEnabled) R.string.hide_alphabet_index else R.string.show_alphabet_index)) },
                     onClick = { onToggleAlphabet(); showSortMenu = false },
                 )
+                if (!manualOnly) HorizontalDivider()
             }
             LibrarySortOrder.entries.filter { !manualOnly }.forEach { order ->
                 DropdownMenuItem(
@@ -857,9 +865,10 @@ private fun LibrarySortButton(
                         onSortOrderChanged(order)
                         showSortMenu = false
                     },
-                    leadingIcon = if (order == sortOrder && !customOrderActive) {
-                        { Icon(Icons.Filled.MusicNote, contentDescription = null) }
+                    trailingIcon = if (order == sortOrder && !customOrderActive) {
+                        { Icon(Icons.Filled.Check, contentDescription = null) }
                     } else null,
+                    modifier = Modifier.semantics { selected = order == sortOrder && !customOrderActive },
                 )
             }
         }
@@ -1018,6 +1027,11 @@ private fun CollectionRow(
             collection.subtitle.toIntOrNull() ?: 0,
             collection.subtitle.toIntOrNull() ?: 0,
         )
+        // The title is the folder's own name; its path follows the track count.
+        LibraryBrowseMode.FOLDERS -> listOf(
+            pluralStringResource(R.plurals.collection_track_count, collection.tracks.size, collection.tracks.size),
+            collection.subtitle,
+        ).filter(String::isNotBlank).joinToString(" · ")
         else -> pluralStringResource(
             R.plurals.collection_track_count,
             collection.tracks.size,
@@ -1136,6 +1150,7 @@ private fun AlbumPage(
                 number = track.trackNumber ?: (index + 1),
                 track = track,
                 isCurrent = track.id == playback.trackId,
+                isPlaying = track.id == playback.trackId && playback.isPlaying,
                 onPlay = { onPlayQueue(album.tracks, index) },
                 onMore = { onTrackMore(track) },
                 moreIcon = moreIcon,
@@ -1163,6 +1178,7 @@ private fun AlbumTrackRow(
     number: Int,
     track: AudioTrack,
     isCurrent: Boolean,
+    isPlaying: Boolean,
     onPlay: () -> Unit,
     onMore: () -> Unit,
     moreIcon: Painter,
@@ -1172,6 +1188,8 @@ private fun AlbumTrackRow(
     val subtitle = remember(track.artist, track.album) { track.displaySubtitle() }
         .ifBlank { stringResource(R.string.unknown_artist) }
     val hairline = LocalVesqenColors.current.hairline
+    // Only the title's color marks the current track, so say it for TalkBack too (#35).
+    val playbackState = if (!isCurrent) null else stringResource(if (isPlaying) R.string.playing else R.string.paused)
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1179,15 +1197,19 @@ private fun AlbumTrackRow(
             .drawBehind { drawLine(hairline, Offset(0f, .5.dp.toPx()), Offset(size.width, .5.dp.toPx()), 1.dp.toPx()) }
             .testTag("vesqen.library.track.${track.id}")
             .clickable(onClick = onPlay)
+            .semantics { playbackState?.let { stateDescription = it } }
             .padding(start = VesqenSpacing.xxs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        // At least the 20 dp column of the design; larger text widens it instead of wrapping "01" (#35).
         Text(
             text = String.format(Locale.ROOT, "%02d", number),
-            modifier = Modifier.width(20.dp),
+            modifier = Modifier.widthIn(min = 20.dp),
             style = VesqenDataStyle,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            softWrap = false,
         )
         Text(
             text = title,

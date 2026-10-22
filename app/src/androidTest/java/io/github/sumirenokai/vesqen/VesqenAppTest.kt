@@ -29,6 +29,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -162,6 +163,7 @@ import io.github.sumirenokai.vesqen.ui.navigation.NavigationRailWidth
 import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
 import io.github.sumirenokai.vesqen.ui.screens.ChainSummaryMetricIds
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
+import io.github.sumirenokai.vesqen.ui.screens.ChainNowPlaying
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
 import io.github.sumirenokai.vesqen.verification.OutputVerificationRegistryState
 import io.github.sumirenokai.vesqen.verification.OutputVerificationMatch
@@ -1293,6 +1295,73 @@ class VesqenAppTest {
             "vesqen.support-prompt.later",
             "vesqen.support-prompt.never",
         )
+    }
+
+    @Test
+    fun the_current_track_row_says_whether_it_is_playing_or_paused() {
+        val playing = grantedState(
+            tracks = sampleTracks,
+            playback = PlaybackSnapshot(isControllerReady = true, isPlaying = true, trackId = 1, title = "Dawn Signal"),
+        )
+        var state by mutableStateOf(playing)
+        render(playing, stateProvider = { state })
+
+        // #35: TalkBack skipped the play marker's description, so the row carries the state itself.
+        composeRule.onNodeWithTag("vesqen.library.track.1").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, context.getString(R.string.playing)),
+        )
+        composeRule.onNodeWithTag("vesqen.library.track.2")
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+        composeRule.runOnIdle { state = playing.copy(playback = playing.playback.copy(isPlaying = false)) }
+        composeRule.onNodeWithTag("vesqen.library.track.1").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, context.getString(R.string.paused)),
+        )
+    }
+
+    @Test
+    fun the_sort_menu_marks_the_current_order_as_selected() {
+        render(grantedState(tracks = sampleTracks))
+
+        composeRule.onNodeWithTag("vesqen.library.sort").performClick()
+
+        composeRule.onNode(hasText(context.getString(R.string.sort_title)) and hasClickAction(), useUnmergedTree = false)
+            .assertIsSelected()
+        composeRule.onNode(hasText(context.getString(R.string.sort_artist)) and hasClickAction(), useUnmergedTree = false)
+            .assertIsNotSelected()
+    }
+
+    @Test
+    fun folders_lead_with_their_own_name_and_show_the_path_after_the_count() {
+        render(grantedState(tracks = sampleTracks.map { it.copy(folderName = "Music/Demo/Quiet Rooms/") }))
+
+        composeRule.onNodeWithTag("vesqen.library.mode.folders").performScrollTo().performClick()
+
+        val count = context.resources.getQuantityString(R.plurals.collection_track_count, sampleTracks.size, sampleTracks.size)
+        composeRule.onNodeWithText("Quiet Rooms").assertIsDisplayed()
+        composeRule.onNodeWithText("$count · Music/Demo").assertIsDisplayed()
+    }
+
+    @Test
+    fun the_chain_labels_a_paused_track_as_paused() {
+        var playback by mutableStateOf(PlaybackSnapshot(isControllerReady = true, isPlaying = true, title = "Dawn Signal"))
+        composeRule.setContent { VesqenTheme { ChainNowPlaying(playback) } }
+
+        composeRule.onNodeWithText(context.getString(R.string.chain_current_playing)).assertIsDisplayed()
+        composeRule.runOnIdle { playback = playback.copy(isPlaying = false, showsPauseAction = false) }
+        // #35: it said "Now playing" above a notice that said nothing was playing.
+        composeRule.onNodeWithText(context.getString(R.string.paused)).assertIsDisplayed()
+        composeRule.onAllNodesWithText(context.getString(R.string.chain_current_playing)).assertCountEquals(0)
+    }
+
+    @Test
+    fun track_details_buttons_keep_whole_labels_at_200_percent_text() {
+        render(grantedState(tracks = sampleTracks), fontScale = 2f)
+
+        composeRule.onNodeWithTag("vesqen.library.track.1.more").performClick()
+
+        // #35: side by side, "Play this track" was cut to "Play…"; the buttons now stack instead.
+        assertSingleCompleteLine(context.getString(R.string.play_this_track))
+        assertSingleCompleteLine(context.getString(R.string.favorite))
     }
 
     private fun openDeviceReport() {
