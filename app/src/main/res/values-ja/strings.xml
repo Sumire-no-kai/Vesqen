@@ -304,8 +304,8 @@
     <string name="player_use_system_output">システム出力を使う</string>
     <string name="player_keep_strict_output">厳格モードのままにする</string>
     <string name="chain_core_source">01 · ソースファイル</string>
-    <string name="chain_core_output">02 · AudioTrack</string>
-    <string name="chain_core_route">03 · ルートと安定性</string>
+    <string name="chain_core_output">02 · システムに渡す形式</string>
+    <string name="chain_core_route">03 · 出力と安定性</string>
     <string name="unavailable">利用不可</string>
     <string name="library_songs">曲</string>
     <string name="library_albums">アルバム</string>

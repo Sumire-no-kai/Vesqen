@@ -309,8 +309,8 @@
     <string name="player_use_system_output">Use System output</string>
     <string name="player_keep_strict_output">Keep strict mode</string>
     <string name="chain_core_source">01 · Source file</string>
-    <string name="chain_core_output">02 · AudioTrack</string>
-    <string name="chain_core_route">03 · Route and stability</string>
+    <string name="chain_core_output">02 · Sent to Android</string>
+    <string name="chain_core_route">03 · Output and stability</string>
     <string name="unavailable">Unavailable</string>
     <string name="library_songs">Songs</string>
     <string name="library_albums">Albums</string>
