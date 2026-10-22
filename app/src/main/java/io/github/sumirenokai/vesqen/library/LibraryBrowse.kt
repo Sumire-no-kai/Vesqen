@@ -76,10 +76,12 @@ fun buildLibraryCollections(
         trackOrder = compareBy<AudioTrack> { it.album.lowercase() }
             .then(albumTrackComparator),
     )
+    // The folder's own name leads; the path above it follows in the subtitle, so a narrow row or
+    // large text never cuts off the part that tells folders apart (#35).
     LibraryBrowseMode.FOLDERS -> tracks.groupedCollections(
         key = { track -> collectionKey("folder", track.folderName) },
-        title = AudioTrack::folderName,
-        subtitle = { group -> group.size.toString() },
+        title = { track -> folderPathParts(track.folderName).second },
+        subtitle = { group -> folderPathParts(group.first().folderName).first },
         trackOrder = compareBy { it.fileName.lowercase() },
     )
     LibraryBrowseMode.GENRES -> tracks.groupedCollections(
@@ -145,6 +147,13 @@ private inline fun List<AudioTrack>.groupedCollections(
         )
     }
     .sortedWith(compareBy { it.title.lowercase() })
+
+/** "Music/Demo/Copper Hours/" → ("Music/Demo", "Copper Hours"); a bare name has nothing above it. */
+internal fun folderPathParts(path: String): Pair<String, String> {
+    val trimmed = path.trimEnd('/')
+    val slash = trimmed.lastIndexOf('/')
+    return if (slash < 0) "" to trimmed else trimmed.substring(0, slash) to trimmed.substring(slash + 1)
+}
 
 private fun List<AudioTrack>.firstNotBlank(vararg selectors: (AudioTrack) -> String): String =
     asSequence().flatMap { track -> selectors.asSequence().map { it(track) } }.firstOrNull(String::isNotBlank).orEmpty()

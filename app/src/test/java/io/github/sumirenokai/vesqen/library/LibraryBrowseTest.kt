@@ -69,6 +69,35 @@ class LibraryBrowseTest {
         assertNotEquals(artistKey, genreKey)
     }
 
+    @Test
+    fun `a folder is titled by its own name with the path above it as the subtitle`() {
+        val folders = buildLibraryCollections(LibraryBrowseMode.FOLDERS, tracks, emptyList())
+
+        assertEquals(listOf("Open", "Quiet"), folders.map(LibraryCollection::title))
+        assertEquals(listOf("Music/Nari", "Music/Mori"), folders.map(LibraryCollection::subtitle))
+    }
+
+    @Test
+    fun `two folders with the same name stay apart`() {
+        val copies = listOf(
+            tracks[0].copy(folderName = "Music/A/CD1/"),
+            tracks[2].copy(folderName = "Music/B/CD1/"),
+        )
+
+        val folders = buildLibraryCollections(LibraryBrowseMode.FOLDERS, copies, emptyList())
+
+        assertEquals(listOf("CD1", "CD1"), folders.map(LibraryCollection::title))
+        assertEquals(setOf("Music/A", "Music/B"), folders.map(LibraryCollection::subtitle).toSet())
+    }
+
+    @Test
+    fun `folder paths split at the last slash`() {
+        assertEquals("Music/Demo" to "Copper Hours", folderPathParts("Music/Demo/Copper Hours/"))
+        // Before Android 10 the folder name has no path in front of it.
+        assertEquals("" to "Copper Hours", folderPathParts("Copper Hours"))
+        assertEquals("" to "", folderPathParts(""))
+    }
+
     private fun track(
         id: Long,
         title: String,

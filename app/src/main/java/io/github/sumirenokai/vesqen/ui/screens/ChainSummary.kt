@@ -268,12 +268,15 @@ internal fun ChainSummaryScreen(
     }
 }
 
-/** Current track, shared by the summary and the advanced dashboard. */
+/**
+ * Current track, shared by the summary and the advanced dashboard. While it is paused the label says
+ * so, matching the "Nothing is playing" notice and the last-playback path below it (#35).
+ */
 @Composable
 internal fun ChainNowPlaying(playback: PlaybackSnapshot) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
-            text = stringResource(R.string.chain_current_playing),
+            text = stringResource(if (playback.showsPauseAction) R.string.chain_current_playing else R.string.paused),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

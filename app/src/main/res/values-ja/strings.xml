@@ -330,6 +330,7 @@
     <string name="library_recently_added">最近追加したアルバム</string>
     <string name="library_all_albums">すべてのアルバム</string>
     <string name="create_playlist">プレイリストを作成</string>
+    <string name="no_playlists_title">プレイリストはまだありません</string>
     <string name="no_playlists_body">プレイリストを作ると、ライブラリの曲をまとめられます。</string>
     <string name="empty_playlist_body">このプレイリストは空です。曲の詳細から追加できます。</string>
     <string name="playlist_name">プレイリスト名</string>
