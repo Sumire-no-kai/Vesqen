@@ -302,3 +302,4 @@
 - 这款耳机有入耳检测：摘下或戴上时会发暂停或播放键，Vesqen 在前台时都能收到（18:45 的几次来回切换）。
 - 结论：蓝牙断连通过。
 - 同时发现：关掉蓝牙、用扬声器播放时，链路页第 05 步"路由"仍显示 WF-1000XM4（"实测 · 未验证"），切歌后也不变。`dumpsys media_router` 里系统会话选中的是内置扬声器，MediaRouter2 服务端没有 Vesqen 的 router 记录。记为 #155，1.0 之前修。
+- 修复验证（PR #157，Vesqen Test 用 `32bff93` 构建，同一台手机和耳机，22:00–22:04）：链路页打开时 MediaRouter2 服务端出现 Vesqen Test 的 router 记录；关蓝牙后"路由"一两秒内变为 Phone，编码一行清除；切歌后仍是 Phone；蓝牙连回后变回 WF-1000XM4 并重新显示 LDAC；离开链路页后 router 记录消失。没有覆盖有线或 USB 耳机插拔，以及 Android 11–13。记录在被忽略的 `build/qa/route-155-verify-2026-10-23.log`。
