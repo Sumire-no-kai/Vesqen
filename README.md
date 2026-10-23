@@ -63,7 +63,7 @@ Playback and your library never use the network, and your library, playlists and
 - Vesqen doesn't move its data to a new phone. Favorites, playlists and settings stay on the old phone.
 - Vesqen hasn't been tested on foldables, and its smoothness at high refresh rates hasn't been measured. TalkBack was checked on an Android 16 emulator, not yet on a phone.
 
-Each release lists its own limitations in the release notes. Known bugs and planned work are grouped by release in the [milestones](https://github.com/Sumire-no-kai/Vesqen/milestones).
+Each release lists its own limitations in the release notes. The current list of known issues and plans is in [issue #163](https://github.com/Sumire-no-kai/Vesqen/issues/163) and on the [website](https://vesqen.sumirenokai.com/status/). Planned work is grouped by release in the [milestones](https://github.com/Sumire-no-kai/Vesqen/milestones).
 
 ## Feedback and support
 

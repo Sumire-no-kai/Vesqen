@@ -63,7 +63,7 @@ Vesqen 是一款 Android 离线音乐播放器，播放你手机里的音乐，�
 - Vesqen 不会把数据迁移到新手机，收藏、歌单和设置会留在原来的手机上。
 - 还没在折叠屏上测过，高刷新率下的流畅度也还没有测量。TalkBack 在 Android 16 模拟器上检查过，还没在真机上测。
 
-每个版本的发布说明都会列出当时的限制。已知问题和计划中的工作按版本分在各个[里程碑](https://github.com/Sumire-no-kai/Vesqen/milestones)里。
+每个版本的发布说明都会列出当时的限制。最新的已知问题和计划放在 [issue #163](https://github.com/Sumire-no-kai/Vesqen/issues/163) 和[官网](https://vesqen.sumirenokai.com/zh/status/)上，计划中的工作按版本分在各个[里程碑](https://github.com/Sumire-no-kai/Vesqen/milestones)里。
 
 ## 反馈与支持
 
