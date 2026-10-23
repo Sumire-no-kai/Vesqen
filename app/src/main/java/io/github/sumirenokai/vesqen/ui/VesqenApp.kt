@@ -130,6 +130,7 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 import io.github.sumirenokai.vesqen.updates.AppUpdater
+import io.github.sumirenokai.vesqen.usage.UsageSettingsStatus
 import io.github.sumirenokai.vesqen.usage.UsageStatistics
 import io.github.sumirenokai.vesqen.verification.OutputVerificationImportFailure
 import io.github.sumirenokai.vesqen.verification.OutputVerificationImportResult
@@ -276,7 +277,8 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
     // #70: the statistics explanation comes first whenever the runtime requires it.
     val usageSnapshot by application.usageStatistics.snapshot.collectAsStateWithLifecycle()
     val serviceStatus by application.serviceStatus.collectAsStateWithLifecycle()
-    // #151: an open that began with the statistics introduction asks nothing more.
+    // #151: an open that began with the statistics introduction asks nothing more, and the support
+    // question waits until the statistics settings are read, so it cannot come just before the introduction.
     var usageIntroductionShown by rememberSaveable { mutableStateOf(false) }
     if (usageIntroductionDue(usageSnapshot)) {
         SideEffect { usageIntroductionShown = true }
@@ -359,7 +361,9 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
         activationCodes = application.activationCodes,
         openPremiumRequest = openPremiumRequest,
         crashPrompt = application.crashPrompt,
-        supportPrompt = application.supportPrompt.takeUnless { usageIntroductionShown },
+        supportPrompt = application.supportPrompt.takeUnless {
+            usageIntroductionShown || usageSnapshot.status == UsageSettingsStatus.LOADING
+        },
     )
 }
 

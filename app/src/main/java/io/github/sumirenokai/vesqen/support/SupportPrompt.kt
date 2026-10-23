@@ -67,21 +67,34 @@ internal class SupportPromptRuntime(
 ) : SupportPrompt {
     private val mutableDue = MutableStateFlow(false)
     override val due: StateFlow<Boolean> = mutableDue.asStateFlow()
+    private val lock = Any()
+    /** Bumped when the question is shown or answered; a check that began before then is stale. */
+    private var answers = 0
 
     override fun check() {
+        val startedAt = synchronized(lock) { answers }
         scope.launch(dispatcher) {
-            mutableDue.value = SupportPromptRules.isDue(store.read(), installedAtEpochMs(), clock(), totalPlays)
+            val isDue = SupportPromptRules.isDue(store.read(), installedAtEpochMs(), clock(), totalPlays)
+            // A check that read the record before the question was shown would set it due again, and
+            // the next open in this process would ask within minutes instead of sixty days.
+            synchronized(lock) { if (answers == startedAt) mutableDue.value = isDue }
         }
     }
 
     override fun markShown() {
-        mutableDue.value = false
+        settle()
         val record = store.read()
         store.write(record.copy(asks = record.asks + 1, lastAskedAtEpochMs = clock()))
     }
 
     override fun finish() {
+        settle()
         store.write(store.read().copy(finished = true))
+    }
+
+    private fun settle() = synchronized(lock) {
+        answers++
+        mutableDue.value = false
     }
 }
 

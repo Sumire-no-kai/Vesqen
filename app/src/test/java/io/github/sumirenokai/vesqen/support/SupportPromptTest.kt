@@ -68,6 +68,32 @@ class SupportPromptTest {
         assertTrue(due())
     }
 
+    @Test fun `a check still running when the question is shown does not make it due again`() {
+        var showWhileReading = false
+        lateinit var prompt: SupportPromptRuntime
+        prompt = SupportPromptRuntime(
+            scope,
+            store,
+            installedAtEpochMs = { installedAt },
+            totalPlays = {
+                // Another open shows the question while this check is still reading the library.
+                if (showWhileReading) {
+                    showWhileReading = false
+                    prompt.markShown()
+                }
+                plays
+            },
+            clock = { now },
+            dispatcher = Dispatchers.Unconfined,
+        )
+        prompt.check()
+        assertTrue(prompt.due.value)
+        showWhileReading = true
+        prompt.check()
+        assertFalse(prompt.due.value)
+        assertEquals(1, store.record.asks)
+    }
+
     @Test fun `later is asked at most three times`() {
         repeat(3) {
             val prompt = runtime()
