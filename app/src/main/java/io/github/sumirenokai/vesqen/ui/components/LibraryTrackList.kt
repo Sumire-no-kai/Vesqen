@@ -187,12 +187,12 @@ internal fun LibraryTrackList(
                         } else 0f
                     }
                     .background(if (dragging) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent)
-                    .semantics {
-                        if (editing && !saving) customActions = buildList {
-                            if (index > 0) add(CustomAccessibilityAction(upLabel) { move(track.id, index - 1); true })
-                            if (index < tracks.lastIndex) add(CustomAccessibilityAction(downLabel) { move(track.id, index + 1); true })
-                        }
-                    }
+                // The row's own merged node carries the moves: TalkBack never focuses the wrapper Box,
+                // so actions there could not be reached and the order could only be dragged.
+                val moves = if (!editing || saving) emptyList() else buildList {
+                    if (index > 0) add(CustomAccessibilityAction(upLabel) { move(track.id, index - 1); true })
+                    if (index < tracks.lastIndex) add(CustomAccessibilityAction(downLabel) { move(track.id, index + 1); true })
+                }
                 Box(if (dragging) rowModifier else rowModifier.hairlineBelow()) {
                     TrackRow(
                         track = track,
@@ -201,6 +201,7 @@ internal fun LibraryTrackList(
                         onPlay = { onTrackSelected(track) },
                         onMore = { onTrackMore(track) },
                         enabled = !editing,
+                        accessibilityActions = moves,
                         moreIcon = moreIcon,
                         artworkFallback = artworkFallback,
                         trailingContent = if (!editing) null else {

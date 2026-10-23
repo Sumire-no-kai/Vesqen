@@ -1,5 +1,8 @@
 ﻿package io.github.sumirenokai.vesqen
 
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Offset
@@ -15,6 +18,23 @@ import org.junit.Test
 
 class LibraryOrderUiTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
+    @Test fun talkBackCanMoveARowWhileEditingTheOrder() {
+        val tracks = mutableStateOf((1L..3L).map { AudioTrack(it, "content://fixture/$it", "Track $it", "", "", 1000) })
+        compose.setContent {
+            VesqenTheme {
+                LibraryTrackList(tracks.value, null, false, {}, {}, editing = true, onReorder = { tracks.value = it })
+            }
+        }
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        // The actions sit on the row TalkBack focuses (its merged node), which is not disabled.
+        val row = compose.onNodeWithTag("vesqen.library.track.1")
+        row.assertIsEnabled()
+        val actions = row.fetchSemanticsNode().config[SemanticsActions.CustomActions]
+        assertEquals(listOf(context.getString(R.string.move_down)), actions.map { it.label })
+        compose.runOnIdle { actions.single().action() }
+        compose.runOnIdle { assertEquals(listOf(2L, 1L, 3L), tracks.value.map(AudioTrack::id)) }
+    }
 
     @Test fun handleReordersTheExistingListWithoutPlaying() {
         val tracks = mutableStateOf((1L..100L).map { AudioTrack(it, "content://fixture/$it", "Track $it", "", "", 1000) })
