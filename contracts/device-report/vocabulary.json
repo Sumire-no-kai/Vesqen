@@ -318,6 +318,7 @@
       "audio_track.request_format_pcm_data_rate",
       "bluetooth.ldac_quality_nominal_bitrate",
       "decoder.path_from_public_runtime_facts",
+      "decoder.path_from_raw_pcm_without_codec",
       "library.cached_metadata",
       "library.filename_extension",
       "media3.position_from_last_event",

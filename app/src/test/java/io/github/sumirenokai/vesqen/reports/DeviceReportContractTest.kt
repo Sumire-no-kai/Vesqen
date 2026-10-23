@@ -8,6 +8,7 @@ import io.github.sumirenokai.vesqen.playback.UsbOutputFailureOrigin
 import io.github.sumirenokai.vesqen.playback.telemetryLabel
 import io.github.sumirenokai.vesqen.telemetry.BluetoothCodecSettings
 import io.github.sumirenokai.vesqen.telemetry.LdacQuality
+import io.github.sumirenokai.vesqen.telemetry.PCM_BYPASS_DECODER_PATH_METHOD
 import io.github.sumirenokai.vesqen.telemetry.TelemetryDataSource
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvent
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEventKind
@@ -61,14 +62,22 @@ class DeviceReportContractTest {
             ).previewText
             assertFalse("${metric.id.value}: $report", report.contains("UNREVIEWED_OR_PRIVATE_TEXT"))
         }
-        val estimated = DeviceReportGenerator.generate(
-            reportData().copy(telemetry = TelemetrySnapshot(200, metrics = listOf(TelemetryMetric(
+        listOf(
+            TelemetryMetric(
                 Metrics.SOURCE_CODEC_LABEL, Metrics.descriptor(Metrics.SOURCE_CODEC_LABEL).section,
                 TelemetryEvidence.Estimated(TelemetryReading.Text("FLAC"), source("library.metadata"), 100, "library.cached_metadata"),
-            )))),
-            DeviceReportOptions(chainEvidence = true),
-        ).previewText
-        assertFalse(estimated, estimated.contains("\"methodRedacted\":true"))
+            ),
+            TelemetryMetric(
+                Metrics.DECODER_PATH, Metrics.descriptor(Metrics.DECODER_PATH).section,
+                TelemetryEvidence.Estimated(TelemetryReading.Text("pcm_bypass"), source("media3.analytics"), 100, PCM_BYPASS_DECODER_PATH_METHOD),
+            ),
+        ).forEach { metric ->
+            val estimated = DeviceReportGenerator.generate(
+                reportData().copy(telemetry = TelemetrySnapshot(200, metrics = listOf(metric))),
+                DeviceReportOptions(chainEvidence = true),
+            ).previewText
+            assertFalse(estimated, estimated.contains("\"methodRedacted\":true"))
+        }
     }
 
     @Test fun `an unreviewed Bluetooth codec name is withheld`() {

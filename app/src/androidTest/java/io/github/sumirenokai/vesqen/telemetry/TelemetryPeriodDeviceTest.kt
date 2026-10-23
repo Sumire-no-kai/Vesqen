@@ -1,8 +1,10 @@
 package io.github.sumirenokai.vesqen.telemetry
 
 import android.os.SystemClock
+import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.exoplayer.analytics.AnalyticsListener
@@ -73,6 +75,42 @@ class TelemetryPeriodDeviceTest {
         assertNotNull(sessionId)
         assertEquals(sessionId, snapshot.recentEvents.single { it.kind == TelemetryEventKind.UNDERRUN }.playbackSessionId)
         assertEquals(sessionId, snapshot.recentEvents.single { it.kind == TelemetryEventKind.ERROR }.playbackSessionId)
+    }
+
+    @Test
+    fun rawPcmPassedOnWithoutCodecReportsBypassInsteadOfWarmingUp() = runBlocking {
+        val raw = Format.Builder().setSampleMimeType(MimeTypes.AUDIO_RAW).setPcmEncoding(C.ENCODING_PCM_16BIT)
+            .setSampleRate(44_100).setChannelCount(2).build()
+        main {
+            telemetry.onMediaItemTransition(event(current, current), MediaItem.fromUri("file:///test/current.wav"), Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED)
+            telemetry.onAudioInputFormatChanged(event(current, current), raw, null)
+        }
+        // Until the renderer reports the output, a codec could still be starting.
+        assertTrue(decoderSnapshot().metric(TelemetryMetricCatalog.DECODER_PATH)?.evidence is TelemetryEvidence.Unavailable)
+        telemetry.onDecoderOutputFormat(raw, DecoderOutputFormat(C.ENCODING_PCM_16BIT, 44_100, fromCodec = false))
+        val snapshot = decoderSnapshot()
+        val path = snapshot.metric(TelemetryMetricCatalog.DECODER_PATH)?.evidence as TelemetryEvidence.Estimated
+        assertEquals(TelemetryReading.Text("pcm_bypass"), path.reading)
+        assertEquals(PCM_BYPASS_DECODER_PATH_METHOD, path.methodId)
+        listOf(
+            TelemetryMetricCatalog.DECODER_NAME,
+            TelemetryMetricCatalog.DECODER_SOFTWARE_ONLY,
+            TelemetryMetricCatalog.DECODER_HARDWARE_ACCELERATED,
+            TelemetryMetricCatalog.DECODER_VENDOR,
+        ).forEach { id ->
+            val evidence = snapshot.metric(id)?.evidence as? TelemetryEvidence.Unavailable
+            assertEquals(id.value, TelemetryUnavailableReason.NOT_APPLICABLE, evidence?.reason)
+        }
+    }
+
+    private suspend fun decoderSnapshot(): TelemetrySnapshot = withTimeout(5_000) {
+        telemetry.observe(TelemetryObservation(selection = TelemetryMetricSelection.Explicit(setOf(
+            TelemetryMetricCatalog.DECODER_PATH,
+            TelemetryMetricCatalog.DECODER_NAME,
+            TelemetryMetricCatalog.DECODER_SOFTWARE_ONLY,
+            TelemetryMetricCatalog.DECODER_HARDWARE_ACCELERATED,
+            TelemetryMetricCatalog.DECODER_VENDOR,
+        )))).first()
     }
 
     private suspend fun inputRate(): Long? = withTimeout(5_000) {
