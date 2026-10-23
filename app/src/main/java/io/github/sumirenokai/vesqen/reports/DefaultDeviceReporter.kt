@@ -57,6 +57,10 @@ internal class DefaultDeviceReporter(
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: IOException) { publish(request, DeviceReportState.Failed(DeviceReportFailure.GENERATION_FAILED)) }
             catch (_: SecurityException) { publish(request, DeviceReportState.Failed(DeviceReportFailure.GENERATION_FAILED)) }
+            // A telemetry or report invariant that does not hold must fail this report, not reach the
+            // process-wide scope, where it would crash the app and stop playback.
+            catch (_: IllegalStateException) { publish(request, DeviceReportState.Failed(DeviceReportFailure.GENERATION_FAILED)) }
+            catch (_: IllegalArgumentException) { publish(request, DeviceReportState.Failed(DeviceReportFailure.GENERATION_FAILED)) }
         }
     }
 

@@ -152,6 +152,7 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.serif
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.catch
 
 private val PaperEasing = CubicBezierEasing(.22f, 1f, .36f, 1f)
 private const val COVER_MAX_DP = 360
@@ -943,9 +944,11 @@ private fun NowLinerNotesBody(
     // Collected only while the notes are composed and the app is visible, so sampling follows this
     // observer. Open notes stay composed in the background, which kept the sampler running there.
     val observed by remember(telemetry) {
+        // As on Chain, a failing observation stops updating the notes instead of reaching the
+        // composition, where it would crash the app and stop playback.
         telemetry?.observe(
             TelemetryObservation(selection = TelemetryMetricSelection.Explicit(NotesMetricIds)),
-        ) ?: kotlinx.coroutines.flow.emptyFlow<io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot>()
+        )?.catch { } ?: kotlinx.coroutines.flow.emptyFlow<io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot>()
     }.collectAsStateWithLifecycle(initialValue = null)
     val metrics = observed?.metrics.orEmpty().associateBy(TelemetryMetric::id)
     fun value(id: TelemetryMetricId) = metrics[id]?.evidence
