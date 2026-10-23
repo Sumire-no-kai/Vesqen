@@ -290,6 +290,8 @@ Debug 的 18.10 秒 Simpleperf 有 7705 样本、0 丢样、16 条调用链错�
 
 后两行是附加场景覆盖；播放过程中曲目会自然推进，不能将索引开启行与暂停行视为只改变一个变量的优化实验。临时把系统最小刷新率也设成 120 后，`dumpsys display` 仍为 60 Hz，随后恢复原设置；本轮 **没有完成实际 120 Hz 验收**。
 
+2026-10-23 补充原因：这台 iQOO 关掉了 SurfaceFlinger 的触摸提速（`touchTimer=nullopt`），系统只在真实手指触摸时把刷新率提到 120 Hz。adb `input swipe` 注入的滑动不算，所以注入滑动下 Vesqen 和系统设置都停在 60 Hz（帧间隔 16.7 ms）。所有者用手指操作时，Vesqen、Vesqen Profile 和 Vesqen Test 都在 120 Hz。Vesqen 没有被单独限制在 60 Hz；在这台手机上，用 `input swipe` 的测量（包括 `tools/measure_library_scroll.py`）只代表 60 Hz 下的表现。
+
 修复后另一次“Profile + 播放” Perfetto 有 792 帧：582 None、208 仅 Buffer Stuffing、1 Prediction Error、**1 App Deadline Missed**。该慢帧呈现 23.53 ms、doFrame 20.43 ms、主线程 Running 3.01 ms，`postAndWait` 17.35 ms；对应渲染线程在该区间实际运行 18.37 ms。与 Debug 的长时间列表计算不同，这是主线程等待渲染工作的偶发慢帧。不要把非采集三轮的 0% 写成所有环境完全没有卡顿。该 trace 丢弃 2 条负时间戳事件，没有报告 buffer data loss。
 
 随后冷进程 Profile、索引开启、暂停场景的独立 Simpleperf 取得 4096 样本。`TrackRow` inclusive 3.83%、文字 measure 3.61%；图片解码在 DefaultDispatcher，纹理上传 `GrGLGpu::uploadTexData` 在 RenderThread（1.68%），`prepareToDraw` 同在渲染线程。纹理上传/渲染任务是下一步解释那一帧等待的候选，**不同采集轮的栈不能证明它就是那一帧的唯一原因**。保留 `fixed-profile-playing-timeline` 与 `fixed-profile-cold-cpu` 供继续对齐分析。
