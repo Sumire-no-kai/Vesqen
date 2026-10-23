@@ -89,6 +89,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -1788,6 +1789,7 @@ private fun ChainChartEvidenceSummary(
 @Composable
 private fun ChainUsbInventoryDetails(inventory: UsbInventoryReading) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val unnamedDevice = stringResource(R.string.chain_usb_unnamed_device)
     val unnamedEndpoint = stringResource(R.string.chain_usb_unnamed_endpoint)
     val permissionGranted = stringResource(R.string.chain_usb_permission_granted)
@@ -1887,7 +1889,7 @@ private fun ChainUsbInventoryDetails(inventory: UsbInventoryReading) {
                 val sampleRates = if (endpoint.arbitrarySampleRate) {
                     anyValue
                 } else {
-                    endpoint.sampleRatesHz.joinToString { context.getString(R.string.chain_unit_hz, it.toString()) }
+                    endpoint.sampleRatesHz.joinToString { resources.getString(R.string.chain_unit_hz, it.toString()) }
                         .ifBlank { unavailable }
                 }
                 val channelCounts = if (endpoint.arbitraryChannelCount) {
