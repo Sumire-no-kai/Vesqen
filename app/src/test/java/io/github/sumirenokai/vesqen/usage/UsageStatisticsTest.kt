@@ -70,6 +70,9 @@ class UsageStatisticsTest {
     @Test fun deviceStringsAreCleanedForTheServer() {
         assertEquals("PD2171_A_15.0.20.1", usageText("PD2171_A_15.0.20.1"))
         assertEquals("lineage_x-userdebug 14 AP2A eng.20240901", usageText("lineage_x-userdebug 14 AP2A eng.john.20240901"))
+        // A login can contain dots; everything up to the build date goes.
+        assertEquals("lineage_x-userdebug 14 AP2A eng.20240901.123456", usageText("lineage_x-userdebug 14 AP2A eng.john.smith.20240901.123456"))
+        assertEquals("aosp_x-userdebug 15 userdebug test-keys", usageText("aosp_x-userdebug 15 userdebug.jane.doe test-keys"))
         assertEquals("ROM_build_ 1", usageText("ROM/build# 1"))
         assertEquals(160, usageText("x".repeat(300)).length)
         assertEquals("unknown", usageText("  "))
