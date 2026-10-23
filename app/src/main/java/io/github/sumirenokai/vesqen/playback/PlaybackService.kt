@@ -76,6 +76,12 @@ class PlaybackService : MediaSessionService() {
         override fun onPlayerError(error: PlaybackException) {
             endMediaButtonStartWithoutPlayback()
         }
+
+        // A start that reaches the end without ever playing (nothing left to play) owes no
+        // foreground either; otherwise the restore's notification would stay until the next Play.
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_ENDED) endMediaButtonStartWithoutPlayback()
+        }
     }
 
     private val resumption = PlaybackResumption(

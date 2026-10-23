@@ -115,11 +115,25 @@ internal fun PersistedPlaybackState.restoreAgainst(tracks: List<AudioTrack>): Re
         it in queueTrackIds.indices && queueTrackIds[it] == currentTrackId
     } ?: queueTrackIds.indexOfFirst { it == currentTrackId }
     val currentEntryIndex = restoredEntries.indexOfFirst { it.first == savedIndex }
+    // A queue saved when its track had (almost) finished, typically the end of an album with repeat
+    // off, would restore at the end and play nothing. It continues with the next track instead, or
+    // from the start of the queue after the last one.
+    val finished = currentEntryIndex >= 0 &&
+        restoredEntries[currentEntryIndex].second.durationMs.let { it > 0 && positionMs >= it - FINISHED_TRACK_TOLERANCE_MS }
+    val (startIndex, startPositionMs) = when {
+        currentEntryIndex < 0 -> 0 to 0L
+        !finished -> currentEntryIndex to positionMs
+        currentEntryIndex < restoredEntries.lastIndex -> currentEntryIndex + 1 to 0L
+        else -> 0 to 0L
+    }
     return RestoredPlaybackQueue(
         tracks = restoredEntries.map { it.second },
-        startIndex = currentEntryIndex.coerceAtLeast(0),
-        positionMs = positionMs.takeIf { currentEntryIndex >= 0 } ?: 0,
+        startIndex = startIndex,
+        positionMs = startPositionMs,
         shuffleEnabled = shuffleEnabled,
         repeatMode = repeatMode,
     )
 }
+
+/** Within this of a track's end, a saved position counts as the track having finished. */
+private const val FINISHED_TRACK_TOLERANCE_MS = 1_000L
