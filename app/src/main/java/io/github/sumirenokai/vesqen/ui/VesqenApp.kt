@@ -360,7 +360,9 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
         premiumAccess = application.premiumAccess,
         activationCodes = application.activationCodes,
         openPremiumRequest = openPremiumRequest,
-        crashPrompt = application.crashPrompt,
+        // Neither question may be shown, and counted, in the frames before the statistics settings are
+        // read: the introduction can still take over the open then.
+        crashPrompt = application.crashPrompt.takeUnless { usageSnapshot.status == UsageSettingsStatus.LOADING },
         supportPrompt = application.supportPrompt.takeUnless {
             usageIntroductionShown || usageSnapshot.status == UsageSettingsStatus.LOADING
         },
