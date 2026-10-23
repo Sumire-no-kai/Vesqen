@@ -18,6 +18,9 @@ internal interface UpdatePreferencesStore {
 
 internal fun automaticCheckDue(now: Long, preferences: UpdatePreferences): Boolean =
     preferences.automatic && listOfNotNull(preferences.lastSuccess, preferences.lastAutomaticAttempt)
+        // A stamp more than a day ahead was written while the clock was wrong. Kept, it would stop
+        // automatic checks until real time caught up, and users without statistics have no other check.
+        .filter { it - now <= UPDATE_CHECK_INTERVAL_MS }
         .all { now > it && now - it > UPDATE_CHECK_INTERVAL_MS }
 
 internal fun isHttpsDownloadUrl(value: String): Boolean = try {

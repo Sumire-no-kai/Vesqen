@@ -85,7 +85,10 @@ class GitHubAppUpdaterTest {
         time += UPDATE_CHECK_INTERVAL_MS
         updater.onForeground(); assertEquals(2, transport.checks)
         time++; updater.onForeground(); assertEquals(3, transport.checks)
-        time = 0; updater.onForeground(); assertEquals(3, transport.checks)
+        // A clock set back by more than a day leaves the stamp in the future. One check runs, and the
+        // daily limit then counts from the corrected time instead of blocking checks until then.
+        time = 0; updater.onForeground(); assertEquals(4, transport.checks)
+        updater.onForeground(); assertEquals(4, transport.checks)
     }
 
     @Test fun offlineAttemptIsThrottledButDoesNotClaimSuccessfulCheck() {
@@ -338,5 +341,15 @@ class GitHubAppUpdaterTest {
         assertTrue(isAllowedUpdateNotesLink("https://github.com/Sumire-no-kai/Vesqen"))
         for (url in listOf("http://github.com/", "https://github.com.evil.test/", "https://user@github.com/", "javascript:alert(1)"))
             assertFalse(url, isAllowedUpdateNotesLink(url))
+    }
+
+    @Test fun `a stamp written while the clock ran ahead does not stop automatic checks`() {
+        val now = 10 * UPDATE_CHECK_INTERVAL_MS
+        val future = now + 30 * UPDATE_CHECK_INTERVAL_MS
+        assertTrue(automaticCheckDue(now, UpdatePreferences(automatic = true, lastAutomaticAttempt = future)))
+        assertTrue(automaticCheckDue(now, UpdatePreferences(automatic = true, lastSuccess = future)))
+        // Within a day ahead is ordinary skew and still waits; a recent real attempt still counts.
+        assertFalse(automaticCheckDue(now, UpdatePreferences(automatic = true, lastAutomaticAttempt = now + 60_000)))
+        assertFalse(automaticCheckDue(now, UpdatePreferences(automatic = true, lastAutomaticAttempt = now - 60_000)))
     }
 }
