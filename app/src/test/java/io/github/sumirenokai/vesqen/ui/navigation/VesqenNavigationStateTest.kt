@@ -239,4 +239,45 @@ class VesqenNavigationStateTest {
         assertEquals(VesqenDestination.SETTINGS, premium.back().destination)
         assertEquals(premium, premium.openPremium())
     }
+
+    @Test
+    fun `every sequence of up to five actions stays consistent`() {
+        // Architecture audit: the reducer simulates a stack in four saved slots, and each fix added a
+        // rule. This walks every action sequence up to five steps and checks the stack's promises.
+        val top = listOf(VesqenDestination.LIBRARY, VesqenDestination.NOW, VesqenDestination.SETTINGS, VesqenDestination.CHAIN)
+        val returnsToOpener: List<Pair<String, (VesqenNavigationState) -> VesqenNavigationState>> = listOf(
+            "about" to { it.openAbout() },
+            "privacy" to { it.openPrivacyPolicy() },
+            "licenses" to { it.openLicenses() },
+            "usage" to { it.openUsageStatistics() },
+            "chain" to { it.openChain() },
+        )
+        val actions: List<Pair<String, (VesqenNavigationState) -> VesqenNavigationState>> =
+            top.map { destination -> "tab $destination" to { state: VesqenNavigationState -> state.selectTopLevel(destination) } } +
+                returnsToOpener +
+                listOf("report" to { it.openDeviceReport() }, "premium" to { it.openPremium() }, "back" to { it.back() })
+        var visited = 0
+        fun walk(state: VesqenNavigationState, path: List<String>) {
+            visited++
+            // Details nest at most two levels deep.
+            if (state.destination.isSecondaryDetail && state.returnDestination.isSecondaryDetail) {
+                assertFalse("$path: $state", state.parentReturnDestination.isSecondaryDetail)
+            }
+            // Back always reaches Library.
+            var unwound = state
+            repeat(4) { unwound = unwound.back() }
+            assertEquals("$path: $state", VesqenDestination.LIBRARY, unwound.destination)
+            if (path.size == 5) return
+            actions.forEach { (name, action) ->
+                val next = action(state)
+                // A page opened from a screen returns to it.
+                if (returnsToOpener.any { it.first == name } && next.destination != state.destination) {
+                    assertEquals("${path + name}: $state -> $next", state.destination, next.back().destination)
+                }
+                walk(next, path + name)
+            }
+        }
+        walk(VesqenNavigationState(), emptyList())
+        assertTrue(visited > 100_000)
+    }
 }
