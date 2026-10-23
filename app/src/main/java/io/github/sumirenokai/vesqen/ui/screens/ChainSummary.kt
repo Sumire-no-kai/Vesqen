@@ -181,6 +181,25 @@ private val ProcessingFlags = listOf(
     AppSegmentCondition.APP_DSP to Metrics.PROCESSING_APP_DSP_ACTIVE,
 )
 
+/**
+ * The metrics the summary shows for [metrics], which its notice counts; the rest of
+ * [ChainSummaryMetricIds] feeds the verdict or appears only in the dashboard. The source card shows the
+ * bit rate only without a bit depth, the output card the anticipated route only without a selected
+ * type, and the Bluetooth facts appear only on a Bluetooth route.
+ */
+internal fun chainSummaryShownMetricIds(metrics: Map<TelemetryMetricId, TelemetryMetric>): Set<TelemetryMetricId> {
+    fun read(id: TelemetryMetricId) = metrics[id]?.evidence?.reading != null
+    return buildSet {
+        addAll(ChainStationFacts.values.flatten())
+        ProcessingFlags.mapTo(this) { it.second }
+        add(Metrics.ROUTE_SELECTED_SYSTEM_TYPE)
+        add(Metrics.PLAYBACK_UNDERRUN_COUNT)
+        if (!read(Metrics.SOURCE_BIT_DEPTH)) add(Metrics.SOURCE_AVERAGE_BITRATE)
+        if (!read(Metrics.ROUTE_SELECTED_SYSTEM_TYPE)) add(Metrics.ROUTE_ANTICIPATED_TYPE)
+        if (outputRoute(metrics)?.kind == OutputRouteKind.BLUETOOTH) addAll(BluetoothCodecMetricIds)
+    }
+}
+
 /** B · Paper & Sound Chain summary: claim, two-segment path with evidence, pinned metrics. */
 @Composable
 internal fun ChainSummaryScreen(
@@ -224,7 +243,7 @@ internal fun ChainSummaryScreen(
                     nowElapsedRealtimeMs = nowElapsedRealtimeMs,
                     refreshInterval = refreshInterval,
                     powerMode = powerMode,
-                    requestedMetricIds = ChainSummaryMetricIds,
+                    shownMetricIds = remember(metrics) { chainSummaryShownMetricIds(metrics) },
                     lastPlayback = lastPlayback,
                     onRetry = onRetry,
                     compact = true,

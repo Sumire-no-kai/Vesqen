@@ -147,6 +147,7 @@ import io.github.sumirenokai.vesqen.ui.chain.elapsedChartFraction
 import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
 import io.github.sumirenokai.vesqen.ui.chain.formatSeconds
 import io.github.sumirenokai.vesqen.ui.chain.isTelemetrySnapshotStale
+import io.github.sumirenokai.vesqen.ui.chain.missingMetricCount
 import io.github.sumirenokai.vesqen.ui.chain.telemetryAgeLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetryConfidenceLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetryEvidenceAge
@@ -558,7 +559,8 @@ internal fun ChainObservationNotice(
     nowElapsedRealtimeMs: Long,
     refreshInterval: TelemetryRefreshInterval,
     powerMode: TelemetryPowerMode,
-    requestedMetricIds: Set<TelemetryMetricId>,
+    /** The metrics the page shows; the partial notice counts only these. */
+    shownMetricIds: Set<TelemetryMetricId>,
     lastPlayback: Boolean,
     onRetry: () -> Unit,
     compact: Boolean = false,
@@ -567,14 +569,7 @@ internal fun ChainObservationNotice(
     val isStale = snapshot?.let {
         isTelemetrySnapshotStale(it, nowElapsedRealtimeMs, refreshInterval, powerMode)
     } == true
-    val unavailableCount = snapshot?.let { current ->
-        val metrics = current.metrics.associateBy(TelemetryMetric::id)
-        requestedMetricIds.count { id ->
-            metrics[id]?.evidence.let { evidence ->
-                evidence == null || evidence is TelemetryEvidence.Unavailable
-            }
-        }
-    } ?: 0
+    val unavailableCount = snapshot?.let { missingMetricCount(it, shownMetricIds) } ?: 0
     val content = when {
         state is ChainObservationState.Failed -> ChainNoticeContent(
             icon = Icons.Filled.ErrorOutline,
@@ -732,7 +727,7 @@ private fun ChainAdvancedLayout(
                             nowElapsedRealtimeMs = nowElapsedRealtimeMs,
                             refreshInterval = preferences.refreshInterval,
                             powerMode = preferences.powerMode,
-                            requestedMetricIds = preferences.observedMetricIds(),
+                            shownMetricIds = preferences.selectedMetricIds.toSet(),
                             lastPlayback = lastPlayback,
                             onRetry = onRetry,
                         )
@@ -847,7 +842,7 @@ private fun ChainMetricsGrid(
                     nowElapsedRealtimeMs = nowElapsedRealtimeMs,
                     refreshInterval = preferences.refreshInterval,
                     powerMode = preferences.powerMode,
-                    requestedMetricIds = preferences.observedMetricIds(),
+                    shownMetricIds = preferences.selectedMetricIds.toSet(),
                     lastPlayback = lastPlayback,
                     onRetry = onRetry,
                     compact = true,

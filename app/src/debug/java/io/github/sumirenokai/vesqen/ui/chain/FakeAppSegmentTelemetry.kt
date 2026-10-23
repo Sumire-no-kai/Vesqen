@@ -8,6 +8,7 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricId
 import io.github.sumirenokai.vesqen.telemetry.TelemetryReading
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceId
+import io.github.sumirenokai.vesqen.telemetry.TelemetryUnavailableReason
 import io.github.sumirenokai.vesqen.telemetry.TelemetryUnit
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog as Metrics
 
@@ -53,6 +54,35 @@ internal object FakeAppSegmentTelemetry {
             playbackSessionId = "debug-session",
             metrics = evidence.map { (id, value) -> TelemetryMetric(id, Metrics.descriptor(id).section, value) },
             recentEvents = recentEvents,
+        )
+    }
+
+    /**
+     * [snapshot] plus every other fact the Chain summary shows, and the reasons the producer gives
+     * on a speaker route for the facts that do not apply there.
+     */
+    fun speakerSession(overrides: Map<TelemetryMetricId, TelemetryEvidence> = emptyMap()): TelemetrySnapshot {
+        fun text(value: String) = measured(TelemetryReading.Text(value))
+        fun unavailable(reason: TelemetryUnavailableReason) = TelemetryEvidence.Unavailable(reason, CapturedAtMs)
+        val notApplicable = unavailable(TelemetryUnavailableReason.NOT_APPLICABLE)
+        return snapshot(
+            linkedMapOf(
+                Metrics.SOURCE_CODEC_LABEL to text("FLAC"),
+                Metrics.SOURCE_SAMPLE_RATE to measured(TelemetryReading.Integer(44_100, TelemetryUnit.HERTZ)),
+                Metrics.SOURCE_BIT_DEPTH to measured(TelemetryReading.Integer(16, TelemetryUnit.BITS)),
+                Metrics.SOURCE_AVERAGE_BITRATE to measured(TelemetryReading.Integer(900_000, TelemetryUnit.BITS_PER_SECOND)),
+                Metrics.DECODER_NAME to text("c2.android.flac.decoder"),
+                Metrics.DECODER_PATH to text("software"),
+                Metrics.ROUTE_SELECTED_SYSTEM_NAME to text("Phone"),
+                Metrics.ROUTE_ANTICIPATED_TYPE to text("built_in_speaker"),
+                Metrics.PLAYBACK_UNDERRUN_COUNT to measured(TelemetryReading.Integer(0, TelemetryUnit.COUNT)),
+                Metrics.ROUTE_BLUETOOTH_CODEC to notApplicable,
+                Metrics.ROUTE_BLUETOOTH_CONFIGURATION to notApplicable,
+                Metrics.ROUTE_BLUETOOTH_CONFIGURED_BITRATE to notApplicable,
+                Metrics.ROUTE_BLUETOOTH_TRANSPORT_BITRATE to notApplicable,
+                Metrics.ROUTE_EXTERNAL_VERIFICATION_RECORD to notApplicable,
+                Metrics.ROUTE_OBSERVED_OUTPUT_FORMAT to unavailable(TelemetryUnavailableReason.NOT_EXPOSED_BY_PLATFORM),
+            ) + overrides,
         )
     }
 }

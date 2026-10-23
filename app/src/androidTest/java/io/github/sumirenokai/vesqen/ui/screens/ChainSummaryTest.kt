@@ -84,6 +84,22 @@ class ChainSummaryTest {
     )
 
     @Test
+    fun a_complete_session_reads_as_live_until_a_shown_value_goes_missing() {
+        var snapshot by mutableStateOf(FakeAppSegmentTelemetry.speakerSession())
+        show(snapshotProvider = { snapshot })
+        // Facts that do not apply to the speaker, such as the Bluetooth codec, are not missing.
+        composeRule.onNodeWithTag("vesqen.chain.live").assertExists()
+
+        composeRule.runOnIdle {
+            snapshot = FakeAppSegmentTelemetry.speakerSession(
+                mapOf(Metrics.DECODER_NAME to unavailable(TelemetryUnavailableReason.TEMPORARILY_UNAVAILABLE)),
+            )
+        }
+        composeRule.onNodeWithTag("vesqen.chain.partial").assertExists()
+        composeRule.onAllNodesWithTag("vesqen.chain.live").assertCountEquals(0)
+    }
+
+    @Test
     fun an_untouched_lossless_stream_is_unchanged_in_vesqens_part_only() {
         show(FakeAppSegmentTelemetry.snapshot())
 

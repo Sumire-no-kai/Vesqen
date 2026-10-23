@@ -367,6 +367,29 @@ internal fun isTelemetrySnapshotStale(
     powerMode: TelemetryPowerMode,
 ): Boolean = nowElapsedRealtimeMs - snapshot.capturedAtElapsedRealtimeMs > telemetrySnapshotMaxAgeMs(refreshInterval, powerMode)
 
+/**
+ * Reasons that describe the route or the phone rather than a gap in this snapshot: a Bluetooth codec
+ * on the speaker, or a value Android never gives apps. Their cards still say so; the notice does not.
+ */
+private val ExpectedUnavailableReasons = setOf(
+    TelemetryUnavailableReason.NOT_APPLICABLE,
+    TelemetryUnavailableReason.NOT_EXPOSED_BY_PLATFORM,
+    TelemetryUnavailableReason.UNSUPPORTED_ANDROID_VERSION,
+    TelemetryUnavailableReason.UNSUPPORTED_DEVICE,
+)
+
+/** How many of the [shown] metrics the snapshot lacks or could not read this time, for the partial notice. */
+internal fun missingMetricCount(snapshot: TelemetrySnapshot, shown: Set<TelemetryMetricId>): Int {
+    val metrics = snapshot.metrics.associateBy(TelemetryMetric::id)
+    return shown.count { id ->
+        when (val evidence = metrics[id]?.evidence) {
+            null -> true
+            is TelemetryEvidence.Unavailable -> evidence.reason !in ExpectedUnavailableReasons
+            else -> false
+        }
+    }
+}
+
 private fun formatTelemetryNumber(
     context: Context,
     value: Double,
