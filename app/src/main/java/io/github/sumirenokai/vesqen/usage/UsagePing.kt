@@ -81,6 +81,12 @@ internal fun usagePing(facts: UsageFacts, now: Long, preferences: UsagePreferenc
 }
 
 internal fun interface UsageTransport {
-    /** Null is a successful response without update data. No retries or redirects. */
+    /**
+     * Null is a successful response without update data. No retries or redirects. Throws
+     * [UsageRequestRejected] when the server answered with an error status.
+     */
     suspend fun send(ping: UsagePing): String?
 }
+
+/** The server was reached and answered with an error status (rate limit, schema, server error). */
+internal class UsageRequestRejected(val status: Int) : java.io.IOException("Usage request rejected: $status")

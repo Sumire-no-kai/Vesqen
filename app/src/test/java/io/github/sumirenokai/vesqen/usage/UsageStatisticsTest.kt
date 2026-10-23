@@ -197,8 +197,12 @@ class UsageStatisticsTest {
             return standalone
         }
         assertEquals(1, run(UsageTransport { null }))
-        // A failed ping was the day's only request (#78): no extra update request follows it.
+        // A ping that never reached the server was the day's only request (#78): the update check
+        // would fail too, so none follows it.
         assertEquals(0, run(UsageTransport { throw IOException("offline") }))
+        // A server that answered with an error (a rate limit, a schema mismatch) hands the check back.
+        assertEquals(1, run(UsageTransport { throw UsageRequestRejected(429) }))
+        assertEquals(1, run(UsageTransport { throw UsageRequestRejected(400) }))
         // OEM firewalls raise SecurityException from DNS; it must not crash playback.
         assertEquals(0, run(UsageTransport { throw SecurityException("Permission denied") }))
     }
