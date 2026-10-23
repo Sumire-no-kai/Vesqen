@@ -95,6 +95,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -996,8 +997,10 @@ private fun NowLinerNotesBody(
     val outputEvidence = output?.evidence ?: routeEvidence
     val route = when {
         outputName == null -> row(listOf(TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_NAME))
-        underruns != null && underruns !is TelemetryEvidence.Unavailable -> stringResource(
-            R.string.now_notes_route_underruns,
+        underruns != null && underruns !is TelemetryEvidence.Unavailable -> pluralStringResource(
+            R.plurals.now_notes_route_underruns,
+            // The catalog makes the underrun count an integer reading.
+            (underruns.reading as TelemetryReading.Integer).value.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
             outputName,
             formatTelemetryReading(context, underruns.reading),
         ) to telemetryConfidenceLabel(context, listOfNotNull(outputEvidence, underruns).maxBy { it.confidence.ordinal }.confidence)

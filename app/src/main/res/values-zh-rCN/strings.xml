@@ -603,7 +603,7 @@
     <string name="chain_usb_no_audio_interfaces">未报告 USB 音频接口</string>
     <string name="chain_usb_audio_interface">接口 %1$d · 类 %2$s · 子类 %3$s · 协议 %4$s</string>
     <string name="chain_usb_endpoint_value">%1$s · %2$s</string>
-    <string name="chain_usb_endpoint_capabilities">采样率：%1$s Hz · 声道数：%2$s · 编码：%3$s</string>
+    <string name="chain_usb_endpoint_capabilities">采样率：%1$s · 声道数：%2$s · 编码：%3$s</string>
     <string name="chain_usb_any_value">任意已报告值</string>
     <string name="chain_section_source">音源</string>
     <string name="chain_section_decoder">解码器</string>
@@ -885,7 +885,9 @@
     <string name="collapse_player">收起播放页</string>
     <string name="now_notes_expanded">已展开</string>
     <string name="now_notes_collapsed">已收起</string>
-    <string name="now_notes_route_underruns">%1$s · 欠载 %2$s 次</string>
+    <plurals name="now_notes_route_underruns">
+        <item quantity="other">%1$s · 欠载 %2$s 次</item>
+    </plurals>
     <!-- #119：试用和高级功能。试用天数见 PremiumAccess.TrialDays。 -->
     <string name="settings_premium">高级功能</string>
     <string name="settings_premium_not_charging">2.0 前免费</string>

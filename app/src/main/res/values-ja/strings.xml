@@ -605,7 +605,7 @@
     <string name="chain_usb_no_audio_interfaces">USB オーディオインターフェースの報告なし</string>
     <string name="chain_usb_audio_interface">インターフェース %1$d · クラス %2$s · サブクラス %3$s · プロトコル %4$s</string>
     <string name="chain_usb_endpoint_value">%1$s · %2$s</string>
-    <string name="chain_usb_endpoint_capabilities">サンプルレート：%1$s Hz · チャンネル：%2$s · エンコード：%3$s</string>
+    <string name="chain_usb_endpoint_capabilities">サンプルレート：%1$s · チャンネル：%2$s · エンコード：%3$s</string>
     <string name="chain_usb_any_value">報告された任意の値</string>
     <string name="chain_section_source">ソース</string>
     <string name="chain_section_decoder">デコーダー</string>
@@ -887,7 +887,9 @@
     <string name="collapse_player">プレーヤーを折りたたむ</string>
     <string name="now_notes_expanded">展開</string>
     <string name="now_notes_collapsed">折りたたみ</string>
-    <string name="now_notes_route_underruns">%1$s · アンダーラン %2$s 回</string>
+    <plurals name="now_notes_route_underruns">
+        <item quantity="other">%1$s · アンダーラン %2$s 回</item>
+    </plurals>
     <!-- #119: trial and Pro features. The trial length is PremiumAccess.TrialDays. -->
     <string name="settings_premium">Pro 機能</string>
     <string name="settings_premium_not_charging">2.0 より前は無料</string>

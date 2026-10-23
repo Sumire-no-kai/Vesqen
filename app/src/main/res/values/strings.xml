@@ -628,7 +628,7 @@
     <string name="chain_usb_no_audio_interfaces">No USB audio interface reported</string>
     <string name="chain_usb_audio_interface">Interface %1$d · class %2$s · subclass %3$s · protocol %4$s</string>
     <string name="chain_usb_endpoint_value">%1$s · %2$s</string>
-    <string name="chain_usb_endpoint_capabilities">Sample rates: %1$s Hz · Channels: %2$s · Encodings: %3$s</string>
+    <string name="chain_usb_endpoint_capabilities">Sample rates: %1$s · Channels: %2$s · Encodings: %3$s</string>
     <string name="chain_usb_any_value">any reported value</string>
     <string name="chain_section_source">Source</string>
     <string name="chain_section_decoder">Decoder</string>
@@ -911,7 +911,10 @@
     <string name="collapse_player">Collapse player</string>
     <string name="now_notes_expanded">Expanded</string>
     <string name="now_notes_collapsed">Collapsed</string>
-    <string name="now_notes_route_underruns">%1$s · %2$s underruns</string>
+    <plurals name="now_notes_route_underruns">
+        <item quantity="one">%1$s · %2$s underrun</item>
+        <item quantity="other">%1$s · %2$s underruns</item>
+    </plurals>
     <!-- #119: trial and Pro features. The trial length is PremiumAccess.TrialDays. -->
     <string name="settings_premium">Pro features</string>
     <string name="settings_premium_not_charging">Free until 2.0</string>

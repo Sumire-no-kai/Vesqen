@@ -1883,10 +1883,12 @@ private fun ChainUsbInventoryDetails(inventory: UsbInventoryReading) {
                 val endpointName = endpoint.productName
                     ?.takeIf(String::isNotBlank)
                     ?: unnamedEndpoint
+                // The unit goes with each rate, never after "any reported value" or "Unavailable".
                 val sampleRates = if (endpoint.arbitrarySampleRate) {
                     anyValue
                 } else {
-                    endpoint.sampleRatesHz.joinToString().ifBlank { unavailable }
+                    endpoint.sampleRatesHz.joinToString { context.getString(R.string.chain_unit_hz, it.toString()) }
+                        .ifBlank { unavailable }
                 }
                 val channelCounts = if (endpoint.arbitraryChannelCount) {
                     anyValue
