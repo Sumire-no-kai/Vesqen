@@ -885,6 +885,7 @@
     <string name="chain_segment_bluetooth_nominally_lossless">Nominally lossless; it falls back to lossy on a weak signal, and Vesqen can’t tell which mode is in use.</string>
     <string name="chain_source_android_bluetooth_codec_report">Android Bluetooth codec report</string>
     <string name="chain_method_ldac_nominal_bitrate">Nominal ceiling of the LDAC quality Android reports</string>
+    <string name="chain_method_pcm_bypass">Media3 reports raw PCM input and no codec, so no decoder handles this file</string>
     <string name="chain_segment_list_separator">", "</string>
     <string name="chain_condition_speed">speed</string>
     <string name="chain_condition_pitch">pitch</string>

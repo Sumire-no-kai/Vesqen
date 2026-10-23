@@ -9,6 +9,7 @@ import io.github.sumirenokai.vesqen.playback.OutputDeclaration
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.telemetryLabel
 import io.github.sumirenokai.vesqen.telemetry.LDAC_NOMINAL_BITRATE_METHOD
+import io.github.sumirenokai.vesqen.telemetry.PCM_BYPASS_DECODER_PATH_METHOD
 import io.github.sumirenokai.vesqen.telemetry.TelemetryConfidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetric
@@ -705,6 +706,7 @@ private val ESTIMATED_METHOD_LABEL_RESOURCES = mapOf(
     "audio_track.request_format_pcm_data_rate" to R.string.chain_method_pcm_data_rate,
     "processing.compare_decoder_input_and_audio_track_rates" to R.string.chain_method_rate_conversion,
     LDAC_NOMINAL_BITRATE_METHOD to R.string.chain_method_ldac_nominal_bitrate,
+    PCM_BYPASS_DECODER_PATH_METHOD to R.string.chain_method_pcm_bypass,
 )
 
 private val SOURCE_LABEL_RESOURCES = mapOf(

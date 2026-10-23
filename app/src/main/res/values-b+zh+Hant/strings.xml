@@ -859,6 +859,7 @@
     <string name="chain_segment_bluetooth_nominally_lossless">標稱支援無損，訊號不好時會退回有損，Vesqen 無法確認目前處於哪種模式。</string>
     <string name="chain_source_android_bluetooth_codec_report">Android 藍牙編碼通知</string>
     <string name="chain_method_ldac_nominal_bitrate">系統回報的 LDAC 音質檔位的標稱上限</string>
+    <string name="chain_method_pcm_bypass">Media3 回報輸入是原始 PCM，沒有使用解碼器</string>
     <string name="chain_segment_list_separator">、</string>
     <string name="chain_condition_speed">播放速度</string>
     <string name="chain_condition_pitch">音調</string>

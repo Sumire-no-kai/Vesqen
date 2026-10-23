@@ -999,8 +999,8 @@ private fun NowLinerNotesBody(
         outputName == null -> row(listOf(TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_NAME))
         underruns != null && underruns !is TelemetryEvidence.Unavailable -> pluralStringResource(
             R.plurals.now_notes_route_underruns,
-            // The catalog makes the underrun count an integer reading.
-            (underruns.reading as TelemetryReading.Integer).value.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+            // The catalog makes the underrun count an integer reading; anything else takes the general form.
+            (underruns.reading as? TelemetryReading.Integer)?.value?.coerceIn(0L, Int.MAX_VALUE.toLong())?.toInt() ?: 0,
             outputName,
             formatTelemetryReading(context, underruns.reading),
         ) to telemetryConfidenceLabel(context, listOfNotNull(outputEvidence, underruns).maxBy { it.confidence.ordinal }.confidence)

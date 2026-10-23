@@ -861,6 +861,7 @@
     <string name="chain_segment_bluetooth_nominally_lossless">仕様上はロスレスに対応していますが、電波状況が悪い場合は非可逆圧縮に切り替わります。現在の動作モードは Vesqen では確認できません。</string>
     <string name="chain_source_android_bluetooth_codec_report">Android の Bluetooth コーデック情報</string>
     <string name="chain_method_ldac_nominal_bitrate">Android が報告した LDAC 音質設定に基づく公称ビットレートの上限</string>
+    <string name="chain_method_pcm_bypass">Media3 の報告では入力が生の PCM で、デコーダーは使われていません</string>
     <string name="chain_segment_list_separator">、</string>
     <string name="chain_condition_speed">速度</string>
     <string name="chain_condition_pitch">ピッチ</string>

@@ -51,6 +51,7 @@ class ChainMetricLabelsTest {
             "media3.position_from_last_event",
             "audio_track.request_format_pcm_data_rate",
             "processing.compare_decoder_input_and_audio_track_rates",
+            "decoder.path_from_raw_pcm_without_codec",
         )
 
         assertTrue(derivedMethods.all { telemetryDerivedMethodLabelResource(it) != null })
