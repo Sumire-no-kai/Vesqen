@@ -446,6 +446,7 @@ internal fun SettingsDetailHeader(title: String, backTag: String, onBack: () -> 
             text = title,
             style = MaterialTheme.typography.headlineSmall.pageTitle(),
             maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.semantics { heading() },
         )
     }

@@ -24,6 +24,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -301,8 +303,10 @@ private fun DetailLine(label: String, value: String) {
             text = label,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            // In sp, so the column grows with the text size: a fixed 84 dp broke "Duration" or
+            // "Channels" mid-word at large text.
             modifier = Modifier
-                .width(84.dp)
+                .width(with(LocalDensity.current) { 84.sp.toDp() })
                 .padding(top = 2.dp),
         )
         Spacer(Modifier.width(VesqenSpacing.xs))

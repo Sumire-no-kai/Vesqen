@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.ui.components.EqualButtons
 import io.github.sumirenokai.vesqen.ui.components.PaperDivider
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
@@ -127,10 +128,8 @@ private fun UpdateReleaseCard(state: UpdateState, release: UpdateRelease, appUpd
             when (state) {
                 is UpdateState.Available -> {
                     if (state.skipped) UpdateNote(stringResource(R.string.update_skipped))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(VesqenSpacing.xs),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                    // Side by side only when both labels fit whole; at large text they stack (#35).
+                    EqualButtons(Modifier.fillMaxWidth()) {
                         UpdateButton(R.string.update_download, "download", appUpdater::downloadUpdate)
                         if (!state.skipped) {
                             TextButton(
