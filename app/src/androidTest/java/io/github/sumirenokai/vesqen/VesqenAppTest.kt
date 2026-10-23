@@ -3841,6 +3841,30 @@ class VesqenAppTest {
     }
 
     @Test
+    fun queue_current_row_says_playing_while_playing() {
+        composeRule.setContent {
+            VesqenTheme {
+                QueueSheet(
+                    snapshot = PlaybackSnapshot(
+                        isControllerReady = true,
+                        isPlaying = true,
+                        queue = listOf(PlaybackQueueItem(1, "Dawn Signal", "Mori", true)),
+                    ),
+                    onDismiss = {},
+                    onPlayItem = {},
+                    onRemoveItem = {},
+                    onMoveItem = { _, _ -> },
+                    onClearQueue = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("vesqen.queue.item.0").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, context.getString(R.string.playing)),
+        )
+    }
+
+    @Test
     fun queue_rows_play_on_tap_mark_the_current_track_and_edit_in_place() {
         val played = mutableListOf<Int>()
         val moved = mutableListOf<Pair<Int, Int>>()
