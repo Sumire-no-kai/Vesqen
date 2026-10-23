@@ -55,6 +55,7 @@ Playback and your library never use the network, and your library, playlists and
 - Even on phones that do offer the bit-perfect path, strict USB output currently stops for most files: Vesqen hands Android floating-point audio, and USB DACs' bit-perfect formats are integer. This is being fixed together with Vesqen's own USB output, planned for 2.0.
 - In strict USB mode, there is a short gap between tracks, even on gapless albums.
 - With shuffle on, Play next and Add to queue put the song at a random point in the shuffled order. A fix is planned before 2.0.
+- In a folder added with Add music folder, renaming a song file or moving it to another folder inside it makes Vesqen treat it as a new song at the next scan, so its favorite, play count and playlist places are lost. A fix is planned before 2.0.
 - Bluetooth is never bit-perfect. The Chain page can say that Vesqen's part left the audio unchanged; the phone still re-encodes it for Bluetooth.
 - If Android stops Vesqen in the background, the queue comes back when you open the app again. Resuming straight from headphone buttons doesn't work on the phones we tested, which pass those buttons only to music apps on a list built into the system. On Android 13 and later, the Play button in the notification shade and on the lock screen can't restart it either.
 - On vivo phones, Vesqen's playback controls show on the lock screen only after you turn on Lock screen notifications for Vesqen in the phone's notification settings.
