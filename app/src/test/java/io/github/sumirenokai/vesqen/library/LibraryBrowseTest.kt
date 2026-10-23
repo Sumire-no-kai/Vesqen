@@ -29,6 +29,35 @@ class LibraryBrowseTest {
     }
 
     @Test
+    fun `names sort by reading order in any script, not by code point`() {
+        // By UTF-16 code point these were 周 王 陈, the reverse of pinyin; mixed case is one order too.
+        val artists = listOf("周", "王", "陈", "beta", "Alpha").mapIndexed { index, name ->
+            track(10L + index, "Song $index", name, "Album $index", trackNumber = 1, genre = "Pop", playCount = 0)
+        }
+        val names = buildLibraryCollections(LibraryBrowseMode.ARTISTS, artists, emptyList()).map(LibraryCollection::title)
+
+        assertEquals(listOf("Alpha", "beta", "陈", "王", "周"), names)
+    }
+
+    @Test
+    fun `artist sort orders artists by name, not by their album count`() {
+        val many = (1..10).map { album ->
+            track(100L + album, "Song $album", "Zed", "Album $album", trackNumber = 1, genre = "Pop", playCount = 0)
+        }
+        val few = listOf(
+            track(200, "One", "Amy", "First", trackNumber = 1, genre = "Pop", playCount = 0),
+            track(201, "Two", "Amy", "Second", trackNumber = 1, genre = "Pop", playCount = 0),
+        )
+        val artists = buildLibraryCollections(LibraryBrowseMode.ARTISTS, many + few, emptyList())
+
+        // Their subtitles are album counts, "10" and "2"; compared as text "10" came first.
+        assertEquals(listOf("Amy", "Zed"), sortLibraryCollections(artists, LibrarySortOrder.ARTIST).map(LibraryCollection::title))
+        // Albums still sort by their artist.
+        val albums = buildLibraryCollections(LibraryBrowseMode.ALBUMS, many + few, emptyList())
+        assertEquals("Amy", sortLibraryCollections(albums, LibrarySortOrder.ARTIST).first().subtitle)
+    }
+
+    @Test
     fun `most played sorting is deterministic`() {
         assertEquals(
             listOf(2L, 1L, 3L),
