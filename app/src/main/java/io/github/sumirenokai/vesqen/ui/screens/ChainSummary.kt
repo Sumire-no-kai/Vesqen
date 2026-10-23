@@ -321,7 +321,7 @@ internal fun ChainDeclarationCard(playback: PlaybackSnapshot, onUseSystemOutput:
                     onClick = onUseSystemOutput,
                     enabled = playback.canSetUsbOutputMode,
                     modifier = Modifier
-                        .heightIn(min = 44.dp)
+                        .heightIn(min = 48.dp)
                         .testTag("vesqen.chain.use-system"),
                 ) { Text(stringResource(R.string.player_use_system_output)) }
             }

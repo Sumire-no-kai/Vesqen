@@ -195,6 +195,8 @@ private fun QueueEditButton(icon: ImageVector, label: Int, enabled: Boolean, onC
     IconButton(
         onClick = onClick,
         enabled = enabled,
+        // Material's IconButton clicks at 40 dp; the size makes the clickable itself 48 dp (#143 Q20).
+        modifier = Modifier.size(48.dp),
         colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
     ) {
         Icon(icon, contentDescription = stringResource(label), modifier = Modifier.size(20.dp))
