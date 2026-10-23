@@ -111,6 +111,7 @@ fun QueueSheet(
                             item = item,
                             enabled = snapshot.isControllerReady,
                             isLast = index == snapshot.queue.lastIndex,
+                            isPlaying = snapshot.isPlaying,
                             onPlay = { onPlayItem(index) },
                             onMove = { to -> onMoveItem(index, to) },
                             onRemove = { onRemoveItem(index) },
@@ -128,11 +129,13 @@ private fun QueueRow(
     item: PlaybackQueueItem,
     enabled: Boolean,
     isLast: Boolean,
+    isPlaying: Boolean,
     onPlay: () -> Unit,
     onMove: (Int) -> Unit,
     onRemove: () -> Unit,
 ) {
-    val nowPlaying = stringResource(R.string.chain_current_playing)
+    // The current row says whether it plays or is paused, like the library's rows (#35).
+    val playbackState = stringResource(if (isPlaying) R.string.playing else R.string.paused)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -142,7 +145,7 @@ private fun QueueRow(
                 role = Role.Button,
                 onClick = onPlay,
             )
-            .then(if (item.isCurrent) Modifier.semantics { stateDescription = nowPlaying } else Modifier)
+            .then(if (item.isCurrent) Modifier.semantics { stateDescription = playbackState } else Modifier)
             .heightIn(min = 56.dp)
             .padding(start = VesqenSpacing.md, end = VesqenSpacing.xxs)
             .testTag("vesqen.queue.item.$index"),
