@@ -1082,6 +1082,34 @@ class VesqenAppTest {
     }
 
     @Test
+    fun back_during_an_upload_leaves_the_page_and_keeps_the_receipt() {
+        val reporter = FakeDeviceReporter()
+        render(grantedState(), deviceReporter = reporter, reportUploadAvailable = true)
+        openDeviceReport()
+        val artifact = DeviceReportArtifact("{\"schemaVersion\":1}\n".toByteArray(Charsets.UTF_8))
+        val sending = DeviceReportState.Sending(artifact, DeviceReportDelivery.UPLOAD)
+        composeRule.runOnIdle { reporter.emit(DeviceReportState.Preview(artifact)) }
+        composeRule.onNodeWithTag("vesqen.report.upload").performClick()
+
+        // The upload may still reach the server, so Back leaves without discarding it.
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onAllNodesWithTag("vesqen.report").assertCountEquals(0)
+        composeRule.runOnIdle { assertEquals(sending, reporter.snapshot.value.state) }
+        val receipt = "00000000-0000-4000-8000-000000000000"
+        composeRule.runOnIdle { reporter.emit(DeviceReportState.Sent(artifact, DeviceReportDelivery.UPLOAD, receipt)) }
+        composeRule.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.device-report"))
+        composeRule.onNodeWithTag("vesqen.settings.device-report").performClick()
+        composeRule.onNodeWithTag("vesqen.report.receipt").assertIsDisplayed()
+
+        // The header arrow keeps a send in flight too.
+        composeRule.runOnIdle { reporter.emit(sending) }
+        composeRule.onNodeWithTag("vesqen.report").performScrollToNode(hasTestTag("vesqen.report.back"))
+        composeRule.onNodeWithTag("vesqen.report.back").performClick()
+        composeRule.onAllNodesWithTag("vesqen.report").assertCountEquals(0)
+        composeRule.runOnIdle { assertEquals(sending, reporter.snapshot.value.state) }
+    }
+
+    @Test
     fun device_report_without_a_server_shares_or_emails_and_explains_failures() {
         val reporter = FakeDeviceReporter()
         render(grantedState(), deviceReporter = reporter, reportUploadAvailable = false)
