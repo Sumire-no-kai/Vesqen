@@ -1636,19 +1636,22 @@ private fun ChainMetricCard(
                     .testTag("vesqen.chain.metric-value.${metricId.value}"),
             )
             ChainConfidenceChip(evidence?.confidence, confidence)
-            if (viewMode != ChainMetricViewMode.COMPACT) {
+            // Compact cards keep the provenance until they are opened; other views always show it.
+            val showProvenance = viewMode != ChainMetricViewMode.COMPACT || evidenceExpanded
+            if (showProvenance) {
                 usbInventory?.let { ChainUsbInventoryDetails(it) }
                 if (source != null || window != null) Text(
                     listOfNotNull(source, window).joinToString(" · "), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (evidenceExpanded || evidence is TelemetryEvidence.Unavailable) {
-                    method?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                }
-                // #35: live values refresh every few seconds, so the observation time is a detail
-                // for the expanded card, not a label that sits on every card.
-                if (evidenceExpanded) updated?.let { ChainMetricMeta(stringResource(R.string.chain_metric_updated), it) }
             }
+            // An unavailable card always says why, in every view.
+            if (evidenceExpanded || evidence is TelemetryEvidence.Unavailable) {
+                method?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+            // #35: live values refresh every few seconds, so the observation time is a detail
+            // for the expanded card, not a label that sits on every card.
+            if (evidenceExpanded) updated?.let { ChainMetricMeta(stringResource(R.string.chain_metric_updated), it) }
             if (viewMode == ChainMetricViewMode.CHART && chartDescription != null) {
                 ChainMetricChart(
                     points = history,

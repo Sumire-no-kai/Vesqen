@@ -140,6 +140,7 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetryReading
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySection
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceId
+import io.github.sumirenokai.vesqen.telemetry.TelemetryUnavailableReason
 import io.github.sumirenokai.vesqen.telemetry.TelemetryUnit
 import io.github.sumirenokai.vesqen.telemetry.TelemetryWindow
 import io.github.sumirenokai.vesqen.telemetry.UsbAudioInterfaceReading
@@ -2215,6 +2216,50 @@ class VesqenAppTest {
         val card = composeRule.onNodeWithTag("vesqen.chain.metric.decoder.name").fetchSemanticsNode()
         assertTrue("Identifier must not occupy the narrow numeric column",
             value.fetchSemanticsNode().size.width > card.size.width * .8f)
+    }
+
+    @Test
+    fun a_compact_card_says_why_it_is_unavailable_and_opens_to_its_evidence() {
+        val metricId = TelemetryMetricCatalog.ROUTE_BLUETOOTH_TRANSPORT_BITRATE
+        val snapshot = chainTelemetrySnapshot().let { snapshot ->
+            snapshot.copy(metrics = snapshot.metrics + TelemetryMetric(
+                id = metricId,
+                section = TelemetrySection.ROUTE,
+                evidence = TelemetryEvidence.Unavailable(
+                    reason = TelemetryUnavailableReason.NOT_EXPOSED_BY_PLATFORM,
+                    observedAtEpochMs = snapshot.capturedAtEpochMs,
+                    source = TelemetryDataSource(TelemetrySourceId("android.audio_route")),
+                    observedAtElapsedRealtimeMs = snapshot.capturedAtElapsedRealtimeMs,
+                ),
+            ))
+        }
+        val preferences = InMemoryChainDashboardPreferencesRepository(
+            ChainDashboardPreferences(
+                selectedMetricIds = listOf(metricId),
+                metricOrder = listOf(metricId),
+                viewMode = ChainMetricViewMode.COMPACT,
+            ),
+        )
+        render(
+            state = activePlaybackState(),
+            playbackTelemetry = FakePlaybackTelemetry(snapshot),
+            chainPreferencesRepository = preferences,
+        )
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        openAdvancedChain()
+
+        val card = "vesqen.chain.metric.${metricId.value}"
+        val source = context.getString(R.string.chain_source_android_audio_route)
+        val updated = context.getString(R.string.chain_metric_updated)
+        chainNode(card).assertTextContains(context.getString(R.string.chain_unavailable_not_exposed), substring = true)
+            .assert(!hasText(source, substring = true))
+            .performClick()
+        composeRule.onNodeWithTag(card)
+            .assertTextContains(source, substring = true)
+            .assertTextContains(updated, substring = true)
     }
 
     @Test
