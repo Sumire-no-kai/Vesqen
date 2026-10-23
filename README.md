@@ -2,7 +2,7 @@
 
 [![Android CI](https://github.com/Sumire-no-kai/Vesqen/actions/workflows/android.yml/badge.svg?branch=master)](https://github.com/Sumire-no-kai/Vesqen/actions/workflows/android.yml)
 [![Release](https://img.shields.io/github/v/release/Sumire-no-kai/Vesqen?include_prereleases&color=7A4F00)](https://github.com/Sumire-no-kai/Vesqen/releases)
-[![Android](https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-3DDC84?logo=android&logoColor=white)](app/build.gradle.kts)
+[![Android](https://img.shields.io/badge/Android-9.0%2B%20(API%2028%2B)-3DDC84?logo=android&logoColor=white)](app/build.gradle.kts)
 [![License](https://img.shields.io/badge/license-Apache--2.0-536B1E)](LICENSE)
 
 **English** · [简体中文](README.zh-CN.md)
@@ -11,7 +11,7 @@ Vesqen is an offline music player for Android. It plays the music stored on your
 
 [Website](https://vesqen.sumirenokai.com) · [Privacy policy](https://vesqen.sumirenokai.com/privacy/) · [Support](https://vesqen.sumirenokai.com/support/)
 
-> **Status:** `1.0.0-beta.3`, the third public beta, is out on [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0-beta.3). The Google Play version is in a closed test and will be listed once Google approves it. Read the [known limitations](#known-limitations) before relying on strict USB output.
+> **Status:** `1.0.0`, the first stable version, is out on [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0). The Google Play version is in a closed test and will get the same version once Google approves it. Read the [known limitations](#known-limitations) before relying on strict USB output.
 
 ## What Vesqen does
 
@@ -52,8 +52,14 @@ Playback and your library never use the network, and your library, playlists and
 - No phone and DAC combination has been verified bit-perfect yet, so no `BIT-PERFECT VERIFIED` record exists.
 - Strict USB output hasn't been confirmed with a real DAC yet. Many phones don't offer Android's bit-perfect path, even on Android 14 and later; none of the Android 14+ phones tested so far (vivo and iQOO, on Android 15 and 16) do. On those phones strict mode stops and tells you why. Treat every combination as unverified.
 - Android 13 and earlier don't provide the official bit-perfect mixer API, so strict USB output isn't available there.
+- In strict USB mode, there is a short gap between tracks, even on gapless albums.
+- Bluetooth is never bit-perfect. The Chain page can say that Vesqen's part left the audio unchanged; the phone still re-encodes it for Bluetooth.
 - If Android stops Vesqen in the background, the queue comes back when you open the app again. Resuming straight from headphone buttons doesn't work on the phones we tested, which pass those buttons only to music apps on a list built into the system. On Android 13 and later, the Play button in the notification shade and on the lock screen can't restart it either.
-- Long listening sessions, foldables, high refresh rates and complete TalkBack coverage are still being tested.
+- On vivo phones, Vesqen's playback controls show on the lock screen only after you turn on Lock screen notifications for Vesqen in the phone's notification settings.
+- Some phone makers' systems pause music on their own. On our vivo test phone, the system paused Vesqen about three minutes after the media volume was turned all the way down with the volume keys.
+- Long listening and interruptions passed with wired headphones (8 hours on Android 9), with the screen off (4 hours on Android 15), for incoming calls (on an Android 16 emulator), for unplugging wired headphones and for disconnecting Bluetooth headphones (on Android 15).
+- Vesqen doesn't move its data to a new phone. Favorites, playlists and settings stay on the old phone.
+- Vesqen hasn't been tested on foldables, and its smoothness at high refresh rates hasn't been measured. TalkBack was checked on an Android 16 emulator, not yet on a phone.
 
 Each release lists its own limitations in the release notes. Known bugs and planned work are grouped by release in the [milestones](https://github.com/Sumire-no-kai/Vesqen/milestones).
 

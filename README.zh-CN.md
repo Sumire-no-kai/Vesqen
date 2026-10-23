@@ -2,7 +2,7 @@
 
 [![Android CI](https://github.com/Sumire-no-kai/Vesqen/actions/workflows/android.yml/badge.svg?branch=master)](https://github.com/Sumire-no-kai/Vesqen/actions/workflows/android.yml)
 [![Release](https://img.shields.io/github/v/release/Sumire-no-kai/Vesqen?include_prereleases&color=7A4F00)](https://github.com/Sumire-no-kai/Vesqen/releases)
-[![Android](https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-3DDC84?logo=android&logoColor=white)](app/build.gradle.kts)
+[![Android](https://img.shields.io/badge/Android-9.0%2B%20(API%2028%2B)-3DDC84?logo=android&logoColor=white)](app/build.gradle.kts)
 [![License](https://img.shields.io/badge/license-Apache--2.0-536B1E)](LICENSE)
 
 [English](README.md) · **简体中文**
@@ -11,7 +11,7 @@ Vesqen 是一款 Android 离线音乐播放器，播放你手机里的音乐，�
 
 [官网](https://vesqen.sumirenokai.com/zh/) · [隐私政策](https://vesqen.sumirenokai.com/zh/privacy/) · [支持](https://vesqen.sumirenokai.com/zh/support/)
 
-> **当前状态：** 第三个公开测试版 `1.0.0-beta.3` 已在 [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0-beta.3) 发布。Google Play 版正在封闭测试，Google 批准后会公开上架。依赖严格 USB 输出之前，请先看[已知限制](#已知限制)。
+> **当前状态：** 第一个正式版 `1.0.0` 已在 [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0) 发布。Google Play 版正在封闭测试，Google 批准后会上架同一个版本。依赖严格 USB 输出之前，请先看[已知限制](#已知限制)。
 
 ## 功能
 
@@ -52,8 +52,14 @@ Vesqen 是一款 Android 离线音乐播放器，播放你手机里的音乐，�
 - 目前还没有任何手机和 DAC 的组合通过 bit-perfect 验证，所以还没有 `BIT-PERFECT VERIFIED` 记录。
 - 严格 USB 输出还没有在真实的 DAC 上确认过。很多手机即使是 Android 14 及以上，也没有开放 Android 的 bit-perfect 通路，目前测过的 Android 14 及以上手机（vivo 和 iQOO，Android 15 和 16）都没有；在这些手机上，严格模式会停止播放并说明原因。所有组合都请当作未验证。
 - Android 13 及以下没有官方的 bit-perfect 混音接口，所以不能使用严格 USB 输出。
+- 严格 USB 模式下切歌时会有短暂的间隔，无缝专辑也一样。
+- 蓝牙不可能 bit-perfect。链路页可以说明 Vesqen 这一段没有改动音频，但手机仍会为蓝牙重新编码。
 - Vesqen 在后台被系统停止后，重新打开应用时会恢复播放队列。我们测过的手机只把耳机按键交给系统内置名单里的音乐应用，所以还不能直接用耳机按键恢复播放；在 Android 13 及以上，通知栏和锁屏上的播放按钮也不能让它恢复。
-- 长时间播放、折叠屏、高刷新率和完整的 TalkBack 读屏体验还在测试中。
+- vivo 手机上，要在系统的通知设置里为 Vesqen 打开"锁屏通知"，锁屏上才会显示 Vesqen 的播放控件。
+- 有些手机厂商的系统会自己暂停音乐。例如在我们的 vivo 测试机上，用音量键把媒体音量调到 0 约三分钟后，系统暂停了 Vesqen。
+- 长时间播放和中断：接有线耳机播放 8 小时（Android 9）、关屏播放 4 小时（Android 15）、来电（Android 16 模拟器）、拔掉有线耳机和断开蓝牙耳机（Android 15）都已通过。
+- Vesqen 不会把数据迁移到新手机，收藏、歌单和设置会留在原来的手机上。
+- 还没在折叠屏上测过，高刷新率下的流畅度也还没有测量。TalkBack 在 Android 16 模拟器上检查过，还没在真机上测。
 
 每个版本的发布说明都会列出当时的限制。已知问题和计划中的工作按版本分在各个[里程碑](https://github.com/Sumire-no-kai/Vesqen/milestones)里。
 
