@@ -73,6 +73,14 @@ class UsageStatisticsTest {
         // A login can contain dots; everything up to the build date goes.
         assertEquals("lineage_x-userdebug 14 AP2A eng.20240901.123456", usageText("lineage_x-userdebug 14 AP2A eng.john.smith.20240901.123456"))
         assertEquals("aosp_x-userdebug 15 userdebug test-keys", usageText("aosp_x-userdebug 15 userdebug.jane.doe test-keys"))
+        // Without a date the login ends at the next separator, and nothing of it survives.
+        assertEquals("eng(1)", withoutBuilderLogin("eng.john(1)"))
+        assertEquals("eng:userdebug/test-keys", withoutBuilderLogin("eng.john:userdebug/test-keys"))
+        assertEquals("eng.20240901", withoutBuilderLogin("eng.jürgen.20240901"))
+        assertEquals("eng_x", usageText("eng.john/x"))
+        // Vendor build names have no builder login and stay as they are.
+        assertEquals("STF-AL00 9.1.0.226(C00E220R1P2)", withoutBuilderLogin("STF-AL00 9.1.0.226(C00E220R1P2)"))
+        assertEquals("PD2171_A_15.1.10.5.W10", withoutBuilderLogin("PD2171_A_15.1.10.5.W10"))
         assertEquals("ROM_build_ 1", usageText("ROM/build# 1"))
         assertEquals(160, usageText("x".repeat(300)).length)
         assertEquals("unknown", usageText("  "))

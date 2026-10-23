@@ -61,12 +61,13 @@ internal fun usageText(raw: String): String = withoutBuilderLogin(raw)
 
 /**
  * Self-built ROMs put the builder's login after "eng." or "userdebug." in the build name, followed
- * by the build date ("eng.john.smith.20240901.123456"). Everything up to the date is dropped wherever
- * the build name leaves the device: usage pings and device reports. A login can contain dots.
+ * by the build date ("eng.john.smith.20240901.123456"). Everything up to the date, or up to the next
+ * separator when there is no date, is dropped wherever the build name leaves the device: usage pings
+ * and device reports. A login can contain dots and non-ASCII letters.
  */
 internal fun withoutBuilderLogin(raw: String): String = raw.replace(BUILDER_LOGIN, "$1")
 
-private val BUILDER_LOGIN = Regex("(?i)\\b(eng|userdebug)\\.[A-Za-z0-9._-]*?(?=\\.\\d{8}\\b|\\s|$)")
+private val BUILDER_LOGIN = Regex("(?i)\\b(eng|userdebug)\\.[^\\s()/:,+]*?(?=\\.\\d{8}(?!\\d)|[\\s()/:,+]|$)")
 
 /** UTC and ISO Monday weeks are shared with the server. Only booleans leave the device. */
 internal fun usagePing(facts: UsageFacts, now: Long, preferences: UsagePreferences): UsagePing {
