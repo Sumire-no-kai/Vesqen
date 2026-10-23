@@ -1577,7 +1577,7 @@ private fun ChainMetricCard(
     val evidenceAction = stringResource(R.string.chain_evidence_details)
     val evidence = metric?.evidence
     val value = rememberedTelemetryReading(evidence?.reading, unitDisplayMode)
-    val confidence = evidence?.let { telemetryConfidenceLabel(context, it.confidence) }
+    val confidence = evidence?.let { telemetryConfidenceLabel(context, it) }
         ?: stringResource(R.string.chain_sampling_starting_short)
     val source = evidence?.let { telemetryEvidenceSource(context, it) }
     val updated = evidence?.let { telemetryEvidenceAge(context, it, nowElapsedRealtimeMs) }

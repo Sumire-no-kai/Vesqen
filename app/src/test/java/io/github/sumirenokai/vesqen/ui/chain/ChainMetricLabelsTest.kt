@@ -1,7 +1,15 @@
 package io.github.sumirenokai.vesqen.ui.chain
 
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.playback.OutputDeclaration
+import io.github.sumirenokai.vesqen.playback.telemetryLabel
+import io.github.sumirenokai.vesqen.telemetry.TelemetryDataSource
+import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog
+import io.github.sumirenokai.vesqen.telemetry.TelemetryReading
+import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceId
+import io.github.sumirenokai.vesqen.telemetry.TelemetryUnavailableReason
+import io.github.sumirenokai.vesqen.ui.components.outputDeclarationLabelResource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -75,5 +83,38 @@ class ChainMetricLabelsTest {
         val missing = productionSourceIds.filter { telemetrySourceLabelResource(it) == null }
 
         assertTrue("Missing Chain source labels: $missing", missing.isEmpty())
+    }
+
+    @Test
+    fun `the output declaration card writes each declaration as its chip does`() {
+        OutputDeclaration.entries.forEach { declaration ->
+            assertEquals(outputDeclarationLabelResource(declaration), telemetryTextLabelResource(declaration.telemetryLabel))
+        }
+        assertEquals(R.string.bit_perfect_failed, telemetryTextLabelResource("BIT PERFECT FAILED"))
+    }
+
+    @Test
+    fun `only facts from a signed verification record drop the not verified suffix`() {
+        fun measured(sourceId: String) = TelemetryEvidence.Measured(
+            TelemetryReading.Text("BIT PERFECT VERIFIED"),
+            TelemetryDataSource(TelemetrySourceId(sourceId)),
+            observedAtEpochMs = 1,
+        )
+
+        assertEquals(
+            R.string.chain_confidence_signed_record,
+            telemetryConfidenceLabelResource(measured("vesqen.external_output_verification")),
+        )
+        assertEquals(R.string.chain_confidence_measured, telemetryConfidenceLabelResource(measured("vesqen.output_coordinator")))
+        assertEquals(
+            R.string.unavailable,
+            telemetryConfidenceLabelResource(
+                TelemetryEvidence.Unavailable(
+                    TelemetryUnavailableReason.NOT_APPLICABLE,
+                    observedAtEpochMs = 1,
+                    source = TelemetryDataSource(TelemetrySourceId("vesqen.external_output_verification")),
+                ),
+            ),
+        )
     }
 }

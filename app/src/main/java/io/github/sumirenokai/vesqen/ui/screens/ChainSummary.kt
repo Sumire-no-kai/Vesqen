@@ -548,7 +548,7 @@ private fun ChainFact(
             modifier = Modifier.fillMaxWidth().testTag("vesqen.chain.core-value.${id.value}"),
         )
         Text(
-            text = evidence?.let { telemetryConfidenceLabel(context, it.confidence) }
+            text = evidence?.let { telemetryConfidenceLabel(context, it) }
                 ?: stringResource(R.string.chain_sampling_starting_short),
             style = evidenceStyle(),
             color = MaterialTheme.colorScheme.onSurfaceVariant,

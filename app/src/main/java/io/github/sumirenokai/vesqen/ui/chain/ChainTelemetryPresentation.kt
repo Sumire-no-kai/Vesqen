@@ -5,7 +5,9 @@ import android.text.format.Formatter
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.playback.OutputDeclaration
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import io.github.sumirenokai.vesqen.playback.telemetryLabel
 import io.github.sumirenokai.vesqen.telemetry.LDAC_NOMINAL_BITRATE_METHOD
 import io.github.sumirenokai.vesqen.telemetry.TelemetryConfidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
@@ -19,6 +21,7 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetrySection
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot
 import io.github.sumirenokai.vesqen.telemetry.TelemetryUnavailableReason
 import io.github.sumirenokai.vesqen.telemetry.TelemetryUnit
+import io.github.sumirenokai.vesqen.ui.components.outputDeclarationLabelResource
 import java.text.NumberFormat
 import java.util.Locale
 import kotlin.math.abs
@@ -178,14 +181,35 @@ internal fun formatTelemetryReading(
     )
 }
 
-internal fun telemetryConfidenceLabel(context: Context, confidence: TelemetryConfidence): String = context.getString(
-    when (confidence) {
-        TelemetryConfidence.MEASURED -> R.string.chain_confidence_measured
-        TelemetryConfidence.DERIVED -> R.string.chain_confidence_derived
-        TelemetryConfidence.ESTIMATED -> R.string.chain_confidence_estimated
-        TelemetryConfidence.UNAVAILABLE -> R.string.unavailable
-    },
-)
+internal fun telemetryConfidenceLabel(context: Context, confidence: TelemetryConfidence): String =
+    context.getString(telemetryConfidenceLabelResource(confidence))
+
+/** The confidence of one fact; see [telemetryConfidenceLabelResource]. */
+internal fun telemetryConfidenceLabel(context: Context, evidence: TelemetryEvidence): String =
+    context.getString(telemetryConfidenceLabelResource(evidence))
+
+@StringRes
+private fun telemetryConfidenceLabelResource(confidence: TelemetryConfidence): Int = when (confidence) {
+    TelemetryConfidence.MEASURED -> R.string.chain_confidence_measured
+    TelemetryConfidence.DERIVED -> R.string.chain_confidence_derived
+    TelemetryConfidence.ESTIMATED -> R.string.chain_confidence_estimated
+    TelemetryConfidence.UNAVAILABLE -> R.string.unavailable
+}
+
+/**
+ * A fact taken from a signed output verification record names the record instead of "not verified",
+ * which would contradict the BIT-PERFECT VERIFIED it stands beside.
+ */
+@StringRes
+internal fun telemetryConfidenceLabelResource(evidence: TelemetryEvidence): Int =
+    if (evidence is TelemetryEvidence.Measured && evidence.source.id.value == EXTERNAL_VERIFICATION_SOURCE_ID) {
+        R.string.chain_confidence_signed_record
+    } else {
+        telemetryConfidenceLabelResource(evidence.confidence)
+    }
+
+/** The telemetry source of facts that come from an imported, signed output verification record. */
+private const val EXTERNAL_VERIFICATION_SOURCE_ID = "vesqen.external_output_verification"
 
 internal fun telemetryEvidenceSource(context: Context, evidence: TelemetryEvidence): String =
     evidence.source?.id?.value?.let { sourceId ->
@@ -573,7 +597,16 @@ private fun formatRawNumber(context: Context, value: Number): String = NumberFor
     format(value)
 }
 
-private fun localizedTelemetryText(context: Context, raw: String): String = when (raw.lowercase(Locale.ROOT)) {
+private fun localizedTelemetryText(context: Context, raw: String): String =
+    telemetryTextLabelResource(raw)?.let(context::getString) ?: localizedTelemetryToken(context, raw)
+
+/** The label of a text value a producer emits, or null when the text is shown as it is. */
+@StringRes
+internal fun telemetryTextLabelResource(raw: String): Int? =
+    // The declaration's telemetry text ("BIT PERFECT FAILED") is written as the chip writes it.
+    OutputDeclaration.entries.firstOrNull { it.telemetryLabel == raw }?.let(::outputDeclarationLabelResource)
+
+private fun localizedTelemetryToken(context: Context, raw: String): String = when (raw.lowercase(Locale.ROOT)) {
     "idle" -> context.getString(R.string.chain_text_idle)
     "buffering" -> context.getString(R.string.chain_text_buffering)
     "ready" -> context.getString(R.string.chain_text_ready)

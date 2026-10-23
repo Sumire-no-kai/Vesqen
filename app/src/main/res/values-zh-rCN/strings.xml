@@ -563,6 +563,7 @@
     <string name="chain_confidence_measured">实测 · 未验证</string>
     <string name="chain_confidence_derived">推导</string>
     <string name="chain_confidence_estimated">估算</string>
+    <string name="chain_confidence_signed_record">实测 · 签名记录</string>
     <string name="chain_value_yes">是</string>
     <string name="chain_value_no">否</string>
     <string name="chain_unit_symbol">%1$s %2$s</string>
