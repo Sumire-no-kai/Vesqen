@@ -8,6 +8,10 @@ package io.github.sumirenokai.vesqen.ui.navigation
  * it returns to that surface. About is a secondary detail that returns to whichever surface opened
  * it, and a detail opened from a detail (the privacy policy from About) keeps its parent's origin
  * so Back unwinds both levels.
+ *
+ * Requests from the UI that the current state cannot take are ignored rather than thrown: a page
+ * that is sliding away still takes taps for a moment, so a fast double tap can ask for About while
+ * About is already shown, or for a third level of details (#143 Q15).
  */
 data class VesqenNavigationState(
     val destination: VesqenDestination = VesqenDestination.LIBRARY,
@@ -36,10 +40,10 @@ data class VesqenNavigationState(
 
     fun openDetail(destination: VesqenDestination): VesqenNavigationState {
         require(destination.isSecondaryDetail) { "$destination is not a secondary detail" }
+        if (destination == this.destination) return this
         val nested = this.destination.isSecondaryDetail
-        require(!nested || !returnDestination.isSecondaryDetail) {
-            "Details nest at most two levels deep"
-        }
+        // Details nest at most two levels deep.
+        if (nested && returnDestination.isSecondaryDetail) return this
         return copy(
             destination = destination,
             returnDestination = this.destination,
@@ -48,8 +52,8 @@ data class VesqenNavigationState(
     }
 
     fun openChain(): VesqenNavigationState {
-        require(!destination.isSecondaryDetail) { "Chain opens in context only from a top-level surface" }
-        if (destination == VesqenDestination.CHAIN) return this
+        // Chain opens in context only from a top-level surface.
+        if (destination.isSecondaryDetail || destination == VesqenDestination.CHAIN) return this
         return copy(
             destination = VesqenDestination.CHAIN,
             returnDestination = destination,
