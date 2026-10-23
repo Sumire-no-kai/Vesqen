@@ -421,7 +421,12 @@ internal class OutputRouteChangeTracker<T> {
         return shouldSignal
     }
 
+    /**
+     * Also forgets the route. A route read while an earlier registration was live is not evidence
+     * now: if the next registration fails, captures must not keep reporting it as measured.
+     */
     fun resetLifecycle() {
+        current = null
         lifecycleInitialized = false
     }
 }
