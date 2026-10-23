@@ -32,12 +32,14 @@ class BluetoothCodecReportsTest {
     }
 
     @Test fun standardCodecNamesCoverTheAospTypes() {
-        assertEquals("SBC", BluetoothCodecFields.standardCodecName(0))
-        assertEquals("AAC", BluetoothCodecFields.standardCodecName(1))
-        assertEquals("LDAC", BluetoothCodecFields.standardCodecName(4))
-        assertEquals("Opus", BluetoothCodecFields.standardCodecName(6))
+        assertEquals("SBC", BluetoothCodecFields.standardCodecName(0, 33))
+        assertEquals("AAC", BluetoothCodecFields.standardCodecName(1, 33))
+        assertEquals("LDAC", BluetoothCodecFields.standardCodecName(4, 33))
+        assertEquals("Opus", BluetoothCodecFields.standardCodecName(6, 34))
+        // AOSP's Opus is type 6 only from API 34; before that the number may be a vendor codec.
+        assertNull(BluetoothCodecFields.standardCodecName(6, 33))
         // A vendor type has no name before API 35.
-        assertNull(BluetoothCodecFields.standardCodecName(1_000_000))
+        assertNull(BluetoothCodecFields.standardCodecName(1_000_000, 34))
     }
 
     @Test fun settingsTokenRoundTrips() {
