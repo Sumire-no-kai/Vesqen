@@ -345,13 +345,14 @@ private fun ChainPath(
     val ink = MaterialTheme.colorScheme.onSurface
     val reduceMotion = rememberVesqenMotionPolicy().reduceMotion
     // The flowing dot (B §5, §7) shows live observation; it stops when playback or sampling does.
-    val flow = if (live && !reduceMotion) {
+    // Its progress is read only while drawing, so each frame redraws the dot without recomposing the path.
+    val flowState = if (live && !reduceMotion) {
         rememberInfiniteTransition(label = "vesqen.chain.path-flow").animateFloat(
             initialValue = 0f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(tween(2_800, easing = LinearEasing), RepeatMode.Restart),
             label = "vesqen.chain.path-flow.progress",
-        ).value
+        )
     } else null
     var lastRowHeight by remember { mutableIntStateOf(0) }
     Column(Modifier.fillMaxWidth().testTag("vesqen.chain.path")) {
@@ -365,6 +366,7 @@ private fun ChainPath(
         Column(
             Modifier.drawWithContent {
                 drawContent()
+                val flow = flowState?.value
                 if (flow != null) {
                     val top = NodeCenter.toPx()
                     val bottom = (size.height - lastRowHeight + NodeCenter.toPx()).coerceAtLeast(top)
