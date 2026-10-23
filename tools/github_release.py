@@ -35,10 +35,18 @@ VERSION = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Z
 
 
 # Placeholders the release-note templates leave for the maintainer, such as "(发布时填写)" or
-# "(发布时按 #51 …补上)", in ASCII or full-width brackets. Any of them left in a draft blocks publication.
+# "(发布时按 #51 …补上)", in ASCII, full-width or lenticular brackets, with or without the space
+# before an issue number. Any of them left in a draft blocks publication. "(发布时填写)" is the APK
+# digest, filled in at signing, so prepare() checks the notes without it.
 UNFINISHED_NOTES = re.compile(
-    r"[(（](?:发布时|按 #\d+)[^)）\n]*[)）]"
+    r"[(（【]\s*(?:发布[时前后]|按\s*[#＃]\s*\d+|TBD|TODO)[^)）】\n]*[)）】]"
     r"|Device QA and upgrade acceptance must be recorded before publishing\.")
+DIGEST_PLACEHOLDER = "(发布时填写)"
+
+
+def unfinished_notes(body, *, digest_pending=False):
+    """Placeholders still open in a public release body; before signing the digest may still be open."""
+    return UNFINISHED_NOTES.findall(body.replace(DIGEST_PLACEHOLDER, "") if digest_pending else body)
 
 
 class ReleaseError(ValueError):
@@ -123,6 +131,9 @@ def prepare(source, output, commit, branch, tools):
     _, separator, body = notes.partition("\n---\n")
     if not separator:
         raise ReleaseError("Release notes need a separator before the public body")
+    # Stop before signing: only the APK digest may still be open in the public body.
+    if unfinished_notes(body, digest_pending=True):
+        raise ReleaseError("Release notes still hold a placeholder to finish")
     output.mkdir(parents=True, exist_ok=False)
     shutil.copyfile(apk, output / "candidate.apk")
     (output / "candidate.json").write_text(json.dumps(metadata, indent=2) + "\n")
@@ -180,7 +191,7 @@ def sign(candidate, output, commit, tools, *, expected_certificate=CERT_SHA256):
         shutil.copyfile(signed, output / filename)
         (output / "SHA256SUMS").write_text(f"{digest}  {filename}\n")
         (output / "release-manifest.json").write_text(json.dumps(metadata, indent=2) + "\n")
-        notes = (candidate / "release-notes.md").read_text(encoding="utf-8").replace("(发布时填写)", digest)
+        notes = (candidate / "release-notes.md").read_text(encoding="utf-8").replace(DIGEST_PLACEHOLDER, digest)
         provenance = (f"\n\n## Build record\n\nSource commit: `{commit}`\n\n"
                       f"versionCode: `{metadata['versionCode']}`\n\n"
                       f"Signing certificate SHA-256: `{expected_certificate}`\n")
@@ -285,7 +296,7 @@ def publish_release(candidate, repository, commit, acceptance, tools):
                            "--json", "isDraft,targetCommitish,body"]))
     if not info["isDraft"] or info["targetCommitish"] != commit:
         raise ReleaseError("Only the matching draft can be published")
-    if not info["body"].strip() or UNFINISHED_NOTES.search(info["body"]):
+    if not info["body"].strip() or unfinished_notes(info["body"]):
         raise ReleaseError("Finalize draft release notes before publication")
     # Other drafts may have been published since this candidate was created.
     releases = json.loads(run(["gh", "api", "--paginate", "--slurp", f"repos/{repository}/releases?per_page=100"]))

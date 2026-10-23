@@ -267,6 +267,7 @@ class GithubReleaseTest(unittest.TestCase):
     def test_unfinished_note_placeholders_block_publication(self):
         for placeholder in ("SHA-256: `(发布时填写)`", "已通过。（发布时按 #51 蓝牙断连的结果补上）",
                             "all passed. (发布时按 #51 蓝牙断连的结果补上)", "(按 #42 的结果更新)",
+                            "（按#51 的结果）", "（按 ＃51 的结果）", "（发布前填写）", "【发布时填写】", "(TBD)",
                             "Device QA and upgrade acceptance must be recorded before publishing."):
             with self.subTest(placeholder=placeholder):
                 self.assertIsNotNone(release.UNFINISHED_NOTES.search(placeholder))
@@ -274,6 +275,11 @@ class GithubReleaseTest(unittest.TestCase):
                          "Bluetooth disconnects passed (#51).", "设置里的“检查更新”（按钮）"):
             with self.subTest(finished=finished):
                 self.assertIsNone(release.UNFINISHED_NOTES.search(finished))
+
+    def test_prepare_stops_on_any_placeholder_but_the_digest(self):
+        self.assertEqual([], release.unfinished_notes("SHA-256: `(发布时填写)`", digest_pending=True))
+        self.assertNotEqual([], release.unfinished_notes("SHA-256: `(发布时填写)`"))
+        self.assertNotEqual([], release.unfinished_notes("passed. (发布时按 #51 的结果补上)", digest_pending=True))
 
     def test_local_signing_exports_ledger_and_public_notes_without_ci_environment(self):
         with tempfile.TemporaryDirectory() as directory:
