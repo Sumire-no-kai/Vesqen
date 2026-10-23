@@ -86,17 +86,33 @@ internal class AndroidLibraryCatalog(
         snapshotInternal(includeDeviceLibrary).tracks
     }
 
-    override suspend fun addFolder(treeUri: Uri): Unit = serialized {
+    override suspend fun addFolder(treeUri: Uri) {
+        // The picker's grant lasts only as long as the screen that asked for it, and a scan can hold
+        // the catalog for minutes, so the grant is made persistent before waiting for the catalog.
         val persistedPermission = contentResolver.persistedUriPermissions.any {
             it.uri == treeUri && it.isReadPermission
         }
         if (!persistedPermission) {
             contentResolver.takePersistableUriPermission(treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        store.upsertFolderSource(
-            treeUri = treeUri.toString(),
-            displayName = treeScanner.displayName(treeUri),
-        )
+        try {
+            serialized {
+                store.upsertFolderSource(
+                    treeUri = treeUri.toString(),
+                    displayName = treeScanner.displayName(treeUri),
+                )
+            }
+        } catch (failure: Throwable) {
+            // A folder that was never added must not keep a grant (cancellation included).
+            if (!persistedPermission) {
+                try {
+                    contentResolver.releasePersistableUriPermission(treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (releaseFailure: RuntimeException) {
+                    failure.addSuppressed(releaseFailure)
+                }
+            }
+            throw failure
+        }
     }
 
     override suspend fun removeFolder(sourceId: String): Unit = serialized {
