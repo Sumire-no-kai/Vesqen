@@ -33,7 +33,10 @@ class GitHubUpdateRuntime(application: Application, scope: CoroutineScope) : Upd
         channel = defaultUpdateChannel(BuildConfig.VERSION_NAME), source = source.first, installerPackage = source.second)
     override val updater: AppUpdater get() = engine
 
-    override fun onForeground(usageRequestExpected: Boolean) = engine.onForeground(usageRequestExpected)
+    override fun onForeground(usageRequestExpected: Boolean) {
+        endStaleInstallation()
+        engine.onForeground(usageRequestExpected)
+    }
     override fun acceptUsageResponse(manifest: String) = engine.acceptUsageResponse(manifest)
     override fun checkWithoutUsageResponse() = engine.onForeground(usageRequestExpected = false)
     /** The system install result arrived but could not be recorded (storage or a damaged record). */
@@ -43,10 +46,20 @@ class GitHubUpdateRuntime(application: Application, scope: CoroutineScope) : Upd
         installer.onResult = engine::installationResult
         try {
             installer.savedRelease()?.let { release ->
-                if (installer.activeSession()) engine.restoreInstallation(release)
-                else installer.finish(if (installer.installedIdentity().versionCode >= release.versionCode) null
-                    else UpdateFailure.INSTALL_FAILED)
+                when {
+                    installer.staleSession() -> installer.finish(UpdateFailure.INSTALL_CANCELLED)
+                    installer.activeSession() -> engine.restoreInstallation(release)
+                    else -> installer.finish(if (installer.installedIdentity().versionCode >= release.versionCode) null
+                        else UpdateFailure.INSTALL_FAILED)
+                }
             }
+        } catch (failure: UpdateOperationException) { engine.initializationFailure(failure.reason) }
+    }
+
+    /** A confirmation closed without a decision leaves "Installing" with nothing to press; end it so Retry works. */
+    private fun endStaleInstallation() {
+        try {
+            if (installer.savedRelease() != null && installer.staleSession()) installer.finish(UpdateFailure.INSTALL_CANCELLED)
         } catch (failure: UpdateOperationException) { engine.initializationFailure(failure.reason) }
     }
 }

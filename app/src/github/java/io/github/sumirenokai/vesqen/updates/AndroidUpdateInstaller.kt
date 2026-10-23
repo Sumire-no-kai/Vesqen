@@ -19,6 +19,9 @@ import java.util.UUID
 import org.json.JSONException
 import org.json.JSONObject
 
+/** How long a confirmation may stay open before its session counts as abandoned. */
+private const val STALE_CONFIRMATION_MS = 10 * 60_000L
+
 internal class AndroidUpdateInstaller(private val context: Context) : UpdateInstaller {
     private val manager = context.packageManager
     private val sessions = manager.packageInstaller
@@ -53,7 +56,8 @@ internal class AndroidUpdateInstaller(private val context: Context) : UpdateInst
             val token = UUID.randomUUID().toString()
             // Record ownership before copying bytes, so process death leaves a reclaimable session.
             if (!pending.edit().putInt("session", sessionId).putString("token", token)
-                    .putString("release", UpdateManifest.encodeRelease(release)).commit())
+                    .putString("release", UpdateManifest.encodeRelease(release))
+                    .putLong("asked_at", System.currentTimeMillis()).commit())
                 throw UpdateOperationException(UpdateFailure.STORAGE_UNAVAILABLE)
             sessions.openSession(sessionId).use { session ->
                 session.openWrite("base.apk", 0, apk.length()).use { output ->
@@ -100,6 +104,17 @@ internal class AndroidUpdateInstaller(private val context: Context) : UpdateInst
     }
 
     fun activeSession(): Boolean = sessions.getSessionInfo(pending.getInt("session", -1))?.isSealed == true
+
+    /**
+     * A sealed session still waiting long after the system was asked to confirm it: the confirmation
+     * was closed without a decision (for example swiped away), and nothing else will end it. A clock
+     * moved back by more than a day counts as stale too. Records from before this check have no time.
+     */
+    fun staleSession(now: Long = System.currentTimeMillis()): Boolean {
+        if (!activeSession()) return false
+        val askedAt = pending.getLong("asked_at", 0)
+        return now - askedAt > STALE_CONFIRMATION_MS || askedAt - now > 24 * 60 * 60_000L
+    }
     fun accepts(intent: Intent): Boolean = pending.contains("token") &&
         intent.data?.toString() == "vesqen-update://install/${pending.getString("token", null)}" &&
         intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1) == pending.getInt("session", -2)
@@ -158,11 +173,15 @@ class UpdateInstallActivity : Activity() {
         }
     }
 
+    /**
+     * The confirmation's own result is not the outcome. AOSP's installer finishes without a result
+     * after the user approves, which reads as RESULT_CANCELED, so treating it as a cancellation
+     * abandoned the approved session. The session reports the outcome to this activity instead:
+     * STATUS_FAILURE_ABORTED when the user cancels, success or failure after approval.
+     */
     @Deprecated("System installer result bridge")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == 1 && resultCode == RESULT_CANCELED && installer.accepts(intent))
-            complete(UpdateFailure.INSTALL_CANCELLED)
         finish()
     }
 }
