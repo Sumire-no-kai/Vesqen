@@ -110,11 +110,12 @@ class AppSegmentAssessmentTest {
 
     @Test
     fun `precision follows the measured input width into the AudioTrack`() {
-        fun precision(input: TelemetryEvidence, output: String) = assess(snapshot(mapOf(
+        fun text(value: String) = measured(TelemetryReading.Text(value))
+        fun precision(input: TelemetryEvidence, output: String, mime: String = "audio/flac") = assess(snapshot(mapOf(
+            Metrics.DECODER_INPUT_MIME to text(mime),
             Metrics.DECODER_INPUT_PCM_ENCODING to input,
             Metrics.PLAYBACK_AUDIO_TRACK_ENCODING to measured(TelemetryReading.Text(output)),
         ))).checks.single { it.condition == AppSegmentCondition.PCM_PRECISION }
-        fun text(value: String) = measured(TelemetryReading.Text(value))
 
         assertEquals(AppSegmentStatus.UNCHANGED, precision(text("pcm-24"), "pcm-float").status)
         assertEquals(AppSegmentStatus.UNCHANGED, precision(text("pcm-16"), "pcm-16").status)
@@ -123,8 +124,8 @@ class AppSegmentAssessmentTest {
 
         // Compressed input has no PCM width: only a float AudioTrack is sure to hold the codec output.
         val compressed = TelemetryEvidence.Unavailable(TelemetryUnavailableReason.NOT_APPLICABLE, CapturedAtMs)
-        assertEquals(AppSegmentStatus.UNCHANGED, precision(compressed, "pcm-float").status)
-        assertEquals(AppSegmentStatus.UNKNOWN, precision(compressed, "pcm-16").status)
+        assertEquals(AppSegmentStatus.UNCHANGED, precision(compressed, "pcm-float", mime = "audio/mpeg").status)
+        assertEquals(AppSegmentStatus.UNKNOWN, precision(compressed, "pcm-16", mime = "audio/mpeg").status)
         // Any other unavailability is missing evidence, not compressed input.
         val unreported = TelemetryEvidence.Unavailable(TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT, CapturedAtMs)
         assertEquals(AppSegmentStatus.UNKNOWN, precision(unreported, "pcm-float").status)
@@ -154,6 +155,27 @@ class AppSegmentAssessmentTest {
     }
 
     @Test
+    fun `a lossless stream without a stated width is unchanged only when float throughout`() {
+        // Media3 states no PCM width for 20-bit FLAC or FLAC in MP4. On Android 9 the OMX decoder is
+        // kept on 16-bit output, which cuts 20 bits to 16 even though the decoder and AudioTrack agree.
+        val unstated = TelemetryEvidence.Unavailable(TelemetryUnavailableReason.NOT_APPLICABLE, CapturedAtMs)
+        fun text(value: String) = measured(TelemetryReading.Text(value))
+        fun precision(decoded: String?, output: String) = assess(snapshot(buildMap {
+            put(Metrics.DECODER_INPUT_MIME, text("audio/flac"))
+            put(Metrics.DECODER_INPUT_PCM_ENCODING, unstated)
+            put(Metrics.PLAYBACK_AUDIO_TRACK_ENCODING, text(output))
+            decoded?.let { put(Metrics.DECODER_OUTPUT_ENCODING, text(it)) }
+        })).checks.single { it.condition == AppSegmentCondition.PCM_PRECISION }
+
+        assertEquals(AppSegmentStatus.UNCHANGED, precision("pcm-float", "pcm-float").status)
+        val truncatedMaybe = precision("pcm-16", "pcm-16")
+        assertEquals(AppSegmentStatus.UNKNOWN, truncatedMaybe.status)
+        assertTrue(truncatedMaybe.issues.any { it.metricId == Metrics.DECODER_INPUT_PCM_ENCODING })
+        assertEquals(AppSegmentStatus.UNKNOWN, precision("pcm-16", "pcm-float").status)
+        assertEquals(AppSegmentStatus.UNKNOWN, precision(null, "pcm-float").status)
+    }
+
+    @Test
     fun `a measured decoder output rate tells AAC's SBR from resampling`() {
         fun hertz(value: Long) = measured(TelemetryReading.Integer(value, TelemetryUnit.HERTZ))
         fun sampleRate(decoded: Long?, output: Long) = assess(snapshot(buildMap {
@@ -166,6 +188,15 @@ class AppSegmentAssessmentTest {
         assertEquals(AppSegmentStatus.UNCHANGED, sampleRate(48_000, 48_000).status)
         assertEquals(AppSegmentStatus.MODIFIED, sampleRate(48_000, 44_100).status)
         assertEquals(SegmentReason.DECODER_MAY_CHANGE_FORMAT, sampleRate(null, 48_000).reason)
+
+        // A lossless decoder must keep the file's rate, so its output rate never explains a change.
+        val flac = assess(snapshot(mapOf(
+            Metrics.DECODER_INPUT_MIME to measured(TelemetryReading.Text("audio/flac")),
+            Metrics.DECODER_INPUT_SAMPLE_RATE to hertz(96_000),
+            Metrics.DECODER_OUTPUT_SAMPLE_RATE to hertz(48_000),
+            Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE to hertz(48_000),
+        ))).checks.single { it.condition == AppSegmentCondition.SAMPLE_RATE }
+        assertEquals(AppSegmentStatus.MODIFIED, flac.status)
     }
 
     @Test
