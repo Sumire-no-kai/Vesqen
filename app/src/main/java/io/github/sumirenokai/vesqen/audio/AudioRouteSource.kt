@@ -50,11 +50,14 @@ class AudioRouteSource(context: Context) {
     private var legacyRouter: MediaRouter? = null
     private var legacyRouterCallback: MediaRouter.Callback? = null
 
-    fun readState(): AudioRouteState = AudioRouteState(
-        connectedOutputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-            .mapTo(linkedSetOf()) { device -> device.type.toOutputType() },
-        activeRoute = readActiveRoute(),
-    )
+    fun readState(): AudioRouteState {
+        val connectedOutputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            .mapTo(linkedSetOf()) { device -> device.type.toOutputType() }
+        return AudioRouteState(
+            connectedOutputs = connectedOutputs,
+            activeRoute = readActiveRoute()?.takeIf { it.couldBeSelectedWith(connectedOutputs) },
+        )
+    }
 
     fun addListener(listener: (AudioRouteState) -> Unit) {
         val initialState = synchronized(lock) {
@@ -194,23 +197,27 @@ class AudioRouteSource(context: Context) {
         val activeRouter = MediaRouter2.getInstance(appContext)
         val executor = ContextCompat.getMainExecutor(appContext)
         router2 = activeRouter
-        router2Callback = object : MediaRouter2.ControllerCallback() {
+        // Each callback is kept before it is registered, so stopRouter2 can remove it even when
+        // registering throws halfway (MediaRouter2 adds its record before calling the service).
+        val controllerCallback = object : MediaRouter2.ControllerCallback() {
             override fun onControllerUpdated(controller: MediaRouter2.RoutingController) {
                 if (controller.id == activeRouter.systemController.id) publish()
             }
-        }.also { callback -> activeRouter.registerControllerCallback(executor, callback) }
+        }
+        router2Callback = controllerCallback
+        activeRouter.registerControllerCallback(executor, controllerCallback)
         // MediaRouter2 reads the system session once, when the process first creates it, and hears
         // about later route changes only while a route callback is registered; a controller
         // callback alone left the selected route frozen (#155). Registering resyncs the session and
         // routes, which reaches the controller callback above. No preferred features and no active
         // scan: this asks only for the system's own updates and wakes no route provider.
-        router2RouteCallback = object : MediaRouter2.RouteCallback() {}.also { callback ->
-            activeRouter.registerRouteCallback(
-                executor,
-                callback,
-                RouteDiscoveryPreference.Builder(emptyList(), false).build(),
-            )
-        }
+        val routeCallback = object : MediaRouter2.RouteCallback() {}
+        router2RouteCallback = routeCallback
+        activeRouter.registerRouteCallback(
+            executor,
+            routeCallback,
+            RouteDiscoveryPreference.Builder(emptyList(), false).build(),
+        )
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
@@ -240,6 +247,18 @@ class AudioRouteSource(context: Context) {
         legacyRouter = null
     }
 }
+
+/**
+ * MediaRouter2 resyncs its cached session only after it registers with the system (#155), so the
+ * first read after Chain opens can still name a route from before the last change. A Bluetooth or
+ * wired route while no such output is connected is such a leftover and is not reported. The
+ * speaker is always connected, so a route of unknown kind or the speaker cannot be checked this way.
+ */
+internal fun ActiveAudioRoute.couldBeSelectedWith(connectedOutputs: Set<AudioOutputType>): Boolean =
+    when (outputType) {
+        AudioOutputType.BLUETOOTH, AudioOutputType.WIRED_OR_USB -> outputType in connectedOutputs
+        else -> true
+    }
 
 fun Int.toOutputType(): AudioOutputType = when (this) {
     AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,

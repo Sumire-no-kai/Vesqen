@@ -46,6 +46,8 @@ class AudioRouteSourceDeviceTest {
         val dump = ParcelFileDescriptor.AutoCloseInputStream(
             instrumentation.uiAutomation.executeShellCommand("dumpsys media_router"),
         ).bufferedReader().use { it.readText() }
+        // Android versions whose dump has no router section cannot show the registration this way.
+        assumeTrue("dumpsys media_router lists router records", "Router Records:" in dump)
         val routerRecords = dump.substringAfter("Router Records:", "").substringBefore("Manager Records:")
         return Regex("""mPackageName=${Regex.escape(context.packageName)}\s*$""", RegexOption.MULTILINE)
             .containsMatchIn(routerRecords)
