@@ -199,12 +199,14 @@ class GithubReleaseTest(unittest.TestCase):
     def test_publish_requires_matching_tag_and_never_rebuilds_or_uploads(self):
         reminder = "Device QA and upgrade acceptance must be recorded before publishing."
         for tag_type, target, body, github_digests_match, succeeds in (
-                ("missing", COMMIT, "Accepted release notes", True, True),
-                ("tag", COMMIT, "Accepted release notes", True, True),
-                ("tag", COMMIT, "Accepted release notes", False, False),
-                ("tag", "d" * 40, "Accepted release notes", True, False),
-                ("commit", COMMIT, "Accepted release notes", True, False),
-                ("tag", COMMIT, "Release notes\n" + reminder, True, False)):
+                ("missing", COMMIT, "Accepted release notes. SHA-256: {sha}", True, True),
+                ("tag", COMMIT, "Accepted release notes. SHA-256: {sha}", True, True),
+                ("tag", COMMIT, "Accepted release notes. SHA-256: {sha}", False, False),
+                ("tag", "d" * 40, "Accepted release notes. SHA-256: {sha}", True, False),
+                ("commit", COMMIT, "Accepted release notes. SHA-256: {sha}", True, False),
+                ("tag", COMMIT, "Release notes. SHA-256: {sha}\n" + reminder, True, False),
+                # Pasted notes with another digest typed in are refused.
+                ("tag", COMMIT, "Accepted release notes. SHA-256: " + "e" * 64, True, False)):
             with self.subTest(tag_type=tag_type, target=target, github_digests_match=github_digests_match), \
                     tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -227,7 +229,8 @@ class GithubReleaseTest(unittest.TestCase):
                     if "verify" in args:
                         return verification
                     if "view" in args:
-                        return json.dumps({"isDraft": True, "targetCommitish": COMMIT, "body": body})
+                        return json.dumps({"isDraft": True, "targetCommitish": COMMIT,
+                                           "body": body.replace("{sha}", data["apkSha256"])})
                     if "api" in args:
                         if "--paginate" in args:
                             return json.dumps([[listed]])

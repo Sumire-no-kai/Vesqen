@@ -298,6 +298,9 @@ def publish_release(candidate, repository, commit, acceptance, tools):
         raise ReleaseError("Only the matching draft can be published")
     if not info["body"].strip() or unfinished_notes(info["body"]):
         raise ReleaseError("Finalize draft release notes before publication")
+    # Notes pasted over the generated ones must still state this APK's digest, not a hand-typed one.
+    if metadata["apkSha256"] not in info["body"]:
+        raise ReleaseError("Release notes must state the accepted APK SHA-256")
     # Other drafts may have been published since this candidate was created.
     releases = json.loads(run(["gh", "api", "--paginate", "--slurp", f"repos/{repository}/releases?per_page=100"]))
     check_published_version_codes(repository, metadata, releases)
