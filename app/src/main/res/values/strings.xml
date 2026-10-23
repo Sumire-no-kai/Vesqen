@@ -339,6 +339,7 @@
     <string name="no_playlists_body">Create a playlist to organize tracks from your local library.</string>
     <string name="empty_playlist_body">This playlist is empty. Add tracks from a song’s details.</string>
     <string name="playlist_name">Playlist name</string>
+    <string name="playlist_name_taken">A playlist with this name already exists.</string>
     <string name="create">Create</string>
     <string name="cancel">Cancel</string>
     <string name="delete_playlist">Delete playlist</string>

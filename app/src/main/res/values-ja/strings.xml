@@ -334,6 +334,7 @@
     <string name="no_playlists_body">プレイリストを作ると、ライブラリの曲をまとめられます。</string>
     <string name="empty_playlist_body">このプレイリストは空です。曲の詳細から追加できます。</string>
     <string name="playlist_name">プレイリスト名</string>
+    <string name="playlist_name_taken">同じ名前のプレイリストがすでにあります。</string>
     <string name="create">作成</string>
     <string name="cancel">キャンセル</string>
     <string name="delete_playlist">プレイリストを削除</string>

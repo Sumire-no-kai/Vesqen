@@ -333,6 +333,7 @@
     <string name="no_playlists_body">新增播放清單，把本機音樂庫中的歌曲整理在一起。</string>
     <string name="empty_playlist_body">這個播放清單還沒有歌曲，可以從歌曲詳細資料中加入。</string>
     <string name="playlist_name">播放清單名稱</string>
+    <string name="playlist_name_taken">已有同名的播放清單。</string>
     <string name="create">建立</string>
     <string name="cancel">取消</string>
     <string name="delete_playlist">刪除播放清單</string>

@@ -714,6 +714,7 @@ fun LibraryScreen(
             title = stringResource(R.string.create_playlist),
             initialName = "",
             confirmLabel = stringResource(R.string.create),
+            playlists = state.playlists,
             onDismiss = { showCreatePlaylist = false },
             onConfirm = { name ->
                 onCreatePlaylist(name)
@@ -724,6 +725,7 @@ fun LibraryScreen(
     playlistToEdit?.let { playlist ->
         PlaylistEditDialog(
             playlist = playlist,
+            playlists = state.playlists,
             onDismiss = { playlistToEdit = null },
             onRename = { name ->
                 onRenamePlaylist(playlist.id, name)
@@ -1307,23 +1309,18 @@ private fun PlaylistNameDialog(
     title: String,
     initialName: String,
     confirmLabel: String,
+    playlists: List<LibraryPlaylist>,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
     var name by remember(initialName) { mutableStateOf(initialName) }
+    val taken = playlistNameTaken(name, playlists, except = null)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                singleLine = true,
-                label = { Text(stringResource(R.string.playlist_name)) },
-            )
-        },
+        text = { PlaylistNameField(name, taken) { name = it } },
         confirmButton = {
-            TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) {
+            TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank() && !taken) {
                 Text(confirmLabel)
             }
         },
@@ -1333,9 +1330,31 @@ private fun PlaylistNameDialog(
     )
 }
 
+/**
+ * Playlist names are unique regardless of case in the catalog, which ignores a clash without saying
+ * so: the dialog closed and nothing happened. The clash is now shown before saving.
+ */
+internal fun playlistNameTaken(name: String, playlists: List<LibraryPlaylist>, except: Long?): Boolean =
+    playlists.any { it.id != except && it.name.trim().equals(name.trim(), ignoreCase = true) }
+
+@Composable
+private fun PlaylistNameField(name: String, taken: Boolean, onNameChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = name,
+        onValueChange = onNameChange,
+        singleLine = true,
+        label = { Text(stringResource(R.string.playlist_name)) },
+        isError = taken,
+        supportingText = if (taken) {
+            { Text(stringResource(R.string.playlist_name_taken)) }
+        } else null,
+    )
+}
+
 @Composable
 private fun PlaylistEditDialog(
     playlist: LibraryPlaylist,
+    playlists: List<LibraryPlaylist>,
     onDismiss: () -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
@@ -1353,19 +1372,13 @@ private fun PlaylistEditDialog(
         )
         return
     }
+    val taken = playlistNameTaken(name, playlists, except = playlist.id)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.edit_playlist)) },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                singleLine = true,
-                label = { Text(stringResource(R.string.playlist_name)) },
-            )
-        },
+        text = { PlaylistNameField(name, taken) { name = it } },
         confirmButton = {
-            TextButton(onClick = { onRename(name) }, enabled = name.isNotBlank()) {
+            TextButton(onClick = { onRename(name) }, enabled = name.isNotBlank() && !taken) {
                 Text(stringResource(R.string.save))
             }
         },
