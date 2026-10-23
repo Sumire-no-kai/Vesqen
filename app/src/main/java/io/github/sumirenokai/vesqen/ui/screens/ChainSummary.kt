@@ -60,6 +60,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -531,12 +532,13 @@ private fun ChainFact(
     val context = LocalContext.current
     val evidence = metrics[id]?.evidence
     val value = rememberedTelemetryReading(evidence?.reading, unitDisplayMode)
+    val toggleState = evidenceToggleState(expanded)
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
             .clickable(onClickLabel = stringResource(R.string.chain_evidence_details), role = Role.Button, onClick = onToggle)
-            .semantics(mergeDescendants = true) {}
+            .semantics(mergeDescendants = true) { stateDescription = toggleState }
             .testTag("vesqen.chain.core.${id.value}"),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
@@ -571,6 +573,11 @@ private fun ChainFact(
     }
 }
 
+/** What TalkBack says about a fact whose evidence opens on tap, as the Now liner notes say it. */
+@Composable
+internal fun evidenceToggleState(expanded: Boolean): String =
+    stringResource(if (expanded) R.string.now_notes_expanded else R.string.now_notes_collapsed)
+
 /** App processing: the processing part of the segment verdict, never a separate claim. */
 @Composable
 private fun ChainProcessingFact(
@@ -592,12 +599,13 @@ private fun ChainProcessingFact(
     }
     // The flags come from one player state, so one confidence and age stand for all of them.
     val evidence = ProcessingFlags.firstNotNullOfOrNull { metrics[it.second]?.evidence }
+    val toggleState = evidenceToggleState(expanded)
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
             .clickable(onClickLabel = stringResource(R.string.chain_evidence_details), role = Role.Button, onClick = onToggle)
-            .semantics(mergeDescendants = true) {}
+            .semantics(mergeDescendants = true) { stateDescription = toggleState }
             .testTag("vesqen.chain.processing"),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {

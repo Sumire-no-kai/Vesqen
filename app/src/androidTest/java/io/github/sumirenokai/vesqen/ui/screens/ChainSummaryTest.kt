@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
@@ -381,6 +383,19 @@ class ChainSummaryTest {
         composeRule.onNodeWithTag(audioTrackRate).assert(!hasText(source, substring = true)).performClick()
         composeRule.onNodeWithTag(audioTrackRate).assertTextContains(source, substring = true)
         flags.forEach { composeRule.onAllNodesWithTag(processingFlag(it), useUnmergedTree = true).assertCountEquals(0) }
+    }
+
+    @Test
+    fun evidence_toggles_say_whether_their_evidence_is_open() {
+        show(FakeAppSegmentTelemetry.speakerSession())
+        val decoder = "vesqen.chain.core.${Metrics.DECODER_NAME.value}"
+        fun state(resource: Int) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(resource))
+
+        processing().assert(state(R.string.now_notes_collapsed)).performClick()
+        processing().assert(state(R.string.now_notes_expanded))
+        scrollTo(decoder)
+        composeRule.onNodeWithTag(decoder).assert(state(R.string.now_notes_collapsed)).performClick()
+        composeRule.onNodeWithTag(decoder).assert(state(R.string.now_notes_expanded))
     }
 
     private fun show(

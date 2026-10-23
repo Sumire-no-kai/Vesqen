@@ -1576,6 +1576,7 @@ private fun ChainMetricCard(
     val label = telemetryMetricLabel(context, metricId)
     var evidenceExpanded by remember(metricId) { mutableStateOf(false) }
     val evidenceAction = stringResource(R.string.chain_evidence_details)
+    val toggleState = evidenceToggleState(evidenceExpanded)
     val evidence = metric?.evidence
     val value = rememberedTelemetryReading(evidence?.reading, unitDisplayMode)
     val confidence = evidence?.let { telemetryConfidenceLabel(context, it) }
@@ -1604,7 +1605,7 @@ private fun ChainMetricCard(
             // The click sits outside the Surface's own clip, so clip it to the card's corners.
             .clip(shape)
             .clickable(onClickLabel = evidenceAction) { evidenceExpanded = !evidenceExpanded }
-            .semantics(mergeDescendants = true) {},
+            .semantics(mergeDescendants = true) { stateDescription = toggleState },
         shape = shape,
         color = if (pinned) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
     ) {

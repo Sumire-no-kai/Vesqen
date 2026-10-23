@@ -2282,12 +2282,15 @@ class VesqenAppTest {
         val card = "vesqen.chain.metric.${metricId.value}"
         val source = context.getString(R.string.chain_source_android_audio_route)
         val updated = context.getString(R.string.chain_metric_updated)
+        fun state(resource: Int) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, context.getString(resource))
         chainNode(card).assertTextContains(context.getString(R.string.chain_unavailable_not_exposed), substring = true)
             .assert(!hasText(source, substring = true))
+            .assert(state(R.string.now_notes_collapsed))
             .performClick()
         composeRule.onNodeWithTag(card)
             .assertTextContains(source, substring = true)
             .assertTextContains(updated, substring = true)
+            .assert(state(R.string.now_notes_expanded))
     }
 
     @Test
