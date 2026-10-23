@@ -147,6 +147,7 @@ import io.github.sumirenokai.vesqen.ui.chain.elapsedChartFraction
 import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
 import io.github.sumirenokai.vesqen.ui.chain.formatSeconds
 import io.github.sumirenokai.vesqen.ui.chain.isTelemetrySnapshotStale
+import io.github.sumirenokai.vesqen.ui.chain.localizedTelemetryText
 import io.github.sumirenokai.vesqen.ui.chain.missingMetricCount
 import io.github.sumirenokai.vesqen.ui.chain.telemetryAgeLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetryConfidenceLabel
@@ -1782,6 +1783,7 @@ private fun ChainChartEvidenceSummary(
 
 @Composable
 private fun ChainUsbInventoryDetails(inventory: UsbInventoryReading) {
+    val context = LocalContext.current
     val unnamedDevice = stringResource(R.string.chain_usb_unnamed_device)
     val unnamedEndpoint = stringResource(R.string.chain_usb_unnamed_endpoint)
     val permissionGranted = stringResource(R.string.chain_usb_permission_granted)
@@ -1893,7 +1895,7 @@ private fun ChainUsbInventoryDetails(inventory: UsbInventoryReading) {
                     endpoint.encodings.joinToString().ifBlank { unavailable }
                 }
                 Text(
-                    text = stringResource(R.string.chain_usb_endpoint_value, endpointName, endpoint.type),
+                    text = stringResource(R.string.chain_usb_endpoint_value, endpointName, localizedTelemetryText(context, endpoint.type)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

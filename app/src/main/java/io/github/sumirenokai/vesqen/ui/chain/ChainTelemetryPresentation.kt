@@ -23,7 +23,6 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetryUnavailableReason
 import io.github.sumirenokai.vesqen.telemetry.TelemetryUnit
 import io.github.sumirenokai.vesqen.ui.components.outputDeclarationLabelResource
 import java.text.NumberFormat
-import java.util.Locale
 import kotlin.math.abs
 
 internal sealed interface ChainObservationState {
@@ -597,36 +596,84 @@ private fun formatRawNumber(context: Context, value: Number): String = NumberFor
     format(value)
 }
 
-private fun localizedTelemetryText(context: Context, raw: String): String =
-    telemetryTextLabelResource(raw)?.let(context::getString) ?: localizedTelemetryToken(context, raw)
+/**
+ * A producer's text value in the reader's language. A comma-separated list of known values, such as
+ * the connected output types, is translated item by item; anything else, such as a route or decoder
+ * name, is shown as it is.
+ */
+internal fun localizedTelemetryText(context: Context, raw: String): String {
+    telemetryTextLabelResource(raw)?.let { return context.getString(it) }
+    val items = raw.split(',')
+    if (items.size < 2) return raw
+    val labels = items.map { item -> telemetryTextLabelResource(item.trim()) ?: return raw }
+    return labels.joinToString(context.getString(R.string.chain_segment_list_separator)) { context.getString(it) }
+}
 
 /** The label of a text value a producer emits, or null when the text is shown as it is. */
 @StringRes
 internal fun telemetryTextLabelResource(raw: String): Int? =
     // The declaration's telemetry text ("BIT PERFECT FAILED") is written as the chip writes it.
     OutputDeclaration.entries.firstOrNull { it.telemetryLabel == raw }?.let(::outputDeclarationLabelResource)
+        ?: TEXT_LABEL_RESOURCES[raw]
 
-private fun localizedTelemetryToken(context: Context, raw: String): String = when (raw.lowercase(Locale.ROOT)) {
-    "idle" -> context.getString(R.string.chain_text_idle)
-    "buffering" -> context.getString(R.string.chain_text_buffering)
-    "ready" -> context.getString(R.string.chain_text_ready)
-    "ended" -> context.getString(R.string.chain_text_ended)
-    "speaker" -> context.getString(R.string.output_phone_speaker)
-    "bluetooth" -> context.getString(R.string.output_bluetooth)
-    "wired", "usb", "wired-or-usb" -> context.getString(R.string.output_wired_or_usb)
-    "none" -> context.getString(R.string.chain_text_none)
-    "light", "moderate", "severe", "critical", "emergency", "shutdown" -> context.getString(
-        when (raw.lowercase(Locale.ROOT)) {
-            "light" -> R.string.chain_thermal_light
-            "moderate" -> R.string.chain_thermal_moderate
-            "severe" -> R.string.chain_thermal_severe
-            "critical" -> R.string.chain_thermal_critical
-            "emergency" -> R.string.chain_thermal_emergency
-            else -> R.string.chain_thermal_shutdown
-        },
-    )
-    else -> raw
-}
+/**
+ * The tokens producers emit, matched exactly so that a name which happens to read like one is left
+ * alone: playback states, thermal status, route and device types (DeviceReportVocabulary.routeTypes),
+ * the decoder path and the direct-playback modes.
+ */
+private val TEXT_LABEL_RESOURCES: Map<String, Int> = mapOf(
+    "idle" to R.string.chain_text_idle,
+    "buffering" to R.string.chain_text_buffering,
+    "ready" to R.string.chain_text_ready,
+    "ended" to R.string.chain_text_ended,
+    "none" to R.string.chain_text_none,
+    "unknown" to R.string.chain_text_unknown,
+    "light" to R.string.chain_thermal_light,
+    "moderate" to R.string.chain_thermal_moderate,
+    "severe" to R.string.chain_thermal_severe,
+    "critical" to R.string.chain_thermal_critical,
+    "emergency" to R.string.chain_thermal_emergency,
+    "shutdown" to R.string.chain_thermal_shutdown,
+    // The selected route's AudioOutputType.
+    "phone_speaker" to R.string.output_phone_speaker,
+    "wired_or_usb" to R.string.output_wired_or_usb,
+    "bluetooth" to R.string.output_bluetooth,
+    "other" to R.string.chain_route_other,
+    // AudioDeviceInfo types (audioDeviceTypeName).
+    "built_in_speaker" to R.string.chain_route_built_in_speaker,
+    "built_in_speaker_safe" to R.string.chain_route_built_in_speaker_safe,
+    "built_in_earpiece" to R.string.chain_route_built_in_earpiece,
+    "wired_headset" to R.string.chain_route_wired_headset,
+    "wired_headphones" to R.string.chain_route_wired_headphones,
+    "line_analog" to R.string.chain_route_line_analog,
+    "line_digital" to R.string.chain_route_line_digital,
+    "hdmi" to R.string.chain_route_hdmi,
+    "hdmi_arc" to R.string.chain_route_hdmi_arc,
+    "hdmi_earc" to R.string.chain_route_hdmi_earc,
+    "usb_device" to R.string.chain_route_usb_device,
+    "usb_accessory" to R.string.chain_route_usb_accessory,
+    "usb_headset" to R.string.chain_route_usb_headset,
+    "dock" to R.string.chain_route_dock,
+    "fm" to R.string.chain_route_fm,
+    "ip" to R.string.chain_route_ip,
+    "bus" to R.string.chain_route_bus,
+    "remote_submix" to R.string.chain_route_remote_submix,
+    "bluetooth_a2dp" to R.string.chain_route_bluetooth_a2dp,
+    "bluetooth_sco" to R.string.chain_route_bluetooth_sco,
+    "ble_headset" to R.string.chain_route_ble_headset,
+    "ble_speaker" to R.string.chain_route_ble_speaker,
+    "ble_broadcast" to R.string.chain_route_ble_broadcast,
+    "hearing_aid" to R.string.chain_route_hearing_aid,
+    // decoder.path. pcm_bypass is a WAV or AIFF file whose PCM reaches the AudioTrack without a codec.
+    "software" to R.string.chain_decoder_path_software,
+    "platform_hardware" to R.string.chain_decoder_path_platform_hardware,
+    "platform_unspecified" to R.string.chain_decoder_path_platform_unspecified,
+    "offload" to R.string.chain_decoder_path_offload,
+    "pcm_bypass" to R.string.chain_decoder_path_pcm_bypass,
+    // route.request_format_direct_modes; "offload" and "none" are above.
+    "offload_gapless" to R.string.chain_direct_mode_offload_gapless,
+    "bitstream" to R.string.chain_direct_mode_bitstream,
+)
 
 @StringRes
 internal fun telemetryMetricLabelResource(metricId: String): Int? = METRIC_LABEL_RESOURCES[metricId]

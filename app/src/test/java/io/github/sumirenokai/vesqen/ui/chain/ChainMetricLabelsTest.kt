@@ -3,6 +3,7 @@ package io.github.sumirenokai.vesqen.ui.chain
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.playback.OutputDeclaration
 import io.github.sumirenokai.vesqen.playback.telemetryLabel
+import io.github.sumirenokai.vesqen.reports.DeviceReportVocabulary
 import io.github.sumirenokai.vesqen.telemetry.TelemetryDataSource
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog
@@ -11,6 +12,7 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceId
 import io.github.sumirenokai.vesqen.telemetry.TelemetryUnavailableReason
 import io.github.sumirenokai.vesqen.ui.components.outputDeclarationLabelResource
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -86,6 +88,21 @@ class ChainMetricLabelsTest {
     }
 
     @Test
+    fun `every token a producer emits has a label`() {
+        val tokens = DeviceReportVocabulary.routeTypes + DeviceReportVocabulary.playbackStates +
+            DeviceReportVocabulary.directModes + DecoderPaths
+        val missing = tokens.filter { telemetryTextLabelResource(it) == null }
+
+        assertTrue("Telemetry tokens shown untranslated: $missing", missing.isEmpty())
+    }
+
+    @Test
+    fun `a name that reads like a token is shown as it is`() {
+        assertNull(telemetryTextLabelResource("Dock"))
+        assertNull(telemetryTextLabelResource("c2.android.flac.decoder"))
+    }
+
+    @Test
     fun `the output declaration card writes each declaration as its chip does`() {
         OutputDeclaration.entries.forEach { declaration ->
             assertEquals(outputDeclarationLabelResource(declaration), telemetryTextLabelResource(declaration.telemetryLabel))
@@ -116,5 +133,13 @@ class ChainMetricLabelsTest {
                 ),
             ),
         )
+    }
+
+    private companion object {
+        /**
+         * The decoder.path values of AndroidPlaybackTelemetry, which has no shared vocabulary for
+         * them; pcm_bypass is a WAV or AIFF file played without a codec.
+         */
+        val DecoderPaths = setOf("offload", "software", "platform_hardware", "platform_unspecified", "pcm_bypass")
     }
 }
