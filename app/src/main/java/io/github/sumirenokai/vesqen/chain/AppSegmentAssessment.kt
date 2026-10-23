@@ -151,8 +151,10 @@ internal fun assessAppSegment(
     }
     val inputMime = reader.measuredText(Metrics.DECODER_INPUT_MIME)
     val codecMayChangeFormat = inputMime == "audio/mp4a-latm" || inputMime == "audio/aac"
-    // The decoder's measured output rate (#72) tells an AAC decoder's SBR from Vesqen resampling.
+    // The decoder's measured output rate (#72) tells an AAC decoder's SBR from Vesqen resampling. A
+    // lossless decoder has to keep the file's rate, so for lossless input it never explains a change.
     val decodedRate = reader.measuredInteger(Metrics.DECODER_OUTPUT_SAMPLE_RATE)
+        .takeUnless { inputMime?.let(::sourceCompression) == SourceCompression.LOSSLESS }
     check(AppSegmentCondition.SAMPLE_RATE, listOf(Metrics.DECODER_INPUT_SAMPLE_RATE, Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE)) {
         val output = (it[1] as TelemetryReading.Integer).value
         val same = (it[0] as TelemetryReading.Integer).value == output
@@ -197,26 +199,35 @@ internal fun assessAppSegment(
 
 /**
  * Lossless input states its PCM width; compressed input has none (NOT_APPLICABLE) and decodes to
- * the codec's own output, which only a float AudioTrack is certain to hold exactly.
+ * the codec's own output, which only a float AudioTrack is certain to hold exactly. Media3 also
+ * states no width for some lossless streams (20-bit FLAC, FLAC in MP4); an integer decoder may have
+ * cut those to 16 bits, so only float from the decoder through to the AudioTrack keeps them.
  */
 private fun precisionCheck(reader: SegmentEvidenceReader): AppSegmentCheck {
     val ids = listOf(Metrics.DECODER_INPUT_PCM_ENCODING, Metrics.PLAYBACK_AUDIO_TRACK_ENCODING)
     val read = reader.read(ids)
     val inputEvidence = read.evidence[Metrics.DECODER_INPUT_PCM_ENCODING]
-    val compressedInput = inputEvidence is TelemetryEvidence.Unavailable &&
+    val widthNotStated = inputEvidence is TelemetryEvidence.Unavailable &&
         inputEvidence.reason == TelemetryUnavailableReason.NOT_APPLICABLE
-    val blocking = read.issues.filterNot {
-        compressedInput && it.metricId == Metrics.DECODER_INPUT_PCM_ENCODING && it.reason == SegmentReason.UNAVAILABLE
+    val losslessInput = reader.measuredText(Metrics.DECODER_INPUT_MIME)?.let(::sourceCompression) ==
+        SourceCompression.LOSSLESS
+    val compressedInput = widthNotStated && !losslessInput
+    val unstatedLosslessWidth = widthNotStated && losslessInput
+    val widthIssues = read.issues.filter {
+        widthNotStated && it.metricId == Metrics.DECODER_INPUT_PCM_ENCODING && it.reason == SegmentReason.UNAVAILABLE
     }
+    val blocking = read.issues - widthIssues.toSet()
     val output = (read.evidence[Metrics.PLAYBACK_AUDIO_TRACK_ENCODING]?.reading as? TelemetryReading.Text)?.value
     // Compressed input has no PCM width of its own: what counts is the PCM its decoder produced
     // (#72). AOSP's lossy decoders only output 16-bit, so float output alone cannot be required.
-    val decoded = if (compressedInput) reader.read(listOf(Metrics.DECODER_OUTPUT_ENCODING)) else null
+    val decoded = if (widthNotStated) reader.read(listOf(Metrics.DECODER_OUTPUT_ENCODING)) else null
     val decodedEncoding = decoded?.takeIf { it.issues.isEmpty() }
         ?.let { (it.evidence[Metrics.DECODER_OUTPUT_ENCODING]?.reading as? TelemetryReading.Text)?.value }
     val reference = if (compressedInput) decodedEncoding else (inputEvidence?.reading as? TelemetryReading.Text)?.value
     val verdict = when {
         blocking.isNotEmpty() || output == null -> Verdict.Unresolved(null)
+        unstatedLosslessWidth ->
+            if (decodedEncoding == "pcm-float" && output == "pcm-float") Verdict.Kept else Verdict.Unresolved(null)
         // Float keeps every decoder's output, even when that output was not measured.
         compressedInput && decodedEncoding == null -> if (output == "pcm-float") Verdict.Kept else Verdict.Unresolved(null)
         else -> when (preservesPcmPrecision(requireNotNull(reference), output)) {
@@ -225,7 +236,12 @@ private fun precisionCheck(reader: SegmentEvidenceReader): AppSegmentCheck {
             null -> Verdict.Unresolved(SegmentReason.UNSUPPORTED_VALUE)
         }
     }
-    val issues = if (verdict is Verdict.Unresolved && decodedEncoding == null) blocking + decoded?.issues.orEmpty() else blocking
+    val issues = when {
+        verdict !is Verdict.Unresolved -> blocking
+        unstatedLosslessWidth -> blocking + widthIssues + decoded?.issues.orEmpty()
+        decodedEncoding == null -> blocking + decoded?.issues.orEmpty()
+        else -> blocking
+    }
     return AppSegmentCheck(
         condition = AppSegmentCondition.PCM_PRECISION,
         status = when (verdict) {

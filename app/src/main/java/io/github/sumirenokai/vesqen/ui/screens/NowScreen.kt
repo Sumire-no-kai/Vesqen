@@ -1213,7 +1213,7 @@ private fun NowPlaybackOrderButton(
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier
-            .size(44.dp)
+            .size(48.dp)
             .testTag("vesqen.now.playback-order")
             .semantics {
                 contentDescription = description
@@ -1264,7 +1264,7 @@ private fun NowFavoriteButton(track: AudioTrack?, onToggleFavorite: (Long, Boole
         checked = favorite,
         onCheckedChange = { checked -> track?.let { onToggleFavorite(it.id, checked) } },
         enabled = track != null,
-        modifier = Modifier.size(44.dp).testTag("vesqen.now.favorite"),
+        modifier = Modifier.size(48.dp).testTag("vesqen.now.favorite"),
     ) {
         Icon(
             if (favorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,

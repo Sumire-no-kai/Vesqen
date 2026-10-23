@@ -3,7 +3,6 @@ package io.github.sumirenokai.vesqen.ui.navigation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class VesqenNavigationStateTest {
@@ -127,7 +126,23 @@ class VesqenNavigationStateTest {
             .openAbout()
             .openPrivacyPolicy()
 
-        assertThrows(IllegalArgumentException::class.java) { privacy.openChain() }
+        // A tap that lands on a page while it slides away must not crash the app (#143 Q15).
+        assertEquals(privacy, privacy.openChain())
+        assertEquals(privacy, privacy.openLicenses())
+    }
+
+    @Test
+    fun `opening the shown detail again changes nothing, so its links still work`() {
+        // A fast double tap on Settings' About row reaches Settings again before About covers it.
+        val about = VesqenNavigationState()
+            .selectTopLevel(VesqenDestination.SETTINGS)
+            .openAbout()
+        assertEquals(about, about.openAbout())
+
+        val privacy = about.openAbout().openPrivacyPolicy()
+        assertEquals(VesqenDestination.PRIVACY_POLICY, privacy.destination)
+        assertEquals(VesqenDestination.ABOUT, privacy.back().destination)
+        assertEquals(VesqenDestination.SETTINGS, privacy.back().back().destination)
     }
 
     @Test

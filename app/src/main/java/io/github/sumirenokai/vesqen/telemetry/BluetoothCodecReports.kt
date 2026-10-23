@@ -23,12 +23,14 @@ internal const val LDAC_NOMINAL_BITRATE_METHOD = "bluetooth.ldac_quality_nominal
  * LDAC playback quality as Android reports it in `codecSpecific1`. The values are AOSP's
  * (1000–1003); the SDK does not name them. On the iQOO 9 (Android 15, 2026-10-16) choosing 990 kbps
  * was reported as 1003, the adaptive value, so 1003 cannot be shown as adaptive alone (#73).
+ * [nominalBitsPerSecond] is the tier's ceiling, an estimate: adaptive LDAC also tops out at 990 kbps,
+ * so 1003's ceiling holds either way, and its kbps is labelled Estimated like the others (#136 R5).
  */
-enum class LdacQuality(val token: String, val nominalBitsPerSecond: Long?) {
+enum class LdacQuality(val token: String, val nominalBitsPerSecond: Long) {
     KBPS_990("ldac_990kbps", 990_000),
     KBPS_660("ldac_660kbps", 660_000),
     KBPS_330("ldac_330kbps", 330_000),
-    ADAPTIVE_OR_990("ldac_adaptive_or_990kbps", null),
+    ADAPTIVE_OR_990("ldac_adaptive_or_990kbps", 990_000),
     ;
 
     companion object {
@@ -134,8 +136,11 @@ internal object BluetoothCodecFields {
 
     /** AOSP codec type numbers, public since API 33; Opus (6) since API 34. */
     private val standardNames = mapOf(0 to "SBC", 1 to "AAC", 2 to "aptX", 3 to "aptX HD", 4 to "LDAC", 5 to "LC3", 6 to "Opus")
+    private const val OPUS_TYPE = 6
 
-    fun standardCodecName(type: Int): String? = standardNames[type]
+    /** Before API 34 type 6 is not AOSP's Opus and may be a vendor codec, so it stays unnamed (#73). */
+    fun standardCodecName(type: Int, apiLevel: Int): String? =
+        if (type == OPUS_TYPE && apiLevel < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) null else standardNames[type]
 
     fun settings(isLdac: Boolean, sampleRate: Int, bits: Int, channelMode: Int, codecSpecific1: Long) =
         BluetoothCodecSettings(
@@ -217,7 +222,7 @@ internal class AndroidBluetoothCodecObserver(
             config.extendedCodecType?.codecName?.takeIf(String::isNotBlank)
         } else {
             null
-        } ?: BluetoothCodecFields.standardCodecName(type)
+        } ?: BluetoothCodecFields.standardCodecName(type, Build.VERSION.SDK_INT)
         return BluetoothCodecReport(
             codecName = name,
             settings = BluetoothCodecFields.settings(

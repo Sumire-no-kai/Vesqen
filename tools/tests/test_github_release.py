@@ -264,6 +264,17 @@ class GithubReleaseTest(unittest.TestCase):
                 release.check_published_version_codes("owner/repo", metadata(), releases)
             release.check_published_version_codes("owner/repo", {**metadata(), "versionCode": 12}, releases)
 
+    def test_unfinished_note_placeholders_block_publication(self):
+        for placeholder in ("SHA-256: `(发布时填写)`", "已通过。（发布时按 #51 蓝牙断连的结果补上）",
+                            "all passed. (发布时按 #51 蓝牙断连的结果补上)", "(按 #42 的结果更新)",
+                            "Device QA and upgrade acceptance must be recorded before publishing."):
+            with self.subTest(placeholder=placeholder):
+                self.assertIsNotNone(release.UNFINISHED_NOTES.search(placeholder))
+        for finished in ("Vesqen 1.0 needs Android 9.0 (API 28).", "发布时会自动换成 SHA-256。",
+                         "Bluetooth disconnects passed (#51).", "设置里的“检查更新”（按钮）"):
+            with self.subTest(finished=finished):
+                self.assertIsNone(release.UNFINISHED_NOTES.search(finished))
+
     def test_local_signing_exports_ledger_and_public_notes_without_ci_environment(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

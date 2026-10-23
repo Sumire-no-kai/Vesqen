@@ -12,9 +12,10 @@ class BluetoothCodecReportsTest {
         assertEquals(LdacQuality.KBPS_990, LdacQuality.fromCodecSpecific1(1000))
         assertEquals(LdacQuality.KBPS_660, LdacQuality.fromCodecSpecific1(1001))
         assertEquals(LdacQuality.KBPS_330, LdacQuality.fromCodecSpecific1(1002))
-        // The iQOO 9 reported 990 kbps as 1003 (#73), so 1003 never claims a bit rate.
+        // The iQOO 9 reported 990 kbps as 1003 (#73), so 1003 stays "adaptive or 990 kbps". Adaptive
+        // LDAC also tops out at 990 kbps, so that ceiling is its estimated bit rate either way.
         assertEquals(LdacQuality.ADAPTIVE_OR_990, LdacQuality.fromCodecSpecific1(1003))
-        assertNull(LdacQuality.ADAPTIVE_OR_990.nominalBitsPerSecond)
+        assertEquals(990_000L, LdacQuality.ADAPTIVE_OR_990.nominalBitsPerSecond)
         assertNull(LdacQuality.fromCodecSpecific1(0))
     }
 
@@ -31,12 +32,14 @@ class BluetoothCodecReportsTest {
     }
 
     @Test fun standardCodecNamesCoverTheAospTypes() {
-        assertEquals("SBC", BluetoothCodecFields.standardCodecName(0))
-        assertEquals("AAC", BluetoothCodecFields.standardCodecName(1))
-        assertEquals("LDAC", BluetoothCodecFields.standardCodecName(4))
-        assertEquals("Opus", BluetoothCodecFields.standardCodecName(6))
+        assertEquals("SBC", BluetoothCodecFields.standardCodecName(0, 33))
+        assertEquals("AAC", BluetoothCodecFields.standardCodecName(1, 33))
+        assertEquals("LDAC", BluetoothCodecFields.standardCodecName(4, 33))
+        assertEquals("Opus", BluetoothCodecFields.standardCodecName(6, 34))
+        // AOSP's Opus is type 6 only from API 34; before that the number may be a vendor codec.
+        assertNull(BluetoothCodecFields.standardCodecName(6, 33))
         // A vendor type has no name before API 35.
-        assertNull(BluetoothCodecFields.standardCodecName(1_000_000))
+        assertNull(BluetoothCodecFields.standardCodecName(1_000_000, 34))
     }
 
     @Test fun settingsTokenRoundTrips() {

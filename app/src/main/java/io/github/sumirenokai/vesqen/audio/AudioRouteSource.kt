@@ -7,6 +7,7 @@ import android.media.AudioManager
 import android.media.MediaRoute2Info
 import android.media.MediaRouter
 import android.media.MediaRouter2
+import android.media.RouteDiscoveryPreference
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -45,6 +46,7 @@ class AudioRouteSource(context: Context) {
     private var audioDeviceCallback: AudioDeviceCallback? = null
     private var router2: MediaRouter2? = null
     private var router2Callback: MediaRouter2.ControllerCallback? = null
+    private var router2RouteCallback: MediaRouter2.RouteCallback? = null
     private var legacyRouter: MediaRouter? = null
     private var legacyRouterCallback: MediaRouter.Callback? = null
 
@@ -190,18 +192,31 @@ class AudioRouteSource(context: Context) {
     @RequiresApi(Build.VERSION_CODES.R)
     private fun startRouter2() {
         val activeRouter = MediaRouter2.getInstance(appContext)
+        val executor = ContextCompat.getMainExecutor(appContext)
         router2 = activeRouter
         router2Callback = object : MediaRouter2.ControllerCallback() {
             override fun onControllerUpdated(controller: MediaRouter2.RoutingController) {
                 if (controller.id == activeRouter.systemController.id) publish()
             }
-        }.also { callback ->
-            activeRouter.registerControllerCallback(ContextCompat.getMainExecutor(appContext), callback)
+        }.also { callback -> activeRouter.registerControllerCallback(executor, callback) }
+        // MediaRouter2 reads the system session once, when the process first creates it, and hears
+        // about later route changes only while a route callback is registered; a controller
+        // callback alone left the selected route frozen (#155). Registering resyncs the session and
+        // routes, which reaches the controller callback above. No preferred features and no active
+        // scan: this asks only for the system's own updates and wakes no route provider.
+        router2RouteCallback = object : MediaRouter2.RouteCallback() {}.also { callback ->
+            activeRouter.registerRouteCallback(
+                executor,
+                callback,
+                RouteDiscoveryPreference.Builder(emptyList(), false).build(),
+            )
         }
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
     private fun stopRouter2() {
+        router2RouteCallback?.let { callback -> router2?.unregisterRouteCallback(callback) }
+        router2RouteCallback = null
         router2Callback?.let { callback -> router2?.unregisterControllerCallback(callback) }
         router2Callback = null
         router2 = null

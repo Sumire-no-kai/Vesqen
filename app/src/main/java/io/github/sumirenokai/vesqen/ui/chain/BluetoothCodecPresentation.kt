@@ -3,6 +3,7 @@ package io.github.sumirenokai.vesqen.ui.chain
 import android.content.Context
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.telemetry.BluetoothCodecSettings
+import io.github.sumirenokai.vesqen.telemetry.LdacQuality
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryReading
 import io.github.sumirenokai.vesqen.telemetry.TelemetryUnavailableReason
@@ -49,8 +50,11 @@ internal fun bluetoothCodecSettingsSummary(
         settings?.sampleRateHz?.let { context.getString(R.string.chain_unit_khz, kilohertz.format(it / 1_000.0)) },
         settings?.bitsPerSample?.let { context.getString(R.string.chain_unit_bits, it.toString()) },
         settings?.ldacQuality?.takeIf { includeNominalBitrate }?.let { quality ->
-            quality.nominalBitsPerSecond?.let { context.getString(R.string.chain_unit_kbps, (it / 1_000).toString()) }
-                ?: context.getString(R.string.bluetooth_ldac_adaptive_or_990)
+            if (quality == LdacQuality.ADAPTIVE_OR_990) {
+                context.getString(R.string.bluetooth_ldac_adaptive_or_990)
+            } else {
+                context.getString(R.string.chain_unit_kbps, (quality.nominalBitsPerSecond / 1_000).toString())
+            }
         },
     ).joinToString(" · ").ifEmpty { null }
 }

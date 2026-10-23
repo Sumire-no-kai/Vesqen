@@ -34,6 +34,13 @@ CERT_SHA256 = "743e96fcb71dc58188496819a001a27cd88d909162c5ae929c87bfa29ab86293"
 VERSION = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?")
 
 
+# Placeholders the release-note templates leave for the maintainer, such as "(发布时填写)" or
+# "(发布时按 #51 …补上)", in ASCII or full-width brackets. Any of them left in a draft blocks publication.
+UNFINISHED_NOTES = re.compile(
+    r"[(（](?:发布时|按 #\d+)[^)）\n]*[)）]"
+    r"|Device QA and upgrade acceptance must be recorded before publishing\.")
+
+
 class ReleaseError(ValueError):
     pass
 
@@ -278,9 +285,7 @@ def publish_release(candidate, repository, commit, acceptance, tools):
                            "--json", "isDraft,targetCommitish,body"]))
     if not info["isDraft"] or info["targetCommitish"] != commit:
         raise ReleaseError("Only the matching draft can be published")
-    if not info["body"].strip() or any(marker in info["body"] for marker in (
-            "(发布时填写)", "(按 #42 的结果更新)",
-            "Device QA and upgrade acceptance must be recorded before publishing.")):
+    if not info["body"].strip() or UNFINISHED_NOTES.search(info["body"]):
         raise ReleaseError("Finalize draft release notes before publication")
     # Other drafts may have been published since this candidate was created.
     releases = json.loads(run(["gh", "api", "--paginate", "--slurp", f"repos/{repository}/releases?per_page=100"]))

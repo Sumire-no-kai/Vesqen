@@ -2097,13 +2097,16 @@ class AndroidPlaybackTelemetry internal constructor(
         pendingDecoders.clear()
         pendingDecoderCounters.clear()
         pendingAudioTracks.clear()
+        decoderOutputs.clear()
         currentMediaTransfers.reset()
     }
 
     private companion object {
         const val MAX_RECENT_EVENTS = 128
         const val MAX_PERIOD_FACTS = 8
-        const val MAX_DECODER_OUTPUTS = 8
+        // The playing item and the next one decoding early in a gapless transition, plus a spare. Each
+        // entry holds its input Format, whose metadata can carry the file's embedded artwork.
+        const val MAX_DECODER_OUTPUTS = 3
         val SOURCE_METADATA = TelemetryDataSource(TelemetrySourceId("library.metadata"))
         val MEDIA3_ANALYTICS = TelemetryDataSource(TelemetrySourceId("media3.analytics"))
         val MEDIA3_COUNTERS = TelemetryDataSource(TelemetrySourceId("media3.decoder_counters"))

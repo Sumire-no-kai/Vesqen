@@ -1105,7 +1105,7 @@ private fun AlbumPage(
     ) {
         item(key = "back") {
             Box(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = VesqenSpacing.xxs)) {
-                IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
+                IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart).size(48.dp)) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                 }
             }
@@ -1255,7 +1255,7 @@ private fun CollectionTrackList(
                 .padding(horizontal = VesqenSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
             }
             Text(
@@ -1266,13 +1266,14 @@ private fun CollectionTrackList(
                 modifier = Modifier.weight(1f).semantics { heading() },
             )
             onEditPlaylist?.let { edit ->
-                IconButton(onClick = edit) {
+                IconButton(onClick = edit, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.edit_playlist))
                 }
             }
             IconButton(
                 onClick = { onPlayQueue(collection.tracks, 0) },
                 enabled = collection.tracks.isNotEmpty() && !editing,
+                modifier = Modifier.size(48.dp),
             ) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.play_all))
             }

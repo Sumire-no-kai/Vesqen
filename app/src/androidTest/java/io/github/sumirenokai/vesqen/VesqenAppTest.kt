@@ -3864,8 +3864,9 @@ class VesqenAppTest {
             }
         }
 
+        // Nothing is playing in this snapshot, so the current row says Paused, like the library's rows.
         composeRule.onNodeWithTag("vesqen.queue.item.0").assert(
-            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, context.getString(R.string.chain_current_playing)),
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, context.getString(R.string.paused)),
         )
         composeRule.onNodeWithTag("vesqen.queue.item.1").performClick()
         // The first row cannot move up and the last cannot move down; the others edit in place.

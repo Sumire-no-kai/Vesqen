@@ -65,7 +65,7 @@ fun VesqenEmptyState(
             if (primaryAction) {
                 Button(onClick = onAction, modifier = actionModifier.heightIn(min = 52.dp)) { Text(actionLabel) }
             } else {
-                OutlinedButton(onClick = onAction, modifier = actionModifier.heightIn(min = 44.dp)) { Text(actionLabel) }
+                OutlinedButton(onClick = onAction, modifier = actionModifier.heightIn(min = 48.dp)) { Text(actionLabel) }
             }
             if (secondaryActionLabel != null) {
                 OutlinedButton(
