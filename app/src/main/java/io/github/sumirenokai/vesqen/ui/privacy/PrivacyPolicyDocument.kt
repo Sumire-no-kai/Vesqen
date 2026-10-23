@@ -120,6 +120,27 @@ internal object PolicyMarkdown {
     private val INLINE = Regex("""\*\*(.+?)\*\*|`([^`]+)`|\[([^\[\]]+)]\([^)\s]+\)""")
 }
 
+/** A table row as a phone shows it: the first cell as its title, then each other cell with its column's name. */
+internal data class PolicyTableRow(val title: List<PolicySpan>, val cells: List<PolicyTableCell>)
+
+internal data class PolicyTableCell(val header: List<PolicySpan>?, val content: List<PolicySpan>)
+
+/**
+ * The first row names the columns. Stacked on a phone, a value such as "7 days" means nothing without
+ * its column's name, so each cell keeps it.
+ */
+internal fun PolicyBlock.Table.bodyRows(): List<PolicyTableRow> {
+    val header = rows.firstOrNull().orEmpty()
+    return rows.drop(1).map { row ->
+        PolicyTableRow(
+            title = row.firstOrNull().orEmpty(),
+            cells = row.drop(1).mapIndexed { index, cell ->
+                PolicyTableCell(header.getOrNull(index + 1)?.takeIf { it.isNotEmpty() }, cell)
+            },
+        )
+    }
+}
+
 /** The screen title already names the document, so the file's own top-level title is not repeated. */
 internal fun List<PolicyBlock>.withoutDocumentTitle(): List<PolicyBlock> {
     val first = firstOrNull()

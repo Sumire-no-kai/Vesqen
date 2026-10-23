@@ -247,6 +247,7 @@
     <string name="privacy_policy_unavailable">無法載入隱私權政策。</string>
     <string name="privacy_policy_asset">privacy/zh-CN.md</string>
     <string name="privacy_policy_url">https://vesqen.sumirenokai.com/zh/privacy/</string>
+    <string name="privacy_policy_table_separator">：</string>
     <string name="back">返回</string>
     <string name="search_local_music">搜尋本機音樂</string>
     <string name="clear_search">清除搜尋</string>

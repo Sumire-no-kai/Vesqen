@@ -55,6 +55,8 @@ import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.ui.privacy.PolicyBlock
 import io.github.sumirenokai.vesqen.ui.privacy.PolicyMarkdown
 import io.github.sumirenokai.vesqen.ui.privacy.PolicySpan
+import io.github.sumirenokai.vesqen.ui.privacy.PolicyTableCell
+import io.github.sumirenokai.vesqen.ui.privacy.bodyRows
 import io.github.sumirenokai.vesqen.ui.privacy.withoutDocumentTitle
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
@@ -197,20 +199,19 @@ private fun PolicyBlockView(block: PolicyBlock) {
                 modifier = Modifier.padding(VesqenSpacing.md),
             )
         }
-        // The first row names the columns. On a phone the rows read better stacked than as a grid.
+        // On a phone the rows read better stacked than as a grid; each value keeps its column's name.
         is PolicyBlock.Table -> Column {
-            block.rows.drop(1).forEachIndexed { index, row ->
+            val separator = stringResource(R.string.privacy_policy_table_separator)
+            block.bodyRows().forEachIndexed { index, row ->
                 if (index > 0) HorizontalDivider()
                 Column(
                     modifier = Modifier.padding(vertical = VesqenSpacing.sm),
                     verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xs),
                 ) {
-                    row.firstOrNull()?.let { title ->
-                        Text(text = title.toAnnotatedString(), style = MaterialTheme.typography.titleSmall)
-                    }
-                    row.drop(1).forEach { cell ->
+                    Text(text = row.title.toAnnotatedString(), style = MaterialTheme.typography.titleSmall)
+                    row.cells.forEach { cell ->
                         Text(
-                            text = cell.toAnnotatedString(),
+                            text = cell.toAnnotatedString(separator),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -229,6 +230,15 @@ private fun List<PolicySpan>.toAnnotatedString(): AnnotatedString = buildAnnotat
             else -> append(span.text)
         }
     }
+}
+
+/** "How long we keep it: 7 days", with the column's name in medium weight. */
+private fun PolicyTableCell.toAnnotatedString(separator: String): AnnotatedString = buildAnnotatedString {
+    header?.let { name ->
+        withStyle(SpanStyle(fontWeight = FontWeight.Medium)) { append(name.toAnnotatedString()) }
+        append(separator)
+    }
+    append(content.toAnnotatedString())
 }
 
 private sealed interface PolicyDocumentState {

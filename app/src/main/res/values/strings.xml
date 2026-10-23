@@ -253,6 +253,8 @@
     <string name="privacy_policy_asset">privacy/en.md</string>
     <!-- Every published URL must stay reachable or redirect; checkPrivacyPolicyFinal rejects a blank one. -->
     <string name="privacy_policy_url">https://vesqen.sumirenokai.com/privacy/</string>
+    <!-- Joins a column name to its value when the policy tables are stacked: "How long we keep it: 7 days". -->
+    <string name="privacy_policy_table_separator">": "</string>
     <string name="back">Back</string>
     <string name="search_local_music">Search local music</string>
     <string name="clear_search">Clear search</string>
