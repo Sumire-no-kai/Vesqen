@@ -173,6 +173,27 @@ class AppSegmentAssessmentTest {
         assertTrue(truncatedMaybe.issues.any { it.metricId == Metrics.DECODER_INPUT_PCM_ENCODING })
         assertEquals(AppSegmentStatus.UNKNOWN, precision("pcm-16", "pcm-float").status)
         assertEquals(AppSegmentStatus.UNKNOWN, precision(null, "pcm-float").status)
+        // The codec decides which rule applies, so its evidence is part of the check.
+        assertTrue(Metrics.DECODER_INPUT_MIME in precision("pcm-float", "pcm-float").evidence)
+    }
+
+    @Test
+    fun `an unknown codec without a stated width keeps the strict rule`() {
+        val unstated = TelemetryEvidence.Unavailable(TelemetryUnavailableReason.NOT_APPLICABLE, CapturedAtMs)
+        fun text(value: String) = measured(TelemetryReading.Text(value))
+        fun precision(mime: TelemetryEvidence, decoded: String, output: String) = assess(snapshot(mapOf(
+            Metrics.DECODER_INPUT_MIME to mime,
+            Metrics.DECODER_INPUT_PCM_ENCODING to unstated,
+            Metrics.DECODER_OUTPUT_ENCODING to text(decoded),
+            Metrics.PLAYBACK_AUDIO_TRACK_ENCODING to text(output),
+        ))).checks.single { it.condition == AppSegmentCondition.PCM_PRECISION }
+
+        val unmeasured = TelemetryEvidence.Unavailable(TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT, CapturedAtMs)
+        assertEquals(AppSegmentStatus.UNKNOWN, precision(unmeasured, "pcm-16", "pcm-16").status)
+        assertEquals(AppSegmentStatus.UNKNOWN, precision(text("audio/x-unknown"), "pcm-16", "pcm-16").status)
+        assertEquals(AppSegmentStatus.UNCHANGED, precision(text("audio/x-unknown"), "pcm-float", "pcm-float").status)
+        // A known lossy codec is still judged against what its decoder produced.
+        assertEquals(AppSegmentStatus.UNCHANGED, precision(text("audio/mpeg"), "pcm-16", "pcm-16").status)
     }
 
     @Test
@@ -189,14 +210,17 @@ class AppSegmentAssessmentTest {
         assertEquals(AppSegmentStatus.MODIFIED, sampleRate(48_000, 44_100).status)
         assertEquals(SegmentReason.DECODER_MAY_CHANGE_FORMAT, sampleRate(null, 48_000).reason)
 
-        // A lossless decoder must keep the file's rate, so its output rate never explains a change.
-        val flac = assess(snapshot(mapOf(
+        // A lossless decoder must keep the file's rate: a 96 kHz FLAC decoded at 96 kHz and played at
+        // 48 kHz was resampled. When the decoder reports another rate than the container, the
+        // container's number is in doubt, so neither verdict holds.
+        fun flac(decoded: Long) = assess(snapshot(mapOf(
             Metrics.DECODER_INPUT_MIME to measured(TelemetryReading.Text("audio/flac")),
             Metrics.DECODER_INPUT_SAMPLE_RATE to hertz(96_000),
-            Metrics.DECODER_OUTPUT_SAMPLE_RATE to hertz(48_000),
+            Metrics.DECODER_OUTPUT_SAMPLE_RATE to hertz(decoded),
             Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE to hertz(48_000),
         ))).checks.single { it.condition == AppSegmentCondition.SAMPLE_RATE }
-        assertEquals(AppSegmentStatus.MODIFIED, flac.status)
+        assertEquals(AppSegmentStatus.MODIFIED, flac(96_000).status)
+        assertEquals(AppSegmentStatus.UNKNOWN, flac(48_000).status)
     }
 
     @Test
