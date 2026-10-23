@@ -64,6 +64,7 @@ internal class MediaStoreIdentityIndex(
     private val rowsByRemoteId = rows.associateByTo(HashMap(), StoredTrackIdentity::remoteId)
     private val unseenRowsByFile = rows.groupByTo(HashMap(), StoredTrackIdentity::fileKey)
     private val listedRemoteIdsByFile = listedFiles.groupBy(ListedMediaStoreFile::fileKey) { it.remoteId }
+    private val storedFileByRemoteId = rows.associate { it.remoteId to it.fileKey() }
 
     /** Returns the row of an unchanged file and marks it seen, or null when [plan] must decide. */
     fun unchangedTrackId(candidate: LibraryTrackCandidate): Long? {
@@ -100,8 +101,15 @@ internal class MediaStoreIdentityIndex(
         )
     }
 
-    private fun StoredTrackIdentity.isListedUnderAnotherId(remoteId: String): Boolean =
-        listedRemoteIdsByFile[fileKey()].orEmpty().any { it != remoteId }
+    /**
+     * True when this row's file is listed under another `_ID`. An identical copy listed under the
+     * `_ID` of its own row with the same key is that row's file, not this one renumbered: before
+     * Android 10 copies on two storages share a key, and a tag edit to one must keep its row.
+     */
+    private fun StoredTrackIdentity.isListedUnderAnotherId(remoteId: String): Boolean {
+        val key = fileKey()
+        return listedRemoteIdsByFile[key].orEmpty().any { it != remoteId && storedFileByRemoteId[it] != key }
+    }
 
     private fun markSeen(row: StoredTrackIdentity) {
         val key = row.fileKey()

@@ -258,6 +258,30 @@ class MediaStoreIdentityIndexTest {
     }
 
     @Test
+    fun `before Android 10 a tag edit keeps its row beside an identical copy on other storage`() {
+        // Music/Album/x.flac on the phone and Album/x.flac on an SD card share a key there; editing
+        // the phone copy's tags changes its size, while the SD copy is still listed under its own row.
+        val index = MediaStoreIdentityIndex(
+            rows = listOf(
+                row(1, mediaId = 1, songA, folderName = "Album", volumeName = "external"),
+                row(2, mediaId = 2, songA, folderName = "Album", volumeName = "external"),
+            ),
+            listedFiles = listOf(
+                listed(mediaId = 1, songA.copy(sizeBytes = songA.sizeBytes + 512), folderName = "Album", volumeName = "external"),
+                listed(mediaId = 2, songA, folderName = "Album", volumeName = "external"),
+            ),
+            pathIdentifiesFile = false,
+        )
+
+        assertEquals(
+            MediaStoreTrackPlan(targetTrackId = 1),
+            index.plan(
+                candidate(mediaId = 1, songA.copy(sizeBytes = songA.sizeBytes + 512), folderName = "Album", volumeName = "external"),
+            ),
+        )
+    }
+
+    @Test
     fun `a rename keeps the row while the old name is no longer listed`() {
         val renamed = songA.copy(fileName = "renamed.flac")
         val index = MediaStoreIdentityIndex(
