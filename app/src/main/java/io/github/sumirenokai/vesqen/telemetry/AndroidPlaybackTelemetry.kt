@@ -1856,7 +1856,7 @@ class AndroidPlaybackTelemetry internal constructor(
         elapsedSinceLastFeedMs: Long,
     ) {
         val instant = clock.fromElapsedRealtime(eventTime.realtimeMs)
-        val mediaPeriodId = eventTime.mediaPeriodId ?: eventTime.currentMediaPeriodId
+        val mediaPeriodId = eventTime.playingPeriodId()
         synchronized(stateLock) {
             bindDeferredCurrentPeriodLocked(eventTime)
             if (!belongsToActivePeriodLocked(mediaPeriodId)) return
@@ -1909,10 +1909,11 @@ class AndroidPlaybackTelemetry internal constructor(
         recordError(eventTime, "error.audio_sink")
     }
 
+    /** Scoped to the session that was playing when Media3 reported the error. */
     private fun recordError(eventTime: AnalyticsListener.EventTime, code: String) {
         val instant = clock.fromElapsedRealtime(eventTime.realtimeMs)
         synchronized(stateLock) {
-            val mediaPeriodId = eventTime.mediaPeriodId ?: eventTime.currentMediaPeriodId
+            val mediaPeriodId = eventTime.playingPeriodId()
             recordEventLocked(
                 kind = TelemetryEventKind.ERROR,
                 severity = TelemetryEventSeverity.ERROR,
@@ -3086,6 +3087,17 @@ internal fun decoderFlagEvidenceInstant(
     flagsObservedAt: TelemetryInstant?,
     snapshotInstant: TelemetryInstant,
 ): TelemetryInstant = flagsObservedAt.takeIf { hasActivePlayback } ?: snapshotInstant
+
+/**
+ * The period an underrun or error is attributed to. Media3 stamps underruns and audio sink and
+ * codec errors with the renderer's reading period. Once the renderer has read an item to its end,
+ * that is already the next item while the codec and AudioTrack still hold the last 0.3–1 s of the
+ * playing one, so these go to the playing period. The reading period stands in only when Media3
+ * reports no playing period.
+ */
+@OptIn(UnstableApi::class)
+internal fun AnalyticsListener.EventTime.playingPeriodId(): MediaSource.MediaPeriodId? =
+    currentMediaPeriodId ?: mediaPeriodId
 
 internal data class OutputSignalEventSpec(
     val kind: TelemetryEventKind,

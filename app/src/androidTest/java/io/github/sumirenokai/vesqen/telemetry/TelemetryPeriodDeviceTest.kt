@@ -57,6 +57,24 @@ class TelemetryPeriodDeviceTest {
         assertNull(inputRate())
     }
 
+    @Test
+    fun sinkCallbacksStampedWithNextReadingPeriodBelongToPlayingItem() = runBlocking {
+        main {
+            telemetry.onMediaItemTransition(event(current, current), MediaItem.fromUri("file:///test/current.flac"), Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED)
+            // The renderer has read the current item to its end while its tail is still playing.
+            telemetry.onAudioUnderrun(event(next, current), 4_096, 20, 30)
+            telemetry.onAudioSinkError(event(next, current), IllegalStateException())
+        }
+        val snapshot = withTimeout(5_000) {
+            telemetry.observe(TelemetryObservation(selection = TelemetryMetricSelection.Explicit(setOf(TelemetryMetricCatalog.PLAYBACK_UNDERRUN_COUNT)))).first()
+        }
+        assertEquals(1L, (snapshot.metric(TelemetryMetricCatalog.PLAYBACK_UNDERRUN_COUNT)?.evidence?.reading as? TelemetryReading.Integer)?.value)
+        val sessionId = snapshot.playbackSessionId
+        assertNotNull(sessionId)
+        assertEquals(sessionId, snapshot.recentEvents.single { it.kind == TelemetryEventKind.UNDERRUN }.playbackSessionId)
+        assertEquals(sessionId, snapshot.recentEvents.single { it.kind == TelemetryEventKind.ERROR }.playbackSessionId)
+    }
+
     private suspend fun inputRate(): Long? = withTimeout(5_000) {
         val snapshot = telemetry.observe(TelemetryObservation(selection = TelemetryMetricSelection.Explicit(setOf(TelemetryMetricCatalog.DECODER_INPUT_SAMPLE_RATE)))).first()
         (snapshot.metric(TelemetryMetricCatalog.DECODER_INPUT_SAMPLE_RATE)?.evidence?.reading as? TelemetryReading.Integer)?.value
