@@ -85,6 +85,38 @@ Play 正式版的时间取决于 Google：2026-10-16 查看时封闭测试已满
 - Play 数据安全表单：对照 [`PLAY_LISTING.md`](PLAY_LISTING.md) 第 5 节核对一遍。表单按 beta.2 填写，之后 #73 给设备报告加了系统报告的蓝牙编码字段。
 - 官网下载区先以 GitHub 为主，加安装说明；Play 上架后再加 Play 入口。README 状态同步。
 
+## 1.0 之后的排期（暂定）
+
+2026-10-24 所有者决定：官网不写日期，"已知问题与计划"页按"下一个更新版本 / 2.0 之前 / 2.0"三档排。这里的时间是内部估计，可以随反馈调整，不对外承诺（PRD 2026-10-13：对外不承诺具体功能或上线时间）。
+
+### 1.0.1：1.0 发布后约 2–3 周（[里程碑 1.0.1](https://github.com/Sumire-no-kai/Vesqen/milestone/5)）
+
+| Issue | 内容 |
+| --- | --- |
+| [#158](https://github.com/Sumire-no-kai/Vesqen/issues/158) | 随机播放时"下一首播放"和"添加到队列"插到随机位置：在服务里用自定义命令调用 `setShuffleOrder`，队列按随机顺序显示 |
+| [#164](https://github.com/Sumire-no-kai/Vesqen/issues/164) | 文件夹来源里改名或移动文件会丢失收藏、播放次数和歌单位置：按 #143 Q2 的做法先隐藏、再按文件名和大小接回 |
+| [#162](https://github.com/Sumire-no-kai/Vesqen/issues/162) | 约 35 个文字按钮的可点区域补到 48 dp |
+| [#160](https://github.com/Sumire-no-kai/Vesqen/issues/160) | Android 13–14 上编号 5、6 的蓝牙编码命名 |
+| | 1.0 发布后反馈里需要尽快修的问题 |
+
+发 1.0.1 时：`versionName` 1.0.1、`versionCode` 14；重新生成 Baseline Profile；发布说明；官网更新日志加一条，"已知问题与计划"页和 #163 去掉已修好的条目。
+
+### 2.0 之前（1.0.1 之后的 1.0.x 版本）
+
+| Issue | 内容 |
+| --- | --- |
+| [#159](https://github.com/Sumire-no-kai/Vesqen/issues/159)、[#139](https://github.com/Sumire-no-kai/Vesqen/issues/139) | 媒体库重建时的匹配，以及对不上的旧记录让用户选择归属。都要改扫描流程，一起做 |
+| [#161](https://github.com/Sumire-no-kai/Vesqen/issues/161) | 中文"高级功能"和"高级链路"撞名，先由所有者定新名称 |
+| [#165](https://github.com/Sumire-no-kai/Vesqen/issues/165) | 审计里"之后处理"的条目按影响挑选；其中多个 SQLiteOpenHelper 必须在下一次改表结构之前合成一个，A36（两个渠道的版本号和降级）要在 2.0 之前定 |
+
+### Google Play 正式版
+
+封闭测试满 14 天后约 2026-10-30 申请正式版，审核一般 7 天以内，上架当时最新的 1.0.x。Play 版此后留在 1.x（[商业模式](MONETIZATION.md)"GitHub 优先"）。
+
+### 2.0：不定日期
+
+前提是 M7（#71）在没有官方 bit-perfect 通路的参考手机（iQOO）上实测达到 `BIT-PERFECT ACTIVE`。在那之前只记录进度，不估日期；M7 有实测结果后再排。随 2.0 的内容见下面两张表。
+
 ## 2.0 之前
 
 | Issue | 内容 |
