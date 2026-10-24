@@ -146,3 +146,11 @@ attestation of real QA, not an automated device test.
 Published versions and their tags/APKs remain immutable. Any correction requires
 a higher versionCode and a new version. Record the CI run URL, workflow/source
 commits, signed APK hash and certificate alongside the device results.
+
+GitHub enforces this since 2026-10-23 (#165 A33). Immutable releases are on for
+the repository, so a published release's assets and tag cannot be replaced or
+deleted. It covers only releases published after it was turned on; the three
+1.0.0 betas stay mutable. The `Protect version tags` ruleset blocks deleting or
+moving any `v*` tag, with no bypass; creating a tag is still allowed, so the
+publish job can tag the release. A draft stays editable until it is published,
+so QA and deleting a withdrawn draft before re-signing work as before.
