@@ -97,6 +97,7 @@ Play 正式版的时间取决于 Google：2026-10-16 查看时封闭测试已满
 | [#164](https://github.com/Sumire-no-kai/Vesqen/issues/164) | 文件夹来源里改名或移动文件会丢失收藏、播放次数和歌单位置：按 #143 Q2 的做法先隐藏、再按文件名和大小接回 |
 | [#162](https://github.com/Sumire-no-kai/Vesqen/issues/162) | 约 35 个文字按钮的可点区域补到 48 dp |
 | [#160](https://github.com/Sumire-no-kai/Vesqen/issues/160) | Android 13–14 上编号 5、6 的蓝牙编码命名 |
+| [#167](https://github.com/Sumire-no-kai/Vesqen/issues/167) | 专辑、艺术家等列表的中文排序和歌曲列表一致：先按 A–Z 分组，再按拼音（#165 A13 之后中文全部排在英文之前） |
 | | 1.0 发布后反馈里需要尽快修的问题 |
 
 发 1.0.1 时：`versionName` 1.0.1、`versionCode` 14；重新生成 Baseline Profile；发布说明；官网更新日志加一条，"已知问题与计划"页和 #163 去掉已修好的条目。
