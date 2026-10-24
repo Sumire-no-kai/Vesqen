@@ -95,6 +95,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -152,6 +153,7 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.serif
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.catch
 
 private val PaperEasing = CubicBezierEasing(.22f, 1f, .36f, 1f)
 private const val COVER_MAX_DP = 360
@@ -943,9 +945,11 @@ private fun NowLinerNotesBody(
     // Collected only while the notes are composed and the app is visible, so sampling follows this
     // observer. Open notes stay composed in the background, which kept the sampler running there.
     val observed by remember(telemetry) {
+        // As on Chain, a failing observation stops updating the notes instead of reaching the
+        // composition, where it would crash the app and stop playback.
         telemetry?.observe(
             TelemetryObservation(selection = TelemetryMetricSelection.Explicit(NotesMetricIds)),
-        ) ?: kotlinx.coroutines.flow.emptyFlow<io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot>()
+        )?.catch { } ?: kotlinx.coroutines.flow.emptyFlow<io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot>()
     }.collectAsStateWithLifecycle(initialValue = null)
     val metrics = observed?.metrics.orEmpty().associateBy(TelemetryMetric::id)
     fun value(id: TelemetryMetricId) = metrics[id]?.evidence
@@ -993,8 +997,10 @@ private fun NowLinerNotesBody(
     val outputEvidence = output?.evidence ?: routeEvidence
     val route = when {
         outputName == null -> row(listOf(TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_NAME))
-        underruns != null && underruns !is TelemetryEvidence.Unavailable -> stringResource(
-            R.string.now_notes_route_underruns,
+        underruns != null && underruns !is TelemetryEvidence.Unavailable -> pluralStringResource(
+            R.plurals.now_notes_route_underruns,
+            // The catalog makes the underrun count an integer reading; anything else takes the general form.
+            (underruns.reading as? TelemetryReading.Integer)?.value?.coerceIn(0L, Int.MAX_VALUE.toLong())?.toInt() ?: 0,
             outputName,
             formatTelemetryReading(context, underruns.reading),
         ) to telemetryConfidenceLabel(context, listOfNotNull(outputEvidence, underruns).maxBy { it.confidence.ordinal }.confidence)

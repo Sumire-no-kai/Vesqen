@@ -28,6 +28,13 @@ class UpdateManifestTests(unittest.TestCase):
         with self.assertRaises(release.ReleaseError):
             updates.public_notes("English only")
 
+    def test_a_published_candidate_counts_once_when_publication_is_retried(self):
+        current = {"versionName": "1.0.0", "versionCode": 13, "apkSha256": "a" * 64}
+        self.assertTrue(updates.is_candidate(dict(current), current))
+        # Another build under the same version is not the candidate, so the duplicate check still stops it.
+        self.assertFalse(updates.is_candidate({**current, "apkSha256": "b" * 64}, current))
+        self.assertFalse(updates.is_candidate({**current, "versionCode": 12, "versionName": "1.0.0-beta.3"}, current))
+
     def test_manifest_binds_the_exact_asset_and_minimum_sdk(self):
         with tempfile.TemporaryDirectory() as directory:
             apk = Path(directory) / "app.apk"

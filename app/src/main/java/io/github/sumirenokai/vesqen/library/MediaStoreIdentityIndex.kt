@@ -83,7 +83,7 @@ internal class MediaStoreIdentityIndex(
                 current.fileKey() == candidate.fileKey() ||
                 sameFile == null &&
                 current.namesSameFileAs(candidate, pathIdentifiesFile) &&
-                !current.isListedUnderAnotherId(candidate.remoteId)
+                !current.isListedUnderAnotherId(candidate)
             )
         if (keepsCurrent) {
             markSeen(current!!)
@@ -102,13 +102,18 @@ internal class MediaStoreIdentityIndex(
     }
 
     /**
-     * True when this row's file is listed under another `_ID`. An identical copy listed under the
-     * `_ID` of its own row with the same key is that row's file, not this one renumbered: before
-     * Android 10 copies on two storages share a key, and a tag edit to one must keep its row.
+     * True when this row's file is listed under another `_ID`. Before Android 10 copies on two
+     * storages share a key, so when the candidate keeps this row's path (a tag edit), an identical
+     * copy listed under the `_ID` of its own row with the same key is that copy, not this file
+     * renumbered. A candidate on another path gets no such exemption: the copy's row may only be
+     * left over from a removed card while this row's file was renumbered after a MediaStore rebuild.
      */
-    private fun StoredTrackIdentity.isListedUnderAnotherId(remoteId: String): Boolean {
+    private fun StoredTrackIdentity.isListedUnderAnotherId(candidate: LibraryTrackCandidate): Boolean {
         val key = fileKey()
-        return listedRemoteIdsByFile[key].orEmpty().any { it != remoteId && storedFileByRemoteId[it] != key }
+        val samePath = folderName == candidate.folderName && fileName == candidate.fileName
+        return listedRemoteIdsByFile[key].orEmpty().any {
+            it != candidate.remoteId && !(samePath && storedFileByRemoteId[it] == key)
+        }
     }
 
     private fun markSeen(row: StoredTrackIdentity) {

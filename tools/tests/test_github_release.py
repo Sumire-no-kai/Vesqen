@@ -199,12 +199,14 @@ class GithubReleaseTest(unittest.TestCase):
     def test_publish_requires_matching_tag_and_never_rebuilds_or_uploads(self):
         reminder = "Device QA and upgrade acceptance must be recorded before publishing."
         for tag_type, target, body, github_digests_match, succeeds in (
-                ("missing", COMMIT, "Accepted release notes", True, True),
-                ("tag", COMMIT, "Accepted release notes", True, True),
-                ("tag", COMMIT, "Accepted release notes", False, False),
-                ("tag", "d" * 40, "Accepted release notes", True, False),
-                ("commit", COMMIT, "Accepted release notes", True, False),
-                ("tag", COMMIT, "Release notes\n" + reminder, True, False)):
+                ("missing", COMMIT, "Accepted release notes. SHA-256: {sha}", True, True),
+                ("tag", COMMIT, "Accepted release notes. SHA-256: {sha}", True, True),
+                ("tag", COMMIT, "Accepted release notes. SHA-256: {sha}", False, False),
+                ("tag", "d" * 40, "Accepted release notes. SHA-256: {sha}", True, False),
+                ("commit", COMMIT, "Accepted release notes. SHA-256: {sha}", True, False),
+                ("tag", COMMIT, "Release notes. SHA-256: {sha}\n" + reminder, True, False),
+                # Pasted notes with another digest typed in are refused.
+                ("tag", COMMIT, "Accepted release notes. SHA-256: " + "e" * 64, True, False)):
             with self.subTest(tag_type=tag_type, target=target, github_digests_match=github_digests_match), \
                     tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -227,7 +229,8 @@ class GithubReleaseTest(unittest.TestCase):
                     if "verify" in args:
                         return verification
                     if "view" in args:
-                        return json.dumps({"isDraft": True, "targetCommitish": COMMIT, "body": body})
+                        return json.dumps({"isDraft": True, "targetCommitish": COMMIT,
+                                           "body": body.replace("{sha}", data["apkSha256"])})
                     if "api" in args:
                         if "--paginate" in args:
                             return json.dumps([[listed]])
@@ -267,6 +270,7 @@ class GithubReleaseTest(unittest.TestCase):
     def test_unfinished_note_placeholders_block_publication(self):
         for placeholder in ("SHA-256: `(发布时填写)`", "已通过。（发布时按 #51 蓝牙断连的结果补上）",
                             "all passed. (发布时按 #51 蓝牙断连的结果补上)", "(按 #42 的结果更新)",
+                            "（按#51 的结果）", "（按 ＃51 的结果）", "（发布前填写）", "【发布时填写】", "(TBD)",
                             "Device QA and upgrade acceptance must be recorded before publishing."):
             with self.subTest(placeholder=placeholder):
                 self.assertIsNotNone(release.UNFINISHED_NOTES.search(placeholder))
@@ -274,6 +278,11 @@ class GithubReleaseTest(unittest.TestCase):
                          "Bluetooth disconnects passed (#51).", "设置里的“检查更新”（按钮）"):
             with self.subTest(finished=finished):
                 self.assertIsNone(release.UNFINISHED_NOTES.search(finished))
+
+    def test_prepare_stops_on_any_placeholder_but_the_digest(self):
+        self.assertEqual([], release.unfinished_notes("SHA-256: `(发布时填写)`", digest_pending=True))
+        self.assertNotEqual([], release.unfinished_notes("SHA-256: `(发布时填写)`"))
+        self.assertNotEqual([], release.unfinished_notes("passed. (发布时按 #51 的结果补上)", digest_pending=True))
 
     def test_local_signing_exports_ledger_and_public_notes_without_ci_environment(self):
         with tempfile.TemporaryDirectory() as directory:

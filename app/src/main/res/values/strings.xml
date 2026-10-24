@@ -253,6 +253,8 @@
     <string name="privacy_policy_asset">privacy/en.md</string>
     <!-- Every published URL must stay reachable or redirect; checkPrivacyPolicyFinal rejects a blank one. -->
     <string name="privacy_policy_url">https://vesqen.sumirenokai.com/privacy/</string>
+    <!-- Joins a column name to its value when the policy tables are stacked: "How long we keep it: 7 days". -->
+    <string name="privacy_policy_table_separator">": "</string>
     <string name="back">Back</string>
     <string name="search_local_music">Search local music</string>
     <string name="clear_search">Clear search</string>
@@ -339,6 +341,7 @@
     <string name="no_playlists_body">Create a playlist to organize tracks from your local library.</string>
     <string name="empty_playlist_body">This playlist is empty. Add tracks from a song’s details.</string>
     <string name="playlist_name">Playlist name</string>
+    <string name="playlist_name_taken">A playlist with this name already exists.</string>
     <string name="create">Create</string>
     <string name="cancel">Cancel</string>
     <string name="delete_playlist">Delete playlist</string>
@@ -584,6 +587,7 @@
     <string name="chain_confidence_measured">Measured · not verified</string>
     <string name="chain_confidence_derived">Derived</string>
     <string name="chain_confidence_estimated">Estimated</string>
+    <string name="chain_confidence_signed_record">Measured · signed record</string>
     <string name="chain_value_yes">Yes</string>
     <string name="chain_value_no">No</string>
     <string name="chain_unit_symbol">%1$s %2$s</string>
@@ -624,7 +628,7 @@
     <string name="chain_usb_no_audio_interfaces">No USB audio interface reported</string>
     <string name="chain_usb_audio_interface">Interface %1$d · class %2$s · subclass %3$s · protocol %4$s</string>
     <string name="chain_usb_endpoint_value">%1$s · %2$s</string>
-    <string name="chain_usb_endpoint_capabilities">Sample rates: %1$s Hz · Channels: %2$s · Encodings: %3$s</string>
+    <string name="chain_usb_endpoint_capabilities">Sample rates: %1$s · Channels: %2$s · Encodings: %3$s</string>
     <string name="chain_usb_any_value">any reported value</string>
     <string name="chain_section_source">Source</string>
     <string name="chain_section_decoder">Decoder</string>
@@ -691,6 +695,39 @@
     <string name="chain_thermal_critical">Critical</string>
     <string name="chain_thermal_emergency">Emergency</string>
     <string name="chain_thermal_shutdown">Shutdown</string>
+    <string name="chain_text_unknown">Unknown</string>
+    <string name="chain_route_other">Other output</string>
+    <string name="chain_route_built_in_speaker">Built-in speaker</string>
+    <string name="chain_route_built_in_speaker_safe">Built-in speaker for alerts</string>
+    <string name="chain_route_built_in_earpiece">Earpiece</string>
+    <string name="chain_route_wired_headset">Wired headset</string>
+    <string name="chain_route_wired_headphones">Wired headphones</string>
+    <string name="chain_route_line_analog">Analog line output</string>
+    <string name="chain_route_line_digital">Digital line output</string>
+    <string name="chain_route_hdmi">HDMI</string>
+    <string name="chain_route_hdmi_arc">HDMI ARC</string>
+    <string name="chain_route_hdmi_earc">HDMI eARC</string>
+    <string name="chain_route_usb_device">USB device</string>
+    <string name="chain_route_usb_accessory">USB accessory</string>
+    <string name="chain_route_usb_headset">USB headset</string>
+    <string name="chain_route_dock">Dock</string>
+    <string name="chain_route_fm">FM transmitter</string>
+    <string name="chain_route_ip">Network audio (IP)</string>
+    <string name="chain_route_bus">Audio bus</string>
+    <string name="chain_route_remote_submix">Remote submix</string>
+    <string name="chain_route_bluetooth_a2dp">Bluetooth (A2DP)</string>
+    <string name="chain_route_bluetooth_sco">Bluetooth call audio (SCO)</string>
+    <string name="chain_route_ble_headset">Bluetooth LE Audio headset</string>
+    <string name="chain_route_ble_speaker">Bluetooth LE Audio speaker</string>
+    <string name="chain_route_ble_broadcast">Bluetooth LE Audio broadcast</string>
+    <string name="chain_route_hearing_aid">Hearing aid</string>
+    <string name="chain_decoder_path_software">Software decoder</string>
+    <string name="chain_decoder_path_platform_hardware">Hardware-accelerated decoder</string>
+    <string name="chain_decoder_path_platform_unspecified">Android decoder, kind not reported</string>
+    <string name="chain_decoder_path_offload">Audio offload</string>
+    <string name="chain_decoder_path_pcm_bypass">PCM, no decoder</string>
+    <string name="chain_direct_mode_offload_gapless">Gapless audio offload</string>
+    <string name="chain_direct_mode_bitstream">Bitstream passthrough</string>
     <string name="chain_metric_source_container">Source container (filename estimate)</string>
     <string name="chain_metric_source_codec_mime">Source codec MIME type</string>
     <string name="chain_metric_source_codec_label">Source codec label</string>
@@ -848,6 +885,7 @@
     <string name="chain_segment_bluetooth_nominally_lossless">Nominally lossless; it falls back to lossy on a weak signal, and Vesqen can’t tell which mode is in use.</string>
     <string name="chain_source_android_bluetooth_codec_report">Android Bluetooth codec report</string>
     <string name="chain_method_ldac_nominal_bitrate">Nominal ceiling of the LDAC quality Android reports</string>
+    <string name="chain_method_pcm_bypass">Media3 reports raw PCM input and no codec, so no decoder handles this file</string>
     <string name="chain_segment_list_separator">", "</string>
     <string name="chain_condition_speed">speed</string>
     <string name="chain_condition_pitch">pitch</string>
@@ -874,7 +912,10 @@
     <string name="collapse_player">Collapse player</string>
     <string name="now_notes_expanded">Expanded</string>
     <string name="now_notes_collapsed">Collapsed</string>
-    <string name="now_notes_route_underruns">%1$s · %2$s underruns</string>
+    <plurals name="now_notes_route_underruns">
+        <item quantity="one">%1$s · %2$s underrun</item>
+        <item quantity="other">%1$s · %2$s underruns</item>
+    </plurals>
     <!-- #119: trial and Pro features. The trial length is PremiumAccess.TrialDays. -->
     <string name="settings_premium">Pro features</string>
     <string name="settings_premium_not_charging">Free until 2.0</string>

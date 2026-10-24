@@ -27,6 +27,8 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
@@ -44,6 +46,7 @@ fun TrackRow(
     onMore: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    accessibilityActions: List<CustomAccessibilityAction> = emptyList(),
     trailingContent: (@Composable () -> Unit)? = null,
     moreIcon: Painter = rememberVectorPainter(Icons.Filled.MoreVert),
     artworkFallback: Painter = rememberTwinPathsPainter(),
@@ -59,8 +62,13 @@ fun TrackRow(
             .testTag("vesqen.library.track.${track.id}")
             // TalkBack reads the merged title and subtitle; a row description on top would repeat them.
             // TalkBack skipped the play marker's description, so the current row states it itself (#35).
-            .clickable(enabled = enabled, onClick = onPlay)
-            .semantics { playbackState?.let { stateDescription = it } },
+            // A disabled clickable (order editing) would make TalkBack announce the row as disabled
+            // and ignore its move actions; the row stays one merged node instead.
+            .then(if (enabled) Modifier.clickable(onClick = onPlay) else Modifier.semantics(mergeDescendants = true) {})
+            .semantics {
+                playbackState?.let { stateDescription = it }
+                if (accessibilityActions.isNotEmpty()) customActions = accessibilityActions
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AlbumArtwork(track = track, targetSize = 48.dp, modifier = Modifier.size(48.dp), fallbackPainter = artworkFallback)

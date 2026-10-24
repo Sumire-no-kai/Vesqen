@@ -72,8 +72,11 @@ fun DeviceReportScreen(
     val snapshot by deviceReporter.snapshot.collectAsStateWithLifecycle()
     val state = snapshot.state
     val report = state.report
-    // Back from a preview returns to the choices instead of leaving with an unsent report.
-    BackHandler(enabled = report != null) { deviceReporter.discard() }
+    // Back from a preview returns to the choices instead of leaving with an unsent report. During a
+    // send it leaves the page and keeps the send: an upload may still reach the server, and its
+    // receipt, the person's only way to ask for deletion, waits here when they come back.
+    val discardOnBack = report != null && state !is DeviceReportState.Sending
+    BackHandler(enabled = discardOnBack) { deviceReporter.discard() }
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.fillMaxHeight().fillMaxWidth().widthIn(max = 720.dp)) {
             LazyColumn(
@@ -87,7 +90,7 @@ fun DeviceReportScreen(
                     SettingsDetailHeader(
                         title = stringResource(R.string.report_title),
                         backTag = "vesqen.report.back",
-                        onBack = if (report != null) deviceReporter::discard else onBack,
+                        onBack = if (discardOnBack) deviceReporter::discard else onBack,
                     )
                 }
                 if (report == null) {

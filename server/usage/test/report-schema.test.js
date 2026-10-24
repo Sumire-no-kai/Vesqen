@@ -98,6 +98,16 @@ test('all contract text values validate and values outside each allowlist are re
   }
 });
 
+test('estimate method ids come from the contract, including the codec-less PCM decoder path',()=>{
+  const estimated=methodId=>({...report(),chainEvidence:{capturedAtEpochMs:100,capturedAtElapsedRealtimeMs:100,metrics:[
+    {...measured('decoder.path',{redactedReason:'UNREVIEWED_OR_PRIVATE_TEXT'}),confidence:'ESTIMATED',source:'media3.analytics',
+      methodId,methodRedacted:false,inputMetricIds:[]},
+  ]}});
+  assert.ok(vocabulary.text.calculations.includes('decoder.path_from_raw_pcm_without_codec'));
+  for(const methodId of vocabulary.text.calculations) validateReport(estimated(methodId));
+  assert.throws(()=>validateReport(estimated('decoder.path_from_unreviewed_guess')));
+});
+
 test('metric value kinds and units come from the shared catalog',()=>{
   for(const definition of vocabulary.metrics) {
     const readings={TEXT:{redactedReason:'UNREVIEWED_OR_PRIVATE_TEXT'},FLAG:{value:true},

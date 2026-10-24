@@ -7,6 +7,28 @@ import org.junit.Test
 
 class PlaybackStateStoreTest {
     @Test
+    fun `a queue saved at the end of its last track restarts from the beginning`() {
+        // An album ended with repeat off: the position was saved at the end of the last track.
+        fun saved(index: Int, positionMs: Long) = PersistedPlaybackState(
+            listOf(1L, 2L, 3L), currentTrackId = index + 1L, positionMs = positionMs,
+            shuffleEnabled = false, repeatMode = PlaybackRepeatMode.OFF, currentQueueIndex = index,
+        )
+        val tracks = listOf(track(1), track(2), track(3))
+
+        val ended = saved(2, 59_800).restoreAgainst(tracks)!!
+        assertEquals(0, ended.startIndex)
+        assertEquals(0, ended.positionMs)
+        // A finished track that is not the last continues with the next one.
+        val between = saved(0, 60_000).restoreAgainst(tracks)!!
+        assertEquals(1, between.startIndex)
+        assertEquals(0, between.positionMs)
+        // Anywhere earlier in a track is restored as saved.
+        val middle = saved(2, 30_000).restoreAgainst(tracks)!!
+        assertEquals(2, middle.startIndex)
+        assertEquals(30_000, middle.positionMs)
+    }
+
+    @Test
     fun `restore preserves the current occurrence of a repeated track`() {
         val restored = repeatedTrackState().restoreAgainst(listOf(track(1), track(2)))!!
 

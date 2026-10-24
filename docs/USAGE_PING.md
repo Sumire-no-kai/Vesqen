@@ -78,8 +78,12 @@ foreground's separate updater GET; disabled/not-due statistics leave ordinary
 updater checks available. A successful usage response without update data (for
 example while the server's relay is not configured) calls
 `GitHubUpdateRuntime.checkWithoutUsageResponse`, so the updater checks on its own.
-A failed usage request was that day's only request and is not replaced by another
-one (#78). Manual updates remain independent.
+A usage request that never reached the server (no network, DNS or a firewall) was
+that day's only request and is not replaced by another one (#78). Since 1.0 an
+error status from the server (a rate limit, a schema mismatch, a server error)
+counts as a reply without update data and hands the check back as well, so a
+server problem cannot stop GitHub users from hearing about updates. Manual updates
+remain independent.
 
 See the PR description for proposed public-policy/README/site/release-note edits.
 Those documents are not changed by this implementation.

@@ -282,6 +282,29 @@ class MediaStoreIdentityIndexTest {
     }
 
     @Test
+    fun `before Android 10 a copy's leftover row does not hand this row to another song after a rebuild`() {
+        // The SD copy's row (2) stays hidden after the card is removed. After a rebuild the phone's
+        // file is listed under _ID 2, and another song within a second of it gets this row's _ID 1.
+        val other = TestFile(fileName = "y.flac", sizeBytes = 55_555, durationMs = songA.durationMs + 400)
+        val index = MediaStoreIdentityIndex(
+            rows = listOf(
+                row(1, mediaId = 1, songA, folderName = "Album", volumeName = "external"),
+                row(2, mediaId = 2, songA, folderName = "Album", volumeName = "external"),
+            ),
+            listedFiles = listOf(
+                listed(mediaId = 1, other, folderName = "Other", volumeName = "external"),
+                listed(mediaId = 2, songA, folderName = "Album", volumeName = "external"),
+            ),
+            pathIdentifiesFile = false,
+        )
+
+        assertEquals(
+            MediaStoreTrackPlan(targetTrackId = null, displacedTrackId = 1),
+            index.plan(candidate(mediaId = 1, other, folderName = "Other", volumeName = "external")),
+        )
+    }
+
+    @Test
     fun `a rename keeps the row while the old name is no longer listed`() {
         val renamed = songA.copy(fileName = "renamed.flac")
         val index = MediaStoreIdentityIndex(

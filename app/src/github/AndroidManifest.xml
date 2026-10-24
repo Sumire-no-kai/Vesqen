@@ -11,14 +11,17 @@
         <!-- #120: activation links from the website's purchase page. They live on the API host, not on
              the website: Chrome keeps a link that stays on the current site in the browser, so the
              purchase page could not hand it to the app. vesqen-api serves the assetlinks.json that
-             verifies it. Only the GitHub build takes website codes; Play sells through Google Play. -->
+             verifies it. Only the GitHub build takes website codes; Play sells through Google Play.
+             1.x sells nothing, so the filter is not auto-verified: verification makes Android fetch
+             that file at every install and update, a request the privacy policy does not list. Add
+             android:autoVerify="true" back, with a policy update, when sales open in 2.0 (#120). -->
         <activity
             android:name="io.github.sumirenokai.vesqen.premium.ActivationLinkActivity"
             android:exported="true"
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
-            <intent-filter android:autoVerify="true">
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />

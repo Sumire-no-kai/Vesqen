@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.ui.components
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -84,16 +85,19 @@ internal fun outputStatusVisualSpec(declaration: OutputDeclaration): OutputStatu
 }
 
 @Composable
-internal fun outputDeclarationLabel(declaration: OutputDeclaration): String = stringResource(
-    when (declaration) {
-        OutputDeclaration.SYSTEM_MIXED -> R.string.system_mixed
-        OutputDeclaration.BIT_PERFECT_AVAILABLE -> R.string.bit_perfect_available
-        OutputDeclaration.BIT_PERFECT_REQUESTED -> R.string.bit_perfect_requested
-        OutputDeclaration.BIT_PERFECT_ACTIVE -> R.string.bit_perfect_active
-        OutputDeclaration.BIT_PERFECT_VERIFIED -> R.string.bit_perfect_verified
-        OutputDeclaration.BIT_PERFECT_FAILED -> R.string.bit_perfect_failed
-    },
-)
+internal fun outputDeclarationLabel(declaration: OutputDeclaration): String =
+    stringResource(outputDeclarationLabelResource(declaration))
+
+/** The chip's code, also used wherever a declaration is written out, such as the dashboard card. */
+@StringRes
+internal fun outputDeclarationLabelResource(declaration: OutputDeclaration): Int = when (declaration) {
+    OutputDeclaration.SYSTEM_MIXED -> R.string.system_mixed
+    OutputDeclaration.BIT_PERFECT_AVAILABLE -> R.string.bit_perfect_available
+    OutputDeclaration.BIT_PERFECT_REQUESTED -> R.string.bit_perfect_requested
+    OutputDeclaration.BIT_PERFECT_ACTIVE -> R.string.bit_perfect_active
+    OutputDeclaration.BIT_PERFECT_VERIFIED -> R.string.bit_perfect_verified
+    OutputDeclaration.BIT_PERFECT_FAILED -> R.string.bit_perfect_failed
+}
 
 @Composable
 fun OutputStatusChip(

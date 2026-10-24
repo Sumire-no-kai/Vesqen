@@ -151,15 +151,19 @@ internal fun assessAppSegment(
     }
     val inputMime = reader.measuredText(Metrics.DECODER_INPUT_MIME)
     val codecMayChangeFormat = inputMime == "audio/mp4a-latm" || inputMime == "audio/aac"
-    // The decoder's measured output rate (#72) tells an AAC decoder's SBR from Vesqen resampling. A
-    // lossless decoder has to keep the file's rate, so for lossless input it never explains a change.
+    // The decoder's measured output rate (#72) tells an AAC decoder's SBR from Vesqen resampling.
     val decodedRate = reader.measuredInteger(Metrics.DECODER_OUTPUT_SAMPLE_RATE)
-        .takeUnless { inputMime?.let(::sourceCompression) == SourceCompression.LOSSLESS }
+    val losslessInput = inputMime?.let(::sourceCompression) == SourceCompression.LOSSLESS
     check(AppSegmentCondition.SAMPLE_RATE, listOf(Metrics.DECODER_INPUT_SAMPLE_RATE, Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE)) {
+        val input = (it[0] as TelemetryReading.Integer).value
         val output = (it[1] as TelemetryReading.Integer).value
-        val same = (it[0] as TelemetryReading.Integer).value == output
         when {
-            same -> Verdict.Kept
+            input == output -> Verdict.Kept
+            // A lossless decoder has to keep the stream's rate. When it reports another rate than
+            // the container states, the container's number is in doubt and proves nothing either way.
+            losslessInput && decodedRate != null && decodedRate != input ->
+                Verdict.Unresolved(SegmentReason.INSUFFICIENT_CONFIDENCE)
+            losslessInput -> Verdict.Changed
             decodedRate != null -> Verdict.of(decodedRate == output)
             codecMayChangeFormat -> Verdict.Unresolved(SegmentReason.DECODER_MAY_CHANGE_FORMAT)
             else -> Verdict.Changed
@@ -209,10 +213,15 @@ private fun precisionCheck(reader: SegmentEvidenceReader): AppSegmentCheck {
     val inputEvidence = read.evidence[Metrics.DECODER_INPUT_PCM_ENCODING]
     val widthNotStated = inputEvidence is TelemetryEvidence.Unavailable &&
         inputEvidence.reason == TelemetryUnavailableReason.NOT_APPLICABLE
-    val losslessInput = reader.measuredText(Metrics.DECODER_INPUT_MIME)?.let(::sourceCompression) ==
-        SourceCompression.LOSSLESS
-    val compressedInput = widthNotStated && !losslessInput
-    val unstatedLosslessWidth = widthNotStated && losslessInput
+    // The verdict depends on the codec, so its evidence goes into the check (and the report) too.
+    val mime = reader.read(listOf(Metrics.DECODER_INPUT_MIME))
+    val compression = mime.takeIf { it.issues.isEmpty() }
+        ?.let { (it.evidence[Metrics.DECODER_INPUT_MIME]?.reading as? TelemetryReading.Text)?.value }
+        ?.let(::sourceCompression) ?: SourceCompression.UNKNOWN
+    // Only input known to be lossy is judged against its decoder; a lossless or unknown codec without
+    // a stated width keeps the strict rule.
+    val compressedInput = widthNotStated && compression == SourceCompression.LOSSY
+    val unstatedLosslessWidth = widthNotStated && compression != SourceCompression.LOSSY
     val widthIssues = read.issues.filter {
         widthNotStated && it.metricId == Metrics.DECODER_INPUT_PCM_ENCODING && it.reason == SegmentReason.UNAVAILABLE
     }
@@ -238,7 +247,7 @@ private fun precisionCheck(reader: SegmentEvidenceReader): AppSegmentCheck {
     }
     val issues = when {
         verdict !is Verdict.Unresolved -> blocking
-        unstatedLosslessWidth -> blocking + widthIssues + decoded?.issues.orEmpty()
+        unstatedLosslessWidth -> blocking + widthIssues + mime.issues + decoded?.issues.orEmpty()
         decodedEncoding == null -> blocking + decoded?.issues.orEmpty()
         else -> blocking
     }
@@ -255,7 +264,7 @@ private fun precisionCheck(reader: SegmentEvidenceReader): AppSegmentCheck {
             is Verdict.Unresolved -> verdict.reason
         },
         issues = issues,
-        evidence = read.evidence + decoded?.evidence.orEmpty(),
+        evidence = read.evidence + mime.evidence + decoded?.evidence.orEmpty(),
     )
 }
 

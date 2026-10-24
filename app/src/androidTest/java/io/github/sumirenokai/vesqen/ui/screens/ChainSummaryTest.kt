@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
@@ -82,6 +84,22 @@ class ChainSummaryTest {
         album = "Quiet Rooms",
         durationMs = 245_000,
     )
+
+    @Test
+    fun a_complete_session_reads_as_live_until_a_shown_value_goes_missing() {
+        var snapshot by mutableStateOf(FakeAppSegmentTelemetry.speakerSession())
+        show(snapshotProvider = { snapshot })
+        // Facts that do not apply to the speaker, such as the Bluetooth codec, are not missing.
+        composeRule.onNodeWithTag("vesqen.chain.live").assertExists()
+
+        composeRule.runOnIdle {
+            snapshot = FakeAppSegmentTelemetry.speakerSession(
+                mapOf(Metrics.DECODER_NAME to unavailable(TelemetryUnavailableReason.TEMPORARILY_UNAVAILABLE)),
+            )
+        }
+        composeRule.onNodeWithTag("vesqen.chain.partial").assertExists()
+        composeRule.onAllNodesWithTag("vesqen.chain.live").assertCountEquals(0)
+    }
 
     @Test
     fun an_untouched_lossless_stream_is_unchanged_in_vesqens_part_only() {
@@ -365,6 +383,19 @@ class ChainSummaryTest {
         composeRule.onNodeWithTag(audioTrackRate).assert(!hasText(source, substring = true)).performClick()
         composeRule.onNodeWithTag(audioTrackRate).assertTextContains(source, substring = true)
         flags.forEach { composeRule.onAllNodesWithTag(processingFlag(it), useUnmergedTree = true).assertCountEquals(0) }
+    }
+
+    @Test
+    fun evidence_toggles_say_whether_their_evidence_is_open() {
+        show(FakeAppSegmentTelemetry.speakerSession())
+        val decoder = "vesqen.chain.core.${Metrics.DECODER_NAME.value}"
+        fun state(resource: Int) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(resource))
+
+        processing().assert(state(R.string.now_notes_collapsed)).performClick()
+        processing().assert(state(R.string.now_notes_expanded))
+        scrollTo(decoder)
+        composeRule.onNodeWithTag(decoder).assert(state(R.string.now_notes_collapsed)).performClick()
+        composeRule.onNodeWithTag(decoder).assert(state(R.string.now_notes_expanded))
     }
 
     private fun show(

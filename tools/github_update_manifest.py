@@ -28,6 +28,12 @@ def public_notes(body):
     return {"en": plain(english), "zh-CN": plain(chinese)}
 
 
+def is_candidate(ledger, current):
+    """A retried publication finds the candidate already published; it is the same release, counted once."""
+    return (ledger["versionCode"] == current["versionCode"] and ledger["versionName"] == current["versionName"]
+            and ledger.get("apkSha256") == current.get("apkSha256"))
+
+
 def make_release(metadata, apk, badging, body, repository):
     release.validate_metadata(metadata, metadata.get("sourceCommit"))
     if (metadata.get("certificateSha256") != release.CERT_SHA256
@@ -73,8 +79,10 @@ def generate(candidate, repository, tools, output):
             release.validate_metadata(ledger, ledger.get("sourceCommit"))
             if item["tag_name"] != f"v{ledger['versionName']}":
                 raise release.ReleaseError("Published tag and ledger disagree")
-            records.append((ledger, None))
             bodies[ledger["versionName"]] = item["body"]
+            if is_candidate(ledger, current):
+                continue
+            records.append((ledger, None))
     if current["versionName"] not in bodies:
         raise release.ReleaseError("Accepted draft is missing")
     if len({record[0]["versionCode"] for record in records}) != len(records):

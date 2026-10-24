@@ -61,6 +61,38 @@ class PrivacyPolicyDocumentTest {
     }
 
     @Test
+    fun `stacked table rows keep each cell's column name`() {
+        val table = PolicyMarkdown.parse(
+            """
+            | Feature | How long we keep it |
+            | --- | --- |
+            | Device report upload | 7 days |
+            """.trimIndent(),
+        ).single() as PolicyBlock.Table
+
+        assertEquals(
+            listOf(
+                PolicyTableRow(
+                    title = listOf(PolicySpan("Device report upload")),
+                    cells = listOf(PolicyTableCell(listOf(PolicySpan("How long we keep it")), listOf(PolicySpan("7 days")))),
+                ),
+            ),
+            table.bodyRows(),
+        )
+    }
+
+    @Test
+    fun `every cell of the packaged policies has a column name`() {
+        for (name in listOf("PRIVACY_POLICY.md", "PRIVACY_POLICY.zh-CN.md")) {
+            val cells = PolicyMarkdown.parse(policyFile(name)).filterIsInstance<PolicyBlock.Table>()
+                .flatMap { it.bodyRows() }
+                .flatMap(PolicyTableRow::cells)
+            assertTrue("$name has no table cells", cells.isNotEmpty())
+            assertTrue("$name has a cell without a column name", cells.all { it.header != null })
+        }
+    }
+
+    @Test
     fun `the document title is not repeated under the screen title`() {
         val blocks = PolicyMarkdown.parse("# Vesqen Privacy Policy\n\nBody").withoutDocumentTitle()
 

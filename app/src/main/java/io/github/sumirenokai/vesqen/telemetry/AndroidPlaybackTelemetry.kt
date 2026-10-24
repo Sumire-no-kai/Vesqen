@@ -14,6 +14,7 @@ import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
@@ -429,12 +430,18 @@ class AndroidPlaybackTelemetry internal constructor(
         )
 
         val decoderInstant = media.decoderObservedAt.takeIf { hasActivePlayback } ?: raw.instant
+        val rawPcmWithoutCodec = hasActivePlayback && playsRawPcmWithoutCodec(
+            inputMime = activeInputFormat?.sampleMimeType,
+            decoderName = activeDecoderName,
+            outputFromCodec = activeDecoderOutput?.output?.fromCodec,
+        )
+        val decoderReason = if (rawPcmWithoutCodec) TelemetryUnavailableReason.NOT_APPLICABLE else activeReason
         metrics.measuredTextOrUnavailable(
             TelemetryMetricCatalog.DECODER_NAME,
             activeDecoderName,
             MEDIA3_ANALYTICS,
             decoderInstant,
-            activeReason,
+            decoderReason,
         )
         metrics.measuredIntegerOrUnavailable(
             TelemetryMetricCatalog.DECODER_INITIALIZATION_DURATION,
@@ -442,14 +449,14 @@ class AndroidPlaybackTelemetry internal constructor(
             TelemetryUnit.MILLISECONDS,
             MEDIA3_ANALYTICS,
             decoderInstant,
-            activeReason,
+            decoderReason,
         )
-        val codecFlagReason = when {
-            media.sessionId == null -> TelemetryUnavailableReason.NO_ACTIVE_PLAYBACK
-            Build.VERSION.SDK_INT < Build.VERSION_CODES.Q -> TelemetryUnavailableReason.UNSUPPORTED_ANDROID_VERSION
-            activeDecoderName == null -> TelemetryUnavailableReason.WARMING_UP
-            else -> TelemetryUnavailableReason.TEMPORARILY_UNAVAILABLE
-        }
+        val codecFlagReason = codecFlagUnavailableReason(
+            hasActivePlayback = hasActivePlayback,
+            rawPcmWithoutCodec = rawPcmWithoutCodec,
+            sdkInt = Build.VERSION.SDK_INT,
+            decoderName = activeDecoderName,
+        )
         val codecFlagInstant = decoderFlagEvidenceInstant(
             hasActivePlayback = hasActivePlayback,
             flagsObservedAt = media.decoderFlagsObservedAt,
@@ -496,6 +503,23 @@ class AndroidPlaybackTelemetry internal constructor(
                         TelemetryMetricCatalog.DECODER_NAME,
                         TelemetryMetricCatalog.DECODER_SOFTWARE_ONLY,
                         TelemetryMetricCatalog.DECODER_HARDWARE_ACCELERATED,
+                        TelemetryMetricCatalog.PLAYBACK_OFFLOAD,
+                    ),
+                ),
+            )
+        } else if (rawPcmWithoutCodec) {
+            metrics.putMetric(
+                TelemetryMetricCatalog.DECODER_PATH,
+                TelemetryEvidence.Estimated(
+                    reading = TelemetryReading.Text("pcm_bypass"),
+                    source = MEDIA3_ANALYTICS,
+                    observedAtEpochMs = raw.instant.epochMs,
+                    observedAtElapsedRealtimeMs = raw.instant.elapsedRealtimeMs,
+                    methodId = PCM_BYPASS_DECODER_PATH_METHOD,
+                    inputMetricIds = setOf(
+                        TelemetryMetricCatalog.DECODER_INPUT_MIME,
+                        TelemetryMetricCatalog.DECODER_NAME,
+                        TelemetryMetricCatalog.DECODER_OUTPUT_ENCODING,
                         TelemetryMetricCatalog.PLAYBACK_OFFLOAD,
                     ),
                 ),
@@ -1856,7 +1880,7 @@ class AndroidPlaybackTelemetry internal constructor(
         elapsedSinceLastFeedMs: Long,
     ) {
         val instant = clock.fromElapsedRealtime(eventTime.realtimeMs)
-        val mediaPeriodId = eventTime.mediaPeriodId ?: eventTime.currentMediaPeriodId
+        val mediaPeriodId = eventTime.playingPeriodId()
         synchronized(stateLock) {
             bindDeferredCurrentPeriodLocked(eventTime)
             if (!belongsToActivePeriodLocked(mediaPeriodId)) return
@@ -1909,10 +1933,11 @@ class AndroidPlaybackTelemetry internal constructor(
         recordError(eventTime, "error.audio_sink")
     }
 
+    /** Scoped to the session that was playing when Media3 reported the error. */
     private fun recordError(eventTime: AnalyticsListener.EventTime, code: String) {
         val instant = clock.fromElapsedRealtime(eventTime.realtimeMs)
         synchronized(stateLock) {
-            val mediaPeriodId = eventTime.mediaPeriodId ?: eventTime.currentMediaPeriodId
+            val mediaPeriodId = eventTime.playingPeriodId()
             recordEventLocked(
                 kind = TelemetryEventKind.ERROR,
                 severity = TelemetryEventSeverity.ERROR,
@@ -3086,6 +3111,45 @@ internal fun decoderFlagEvidenceInstant(
     flagsObservedAt: TelemetryInstant?,
     snapshotInstant: TelemetryInstant,
 ): TelemetryInstant = flagsObservedAt.takeIf { hasActivePlayback } ?: snapshotInstant
+
+/** Method of the `pcm_bypass` decoder path, inferred when Media3 plays raw PCM without a codec. */
+internal const val PCM_BYPASS_DECODER_PATH_METHOD = "decoder.path_from_raw_pcm_without_codec"
+
+/**
+ * Media3 hands raw PCM the audio sink accepts straight to it, so no codec is initialized and no
+ * decoder is reported. That is known only once the renderer has reported this input's output
+ * without a codec: raw PCM the sink cannot take still goes through a platform decoder, and a
+ * compressed stream reports no decoder while its codec is starting.
+ */
+internal fun playsRawPcmWithoutCodec(
+    inputMime: String?,
+    decoderName: String?,
+    outputFromCodec: Boolean?,
+): Boolean = inputMime == MimeTypes.AUDIO_RAW && decoderName == null && outputFromCodec == false
+
+internal fun codecFlagUnavailableReason(
+    hasActivePlayback: Boolean,
+    rawPcmWithoutCodec: Boolean,
+    sdkInt: Int,
+    decoderName: String?,
+): TelemetryUnavailableReason = when {
+    !hasActivePlayback -> TelemetryUnavailableReason.NO_ACTIVE_PLAYBACK
+    rawPcmWithoutCodec -> TelemetryUnavailableReason.NOT_APPLICABLE
+    sdkInt < Build.VERSION_CODES.Q -> TelemetryUnavailableReason.UNSUPPORTED_ANDROID_VERSION
+    decoderName == null -> TelemetryUnavailableReason.WARMING_UP
+    else -> TelemetryUnavailableReason.TEMPORARILY_UNAVAILABLE
+}
+
+/**
+ * The period an underrun or error is attributed to. Media3 stamps underruns and audio sink and
+ * codec errors with the renderer's reading period. Once the renderer has read an item to its end,
+ * that is already the next item while the codec and AudioTrack still hold the last 0.3–1 s of the
+ * playing one, so these go to the playing period. The reading period stands in only when Media3
+ * reports no playing period.
+ */
+@OptIn(UnstableApi::class)
+internal fun AnalyticsListener.EventTime.playingPeriodId(): MediaSource.MediaPeriodId? =
+    currentMediaPeriodId ?: mediaPeriodId
 
 internal data class OutputSignalEventSpec(
     val kind: TelemetryEventKind,

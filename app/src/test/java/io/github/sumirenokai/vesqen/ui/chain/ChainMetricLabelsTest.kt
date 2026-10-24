@@ -1,8 +1,18 @@
 package io.github.sumirenokai.vesqen.ui.chain
 
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.playback.OutputDeclaration
+import io.github.sumirenokai.vesqen.playback.telemetryLabel
+import io.github.sumirenokai.vesqen.reports.DeviceReportVocabulary
+import io.github.sumirenokai.vesqen.telemetry.TelemetryDataSource
+import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog
+import io.github.sumirenokai.vesqen.telemetry.TelemetryReading
+import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceId
+import io.github.sumirenokai.vesqen.telemetry.TelemetryUnavailableReason
+import io.github.sumirenokai.vesqen.ui.components.outputDeclarationLabelResource
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -41,6 +51,7 @@ class ChainMetricLabelsTest {
             "media3.position_from_last_event",
             "audio_track.request_format_pcm_data_rate",
             "processing.compare_decoder_input_and_audio_track_rates",
+            "decoder.path_from_raw_pcm_without_codec",
         )
 
         assertTrue(derivedMethods.all { telemetryDerivedMethodLabelResource(it) != null })
@@ -75,5 +86,61 @@ class ChainMetricLabelsTest {
         val missing = productionSourceIds.filter { telemetrySourceLabelResource(it) == null }
 
         assertTrue("Missing Chain source labels: $missing", missing.isEmpty())
+    }
+
+    @Test
+    fun `every token a producer emits has a label`() {
+        val tokens = DeviceReportVocabulary.routeTypes + DeviceReportVocabulary.playbackStates +
+            DeviceReportVocabulary.directModes + DecoderPaths
+        val missing = tokens.filter { telemetryTextLabelResource(it) == null }
+
+        assertTrue("Telemetry tokens shown untranslated: $missing", missing.isEmpty())
+    }
+
+    @Test
+    fun `a name that reads like a token is shown as it is`() {
+        assertNull(telemetryTextLabelResource("Dock"))
+        assertNull(telemetryTextLabelResource("c2.android.flac.decoder"))
+    }
+
+    @Test
+    fun `the output declaration card writes each declaration as its chip does`() {
+        OutputDeclaration.entries.forEach { declaration ->
+            assertEquals(outputDeclarationLabelResource(declaration), telemetryTextLabelResource(declaration.telemetryLabel))
+        }
+        assertEquals(R.string.bit_perfect_failed, telemetryTextLabelResource("BIT PERFECT FAILED"))
+    }
+
+    @Test
+    fun `only facts from a signed verification record drop the not verified suffix`() {
+        fun measured(sourceId: String) = TelemetryEvidence.Measured(
+            TelemetryReading.Text("BIT PERFECT VERIFIED"),
+            TelemetryDataSource(TelemetrySourceId(sourceId)),
+            observedAtEpochMs = 1,
+        )
+
+        assertEquals(
+            R.string.chain_confidence_signed_record,
+            telemetryConfidenceLabelResource(measured("vesqen.external_output_verification")),
+        )
+        assertEquals(R.string.chain_confidence_measured, telemetryConfidenceLabelResource(measured("vesqen.output_coordinator")))
+        assertEquals(
+            R.string.unavailable,
+            telemetryConfidenceLabelResource(
+                TelemetryEvidence.Unavailable(
+                    TelemetryUnavailableReason.NOT_APPLICABLE,
+                    observedAtEpochMs = 1,
+                    source = TelemetryDataSource(TelemetrySourceId("vesqen.external_output_verification")),
+                ),
+            ),
+        )
+    }
+
+    private companion object {
+        /**
+         * The decoder.path values of AndroidPlaybackTelemetry, which has no shared vocabulary for
+         * them; pcm_bypass is a WAV or AIFF file played without a codec.
+         */
+        val DecoderPaths = setOf("offload", "software", "platform_hardware", "platform_unspecified", "pcm_bypass")
     }
 }

@@ -12,6 +12,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -86,17 +87,33 @@ internal class AndroidLibraryCatalog(
         snapshotInternal(includeDeviceLibrary).tracks
     }
 
-    override suspend fun addFolder(treeUri: Uri): Unit = serialized {
+    override suspend fun addFolder(treeUri: Uri) {
+        // The picker's grant lasts only as long as the screen that asked for it, and a scan can hold
+        // the catalog for minutes, so the grant is made persistent before waiting for the catalog.
         val persistedPermission = contentResolver.persistedUriPermissions.any {
             it.uri == treeUri && it.isReadPermission
         }
         if (!persistedPermission) {
             contentResolver.takePersistableUriPermission(treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        store.upsertFolderSource(
-            treeUri = treeUri.toString(),
-            displayName = treeScanner.displayName(treeUri),
-        )
+        try {
+            serialized {
+                store.upsertFolderSource(
+                    treeUri = treeUri.toString(),
+                    displayName = treeScanner.displayName(treeUri),
+                )
+            }
+        } catch (failure: Throwable) {
+            // A folder that was never added must not keep a grant (cancellation included).
+            if (!persistedPermission) {
+                try {
+                    contentResolver.releasePersistableUriPermission(treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (releaseFailure: RuntimeException) {
+                    failure.addSuppressed(releaseFailure)
+                }
+            }
+            throw failure
+        }
     }
 
     override suspend fun removeFolder(sourceId: String): Unit = serialized {
@@ -154,7 +171,12 @@ internal class AndroidLibraryCatalog(
     override suspend fun refresh(
         includeDeviceLibrary: Boolean,
         onProgress: suspend (LibraryScanProgress) -> Unit,
-    ): LibraryRefreshResult = serialized {
+    ): LibraryRefreshResult = processScanLock.withLock { serialized { refreshLocked(includeDeviceLibrary, onProgress) } }
+
+    private suspend fun refreshLocked(
+        includeDeviceLibrary: Boolean,
+        onProgress: suspend (LibraryScanProgress) -> Unit,
+    ): LibraryRefreshResult {
         reconcileInterruptedStates()
         if (resumePausedSourcesRequested.getAndSet(false)) {
             store.preparePausedSourcesForResume()
@@ -189,7 +211,7 @@ internal class AndroidLibraryCatalog(
                 }
         }
 
-        LibraryRefreshResult(
+        return LibraryRefreshResult(
             snapshot = snapshotInternal(includeDeviceLibrary),
             hadFailure = hadFailure,
         )
@@ -403,6 +425,18 @@ internal class AndroidLibraryCatalog(
 
     private suspend fun <T> serialized(operation: suspend () -> T): T =
         operationGate.withOpenCatalog { operation() }
+
+    private companion object {
+        /**
+         * Each screen's ViewModel has its own catalog, and two can exist at once (a second activity
+         * opened from the media notification over a picker or dialog). Their scans must not interleave:
+         * the first to complete prunes every row the other marked with its newer epoch, and folder rows
+         * are deleted with their favorites and playlist entries. Scans therefore take this lock before
+         * their own catalog's gate; other operations keep only the gate, so the playback service's
+         * reads never wait for a scan in another catalog.
+         */
+        val processScanLock = Mutex()
+    }
 }
 
 /**

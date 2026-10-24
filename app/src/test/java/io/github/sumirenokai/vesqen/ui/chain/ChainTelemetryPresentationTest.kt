@@ -108,6 +108,29 @@ class ChainTelemetryPresentationTest {
     }
 
     @Test
+    fun `counts and units stay with their values in every language`() {
+        val languages = listOf("values", "values-zh-rCN", "values-b+zh+Hant", "values-ja")
+        for (path in languages.map { "src/main/res/$it/strings.xml" }) {
+            val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(File(path))
+            val plurals = document.getElementsByTagName("plurals")
+            val underruns = (0 until plurals.length).map(plurals::item)
+                .single { it.attributes.getNamedItem("name").nodeValue == "now_notes_route_underruns" }
+            val items = (0 until underruns.childNodes.length).map(underruns.childNodes::item)
+                .filter { it.nodeName == "item" }
+                .associate { it.attributes.getNamedItem("quantity").nodeValue to it.textContent }
+            assertTrue("$path underruns needs an other form", "other" in items)
+            if (path == "src/main/res/values/strings.xml") assertTrue("English needs a one form", "one" in items)
+            items.values.forEach { assertTrue("$path underruns must show route and count", "%1\$s" in it && "%2\$s" in it) }
+
+            val strings = document.getElementsByTagName("string")
+            val capabilities = (0 until strings.length).map(strings::item)
+                .single { it.attributes.getNamedItem("name").nodeValue == "chain_usb_endpoint_capabilities" }.textContent
+            // "any reported value" and "Unavailable" take no unit; each rate carries its own.
+            assertFalse("$path puts Hz after the rate list", "Hz" in capabilities)
+        }
+    }
+
+    @Test
     fun `every evidence age plural exists in every language`() {
         // #35: ages never count seconds, so there is no seconds plural to keep.
         val plurals = listOf("minutes", "hours", "days").map { "chain_updated_${it}_ago" }

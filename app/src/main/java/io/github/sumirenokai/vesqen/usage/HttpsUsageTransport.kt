@@ -36,7 +36,7 @@ internal class HttpsUsageTransport(
             // Closed by the owner (#96): nothing was counted. Null hands the day's update check back
             // to the updater, as a paused switch file does, instead of skipping it like a failure.
             if (connection.servicePaused()) return null
-            if (connection.responseCode != 200) throw IOException("Usage request rejected")
+            if (connection.responseCode != 200) throw UsageRequestRejected(connection.responseCode)
             val output = ByteArrayOutputStream()
             connection.inputStream.use { input ->
                 val buffer = ByteArray(4096)

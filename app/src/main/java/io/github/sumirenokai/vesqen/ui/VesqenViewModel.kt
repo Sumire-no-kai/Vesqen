@@ -220,8 +220,11 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                     loadingFailed = result.getOrNull()?.hadFailure ?: result.isFailure,
                 )
             }
+            // Connect to playback even when the library could not be read: music that is already
+            // playing still needs its mini player, Now and controls.
+            val controller = playbackController()
             result.getOrNull()?.snapshot?.let { snapshot ->
-                playbackController().syncLibrary(refreshedTracks ?: snapshot.tracks)
+                controller.syncLibrary(refreshedTracks ?: snapshot.tracks)
             }
             activeLibraryScan = null
             refreshQueuedLibrary()

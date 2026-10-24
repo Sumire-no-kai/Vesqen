@@ -109,9 +109,13 @@ internal class DefaultUsageStatistics(
                         return@launch
                     }
                     var failed = false
-                    // A failed ping skips today's automatic update check (#78): the ping was that
-                    // day's only request. A successful one without update data hands it back.
+                    // A ping that never reached the server skips today's automatic update check
+                    // (#78): the network is down, so the check would fail too. Any answer from the
+                    // server, an error status included, hands the check back like a reply without
+                    // update data: a rate limit or a schema mismatch on the server must not stop
+                    // GitHub users from hearing about updates.
                     val manifest = try { transport.send(ping) }
+                    catch (_: UsageRequestRejected) { null }
                     catch (_: IOException) { null.also { failed = true } /* No retry, logging or playback dependency. */ }
                     // OEM per-app firewalls surface as SecurityException from DNS, not IOException.
                     catch (_: SecurityException) { null.also { failed = true } }

@@ -1,5 +1,8 @@
 package io.github.sumirenokai.vesqen.library
 
+import java.text.Collator
+import java.util.Locale
+
 enum class LibraryBrowseMode {
     SONGS,
     ALBUMS,
@@ -26,81 +29,96 @@ data class LibraryCollection(
     val playlistId: Long? = null,
 )
 
+/**
+ * Names in any script in the order readers expect: case-insensitive, and Chinese by pinyin as the
+ * Songs index orders titles, not by UTF-16 code point (which put 周, 王, 陈 in reverse pinyin order).
+ * Made per sort, because a Collator is not safe to share between threads.
+ */
+private fun nameOrder(): Comparator<String> {
+    val collator = Collator.getInstance(Locale.SIMPLIFIED_CHINESE).apply { strength = Collator.SECONDARY }
+    return Comparator { first, second -> collator.compare(first.trim(), second.trim()) }
+}
+
 fun sortLibraryTracks(
     tracks: List<AudioTrack>,
     sortOrder: LibrarySortOrder,
-): List<AudioTrack> = when (sortOrder) {
-    LibrarySortOrder.TITLE -> tracks.sortedWith(compareBy<AudioTrack> { it.title.lowercase() })
-    LibrarySortOrder.ARTIST -> tracks.sortedWith(
-        compareBy<AudioTrack> { it.artist.lowercase() }
-            .thenBy { it.album.lowercase() }
-            .thenBy { it.title.lowercase() },
-    )
-    LibrarySortOrder.ALBUM -> tracks.sortedWith(
-        compareBy<AudioTrack> { it.album.lowercase() }
-            .thenBy { it.discNumber ?: Int.MAX_VALUE }
-            .thenBy { it.trackNumber ?: Int.MAX_VALUE }
-            .thenBy { it.title.lowercase() },
-    )
-    LibrarySortOrder.RECENTLY_ADDED -> tracks.sortedWith(
-        compareByDescending<AudioTrack> { it.dateModifiedSeconds }
-            .thenBy { it.title.lowercase() },
-    )
-    LibrarySortOrder.RECENTLY_PLAYED -> tracks.sortedWith(
-        compareByDescending<AudioTrack> { it.lastPlayedAtMs }
-            .thenBy { it.title.lowercase() },
-    )
-    LibrarySortOrder.MOST_PLAYED -> tracks.sortedWith(
-        compareByDescending<AudioTrack> { it.playCount }
-            .thenByDescending { it.lastPlayedAtMs }
-            .thenBy { it.title.lowercase() },
-    )
+): List<AudioTrack> {
+    val names = nameOrder()
+    return when (sortOrder) {
+        LibrarySortOrder.TITLE -> tracks.sortedWith(compareBy(names) { it.title })
+        LibrarySortOrder.ARTIST -> tracks.sortedWith(
+            compareBy<AudioTrack, String>(names) { it.artist }
+                .thenBy(names) { it.album }
+                .thenBy(names) { it.title },
+        )
+        LibrarySortOrder.ALBUM -> tracks.sortedWith(
+            compareBy<AudioTrack, String>(names) { it.album }.then(albumTrackOrder(names)),
+        )
+        LibrarySortOrder.RECENTLY_ADDED -> tracks.sortedWith(
+            compareByDescending<AudioTrack> { it.dateModifiedSeconds }
+                .thenBy(names) { it.title },
+        )
+        LibrarySortOrder.RECENTLY_PLAYED -> tracks.sortedWith(
+            compareByDescending<AudioTrack> { it.lastPlayedAtMs }
+                .thenBy(names) { it.title },
+        )
+        LibrarySortOrder.MOST_PLAYED -> tracks.sortedWith(
+            compareByDescending<AudioTrack> { it.playCount }
+                .thenByDescending { it.lastPlayedAtMs }
+                .thenBy(names) { it.title },
+        )
+    }
 }
 
 fun buildLibraryCollections(
     mode: LibraryBrowseMode,
     tracks: List<AudioTrack>,
     playlists: List<LibraryPlaylist>,
-): List<LibraryCollection> = when (mode) {
-    LibraryBrowseMode.SONGS -> emptyList()
-    LibraryBrowseMode.ALBUMS -> tracks.groupedCollections(
-        key = { track -> collectionKey("album", track.albumArtist.trim(), track.album.trim()) },
-        title = AudioTrack::album,
-        subtitle = { group -> group.firstNotBlank(AudioTrack::albumArtist, AudioTrack::artist) },
-        trackOrder = albumTrackComparator,
-    )
-    LibraryBrowseMode.ARTISTS -> tracks.groupedCollections(
-        key = { track -> collectionKey("artist", track.artist.ifBlank { track.albumArtist }) },
-        title = { track -> track.artist.ifBlank { track.albumArtist } },
-        subtitle = { group -> group.map(AudioTrack::album).filter(String::isNotBlank).distinct().size.toString() },
-        trackOrder = compareBy<AudioTrack> { it.album.lowercase() }
-            .then(albumTrackComparator),
-    )
-    // The folder's own name leads; the path above it follows in the subtitle, so a narrow row or
-    // large text never cuts off the part that tells folders apart (#35).
-    LibraryBrowseMode.FOLDERS -> tracks.groupedCollections(
-        key = { track -> collectionKey("folder", track.folderName) },
-        title = { track -> folderPathParts(track.folderName).second },
-        subtitle = { group -> folderPathParts(group.first().folderName).first },
-        trackOrder = compareBy { it.fileName.lowercase() },
-    )
-    LibraryBrowseMode.GENRES -> tracks.groupedCollections(
-        key = { track -> collectionKey("genre", track.genre) },
-        title = AudioTrack::genre,
-        subtitle = { group -> group.size.toString() },
-        trackOrder = compareBy<AudioTrack> { it.artist.lowercase() }
-            .thenBy { it.title.lowercase() },
-    )
-    LibraryBrowseMode.PLAYLISTS -> {
-        val tracksById = tracks.associateBy(AudioTrack::id)
-        playlists.map { playlist ->
-            LibraryCollection(
-                key = collectionKey("playlist", playlist.id.toString()),
-                title = playlist.name,
-                subtitle = playlist.trackCount.toString(),
-                tracks = playlist.trackIds.mapNotNull(tracksById::get),
-                playlistId = playlist.id,
-            )
+): List<LibraryCollection> {
+    val names = nameOrder()
+    return when (mode) {
+        LibraryBrowseMode.SONGS -> emptyList()
+        LibraryBrowseMode.ALBUMS -> tracks.groupedCollections(
+            key = { track -> collectionKey(AlbumNamespace, track.albumArtist.trim(), track.album.trim()) },
+            title = AudioTrack::album,
+            subtitle = { group -> group.firstNotBlank(AudioTrack::albumArtist, AudioTrack::artist) },
+            trackOrder = albumTrackOrder(names),
+            names = names,
+        )
+        LibraryBrowseMode.ARTISTS -> tracks.groupedCollections(
+            key = { track -> collectionKey("artist", track.artist.ifBlank { track.albumArtist }) },
+            title = { track -> track.artist.ifBlank { track.albumArtist } },
+            subtitle = { group -> group.map(AudioTrack::album).filter(String::isNotBlank).distinct().size.toString() },
+            trackOrder = compareBy<AudioTrack, String>(names) { it.album }.then(albumTrackOrder(names)),
+            names = names,
+        )
+        // The folder's own name leads; the path above it follows in the subtitle, so a narrow row or
+        // large text never cuts off the part that tells folders apart (#35).
+        LibraryBrowseMode.FOLDERS -> tracks.groupedCollections(
+            key = { track -> collectionKey("folder", track.folderName) },
+            title = { track -> folderPathParts(track.folderName).second },
+            subtitle = { group -> folderPathParts(group.first().folderName).first },
+            trackOrder = compareBy(names) { it.fileName },
+            names = names,
+        )
+        LibraryBrowseMode.GENRES -> tracks.groupedCollections(
+            key = { track -> collectionKey("genre", track.genre) },
+            title = AudioTrack::genre,
+            subtitle = { group -> group.size.toString() },
+            trackOrder = compareBy<AudioTrack, String>(names) { it.artist }.thenBy(names) { it.title },
+            names = names,
+        )
+        LibraryBrowseMode.PLAYLISTS -> {
+            val tracksById = tracks.associateBy(AudioTrack::id)
+            playlists.map { playlist ->
+                LibraryCollection(
+                    key = collectionKey("playlist", playlist.id.toString()),
+                    title = playlist.name,
+                    subtitle = playlist.trackCount.toString(),
+                    tracks = playlist.trackIds.mapNotNull(tracksById::get),
+                    playlistId = playlist.id,
+                )
+            }
         }
     }
 }
@@ -108,35 +126,43 @@ fun buildLibraryCollections(
 fun sortLibraryCollections(
     collections: List<LibraryCollection>,
     sortOrder: LibrarySortOrder,
-): List<LibraryCollection> = when (sortOrder) {
-    LibrarySortOrder.TITLE,
-    LibrarySortOrder.ALBUM,
-    -> collections.sortedBy { it.title.lowercase() }
-    LibrarySortOrder.ARTIST -> collections.sortedWith(
-        compareBy<LibraryCollection> { it.subtitle.lowercase() }
-            .thenBy { it.title.lowercase() },
-    )
-    LibrarySortOrder.RECENTLY_ADDED -> collections.sortedWith(
-        compareByDescending<LibraryCollection> { collection ->
-            collection.tracks.maxOfOrNull(AudioTrack::dateModifiedSeconds) ?: 0
-        }.thenBy { it.title.lowercase() },
-    )
-    LibrarySortOrder.RECENTLY_PLAYED -> collections.sortedWith(
-        compareByDescending<LibraryCollection> { collection ->
-            collection.tracks.maxOfOrNull(AudioTrack::lastPlayedAtMs) ?: 0
-        }.thenBy { it.title.lowercase() },
-    )
-    LibrarySortOrder.MOST_PLAYED -> collections.sortedWith(
-        compareByDescending<LibraryCollection> { collection -> collection.tracks.sumOf(AudioTrack::playCount) }
-            .thenBy { it.title.lowercase() },
-    )
+): List<LibraryCollection> {
+    val names = nameOrder()
+    return when (sortOrder) {
+        LibrarySortOrder.TITLE,
+        LibrarySortOrder.ALBUM,
+        -> collections.sortedWith(compareBy(names) { it.title })
+        // Only an album's subtitle is an artist; artists, genres, folders and playlists show a count
+        // or a path there, so they sort by their own name ("10" no longer before "2").
+        LibrarySortOrder.ARTIST -> collections.sortedWith(
+            compareBy<LibraryCollection, String>(names) { if (it.isAlbum) it.subtitle else it.title }
+                .thenBy(names) { it.title },
+        )
+        LibrarySortOrder.RECENTLY_ADDED -> collections.sortedWith(
+            compareByDescending<LibraryCollection> { collection ->
+                collection.tracks.maxOfOrNull(AudioTrack::dateModifiedSeconds) ?: 0
+            }.thenBy(names) { it.title },
+        )
+        LibrarySortOrder.RECENTLY_PLAYED -> collections.sortedWith(
+            compareByDescending<LibraryCollection> { collection ->
+                collection.tracks.maxOfOrNull(AudioTrack::lastPlayedAtMs) ?: 0
+            }.thenBy(names) { it.title },
+        )
+        LibrarySortOrder.MOST_PLAYED -> collections.sortedWith(
+            compareByDescending<LibraryCollection> { collection -> collection.tracks.sumOf(AudioTrack::playCount) }
+                .thenBy(names) { it.title },
+        )
+    }
 }
+
+private val LibraryCollection.isAlbum: Boolean get() = key.startsWith("$AlbumNamespace|")
 
 private inline fun List<AudioTrack>.groupedCollections(
     crossinline key: (AudioTrack) -> String,
     crossinline title: (AudioTrack) -> String,
     crossinline subtitle: (List<AudioTrack>) -> String,
     trackOrder: Comparator<AudioTrack>,
+    names: Comparator<String>,
 ): List<LibraryCollection> = groupBy(key)
     .map { (groupKey, groupTracks) ->
         LibraryCollection(
@@ -146,7 +172,7 @@ private inline fun List<AudioTrack>.groupedCollections(
             tracks = groupTracks.sortedWith(trackOrder),
         )
     }
-    .sortedWith(compareBy { it.title.lowercase() })
+    .sortedWith(compareBy(names) { it.title })
 
 /** "Music/Demo/Copper Hours/" → ("Music/Demo", "Copper Hours"); a bare name has nothing above it. */
 internal fun folderPathParts(path: String): Pair<String, String> {
@@ -169,6 +195,9 @@ private fun collectionKey(namespace: String, vararg components: String): String 
     }
 }
 
-private val albumTrackComparator = compareBy<AudioTrack> { it.discNumber ?: Int.MAX_VALUE }
-    .thenBy { it.trackNumber ?: Int.MAX_VALUE }
-    .thenBy { it.title.lowercase() }
+private fun albumTrackOrder(names: Comparator<String>): Comparator<AudioTrack> =
+    compareBy<AudioTrack> { it.discNumber ?: Int.MAX_VALUE }
+        .thenBy { it.trackNumber ?: Int.MAX_VALUE }
+        .thenBy(names) { it.title }
+
+private const val AlbumNamespace = "album"

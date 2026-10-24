@@ -89,6 +89,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -147,6 +148,8 @@ import io.github.sumirenokai.vesqen.ui.chain.elapsedChartFraction
 import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
 import io.github.sumirenokai.vesqen.ui.chain.formatSeconds
 import io.github.sumirenokai.vesqen.ui.chain.isTelemetrySnapshotStale
+import io.github.sumirenokai.vesqen.ui.chain.localizedTelemetryText
+import io.github.sumirenokai.vesqen.ui.chain.missingMetricCount
 import io.github.sumirenokai.vesqen.ui.chain.telemetryAgeLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetryConfidenceLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetryEvidenceAge
@@ -558,7 +561,8 @@ internal fun ChainObservationNotice(
     nowElapsedRealtimeMs: Long,
     refreshInterval: TelemetryRefreshInterval,
     powerMode: TelemetryPowerMode,
-    requestedMetricIds: Set<TelemetryMetricId>,
+    /** The metrics the page shows; the partial notice counts only these. */
+    shownMetricIds: Set<TelemetryMetricId>,
     lastPlayback: Boolean,
     onRetry: () -> Unit,
     compact: Boolean = false,
@@ -567,14 +571,7 @@ internal fun ChainObservationNotice(
     val isStale = snapshot?.let {
         isTelemetrySnapshotStale(it, nowElapsedRealtimeMs, refreshInterval, powerMode)
     } == true
-    val unavailableCount = snapshot?.let { current ->
-        val metrics = current.metrics.associateBy(TelemetryMetric::id)
-        requestedMetricIds.count { id ->
-            metrics[id]?.evidence.let { evidence ->
-                evidence == null || evidence is TelemetryEvidence.Unavailable
-            }
-        }
-    } ?: 0
+    val unavailableCount = snapshot?.let { missingMetricCount(it, shownMetricIds) } ?: 0
     val content = when {
         state is ChainObservationState.Failed -> ChainNoticeContent(
             icon = Icons.Filled.ErrorOutline,
@@ -732,7 +729,7 @@ private fun ChainAdvancedLayout(
                             nowElapsedRealtimeMs = nowElapsedRealtimeMs,
                             refreshInterval = preferences.refreshInterval,
                             powerMode = preferences.powerMode,
-                            requestedMetricIds = preferences.observedMetricIds(),
+                            shownMetricIds = preferences.selectedMetricIds.toSet(),
                             lastPlayback = lastPlayback,
                             onRetry = onRetry,
                         )
@@ -847,7 +844,7 @@ private fun ChainMetricsGrid(
                     nowElapsedRealtimeMs = nowElapsedRealtimeMs,
                     refreshInterval = preferences.refreshInterval,
                     powerMode = preferences.powerMode,
-                    requestedMetricIds = preferences.observedMetricIds(),
+                    shownMetricIds = preferences.selectedMetricIds.toSet(),
                     lastPlayback = lastPlayback,
                     onRetry = onRetry,
                     compact = true,
@@ -1580,9 +1577,10 @@ private fun ChainMetricCard(
     val label = telemetryMetricLabel(context, metricId)
     var evidenceExpanded by remember(metricId) { mutableStateOf(false) }
     val evidenceAction = stringResource(R.string.chain_evidence_details)
+    val toggleState = evidenceToggleState(evidenceExpanded)
     val evidence = metric?.evidence
     val value = rememberedTelemetryReading(evidence?.reading, unitDisplayMode)
-    val confidence = evidence?.let { telemetryConfidenceLabel(context, it.confidence) }
+    val confidence = evidence?.let { telemetryConfidenceLabel(context, it) }
         ?: stringResource(R.string.chain_sampling_starting_short)
     val source = evidence?.let { telemetryEvidenceSource(context, it) }
     val updated = evidence?.let { telemetryEvidenceAge(context, it, nowElapsedRealtimeMs) }
@@ -1608,7 +1606,7 @@ private fun ChainMetricCard(
             // The click sits outside the Surface's own clip, so clip it to the card's corners.
             .clip(shape)
             .clickable(onClickLabel = evidenceAction) { evidenceExpanded = !evidenceExpanded }
-            .semantics(mergeDescendants = true) {},
+            .semantics(mergeDescendants = true) { stateDescription = toggleState },
         shape = shape,
         color = if (pinned) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
@@ -1640,19 +1638,22 @@ private fun ChainMetricCard(
                     .testTag("vesqen.chain.metric-value.${metricId.value}"),
             )
             ChainConfidenceChip(evidence?.confidence, confidence)
-            if (viewMode != ChainMetricViewMode.COMPACT) {
+            // Compact cards keep the provenance until they are opened; other views always show it.
+            val showProvenance = viewMode != ChainMetricViewMode.COMPACT || evidenceExpanded
+            if (showProvenance) {
                 usbInventory?.let { ChainUsbInventoryDetails(it) }
                 if (source != null || window != null) Text(
                     listOfNotNull(source, window).joinToString(" · "), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (evidenceExpanded || evidence is TelemetryEvidence.Unavailable) {
-                    method?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                }
-                // #35: live values refresh every few seconds, so the observation time is a detail
-                // for the expanded card, not a label that sits on every card.
-                if (evidenceExpanded) updated?.let { ChainMetricMeta(stringResource(R.string.chain_metric_updated), it) }
             }
+            // An unavailable card always says why, in every view.
+            if (evidenceExpanded || evidence is TelemetryEvidence.Unavailable) {
+                method?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+            // #35: live values refresh every few seconds, so the observation time is a detail
+            // for the expanded card, not a label that sits on every card.
+            if (evidenceExpanded) updated?.let { ChainMetricMeta(stringResource(R.string.chain_metric_updated), it) }
             if (viewMode == ChainMetricViewMode.CHART && chartDescription != null) {
                 ChainMetricChart(
                     points = history,
@@ -1787,6 +1788,8 @@ private fun ChainChartEvidenceSummary(
 
 @Composable
 private fun ChainUsbInventoryDetails(inventory: UsbInventoryReading) {
+    val context = LocalContext.current
+    val resources = LocalResources.current
     val unnamedDevice = stringResource(R.string.chain_usb_unnamed_device)
     val unnamedEndpoint = stringResource(R.string.chain_usb_unnamed_endpoint)
     val permissionGranted = stringResource(R.string.chain_usb_permission_granted)
@@ -1882,10 +1885,12 @@ private fun ChainUsbInventoryDetails(inventory: UsbInventoryReading) {
                 val endpointName = endpoint.productName
                     ?.takeIf(String::isNotBlank)
                     ?: unnamedEndpoint
+                // The unit goes with each rate, never after "any reported value" or "Unavailable".
                 val sampleRates = if (endpoint.arbitrarySampleRate) {
                     anyValue
                 } else {
-                    endpoint.sampleRatesHz.joinToString().ifBlank { unavailable }
+                    endpoint.sampleRatesHz.joinToString { resources.getString(R.string.chain_unit_hz, it.toString()) }
+                        .ifBlank { unavailable }
                 }
                 val channelCounts = if (endpoint.arbitraryChannelCount) {
                     anyValue
@@ -1898,7 +1903,7 @@ private fun ChainUsbInventoryDetails(inventory: UsbInventoryReading) {
                     endpoint.encodings.joinToString().ifBlank { unavailable }
                 }
                 Text(
-                    text = stringResource(R.string.chain_usb_endpoint_value, endpointName, endpoint.type),
+                    text = stringResource(R.string.chain_usb_endpoint_value, endpointName, localizedTelemetryText(context, endpoint.type)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

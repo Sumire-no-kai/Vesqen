@@ -140,6 +140,7 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetryReading
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySection
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceId
+import io.github.sumirenokai.vesqen.telemetry.TelemetryUnavailableReason
 import io.github.sumirenokai.vesqen.telemetry.TelemetryUnit
 import io.github.sumirenokai.vesqen.telemetry.TelemetryWindow
 import io.github.sumirenokai.vesqen.telemetry.UsbAudioInterfaceReading
@@ -1078,6 +1079,34 @@ class VesqenAppTest {
         composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
         composeRule.runOnIdle { assertEquals(DeviceReportState.Editing, reporter.snapshot.value.state) }
         composeRule.onNodeWithTag("vesqen.report").assertIsDisplayed()
+    }
+
+    @Test
+    fun back_during_an_upload_leaves_the_page_and_keeps_the_receipt() {
+        val reporter = FakeDeviceReporter()
+        render(grantedState(), deviceReporter = reporter, reportUploadAvailable = true)
+        openDeviceReport()
+        val artifact = DeviceReportArtifact("{\"schemaVersion\":1}\n".toByteArray(Charsets.UTF_8))
+        val sending = DeviceReportState.Sending(artifact, DeviceReportDelivery.UPLOAD)
+        composeRule.runOnIdle { reporter.emit(DeviceReportState.Preview(artifact)) }
+        composeRule.onNodeWithTag("vesqen.report.upload").performClick()
+
+        // The upload may still reach the server, so Back leaves without discarding it.
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onAllNodesWithTag("vesqen.report").assertCountEquals(0)
+        composeRule.runOnIdle { assertEquals(sending, reporter.snapshot.value.state) }
+        val receipt = "00000000-0000-4000-8000-000000000000"
+        composeRule.runOnIdle { reporter.emit(DeviceReportState.Sent(artifact, DeviceReportDelivery.UPLOAD, receipt)) }
+        composeRule.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.device-report"))
+        composeRule.onNodeWithTag("vesqen.settings.device-report").performClick()
+        composeRule.onNodeWithTag("vesqen.report.receipt").assertIsDisplayed()
+
+        // The header arrow keeps a send in flight too.
+        composeRule.runOnIdle { reporter.emit(sending) }
+        composeRule.onNodeWithTag("vesqen.report").performScrollToNode(hasTestTag("vesqen.report.back"))
+        composeRule.onNodeWithTag("vesqen.report.back").performClick()
+        composeRule.onAllNodesWithTag("vesqen.report").assertCountEquals(0)
+        composeRule.runOnIdle { assertEquals(sending, reporter.snapshot.value.state) }
     }
 
     @Test
@@ -2215,6 +2244,53 @@ class VesqenAppTest {
         val card = composeRule.onNodeWithTag("vesqen.chain.metric.decoder.name").fetchSemanticsNode()
         assertTrue("Identifier must not occupy the narrow numeric column",
             value.fetchSemanticsNode().size.width > card.size.width * .8f)
+    }
+
+    @Test
+    fun a_compact_card_says_why_it_is_unavailable_and_opens_to_its_evidence() {
+        val metricId = TelemetryMetricCatalog.ROUTE_BLUETOOTH_TRANSPORT_BITRATE
+        val snapshot = chainTelemetrySnapshot().let { snapshot ->
+            snapshot.copy(metrics = snapshot.metrics + TelemetryMetric(
+                id = metricId,
+                section = TelemetrySection.ROUTE,
+                evidence = TelemetryEvidence.Unavailable(
+                    reason = TelemetryUnavailableReason.NOT_EXPOSED_BY_PLATFORM,
+                    observedAtEpochMs = snapshot.capturedAtEpochMs,
+                    source = TelemetryDataSource(TelemetrySourceId("android.audio_route")),
+                    observedAtElapsedRealtimeMs = snapshot.capturedAtElapsedRealtimeMs,
+                ),
+            ))
+        }
+        val preferences = InMemoryChainDashboardPreferencesRepository(
+            ChainDashboardPreferences(
+                selectedMetricIds = listOf(metricId),
+                metricOrder = listOf(metricId),
+                viewMode = ChainMetricViewMode.COMPACT,
+            ),
+        )
+        render(
+            state = activePlaybackState(),
+            playbackTelemetry = FakePlaybackTelemetry(snapshot),
+            chainPreferencesRepository = preferences,
+        )
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        openAdvancedChain()
+
+        val card = "vesqen.chain.metric.${metricId.value}"
+        val source = context.getString(R.string.chain_source_android_audio_route)
+        val updated = context.getString(R.string.chain_metric_updated)
+        fun state(resource: Int) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, context.getString(resource))
+        chainNode(card).assertTextContains(context.getString(R.string.chain_unavailable_not_exposed), substring = true)
+            .assert(!hasText(source, substring = true))
+            .assert(state(R.string.now_notes_collapsed))
+            .performClick()
+        composeRule.onNodeWithTag(card)
+            .assertTextContains(source, substring = true)
+            .assertTextContains(updated, substring = true)
+            .assert(state(R.string.now_notes_expanded))
     }
 
     @Test
@@ -3838,6 +3914,30 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.queue.sheet").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.queue.item.0").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.queue.item.1").assertIsDisplayed()
+    }
+
+    @Test
+    fun queue_current_row_says_playing_while_playing() {
+        composeRule.setContent {
+            VesqenTheme {
+                QueueSheet(
+                    snapshot = PlaybackSnapshot(
+                        isControllerReady = true,
+                        isPlaying = true,
+                        queue = listOf(PlaybackQueueItem(1, "Dawn Signal", "Mori", true)),
+                    ),
+                    onDismiss = {},
+                    onPlayItem = {},
+                    onRemoveItem = {},
+                    onMoveItem = { _, _ -> },
+                    onClearQueue = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("vesqen.queue.item.0").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, context.getString(R.string.playing)),
+        )
     }
 
     @Test

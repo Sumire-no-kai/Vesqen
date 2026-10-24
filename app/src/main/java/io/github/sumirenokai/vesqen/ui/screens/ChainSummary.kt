@@ -60,6 +60,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -181,6 +182,25 @@ private val ProcessingFlags = listOf(
     AppSegmentCondition.APP_DSP to Metrics.PROCESSING_APP_DSP_ACTIVE,
 )
 
+/**
+ * The metrics the summary shows for [metrics], which its notice counts; the rest of
+ * [ChainSummaryMetricIds] feeds the verdict or appears only in the dashboard. The source card shows the
+ * bit rate only without a bit depth, the output card the anticipated route only without a selected
+ * type, and the Bluetooth facts appear only on a Bluetooth route.
+ */
+internal fun chainSummaryShownMetricIds(metrics: Map<TelemetryMetricId, TelemetryMetric>): Set<TelemetryMetricId> {
+    fun read(id: TelemetryMetricId) = metrics[id]?.evidence?.reading != null
+    return buildSet {
+        addAll(ChainStationFacts.values.flatten())
+        ProcessingFlags.mapTo(this) { it.second }
+        add(Metrics.ROUTE_SELECTED_SYSTEM_TYPE)
+        add(Metrics.PLAYBACK_UNDERRUN_COUNT)
+        if (!read(Metrics.SOURCE_BIT_DEPTH)) add(Metrics.SOURCE_AVERAGE_BITRATE)
+        if (!read(Metrics.ROUTE_SELECTED_SYSTEM_TYPE)) add(Metrics.ROUTE_ANTICIPATED_TYPE)
+        if (outputRoute(metrics)?.kind == OutputRouteKind.BLUETOOTH) addAll(BluetoothCodecMetricIds)
+    }
+}
+
 /** B · Paper & Sound Chain summary: claim, two-segment path with evidence, pinned metrics. */
 @Composable
 internal fun ChainSummaryScreen(
@@ -224,7 +244,7 @@ internal fun ChainSummaryScreen(
                     nowElapsedRealtimeMs = nowElapsedRealtimeMs,
                     refreshInterval = refreshInterval,
                     powerMode = powerMode,
-                    requestedMetricIds = ChainSummaryMetricIds,
+                    shownMetricIds = remember(metrics) { chainSummaryShownMetricIds(metrics) },
                     lastPlayback = lastPlayback,
                     onRetry = onRetry,
                     compact = true,
@@ -512,12 +532,13 @@ private fun ChainFact(
     val context = LocalContext.current
     val evidence = metrics[id]?.evidence
     val value = rememberedTelemetryReading(evidence?.reading, unitDisplayMode)
+    val toggleState = evidenceToggleState(expanded)
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
             .clickable(onClickLabel = stringResource(R.string.chain_evidence_details), role = Role.Button, onClick = onToggle)
-            .semantics(mergeDescendants = true) {}
+            .semantics(mergeDescendants = true) { stateDescription = toggleState }
             .testTag("vesqen.chain.core.${id.value}"),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
@@ -529,7 +550,7 @@ private fun ChainFact(
             modifier = Modifier.fillMaxWidth().testTag("vesqen.chain.core-value.${id.value}"),
         )
         Text(
-            text = evidence?.let { telemetryConfidenceLabel(context, it.confidence) }
+            text = evidence?.let { telemetryConfidenceLabel(context, it) }
                 ?: stringResource(R.string.chain_sampling_starting_short),
             style = evidenceStyle(),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -552,6 +573,11 @@ private fun ChainFact(
     }
 }
 
+/** What TalkBack says about a fact whose evidence opens on tap, as the Now liner notes say it. */
+@Composable
+internal fun evidenceToggleState(expanded: Boolean): String =
+    stringResource(if (expanded) R.string.now_notes_expanded else R.string.now_notes_collapsed)
+
 /** App processing: the processing part of the segment verdict, never a separate claim. */
 @Composable
 private fun ChainProcessingFact(
@@ -573,12 +599,13 @@ private fun ChainProcessingFact(
     }
     // The flags come from one player state, so one confidence and age stand for all of them.
     val evidence = ProcessingFlags.firstNotNullOfOrNull { metrics[it.second]?.evidence }
+    val toggleState = evidenceToggleState(expanded)
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
             .clickable(onClickLabel = stringResource(R.string.chain_evidence_details), role = Role.Button, onClick = onToggle)
-            .semantics(mergeDescendants = true) {}
+            .semantics(mergeDescendants = true) { stateDescription = toggleState }
             .testTag("vesqen.chain.processing"),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
