@@ -202,3 +202,31 @@ storage queries. The public contract from #77 is unchanged.
 - Manual device QA: deferred by the owner because both phones are occupied. No app was
   installed and no device setting was changed during this revision.
 - Remote CI is reported on the PR separately from these local checks.
+
+## Upgrade lab on stock Android 16 — 2026-10-24
+
+Checks the #165 A7 fix (`0b4e38e`: trust the install session's status, not the confirmation's
+result; end a confirmation left undecided for 10 minutes) on the `vesqen-check` emulator,
+Android 16 Google APIs (`BE2A.250530.026.F3`), whose installer is
+`com.google.android.packageinstaller` running `com.android.packageinstaller.PackageInstallerActivity`.
+Lab builds from master `48bfa7c` with temporary versionCodes 1000 and 1001 in a throwaway copy;
+`version.properties` in the repository was not changed. `tools/run_device_tests.py
+--foreground-host` keeps the host in front: Android 16 blocks the session's confirmation
+PendingIntent while the app has no visible window (`BAL_BLOCK`), which a user tapping Install
+in the open app never meets.
+
+- Cancel (`cancelInstall=true`): the system prompt "Do you want to update this app?" appears;
+  Cancel gives `Failed(INSTALL_CANCELLED)` and the test passes.
+- Update: the app is replaced, 1000 → 1001. From a fresh process the installed APK's SHA-256
+  matches the 1001 build, `files/update-qa` survived, the app cold-starts, and the pending
+  install record is cleared.
+- Closed without a decision (Home, then the installer force-stopped): Settings → Updates shows
+  "Waiting for the system installer…" with no button. Reopened after 10 minutes, the session is
+  abandoned (`Session was abandoned`) and the record cleared. The day's automatic check ran
+  right after and showed "You're up to date", replacing the "Install cancelled" state.
+- The pre-fix code (`6be71ac`) also upgrades on Android 16, so the race the audit found in the
+  Android 11 and 13 installer sources (the Install button finishes without setting a result)
+  does not show here. Android 11–13 are not covered by this run.
+
+The lab APKs, the instrumentation APK and the temporary TLS keystore were removed from the
+emulator and the host after the run.
