@@ -237,7 +237,7 @@ If the service were deferred or stopped, the music would stop as soon as the use
 
 ## 6. 截图与演示视频
 
-2026-10-13 完成。
+2026-10-13 完成。2026-10-24 用 `1.0.0` 重拍了 12 张截图（Play 版 Profile 构建，`vesqen-check` 模拟器：Android 16 Google APIs arm64，`wm size 1080x2400`、`wm density 420`，拍完复原；曲库只留演示专辑），六个画面和顺序不变，正在播放的都是 Glass Harbor。README 用的是其中三张裁出的内容区（`docs/readme/`，720 × 900）。
 
 - **演示曲库**：截图里不能出现商业专辑的封面和曲名。用 [`tools/demo_library`](../tools/demo_library/README.md) 生成三张虚构专辑（官网同款的 Low Tide Archive、Copper Hours、盐与雾），共十首 FLAC，标签和封面都写全，不会出现 `<unknown>`。
 - **拍摄设备**：临时建的 Android 模拟器（AOSP Android 16 arm64 系统镜像，1080 × 2400，420 dpi），装 beta.2 的 Play 版构建，拍完连同系统镜像一起删除。没用两台测试机，因为它们和其他测试共用，曲库里也有商业专辑。
