@@ -62,7 +62,7 @@ Vesqen 1.x is free. Library, playback and the Chain page stay free. Pro features
 
 There are no dates, and the order may change with feedback. Details and progress are in [issue #163](https://github.com/Sumire-no-kai/Vesqen/issues/163) and the [milestones](https://github.com/Sumire-no-kai/Vesqen/milestones).
 
-- **Next update (1.0.1):** Play next and Add to queue go to the right place while shuffling; renaming or moving a file inside an added folder keeps its favorite, play count and playlist places; text buttons get full 48 dp touch targets; correct names for some Bluetooth codecs on Android 13 and 14.
+- **Next update (1.0.1):** Play next and Add to queue go to the right place while shuffling; renaming or moving a file inside an added folder keeps its favorite, play count and playlist places; text buttons get full 48 dp touch targets; album, artist and other lists sort Chinese names the same way as Songs; correct names for some Bluetooth codecs on Android 13 and 14.
 - **Before 2.0:** better matching after Android rebuilds its media library, with old entries that no longer match kept for you to reassign; clearer Chinese names for Pro features and the advanced Chain view.
 - **2.0:** Vesqen's own USB output, so phones without Android's official bit-perfect path can still play strictly (in development; we can't promise it yet); strict USB output that keeps each source's format, including 16-bit sources sent through a 24-bit path; sample-by-sample checks with real DACs and external equipment for the first `BIT-PERFECT VERIFIED` record; Pro features with a 7-day free trial and a one-time purchase.
 
