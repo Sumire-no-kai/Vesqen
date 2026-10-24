@@ -17,6 +17,12 @@ Vesqen 是一款 Android 离线音乐播放器，无需注册账号即可播放�
 
 ## 功能
 
+<p align="center">
+  <img src="docs/readme/now-zh.png" width="250" alt="正在播放：Maren Holt 的 Glass Harbor">
+  <img src="docs/readme/chain-zh.png" width="250" alt="链路页：SYSTEM MIXED 状态和置顶指标">
+  <img src="docs/readme/library-zh.png" width="250" alt="曲库：歌曲列表和字母索引">
+</p>
+
 - **曲库**：通过 Android 媒体库查找音乐，也可以自行添加文件夹。支持按歌曲、专辑、艺术家、文件夹、流派和歌单浏览，支持收藏；播放队列可以编辑，下次打开时仍会保留。
 - **格式**：无损格式 FLAC、ALAC、WAV、AIFF，以及 MP3、AAC、Ogg Vorbis、Opus，具体以手机解码器的支持为准。
 - **后台播放**：可在通知栏和锁屏上直接控制。

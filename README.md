@@ -17,6 +17,12 @@ Vesqen is an offline music player for Android. It plays the music stored on your
 
 ## Features
 
+<p align="center">
+  <img src="docs/readme/now-en.png" width="250" alt="Now: Glass Harbor by Maren Holt playing">
+  <img src="docs/readme/chain-en.png" width="250" alt="Chain page: the SYSTEM MIXED status and the pinned metrics">
+  <img src="docs/readme/library-en.png" width="250" alt="Library: the song list with the A to Z index">
+</p>
+
 - **Your library.** Finds music through Android's media library and in folders you add. Browse by song, album, artist, folder, genre or playlist, keep favorites, and edit a queue that is still there next time.
 - **Formats.** Lossless FLAC, ALAC, WAV and AIFF, plus MP3, AAC, Ogg Vorbis and Opus, as far as your phone's decoders support them.
 - **Background playback** with controls in the notification and on the lock screen.
