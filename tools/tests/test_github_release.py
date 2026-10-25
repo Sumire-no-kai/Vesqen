@@ -31,6 +31,14 @@ def write_signed_candidate(directory, apk_bytes=b"signed-candidate"):
     return data
 
 
+def verify_output(args):
+    """What apksigner verify prints for a minSdk 28 release APK: it checks v2 only when asked to verify for an older API."""
+    older_api = "--min-sdk-version" in args and int(args[args.index("--min-sdk-version") + 1]) < 28
+    return (f"Signer #1 certificate SHA-256 digest: {release.CERT_SHA256}\n"
+            f"Verified using v2 scheme (APK Signature Scheme v2): {'true' if older_api else 'false'}\n"
+            "Verified using v3 scheme (APK Signature Scheme v3): true\n")
+
+
 def listed_release(directory, draft=True, digests=None):
     """The release as the GitHub API lists it, with the SHA-256 GitHub computed for each attachment."""
     names = ("Vesqen-1.0.0-beta.1.apk", "SHA256SUMS", "release-manifest.json")
@@ -219,15 +227,12 @@ class GithubReleaseTest(unittest.TestCase):
                     listed["assets"][0]["digest"] = "sha256:" + "0" * 64
                 receipt.write_text(json.dumps({**data, "install": "passed", "sameSignerUpgrade": "passed",
                                                "dataRetention": "passed", "deviceEvidence": "docs/evidence.md"}))
-                verification = (f"Signer #1 certificate SHA-256 digest: {release.CERT_SHA256}\n"
-                                "Verified using v2 scheme (APK Signature Scheme v2): true\n"
-                                "Verified using v3 scheme (APK Signature Scheme v3): true\n")
                 commands = []
 
                 def command(args, **kwargs):
                     commands.append(args)
                     if "verify" in args:
-                        return verification
+                        return verify_output(args)
                     if "view" in args:
                         return json.dumps({"isDraft": True, "targetCommitish": COMMIT,
                                            "body": body.replace("{sha}", data["apkSha256"])})
@@ -299,9 +304,7 @@ class GithubReleaseTest(unittest.TestCase):
                 if "--out" in args:
                     Path(args[args.index("--out") + 1]).write_bytes(b"signed-test-apk")
                 if "verify" in args:
-                    return (f"Signer #1 certificate SHA-256 digest: {release.CERT_SHA256}\n"
-                            "Verified using v2 scheme (APK Signature Scheme v2): true\n"
-                            "Verified using v3 scheme (APK Signature Scheme v3): true\n")
+                    return verify_output(args)
                 return ""
 
             with patch.dict(os.environ, {"VESQEN_KEYSTORE_BASE64": base64.b64encode(b"test-key").decode(),

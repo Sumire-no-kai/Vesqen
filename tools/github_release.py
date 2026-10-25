@@ -31,6 +31,9 @@ GITHUB_PERMISSIONS = frozenset({
 })
 KEY_ALIAS = "vesqen-app-signing-v1"
 CERT_SHA256 = "743e96fcb71dc58188496819a001a27cd88d909162c5ae929c87bfa29ab86293"
+# For an APK with minSdk 28 or higher, apksigner verifies only the v3 block. Verifying as if for
+# API 24 also checks the v2 block every release carries; v1 stays off from API 24 on.
+VERIFY_ALL_SCHEMES = ("--min-sdk-version", "24")
 VERSION = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?")
 
 
@@ -173,7 +176,8 @@ def sign(candidate, output, commit, tools, *, expected_certificate=CERT_SHA256):
              "--key-pass", "env:VESQEN_KEYSTORE_PASSWORD", "--debuggable-apk-permitted", "false",
              "--v2-signing-enabled", "true", "--v3-signing-enabled", "true",
              "--v4-signing-enabled", "false", "--out", str(signed), str(aligned)], env=signing_env)
-        verification = run([str(tools / "apksigner"), "verify", "--verbose", "--print-certs", str(signed)], env=public_env)
+        verification = run([str(tools / "apksigner"), "verify", "--verbose", "--print-certs", *VERIFY_ALL_SCHEMES,
+                             str(signed)], env=public_env)
         certificates = re.findall(r"Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})", verification)
         if [value.lower() for value in certificates] != [expected_certificate]:
             raise ReleaseError("Signed APK certificate does not match application signing v1")
@@ -285,7 +289,7 @@ def publish_release(candidate, repository, commit, acceptance, tools):
     tag = f"v{metadata['versionName']}"
     apk = candidate / f"Vesqen-{metadata['versionName']}.apk"
     inspect_apk(apk, tools, metadata)
-    verification = run([str(tools / "apksigner"), "verify", "--verbose", "--print-certs", str(apk)])
+    verification = run([str(tools / "apksigner"), "verify", "--verbose", "--print-certs", *VERIFY_ALL_SCHEMES, str(apk)])
     certificates = re.findall(r"Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})", verification)
     if [value.lower() for value in certificates] != [CERT_SHA256]:
         raise ReleaseError("Publication APK signature does not match")
