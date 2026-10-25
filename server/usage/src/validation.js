@@ -59,15 +59,49 @@ export async function readBoundedText(body, maximum, timeoutMs = 5000, status = 
   } finally { clearTimeout(deadline); reader.releaseLock(); }
 }
 
-/** A client request: JSON only, never compressed. Returns the parsed value and the exact text. */
+/**
+ * Whether valid JSON text names a property twice in one object, comparing names after unescaping.
+ * JSON.parse keeps only the last value, so an earlier one would sit in the text unvalidated.
+ */
+export function hasDuplicateKeys(text) {
+  const objects = []; // One set of names per open object, null per open array.
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '{') objects.push(new Set());
+    else if (c === '[') objects.push(null);
+    else if (c === '}' || c === ']') objects.pop();
+    else if (c === '"') {
+      let end = i + 1;
+      while (text[end] !== '"') end += text[end] === '\\' ? 2 : 1;
+      const names = objects.at(-1);
+      let next = end + 1;
+      while (text[next] === ' ' || text[next] === '\t' || text[next] === '\n' || text[next] === '\r') next++;
+      if (names && text[next] === ':') {
+        const name = JSON.parse(text.slice(i, end + 1));
+        if (names.has(name)) return true;
+        names.add(name);
+      }
+      i = end;
+    }
+  }
+  return false;
+}
+
+/**
+ * A client request: JSON only, never compressed, each property named once. Returns the parsed
+ * value and the exact text, so storing the text stores nothing the value did not show (#170 P1).
+ */
 export async function readJsonRequest(request, maximum, timeoutMs = 5000) {
   if (request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') throw new InvalidRequest(415);
   if (request.headers.has('content-encoding')) throw new InvalidRequest(415);
   const length = request.headers.get('content-length');
   if (length !== null && (!/^\d+$/.test(length) || Number(length) > maximum)) throw new InvalidRequest(413);
   const text = await readBoundedText(request.body, maximum, timeoutMs);
-  try { return {value: JSON.parse(text), text}; }
+  let value;
+  try { value = JSON.parse(text); }
   catch { throw new InvalidRequest(); }
+  requireValid(!hasDuplicateKeys(text));
+  return {value, text};
 }
 
 export async function readJson(request, maximum, timeoutMs = 5000) {
