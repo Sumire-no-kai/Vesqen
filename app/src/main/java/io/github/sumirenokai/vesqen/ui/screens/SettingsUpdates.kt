@@ -207,7 +207,7 @@ private fun ReleaseNotes(release: UpdateRelease) {
     if (overflows || expanded) {
         TextButton(
             onClick = { expanded = !expanded },
-            modifier = Modifier.testTag("vesqen.settings.updates.notes-toggle"),
+            modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.settings.updates.notes-toggle"),
         ) { Text(stringResource(if (expanded) R.string.update_notes_less else R.string.update_notes_more)) }
     }
 }

@@ -3,6 +3,7 @@ package io.github.sumirenokai.vesqen.ui.components
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -113,7 +114,7 @@ internal fun LibraryAlphabetIndex(sections: Map<String, Int>, listState: LazyLis
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showPicker = false }) { Text(stringResource(R.string.cancel)) } },
+            confirmButton = { TextButton(onClick = { showPicker = false }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }

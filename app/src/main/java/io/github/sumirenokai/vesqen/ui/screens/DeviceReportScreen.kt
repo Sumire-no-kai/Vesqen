@@ -348,13 +348,13 @@ internal fun CrashPromptDialog(
         confirmButton = {
             TextButton(
                 onClick = onReview,
-                modifier = Modifier.testTag("vesqen.crash-prompt.review"),
+                modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.crash-prompt.review"),
             ) { Text(stringResource(R.string.crash_prompt_review)) }
         },
         dismissButton = {
             TextButton(
                 onClick = onDecline,
-                modifier = Modifier.testTag("vesqen.crash-prompt.decline"),
+                modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.crash-prompt.decline"),
             ) { Text(stringResource(R.string.crash_prompt_decline)) }
         },
     )

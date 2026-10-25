@@ -660,6 +660,44 @@ class VesqenAppTest {
     }
 
     @Test
+    fun every_clickable_on_the_main_pages_is_at_least_48dp_tall() {
+        // #162: TalkBack, accessibility scanners and Play's pre-launch report read the clickable
+        // node itself, so Material's 40 dp buttons fall short even with a wider touch layer.
+        render(state = activePlaybackState(), containerWidth = 320.dp)
+
+        assertClickablesAtLeast48Dp("Library")
+        composeRule.onNodeWithTag("vesqen.library.mode.albums").performScrollTo().performClick()
+        assertClickablesAtLeast48Dp("Library albums")
+        composeRule.onNodeWithTag("vesqen.nav.chain").performClick()
+        assertClickablesAtLeast48Dp("Chain")
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        assertClickablesAtLeast48Dp("Settings")
+        composeRule.onNodeWithTag("vesqen.nav.now").performClick()
+        openLinerNotes()
+        assertClickablesAtLeast48Dp("Now")
+        // Last: the queue is a sheet over Now.
+        composeRule.onNodeWithTag("vesqen.now.queue").performClick()
+        composeRule.onNodeWithTag("vesqen.queue.sheet").assertExists()
+        assertClickablesAtLeast48Dp("Queue")
+    }
+
+    /** The node's own size, not its clipped bounds, so a row half scrolled off the screen still counts whole. */
+    private fun assertClickablesAtLeast48Dp(page: String) {
+        composeRule.waitForIdle()
+        val minimumPx = with(fixtureDensity) { 48.dp.roundToPx() }
+        val small = composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick))
+            .fetchSemanticsNodes()
+            .filter { it.size.height < minimumPx }
+            .map { node ->
+                val name = node.config.getOrNull(SemanticsProperties.TestTag)
+                    ?: node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString()
+                    ?: node.config.getOrNull(SemanticsProperties.Text)?.joinToString()
+                "$name (${with(fixtureDensity) { node.size.height.toDp() }})"
+            }
+        assertTrue("$page: clickables under 48 dp: $small", small.isEmpty())
+    }
+
+    @Test
     fun paused_library_scan_keeps_cached_rows_visible_and_offers_resume() {
         var resumeCalls = 0
         val folder = LibrarySource(

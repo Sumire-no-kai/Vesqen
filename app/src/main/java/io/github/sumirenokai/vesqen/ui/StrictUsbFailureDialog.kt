@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.ui
 
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -13,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.playback.OfficialMixerApiSupport
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
@@ -44,7 +46,7 @@ internal fun StrictUsbUnavailableDialog(
         confirmButton = {
             TextButton(
                 onClick = onDismiss,
-                modifier = Modifier.testTag("vesqen.output.unavailable-dismiss"),
+                modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.output.unavailable-dismiss"),
             ) { Text(stringResource(R.string.player_output_done)) }
         },
     )
@@ -105,7 +107,7 @@ internal fun StrictUsbFailureDialog(
                     onSetUsbOutputMode(UsbOutputMode.SYSTEM)
                 },
                 enabled = canChangeOutputMode,
-                modifier = Modifier.testTag("vesqen.output.use-system"),
+                modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.output.use-system"),
             ) { Text(stringResource(R.string.player_use_system_output)) }
         },
         dismissButton = {
@@ -115,12 +117,12 @@ internal fun StrictUsbFailureDialog(
                         dismissedFailure = failureKey
                         openPremium()
                     },
-                    modifier = Modifier.testTag("vesqen.output.open-premium"),
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.output.open-premium"),
                 ) { Text(stringResource(R.string.premium_open)) }
             } else {
                 TextButton(
                     onClick = { dismissedFailure = failureKey },
-                    modifier = Modifier.testTag("vesqen.output.keep-strict"),
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.output.keep-strict"),
                 ) { Text(stringResource(R.string.player_keep_strict_output)) }
             }
         },

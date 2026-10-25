@@ -78,6 +78,7 @@ fun QueueSheet(
                         onDismiss()
                     },
                     enabled = snapshot.isControllerReady && snapshot.queue.isNotEmpty(),
+                    modifier = Modifier.heightIn(min = 48.dp),
                 ) {
                     Text(stringResource(R.string.clear_queue))
                 }

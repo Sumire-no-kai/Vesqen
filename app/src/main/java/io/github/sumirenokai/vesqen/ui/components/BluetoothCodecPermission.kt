@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -25,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import io.github.sumirenokai.vesqen.R
@@ -72,7 +74,7 @@ private fun BluetoothCodecPermissionContent(modifier: Modifier) {
                     launcher.launch(Manifest.permission.BLUETOOTH_CONNECT)
                 }
             },
-            modifier = Modifier.testTag("vesqen.bluetooth-codec.permission"),
+            modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.bluetooth-codec.permission"),
         ) {
             Text(stringResource(if (refused) R.string.allow_music_access_in_settings else R.string.bluetooth_codec_permission_action))
         }
