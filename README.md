@@ -1,17 +1,33 @@
-# Vesqen
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/assets/vesqen-mark-inverse.svg">
+    <img src="docs/brand/assets/vesqen-mark-primary.svg" width="128" alt="Vesqen logo">
+  </picture>
+</p>
 
-[![Android CI](https://github.com/Sumire-no-kai/Vesqen/actions/workflows/android.yml/badge.svg?branch=master)](https://github.com/Sumire-no-kai/Vesqen/actions/workflows/android.yml)
-[![Release](https://img.shields.io/github/v/release/Sumire-no-kai/Vesqen?color=7A4F00)](https://github.com/Sumire-no-kai/Vesqen/releases)
-[![Android](https://img.shields.io/badge/Android-9.0%2B%20(API%2028%2B)-3DDC84?logo=android&logoColor=white)](app/build.gradle.kts)
-[![License](https://img.shields.io/badge/license-Apache--2.0-536B1E)](LICENSE)
+<h1 align="center">Vesqen</h1>
 
-**English** · [简体中文](README.zh-CN.md)
+<p align="center"><strong>An offline music player for Android. Every track comes with liner notes.</strong></p>
 
-![Vesqen, an offline music player for Android: every track comes with liner notes.](docs/store/feature-graphic-en.png)
+<p align="center">
+  <a href="https://github.com/Sumire-no-kai/Vesqen/releases/latest"><img src="https://img.shields.io/github/v/release/Sumire-no-kai/Vesqen?color=7A4F00" alt="Release"></a>
+  <a href="app/build.gradle.kts"><img src="https://img.shields.io/badge/Android-9.0%2B%20(API%2028%2B)-3DDC84?logo=android&amp;logoColor=white" alt="Android 9.0 and later"></a>
+  <a href="https://github.com/Sumire-no-kai/Vesqen/actions/workflows/android.yml"><img src="https://github.com/Sumire-no-kai/Vesqen/actions/workflows/android.yml/badge.svg?branch=master" alt="Android CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-536B1E" alt="License: Apache 2.0"></a>
+</p>
+
+<p align="center">
+  <a href="https://vesqen.sumirenokai.com">Website</a> ·
+  <a href="https://github.com/Sumire-no-kai/Vesqen/releases/latest">Download</a> ·
+  <a href="https://vesqen.sumirenokai.com/changelog/">Changelog</a> ·
+  <a href="https://vesqen.sumirenokai.com/status/">Known issues and plans</a> ·
+  <a href="https://vesqen.sumirenokai.com/privacy/">Privacy policy</a> ·
+  <a href="https://vesqen.sumirenokai.com/support/">Support</a>
+</p>
+
+<p align="center"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 
 Vesqen is an offline music player for Android. It plays the music stored on your phone and needs no account. While a track plays, Vesqen records each step from the file to your headphones, and the Chain page shows where every value came from and how it was obtained.
-
-[Website](https://vesqen.sumirenokai.com) · [Download](https://github.com/Sumire-no-kai/Vesqen/releases/latest) · [Changelog](https://vesqen.sumirenokai.com/changelog/) · [Known issues and plans](https://vesqen.sumirenokai.com/status/) · [Privacy policy](https://vesqen.sumirenokai.com/privacy/) · [Support](https://vesqen.sumirenokai.com/support/)
 
 > **Current version:** `1.0.0`, the first stable version, released on October 25, 2026 on [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0). The Google Play version is in a closed test and will get the same version once Google approves it. Read the [known limitations](#known-limitations) before relying on strict USB output.
 

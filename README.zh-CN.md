@@ -1,17 +1,33 @@
-# Vesqen
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/assets/vesqen-mark-inverse.svg">
+    <img src="docs/brand/assets/vesqen-mark-primary.svg" width="128" alt="Vesqen 标识">
+  </picture>
+</p>
 
-[![Android CI](https://github.com/Sumire-no-kai/Vesqen/actions/workflows/android.yml/badge.svg?branch=master)](https://github.com/Sumire-no-kai/Vesqen/actions/workflows/android.yml)
-[![Release](https://img.shields.io/github/v/release/Sumire-no-kai/Vesqen?color=7A4F00)](https://github.com/Sumire-no-kai/Vesqen/releases)
-[![Android](https://img.shields.io/badge/Android-9.0%2B%20(API%2028%2B)-3DDC84?logo=android&logoColor=white)](app/build.gradle.kts)
-[![License](https://img.shields.io/badge/license-Apache--2.0-536B1E)](LICENSE)
+<h1 align="center">Vesqen</h1>
 
-[English](README.md) · **简体中文**
+<p align="center"><strong>Android 离线音乐播放器。每首歌，都有一份链路注记。</strong></p>
 
-![Vesqen：Android 离线音乐播放器，每首歌，都有一份链路注记。](docs/store/feature-graphic-zh.png)
+<p align="center">
+  <a href="https://github.com/Sumire-no-kai/Vesqen/releases/latest"><img src="https://img.shields.io/github/v/release/Sumire-no-kai/Vesqen?color=7A4F00" alt="最新版本"></a>
+  <a href="app/build.gradle.kts"><img src="https://img.shields.io/badge/Android-9.0%2B%20(API%2028%2B)-3DDC84?logo=android&amp;logoColor=white" alt="Android 9.0 及以上"></a>
+  <a href="https://github.com/Sumire-no-kai/Vesqen/actions/workflows/android.yml"><img src="https://github.com/Sumire-no-kai/Vesqen/actions/workflows/android.yml/badge.svg?branch=master" alt="Android CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-536B1E" alt="许可证：Apache 2.0"></a>
+</p>
+
+<p align="center">
+  <a href="https://vesqen.sumirenokai.com/zh/">官网</a> ·
+  <a href="https://github.com/Sumire-no-kai/Vesqen/releases/latest">下载</a> ·
+  <a href="https://vesqen.sumirenokai.com/zh/changelog/">更新日志</a> ·
+  <a href="https://vesqen.sumirenokai.com/zh/status/">已知问题与计划</a> ·
+  <a href="https://vesqen.sumirenokai.com/zh/privacy/">隐私政策</a> ·
+  <a href="https://vesqen.sumirenokai.com/zh/support/">支持</a>
+</p>
+
+<p align="center"><a href="README.md">English</a> · <strong>简体中文</strong></p>
 
 Vesqen 是一款 Android 离线音乐播放器，无需注册账号即可播放手机中的本地音乐。播放时，它会记录音频从文件到耳机经过的每个环节；链路页上的每个数值都注明来源和获取方式。
-
-[官网](https://vesqen.sumirenokai.com/zh/) · [下载](https://github.com/Sumire-no-kai/Vesqen/releases/latest) · [更新日志](https://vesqen.sumirenokai.com/zh/changelog/) · [已知问题与计划](https://vesqen.sumirenokai.com/zh/status/) · [隐私政策](https://vesqen.sumirenokai.com/zh/privacy/) · [支持](https://vesqen.sumirenokai.com/zh/support/)
 
 > **当前版本：** 首个正式版 `1.0.0`，2026 年 10 月 25 日在 [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.0) 发布。Google Play 版正在封闭测试，获得 Google 批准后将上架同一版本。使用严格 USB 输出前，请先阅读[已知限制](#已知限制)。
 
