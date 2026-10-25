@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {handle,prune} from '../src/worker.js';
 import {DISTINCT_VALUES_PER_DAY} from '../src/limits.js';
+import {hasDuplicateKeys} from '../src/validation.js';
 import {environment} from './database.js';
 import {ping,report,request} from './fixtures.js';
 const now=Date.parse('2026-10-04T12:00:00Z');
@@ -75,6 +76,25 @@ test('report is private validated document with a per-report receipt and seven-d
   assert.ok(env.DB.rows('SELECT document FROM reports').some(row=>row.document===spaced));
   assert.equal((await handle(new Request(`https://example.invalid/v1/reports/${reportId}`),env,now)).status,404);
   assert.equal((await handle(new Request('https://example.invalid/v1/reports'),env,now)).status,405);
+});
+
+test('a property named twice is refused, so no unvalidated text is stored with a report',async t=>{
+  const env=environment();t.after(()=>env.DB.close());
+  const valid=JSON.stringify(report());
+  const post=(body,path='/v1/reports')=>handle(new Request(`https://example.invalid${path}`,{method:'POST',body,headers:{'content-type':'application/json'}}),env,now);
+  for (const body of [
+    valid.replace('"basic":','"basic":{"unreviewedField":"PRIVATE"},"basic":'),
+    valid.replace('"model":"Model"','"model":"/private/music.flac","model":"Model"'),
+    valid.replace('"model":"Model"','"mo\\u0064el":"PRIVATE","model":"Model"'),
+  ]) assert.equal((await post(body)).status,400);
+  assert.equal((await post(JSON.stringify(ping()).replace('"model":"Model"','"model":"Other","model":"Model"'),'/v1/usage')).status,400);
+  assert.equal(env.DB.rows('SELECT * FROM reports').length,0);
+  assert.equal(env.DB.rows('SELECT * FROM daily_report_counts').length,0);
+  assert.equal(env.DB.rows('SELECT * FROM daily_totals').length,0);
+  // The same name in separate objects, and name-like text inside values, are not duplicates.
+  assert.equal(hasDuplicateKeys('{"a":{"a":1},"b":[{"a":"\\"a\\":"},{"a":"}{"}]}'),false);
+  assert.equal(hasDuplicateKeys('[{"a":1},{"b":{"c":[1,{"c":2}]},"b" : 2}]'),true);
+  assert.equal((await post(valid)).status,201);
 });
 
 test('scheduled retention removes expired reports and old dimensions atomically',async t=>{
