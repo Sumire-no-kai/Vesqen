@@ -1,8 +1,5 @@
 package io.github.sumirenokai.vesqen.library
 
-import java.text.Collator
-import java.util.Locale
-
 enum class LibraryBrowseMode {
     SONGS,
     ALBUMS,
@@ -29,21 +26,12 @@ data class LibraryCollection(
     val playlistId: Long? = null,
 )
 
-/**
- * Names in any script in the order readers expect: case-insensitive, and Chinese by pinyin as the
- * Songs index orders titles, not by UTF-16 code point (which put 周, 王, 陈 in reverse pinyin order).
- * Made per sort, because a Collator is not safe to share between threads.
- */
-private fun nameOrder(): Comparator<String> {
-    val collator = Collator.getInstance(Locale.SIMPLIFIED_CHINESE).apply { strength = Collator.SECONDARY }
-    return Comparator { first, second -> collator.compare(first.trim(), second.trim()) }
-}
-
+/** [names] is the Songs index order unless a JVM test, which has no ICU, supplies its own. */
 fun sortLibraryTracks(
     tracks: List<AudioTrack>,
     sortOrder: LibrarySortOrder,
+    names: Comparator<String> = LibraryNameOrder(),
 ): List<AudioTrack> {
-    val names = nameOrder()
     return when (sortOrder) {
         LibrarySortOrder.TITLE -> tracks.sortedWith(compareBy(names) { it.title })
         LibrarySortOrder.ARTIST -> tracks.sortedWith(
@@ -74,12 +62,12 @@ fun buildLibraryCollections(
     mode: LibraryBrowseMode,
     tracks: List<AudioTrack>,
     playlists: List<LibraryPlaylist>,
+    names: Comparator<String> = LibraryNameOrder(),
 ): List<LibraryCollection> {
-    val names = nameOrder()
     return when (mode) {
         LibraryBrowseMode.SONGS -> emptyList()
         LibraryBrowseMode.ALBUMS -> tracks.groupedCollections(
-            key = { track -> collectionKey(AlbumNamespace, track.albumArtist.trim(), track.album.trim()) },
+            key = { track -> albumKey(track) },
             title = AudioTrack::album,
             subtitle = { group -> group.firstNotBlank(AudioTrack::albumArtist, AudioTrack::artist) },
             trackOrder = albumTrackOrder(names),
@@ -126,8 +114,8 @@ fun buildLibraryCollections(
 fun sortLibraryCollections(
     collections: List<LibraryCollection>,
     sortOrder: LibrarySortOrder,
+    names: Comparator<String> = LibraryNameOrder(),
 ): List<LibraryCollection> {
-    val names = nameOrder()
     return when (sortOrder) {
         LibrarySortOrder.TITLE,
         LibrarySortOrder.ALBUM,
@@ -194,6 +182,24 @@ private fun collectionKey(namespace: String, vararg components: String): String 
         append(component)
     }
 }
+
+/**
+ * An album is its name and album artist. Without an album artist the name alone would merge
+ * same-named albums by different artists, and each track's artist would split a compilation, so
+ * the folder decides: an album's tracks share one, or disc folders such as CD1 inside one (#170 P3).
+ * Android 9 reports only a folder's own name, so there same-named folders still share an album.
+ */
+private fun albumKey(track: AudioTrack): String {
+    val albumArtist = track.albumArtist.trim()
+    val album = track.album.trim()
+    if (albumArtist.isNotEmpty()) return collectionKey(AlbumNamespace, albumArtist, album)
+    val (parent, name) = folderPathParts(track.folderName)
+    val folder = if (DiscFolder.matches(name)) parent else track.folderName.trimEnd('/')
+    return collectionKey(AlbumNamespace, "", album, folder)
+}
+
+/** "CD1", "CD 02", "Disc 2", "disk_1", "Disc 2 - Bonus". */
+private val DiscFolder = Regex("""(?i)(?:cd|dis[ck])[\s._-]*\d{1,2}(?:\D.*)?""")
 
 private fun albumTrackOrder(names: Comparator<String>): Comparator<AudioTrack> =
     compareBy<AudioTrack> { it.discNumber ?: Int.MAX_VALUE }

@@ -1,8 +1,5 @@
 package io.github.sumirenokai.vesqen.library
 
-import android.icu.text.AlphabeticIndex
-import java.util.Locale
-
 /** Only identity and title affect title collation, not listening history or favorite membership. */
 internal fun libraryTitleKeys(tracks: List<AudioTrack>): List<Pair<Long, String>> =
     tracks.map { it.id to it.title }
@@ -16,32 +13,18 @@ internal fun projectLibraryTitleOrder(order: List<AudioTrack>, current: List<Aud
     }
 }
 
-/** Built off the UI thread. ICU supplies matching Chinese pinyin buckets and collation. */
+/** Built off the UI thread, in the [LibraryNameOrder] that the other Library lists share. */
 internal data class LibraryTitleIndex(
     val tracks: List<AudioTrack>,
     val sections: Map<String, Int>,
 ) {
     companion object {
         fun build(tracks: List<AudioTrack>): LibraryTitleIndex {
-            val alphabet = AlphabeticIndex<Any>(Locale.SIMPLIFIED_CHINESE).addLabels(Locale.ENGLISH)
-            val buckets = alphabet.buildImmutableIndex()
-            val collator = alphabet.collator
-            collator.strength = android.icu.text.Collator.SECONDARY
-            val entries = tracks.map { track ->
-                val title = track.title.trim()
-                val label = buckets.getBucket(buckets.getBucketIndex(title))?.label.orEmpty()
-                val group = label.takeIf {
-                    title.firstOrNull()?.isLetter() == true && it.length == 1 && it[0] in 'A'..'Z'
-                } ?: "#"
-                Triple(track, group, collator.getCollationKey(title))
-            }.sortedWith(
-                compareBy<Triple<AudioTrack, String, android.icu.text.CollationKey>> {
-                    if (it.second == "#") "[" else it.second
-                }.thenBy { it.third }.thenBy { it.first.id },
-            )
+            val names = LibraryNameOrder()
+            val ordered = tracks.sortedWith(compareBy<AudioTrack, String>(names) { it.title }.thenBy { it.id })
             val sections = linkedMapOf<String, Int>()
-            entries.forEachIndexed { index, entry -> sections.putIfAbsent(entry.second, index) }
-            return LibraryTitleIndex(entries.map { it.first }, sections)
+            ordered.forEachIndexed { index, track -> sections.putIfAbsent(names.group(track.title), index) }
+            return LibraryTitleIndex(ordered, sections)
         }
     }
 }
