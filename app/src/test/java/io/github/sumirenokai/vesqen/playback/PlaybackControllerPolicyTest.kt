@@ -28,7 +28,7 @@ class PlaybackControllerPolicyTest {
 
     @Test
     fun `position-only projection preserves structural state`() {
-        val queue = listOf(PlaybackQueueItem(1, "Track", "Artist", isCurrent = true))
+        val queue = listOf(PlaybackQueueItem(1, "Track", "Artist", isCurrent = true, queueIndex = 0))
         val original = PlaybackSnapshot(
             isControllerReady = true,
             trackId = 1,

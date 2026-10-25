@@ -16,11 +16,13 @@ enum class PlaybackProblem {
     UNKNOWN,
 }
 
+/** One queue row, listed in play order; [queueIndex] is its place in the player's list for edits (#158). */
 data class PlaybackQueueItem(
     val trackId: Long,
     val title: String,
     val artist: String,
     val isCurrent: Boolean,
+    val queueIndex: Int,
 )
 
 /**
@@ -122,7 +124,7 @@ data class PlaybackSnapshot(
     val canSkipNext: Boolean = hasNext,
     val shuffleEnabled: Boolean = false,
     val repeatMode: PlaybackRepeatMode = PlaybackRepeatMode.OFF,
-    /** Zero-based media item index and item count reported by the active Media3 player. */
+    /** Zero-based place of the current item in the play order, and the item count. */
     val queueIndex: Int = 0,
     val queueSize: Int = 0,
     val queue: List<PlaybackQueueItem> = emptyList(),

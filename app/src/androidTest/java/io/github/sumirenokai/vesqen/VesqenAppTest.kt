@@ -3901,8 +3901,8 @@ class VesqenAppTest {
                     queueIndex = 0,
                     queueSize = 2,
                     queue = listOf(
-                        PlaybackQueueItem(1, "Dawn Signal", "Mori", true),
-                        PlaybackQueueItem(2, "Long Light", "Mori", false),
+                        PlaybackQueueItem(1, "Dawn Signal", "Mori", true, queueIndex = 0),
+                        PlaybackQueueItem(2, "Long Light", "Mori", false, queueIndex = 1),
                     ),
                 ),
             ),
@@ -3924,7 +3924,7 @@ class VesqenAppTest {
                     snapshot = PlaybackSnapshot(
                         isControllerReady = true,
                         isPlaying = true,
-                        queue = listOf(PlaybackQueueItem(1, "Dawn Signal", "Mori", true)),
+                        queue = listOf(PlaybackQueueItem(1, "Dawn Signal", "Mori", true, queueIndex = 0)),
                     ),
                     onDismiss = {},
                     onPlayItem = {},
@@ -3951,8 +3951,8 @@ class VesqenAppTest {
                     snapshot = PlaybackSnapshot(
                         isControllerReady = true,
                         queue = listOf(
-                            PlaybackQueueItem(1, "Dawn Signal", "Mori", true),
-                            PlaybackQueueItem(2, "Long Light", "Mori", false),
+                            PlaybackQueueItem(1, "Dawn Signal", "Mori", true, queueIndex = 0),
+                            PlaybackQueueItem(2, "Long Light", "Mori", false, queueIndex = 1),
                         ),
                     ),
                     onDismiss = {},
