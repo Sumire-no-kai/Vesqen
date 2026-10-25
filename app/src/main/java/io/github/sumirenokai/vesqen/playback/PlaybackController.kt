@@ -63,7 +63,6 @@ class PlaybackController(
                 publish(
                     player = player,
                     rebuildQueue = events.contains(Player.EVENT_TIMELINE_CHANGED) ||
-                        events.contains(Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED) ||
                         events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION) ||
                         events.contains(Player.EVENT_MEDIA_METADATA_CHANGED),
                 )
@@ -230,29 +229,26 @@ class PlaybackController(
 
     fun playNext(track: AudioTrack) {
         controller?.let { player ->
-            val insertionIndex = (player.currentMediaItemIndex + 1).coerceIn(0, player.mediaItemCount)
-            insert(player, track, insertionIndex, afterCurrent = true)
+            insert(player, track, afterCurrent = true)
         }
     }
 
     fun addToQueue(track: AudioTrack) {
-        controller?.let { player -> insert(player, track, player.mediaItemCount, afterCurrent = false) }
+        controller?.let { player -> insert(player, track, afterCurrent = false) }
     }
 
     /**
      * Inserts through the service, which also places the track in the shuffled play order (#158).
      * The session's timeline change then rebuilds the queue.
      */
-    private fun insert(player: MediaController, track: AudioTrack, listIndex: Int, afterCurrent: Boolean) {
+    private fun insert(player: MediaController, track: AudioTrack, afterCurrent: Boolean) {
         tracksById[track.id.toString()] = track
         availableTracksById[track.id.toString()] = track
         val item = track.toPlaybackMediaItem()
         if (player.isSessionCommandAvailable(insertCommand)) {
-            player.sendCustomCommand(
-                insertCommand,
-                PlayOrderSessionContract.insertArgs(PlayOrderSessionContract.Insert(item, listIndex, afterCurrent)),
-            )
+            player.sendCustomCommand(insertCommand, PlayOrderSessionContract.insertArgs(PlayOrderSessionContract.Insert(item, afterCurrent)))
         } else {
+            val listIndex = if (afterCurrent) (player.currentMediaItemIndex + 1).coerceIn(0, player.mediaItemCount) else player.mediaItemCount
             player.addMediaItem(listIndex, item)
             publish(player, rebuildQueue = true)
         }
@@ -285,14 +281,13 @@ class PlaybackController(
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         controller?.let { player ->
             if (fromIndex !in 0 until player.mediaItemCount || toIndex !in 0 until player.mediaItemCount) return
-            if (player.shuffleModeEnabled && player.isSessionCommandAvailable(moveCommand)) {
-                val order = player.playOrder()
+            if (player.isSessionCommandAvailable(moveCommand)) {
+                // The service decides from its own shuffle mode; a refusal leaves the queue as shown.
                 val move = PlayOrderSessionContract.Move(
                     item = fromIndex,
-                    itemId = player.getMediaItemAt(fromIndex).mediaId,
+                    itemId = player.getMediaItemAt(fromIndex).queueEntryId(),
                     anchor = toIndex,
-                    anchorId = player.getMediaItemAt(toIndex).mediaId,
-                    after = order.indexOf(fromIndex) < order.indexOf(toIndex),
+                    anchorId = player.getMediaItemAt(toIndex).queueEntryId(),
                 )
                 player.sendCustomCommand(moveCommand, PlayOrderSessionContract.moveArgs(move))
                 return
@@ -520,7 +515,7 @@ class PlaybackController(
                 title = queueTrack?.title ?: queueItem.mediaMetadata.title?.toString().orEmpty(),
                 artist = queueTrack?.artist ?: queueItem.mediaMetadata.artist?.toString().orEmpty(),
                 isCurrent = index == currentIndex,
-                queueIndex = index,
+                listIndex = index,
             )
         }
         return PlaybackQueueCache(

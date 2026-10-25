@@ -1,6 +1,10 @@
 package io.github.sumirenokai.vesqen.playback
 
 import android.content.Intent
+import android.os.Bundle
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.telemetry.isolatedPlaybackTestApplication
@@ -56,7 +60,7 @@ class ShuffleQueueEditDeviceTest {
             val order = playback.get().queue
             val moved = order.last()
             val above = order[order.lastIndex - 1]
-            main { controller.moveQueueItem(moved.queueIndex, above.queueIndex) }
+            main { controller.moveQueueItem(moved.listIndex, above.listIndex) }
             val expected = order.dropLast(2).map(PlaybackQueueItem::trackId) + listOf(moved.trackId, above.trackId)
             awaitPlayback { snapshot -> snapshot.queue.map(PlaybackQueueItem::trackId) == expected }
 
@@ -88,6 +92,36 @@ class ShuffleQueueEditDeviceTest {
             File(app.cacheDir, FIXTURE_DIR).deleteRecursively()
         }
     }
+
+    @Test
+    fun aMoveAgainstAChangedQueueIsRefused() {
+        var before = emptyList<Int>()
+        var after = emptyList<Int>()
+        var stale = true
+        var current = false
+        main {
+            val player = ExoPlayer.Builder(app).build()
+            try {
+                // The same track twice: only the entry ID tells the copies apart.
+                player.setMediaItems(listOf(entry("1", "a"), entry("2", "b"), entry("1", "c")))
+                player.shuffleModeEnabled = true
+                before = player.shuffleOrder.playOrder().toList()
+                stale = player.moveInPlayOrder(PlayOrderSessionContract.Move(0, "c", 1, "b"))
+                after = player.shuffleOrder.playOrder().toList()
+                current = player.moveInPlayOrder(PlayOrderSessionContract.Move(0, "a", 1, "b"))
+            } finally {
+                player.release()
+            }
+        }
+        assertEquals(false, stale)
+        assertEquals(before, after)
+        assertEquals(true, current)
+    }
+
+    private fun entry(trackId: String, occurrence: String) = MediaItem.Builder()
+        .setMediaId(trackId)
+        .setMediaMetadata(MediaMetadata.Builder().setExtras(Bundle().apply { putString(PLAYBACK_OCCURRENCE_EXTRA, occurrence) }).build())
+        .build()
 
     private suspend fun awaitPlayback(predicate: (PlaybackSnapshot) -> Boolean) = withTimeout(15_000) {
         while (true) {

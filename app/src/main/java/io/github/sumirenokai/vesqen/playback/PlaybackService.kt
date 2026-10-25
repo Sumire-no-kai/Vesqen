@@ -222,10 +222,12 @@ class PlaybackService : MediaSessionService() {
                     )
                 }
             }
-            // Runs after Media3 applied the result and the Play request to the player.
+            // Runs after Media3 applied the result and the Play request to the player. Shuffle was set
+            // on the empty player, so the new queue's shuffled order starts at its track only now.
             if (isForPlayback) {
                 mainHandler.post {
                     if (player.currentMediaItem == null) endMediaButtonStartWithoutPlayback()
+                    (player as? ExoPlayer)?.playCurrentItemFirst()
                 }
             }
         }
@@ -268,8 +270,9 @@ class PlaybackService : MediaSessionService() {
         player.addListener((application as VesqenApplication).deviceReportRuntime.playbackListener(player))
         player.addListener(playbackListener)
         player.addListener(object : Player.Listener {
-            // Turning shuffle on, here or when a shuffled queue is restored, starts the play order
-            // at the current track, so none of the others is skipped (#158).
+            // Turning shuffle on, here or when the app restores a shuffled queue, starts the play order
+            // at the current track, so none of the others is skipped (#158). A media-button
+            // resumption sets shuffle before its items; resumeSavedQueue handles that one.
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
                 if (shuffleModeEnabled) player.playCurrentItemFirst()
             }

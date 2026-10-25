@@ -16,13 +16,13 @@ enum class PlaybackProblem {
     UNKNOWN,
 }
 
-/** One queue row, listed in play order; [queueIndex] is its place in the player's list for edits (#158). */
+/** One queue row, listed in play order; [listIndex] is its place in the player's list for edits (#158). */
 data class PlaybackQueueItem(
     val trackId: Long,
     val title: String,
     val artist: String,
     val isCurrent: Boolean,
-    val queueIndex: Int,
+    val listIndex: Int,
 )
 
 /**

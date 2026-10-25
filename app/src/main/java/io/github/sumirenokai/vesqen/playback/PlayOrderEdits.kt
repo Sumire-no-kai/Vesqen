@@ -20,29 +20,33 @@ internal object PlayOrderSessionContract {
     const val INSERT_ACTION = "io.github.sumirenokai.vesqen.queue.INSERT"
     const val MOVE_ACTION = "io.github.sumirenokai.vesqen.queue.MOVE"
     private const val KEY_ITEM = "item"
-    private const val KEY_INDEX = "index"
     private const val KEY_AFTER_CURRENT = "after_current"
     private const val KEY_ITEM_ID = "item_id"
     private const val KEY_ANCHOR = "anchor"
     private const val KEY_ANCHOR_ID = "anchor_id"
-    private const val KEY_AFTER = "after"
 
-    data class Insert(val item: MediaItem, val listIndex: Int, val afterCurrent: Boolean)
+    /**
+     * Plays [item] right after the current item, or after every other item. The service picks the
+     * list position from its own current item, which may have moved on while the request travelled.
+     */
+    data class Insert(val item: MediaItem, val afterCurrent: Boolean)
 
-    /** Moves the item at list index [item] to just before or [after] the item at list index [anchor]. */
-    data class Move(val item: Int, val itemId: String, val anchor: Int, val anchorId: String, val after: Boolean)
+    /**
+     * The item at list index [item] takes the place of the item at list index [anchor], its
+     * neighbor in the play order. The entry IDs ([queueEntryId]) let the service refuse a request
+     * made against a queue that has changed since.
+     */
+    data class Move(val item: Int, val itemId: String, val anchor: Int, val anchorId: String)
 
     fun insertArgs(insert: Insert): Bundle = Bundle().apply {
         // The service runs in the app's process, so the item keeps its local URI.
         putBundle(KEY_ITEM, insert.item.toBundleIncludeLocalConfiguration())
-        putInt(KEY_INDEX, insert.listIndex)
         putBoolean(KEY_AFTER_CURRENT, insert.afterCurrent)
     }
 
     fun readInsert(args: Bundle): Insert? {
         val item = args.getBundle(KEY_ITEM)?.let(MediaItem::fromBundle) ?: return null
-        if (!args.containsKey(KEY_INDEX)) return null
-        return Insert(item, args.getInt(KEY_INDEX), args.getBoolean(KEY_AFTER_CURRENT))
+        return Insert(item, args.getBoolean(KEY_AFTER_CURRENT))
     }
 
     fun moveArgs(move: Move): Bundle = Bundle().apply {
@@ -50,7 +54,6 @@ internal object PlayOrderSessionContract {
         putString(KEY_ITEM_ID, move.itemId)
         putInt(KEY_ANCHOR, move.anchor)
         putString(KEY_ANCHOR_ID, move.anchorId)
-        putBoolean(KEY_AFTER, move.after)
     }
 
     fun readMove(args: Bundle): Move? {
@@ -60,34 +63,48 @@ internal object PlayOrderSessionContract {
             itemId = args.getString(KEY_ITEM_ID) ?: return null,
             anchor = args.getInt(KEY_ANCHOR),
             anchorId = args.getString(KEY_ANCHOR_ID) ?: return null,
-            after = args.getBoolean(KEY_AFTER),
         )
     }
 }
 
+/** One queue entry: the same track queued twice has two entries (PLAYBACK_OCCURRENCE_EXTRA). */
+internal fun MediaItem.queueEntryId(): String =
+    mediaMetadata.extras?.getString(PLAYBACK_OCCURRENCE_EXTRA) ?: mediaId
+
 /**
- * Inserts the item and, while shuffled, plays it right after the current item or after every other
- * item. Without shuffle the list order is the play order already.
+ * Inserts the item after the current one, or last, and while shuffled plays it there too. Without
+ * shuffle the list order is the play order already.
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 internal fun ExoPlayer.insertInPlayOrder(insert: PlayOrderSessionContract.Insert) {
-    val listIndex = insert.listIndex.coerceIn(0, mediaItemCount)
+    val current = currentMediaItemIndex.takeIf { insert.afterCurrent && mediaItemCount > 0 }
+    val listIndex = current?.plus(1) ?: mediaItemCount
     val before = shuffleOrder.playOrder()
-    val anchor = currentMediaItemIndex.takeIf { insert.afterCurrent && it != C.INDEX_UNSET && it < mediaItemCount }
     addMediaItem(listIndex, insert.item)
     if (shuffleModeEnabled) {
-        setShuffleOrder(ShuffleOrder.DefaultShuffleOrder(before.withInsertedAt(listIndex, anchor), Random.nextLong()))
+        setShuffleOrder(ShuffleOrder.DefaultShuffleOrder(before.withInsertedAt(listIndex, current), Random.nextLong()))
     }
 }
 
-/** Reorders the shuffled play order; false when not shuffled or the queue changed since the request. */
+/**
+ * Moves an item to its neighbor's place in the play order: while shuffled only that order changes,
+ * so the list keeps its order for when shuffle is turned off; otherwise the list is the order. False
+ * when the queue changed since the request.
+ */
 @androidx.annotation.OptIn(UnstableApi::class)
 internal fun ExoPlayer.moveInPlayOrder(move: PlayOrderSessionContract.Move): Boolean {
     val indices = 0 until mediaItemCount
-    if (!shuffleModeEnabled || move.item !in indices || move.anchor !in indices || move.item == move.anchor) return false
-    if (getMediaItemAt(move.item).mediaId != move.itemId || getMediaItemAt(move.anchor).mediaId != move.anchorId) return false
-    val order = shuffleOrder.playOrder().withMoved(move.item, move.anchor, move.after)
-    setShuffleOrder(ShuffleOrder.DefaultShuffleOrder(order, Random.nextLong()))
+    if (move.item !in indices || move.anchor !in indices || move.item == move.anchor) return false
+    if (getMediaItemAt(move.item).queueEntryId() != move.itemId || getMediaItemAt(move.anchor).queueEntryId() != move.anchorId) {
+        return false
+    }
+    if (!shuffleModeEnabled) {
+        moveMediaItem(move.item, move.anchor)
+        return true
+    }
+    val order = shuffleOrder.playOrder()
+    val after = order.indexOf(move.item) < order.indexOf(move.anchor)
+    setShuffleOrder(ShuffleOrder.DefaultShuffleOrder(order.withMoved(move.item, move.anchor, after), Random.nextLong()))
     return true
 }
 
