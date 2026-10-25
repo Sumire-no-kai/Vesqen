@@ -831,9 +831,9 @@ internal class LibraryCatalogStore(
             val keepsUserState = prunePatterns != null || session.sourceId != LibrarySourceId.DEVICE
             if (prunePatterns == null && session.sourceId != LibrarySourceId.DEVICE) {
                 // A file renamed or moved inside an added folder comes back under a new document
-                // ID, so the scan inserted it as a new row. Its old row, with the user's data, takes
-                // the new file over; rows still unmatched are hidden until their file is listed
-                // again, like MediaStore's (#164).
+                // ID, so a scan wrote it as a new row. Its old row, with the user's data, takes that
+                // file over; rows still unmatched are hidden until their file is listed again, like
+                // MediaStore's (#164).
                 reattachFolderTracks(database, session)
                 database.execSQL(
                     "UPDATE $TRACKS_TABLE SET $TRACK_REMOTE_ID = '$HIDDEN_FOLDER_PREFIX' || $TRACK_ID " +
@@ -854,15 +854,18 @@ internal class LibraryCatalogStore(
     }
 
     /**
-     * Pairs this folder's rows that hold user data but were not listed by this scan with rows the
-     * scan listed that hold none (see [planFolderReattachments]). The old row keeps its catalog ID,
-     * so favorites, plays and playlist places stay; it takes the listed file's columns and the
-     * listed row goes. Runs inside the completing transaction.
+     * Pairs this folder's rows that hold user data but were not listed by this scan with listed rows
+     * written since (see [planFolderReattachments]). The old row keeps its catalog ID, so favorites,
+     * plays and playlist places stay; it takes the listed file's columns and the listed row goes.
+     * Runs inside the completing transaction.
      */
     private fun reattachFolderTracks(database: SQLiteDatabase, session: SourceScanSession) {
         fun identities(selection: String): List<FolderTrackIdentity> = database.query(
             TRACKS_TABLE,
-            arrayOf(TRACK_ID, TRACK_FILE_NAME, TRACK_SIZE_BYTES, TRACK_DURATION_MS),
+            arrayOf(
+                TRACK_ID, TRACK_FILE_NAME, TRACK_SIZE_BYTES, TRACK_DATE_MODIFIED_SECONDS,
+                "CASE WHEN $HOLDS_USER_STATE THEN 1 ELSE 0 END", TRACK_SEEN_EPOCH, TRACK_ARTWORK_REVISION,
+            ),
             "$TRACK_SOURCE_ID = ? AND $selection",
             arrayOf(session.sourceId, session.epoch.toString()),
             null,
@@ -871,19 +874,31 @@ internal class LibraryCatalogStore(
         ).use { cursor ->
             buildList {
                 while (cursor.moveToNext()) {
-                    add(FolderTrackIdentity(cursor.getLong(0), cursor.getString(1), cursor.getLong(2), cursor.getLong(3)))
+                    add(
+                        FolderTrackIdentity(
+                            trackId = cursor.getLong(0),
+                            fileName = cursor.getString(1),
+                            sizeBytes = cursor.getLong(2),
+                            modifiedSeconds = cursor.getLong(3),
+                            holdsUserState = cursor.getInt(4) != 0,
+                            seenEpoch = cursor.getLong(5),
+                            // A scan writes the artwork revision with every row it inserts or updates.
+                            writtenEpoch = cursor.getLong(6),
+                        ),
+                    )
                 }
             }
         }
-        val missing = identities("$TRACK_SEEN_EPOCH != ? AND $HOLDS_USER_STATE")
-        if (missing.isEmpty()) return
-        val listed = identities("$TRACK_SEEN_EPOCH = ? AND NOT $HOLDS_USER_STATE")
+        val missing = identities("$TRACK_SEEN_EPOCH != ?")
+        if (missing.none(FolderTrackIdentity::holdsUserState)) return
+        val listed = identities("$TRACK_SEEN_EPOCH = ?")
         val copied = scannedTrackColumns.filter { it != TRACK_REMOTE_ID }.joinToString(", ")
         for ((oldTrackId, listedTrackId) in planFolderReattachments(missing, listed)) {
             val remoteId = database.query(
                 TRACKS_TABLE, arrayOf(TRACK_REMOTE_ID), "$TRACK_ID = ?", arrayOf(listedTrackId.toString()),
                 null, null, null,
-            ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null } ?: continue
+            ).use { cursor -> check(cursor.moveToFirst()) { "A listed row disappeared during its scan" }; cursor.getString(0) }
+            // Copy, delete, then take the remote ID: UNIQUE(source, remote ID) forbids two rows with it.
             database.execSQL(
                 "UPDATE $TRACKS_TABLE SET ($copied) = (SELECT $copied FROM $TRACKS_TABLE WHERE $TRACK_ID = ?) " +
                     "WHERE $TRACK_ID = ?",
@@ -1357,38 +1372,50 @@ internal data class FolderTrackIdentity(
     val trackId: Long,
     val fileName: String,
     val sizeBytes: Long,
-    val durationMs: Long,
+    /** The document's last-modified time, which a rename or a move within the folder keeps. */
+    val modifiedSeconds: Long,
+    val holdsUserState: Boolean,
+    /** The scan epoch that last listed the row. */
+    val seenEpoch: Long,
+    /** The scan epoch that last wrote the row. */
+    val writtenEpoch: Long,
 )
 
 /**
- * Pairs old folder rows (user data, not listed by the completed scan) with listed rows that hold no
- * user data, when both hold the same file: first by file name and size (moved to another folder),
- * then by size and duration (renamed). A key shared by more than one row on either side pairs
- * nothing, so an ambiguous match leaves the data hidden instead of moving it to the wrong file.
- * Returns (old track ID, listed track ID).
+ * Pairs an old folder row (user data, not listed by the completed scan) with a listed row that
+ * holds none, when both hold the same file: first by file name, size and modified time (moved to
+ * another folder), then by size and modified time (renamed). Duration alone is no identity: an
+ * uncompressed rip's duration follows from its size. The listed row must have been written after
+ * the old row was last seen, so a file that sat beside it all along keeps its own row.
+ *
+ * A key shared by more than one row on either side, counting rows with or without user data and
+ * rows the first key already paired, pairs nothing: the data stays hidden rather than moving to the
+ * wrong file. Returns (old track ID, listed track ID).
  */
 internal fun planFolderReattachments(
     missing: List<FolderTrackIdentity>,
     listed: List<FolderTrackIdentity>,
 ): List<Pair<Long, Long>> {
     val keys = listOf<(FolderTrackIdentity) -> Any?>(
-        { track -> track.fileName.takeIf(String::isNotEmpty)?.let { it to track.sizeBytes } },
-        { track -> track.durationMs.takeIf { it > 0 }?.let { track.sizeBytes to it } },
+        { track -> track.fileName.takeIf(String::isNotEmpty)?.let { Triple(it, track.sizeBytes, track.modifiedSeconds) } },
+        { track -> track.sizeBytes to track.modifiedSeconds },
     )
+    val oldRows = missing.filter { it.sizeBytes > 0 && it.modifiedSeconds > 0 }
+    val newRows = listed.filter { it.sizeBytes > 0 && it.modifiedSeconds > 0 }
     val pairs = mutableListOf<Pair<Long, Long>>()
-    var oldRows = missing.filter { it.sizeBytes > 0 }
-    var newRows = listed.filter { it.sizeBytes > 0 }
+    val pairedOld = HashSet<Long>()
+    val pairedNew = HashSet<Long>()
     for (key in keys) {
         val newByKey = newRows.groupBy(key)
-        val matched = oldRows.groupBy(key).mapNotNull { (value, olds) ->
-            val news = newByKey[value]
-            if (value == null || olds.size != 1 || news?.size != 1) null else olds.single().trackId to news.single().trackId
+        for ((value, olds) in oldRows.groupBy(key)) {
+            val old = olds.singleOrNull() ?: continue
+            val new = newByKey[value]?.singleOrNull() ?: continue
+            if (value == null || !old.holdsUserState || new.holdsUserState || new.writtenEpoch <= old.seenEpoch) continue
+            if (old.trackId in pairedOld || new.trackId in pairedNew) continue
+            pairs += old.trackId to new.trackId
+            pairedOld += old.trackId
+            pairedNew += new.trackId
         }
-        pairs += matched
-        val oldIds = matched.mapTo(HashSet()) { it.first }
-        val newIds = matched.mapTo(HashSet()) { it.second }
-        oldRows = oldRows.filterNot { it.trackId in oldIds }
-        newRows = newRows.filterNot { it.trackId in newIds }
     }
     return pairs
 }

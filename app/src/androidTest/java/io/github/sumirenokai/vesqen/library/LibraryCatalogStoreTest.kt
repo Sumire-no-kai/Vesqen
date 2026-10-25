@@ -936,6 +936,39 @@ class LibraryCatalogStoreTest {
     }
 
     @Test
+    fun aDeletedFavoriteDoesNotMoveToAnotherFileOfTheSameSize() = withStore("library-folder-twin") { store ->
+        // Uncompressed rips with the same sector count share size and duration, not their modified time.
+        val source = store.addTestFolder()
+        store.scanFolder(source, folderFile("doc:1", "Music/A", "07.wav", 30_000_044, 170_000, modifiedSeconds = 100), folderFile("doc:2", "Music/B", "05.wav", 30_000_044, 170_000, modifiedSeconds = 175))
+        val seven = store.readTracks(listOf(source)).single { it.fileName == "07.wav" }
+        val five = store.readTracks(listOf(source)).single { it.fileName == "05.wav" }
+        store.setFavorite(seven.id, true)
+
+        store.scanFolder(source, folderFile("doc:2", "Music/B", "05.wav", 30_000_044, 170_000, modifiedSeconds = 175))
+
+        assertEquals(setOf(seven.id), store.readHiddenFolderTrackIds())
+        val row = store.readTracks(listOf(source)).single { it.id == five.id }
+        assertFalse(row.isFavorite)
+        assertEquals("content://tree/doc:2", row.contentUri)
+    }
+
+    @Test
+    fun anIdenticalCopyThatWasThereAllAlongKeepsItsRow() = withStore("library-folder-copy") { store ->
+        val source = store.addTestFolder()
+        store.scanFolder(source, folderFile("doc:1", "Music/Album", "Aira.flac", 1_000, 60_000), folderFile("doc:2", "Music/Backup", "Aira.flac", 1_000, 60_000))
+        val rows = store.readTracks(listOf(source)).associateBy(AudioTrack::contentUri)
+        val album = rows.getValue("content://tree/doc:1")
+        val backup = rows.getValue("content://tree/doc:2")
+        store.setFavorite(album.id, true)
+
+        // The album copy is deleted; the backup copy was listed when the album copy was last seen.
+        store.scanFolder(source, folderFile("doc:2", "Music/Backup", "Aira.flac", 1_000, 60_000))
+
+        assertEquals(setOf(album.id), store.readHiddenFolderTrackIds())
+        assertTrue(store.readTracks(listOf(source)).any { it.id == backup.id && !it.isFavorite })
+    }
+
+    @Test
     fun aPausedFolderScanHidesAndMovesNothing() = withStore("library-folder-paused") { store ->
         val source = store.addTestFolder()
         store.scanFolder(source, folderFile("doc:1", "Music", "Aira.flac", 1_000, 60_000))
@@ -965,19 +998,27 @@ class LibraryCatalogStoreTest {
         if (complete) completeSourceScan(session) else markSourcePaused(sourceId)
     }
 
-    private fun folderFile(documentId: String, folder: String, fileName: String, sizeBytes: Long, durationMs: Long) =
-        LibraryTrackCandidate(
-            remoteId = documentId,
-            contentUri = "content://tree/$documentId",
-            title = fileName.substringBeforeLast('.'),
-            artist = "Artist",
-            album = "Album",
-            durationMs = durationMs,
-            sizeBytes = sizeBytes,
-            fileName = fileName,
-            folderName = folder,
-            fingerprint = "$documentId|$sizeBytes",
-        )
+    /** A rename or a move keeps the file's size and modified time ([modifiedSeconds] defaults by size). */
+    private fun folderFile(
+        documentId: String,
+        folder: String,
+        fileName: String,
+        sizeBytes: Long,
+        durationMs: Long,
+        modifiedSeconds: Long = 1_700_000_000 + sizeBytes,
+    ) = LibraryTrackCandidate(
+        remoteId = documentId,
+        contentUri = "content://tree/$documentId",
+        title = fileName.substringBeforeLast('.'),
+        artist = "Artist",
+        album = "Album",
+        durationMs = durationMs,
+        dateModifiedSeconds = modifiedSeconds,
+        sizeBytes = sizeBytes,
+        fileName = fileName,
+        folderName = folder,
+        fingerprint = "$documentId|$sizeBytes|$modifiedSeconds",
+    )
 
     private fun withStore(name: String, block: (LibraryCatalogStore) -> Unit) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
