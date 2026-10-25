@@ -1307,7 +1307,7 @@ private fun ChainDiagnosticPanel(
                         showClearConfirmation = false
                         onClear()
                     },
-                    modifier = Modifier.testTag("vesqen.chain.diagnostics.clear-confirm"),
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.chain.diagnostics.clear-confirm"),
                 ) {
                     Text(
                         text = stringResource(R.string.chain_diagnostic_clear_confirm_action),
@@ -1318,7 +1318,7 @@ private fun ChainDiagnosticPanel(
             dismissButton = {
                 TextButton(
                     onClick = { showClearConfirmation = false },
-                    modifier = Modifier.testTag("vesqen.chain.diagnostics.clear-cancel"),
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.chain.diagnostics.clear-cancel"),
                 ) {
                     Text(stringResource(R.string.cancel))
                 }
@@ -2136,13 +2136,13 @@ private fun ChainCustomizerSheet(
                         confirmReset = false
                         onReset()
                     },
-                    modifier = Modifier.testTag("vesqen.chain.reset-confirm"),
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.chain.reset-confirm"),
                 ) {
                     Text(stringResource(R.string.reset))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmReset = false }) {
+                TextButton(onClick = { confirmReset = false }, modifier = Modifier.heightIn(min = 48.dp)) {
                     Text(stringResource(R.string.cancel))
                 }
             },

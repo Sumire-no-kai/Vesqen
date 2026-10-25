@@ -137,13 +137,13 @@ internal fun StrictOutputIntroductionDialog(
         confirmButton = {
             TextButton(
                 onClick = onDismiss,
-                modifier = Modifier.testTag("vesqen.premium.strict-intro.ok"),
+                modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.premium.strict-intro.ok"),
             ) { Text(stringResource(R.string.premium_strict_intro_ok)) }
         },
         dismissButton = {
             TextButton(
                 onClick = onOpenPremium,
-                modifier = Modifier.testTag("vesqen.premium.strict-intro.open"),
+                modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.premium.strict-intro.open"),
             ) { Text(stringResource(R.string.premium_open)) }
         },
     )

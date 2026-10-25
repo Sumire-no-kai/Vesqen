@@ -3,6 +3,7 @@ package io.github.sumirenokai.vesqen.ui
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -17,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 
@@ -54,7 +56,7 @@ internal fun SupportPromptDialog(
         confirmButton = {
             TextButton(
                 onClick = { browserUnavailable = !onSupport() },
-                modifier = Modifier.testTag("vesqen.support-prompt.support"),
+                modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.support-prompt.support"),
             ) { Text(stringResource(R.string.support_prompt_support)) }
         },
         // Two buttons in this slot become two items of the dialog's wrapping button row, so large
@@ -62,11 +64,11 @@ internal fun SupportPromptDialog(
         dismissButton = {
             TextButton(
                 onClick = onNever,
-                modifier = Modifier.testTag("vesqen.support-prompt.never"),
+                modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.support-prompt.never"),
             ) { Text(stringResource(R.string.support_prompt_never)) }
             TextButton(
                 onClick = onLater,
-                modifier = Modifier.testTag("vesqen.support-prompt.later"),
+                modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.support-prompt.later"),
             ) { Text(stringResource(R.string.support_prompt_later)) }
         },
     )

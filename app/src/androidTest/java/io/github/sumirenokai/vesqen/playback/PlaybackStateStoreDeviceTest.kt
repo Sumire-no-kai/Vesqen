@@ -44,6 +44,7 @@ class PlaybackStateStoreDeviceTest {
             positionMs = 12_345,
             shuffleEnabled = true,
             repeatMode = PlaybackRepeatMode.ALL,
+            queueEnded = true,
         )
 
         val loaded = PlaybackStateStore(isolatedContext).load()!!
@@ -52,6 +53,25 @@ class PlaybackStateStoreDeviceTest {
         assertEquals(12_345, loaded.positionMs)
         assertEquals(true, loaded.shuffleEnabled)
         assertEquals(PlaybackRepeatMode.ALL, loaded.repeatMode)
+        assertEquals(true, loaded.queueEnded)
+    }
+
+    @Test
+    fun anUnknownEndStateStaysUnknownWhenSaved() {
+        val store = PlaybackStateStore(isolatedContext)
+        val state = PersistedPlaybackState(
+            queueTrackIds = listOf(1, 2),
+            currentTrackId = 2,
+            currentQueueIndex = 1,
+            positionMs = 59_500,
+            shuffleEnabled = false,
+            repeatMode = PlaybackRepeatMode.OFF,
+            queueEnded = true,
+        )
+        store.save(state)
+        store.save(state.copy(queueEnded = null))
+
+        assertNull(PlaybackStateStore(isolatedContext).load()!!.queueEnded)
     }
 
     @Test
@@ -64,6 +84,7 @@ class PlaybackStateStoreDeviceTest {
 
         val loaded = PlaybackStateStore(isolatedContext).load()!!
         assertNull(loaded.currentQueueIndex)
+        assertNull(loaded.queueEnded)
         assertEquals(listOf(1L, 2L, 1L), loaded.queueTrackIds)
         assertEquals(9_876, loaded.positionMs)
     }

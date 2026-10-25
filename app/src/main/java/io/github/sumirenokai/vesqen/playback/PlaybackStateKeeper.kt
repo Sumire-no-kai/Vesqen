@@ -24,6 +24,7 @@ internal class PlaybackStateKeeper(
     private var queueTrackIds: List<Long> = emptyList()
     private var queueRevision = 0L
     private var started = false
+    private var queueEnded = false
 
     private val checkpoint = object : Runnable {
         override fun run() {
@@ -65,6 +66,9 @@ internal class PlaybackStateKeeper(
         val playingChanged = events.contains(Player.EVENT_IS_PLAYING_CHANGED)
         val mediaItemTransition = events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)
         val positionDiscontinuity = events.contains(Player.EVENT_POSITION_DISCONTINUITY)
+        if (mediaItemTransition || positionDiscontinuity || timelineChanged) {
+            queueEnded = queueEndedAfter(queueEnded, player.playbackState, movedAway = true)
+        }
         if (mediaItemTransition || playingChanged) {
             playbackStartGate.trackStarted(
                 isPlaying = player.isPlaying,
@@ -74,6 +78,8 @@ internal class PlaybackStateKeeper(
         val shouldPersist = timelineChanged ||
             mediaItemTransition ||
             positionDiscontinuity ||
+            // Reaching or leaving the end of the queue; the gate skips other state changes.
+            events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED) ||
             events.contains(Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED) ||
             events.contains(Player.EVENT_REPEAT_MODE_CHANGED) ||
             playingChanged
@@ -105,6 +111,7 @@ internal class PlaybackStateKeeper(
 
     private fun persist(force: Boolean) {
         val positionMs = player.currentPosition.coerceAtLeast(0)
+        queueEnded = queueEndedAfter(queueEnded, player.playbackState, movedAway = false)
         when (
             persistenceGate.decide(
                 PlaybackPersistenceObservation(
@@ -115,6 +122,7 @@ internal class PlaybackStateKeeper(
                     positionMs = positionMs,
                     shuffleEnabled = player.shuffleModeEnabled,
                     repeatMode = player.repeatMode.toPlaybackRepeatMode(),
+                    queueEnded = queueEnded,
                 ),
                 force = force,
             )
@@ -129,6 +137,7 @@ internal class PlaybackStateKeeper(
                     positionMs = positionMs,
                     shuffleEnabled = player.shuffleModeEnabled,
                     repeatMode = player.repeatMode.toPlaybackRepeatMode(),
+                    queueEnded = queueEnded,
                 ),
             )
             PlaybackPersistenceDecision.SAVE_PROGRESS -> stateStore.saveProgress(
@@ -137,6 +146,7 @@ internal class PlaybackStateKeeper(
                 positionMs = positionMs,
                 shuffleEnabled = player.shuffleModeEnabled,
                 repeatMode = player.repeatMode.toPlaybackRepeatMode(),
+                queueEnded = queueEnded,
             )
         }
     }
@@ -155,6 +165,18 @@ internal class PlaybackStateKeeper(
     private companion object {
         const val POSITION_SAVE_BUCKET_MS = 5_000L
     }
+}
+
+/**
+ * Whether the queue still stands at its end. A stop() after the end (a dismissed notification, a
+ * STOP key, a strict USB rebuild) leaves the player idle at the end of its last track, so idle keeps
+ * the end; a seek, another item or a new queue ends it (#170 P2).
+ */
+internal fun queueEndedAfter(previous: Boolean, playbackState: Int, movedAway: Boolean): Boolean = when {
+    playbackState == Player.STATE_ENDED -> true
+    movedAway -> false
+    playbackState == Player.STATE_IDLE -> previous
+    else -> false
 }
 
 /** User seeks and pause boundaries retain their exact cursor instead of waiting for a time bucket. */
@@ -201,6 +223,7 @@ internal data class PlaybackPersistenceObservation(
     val shuffleEnabled: Boolean,
     val repeatMode: PlaybackRepeatMode,
     val currentQueueIndex: Int = 0,
+    val queueEnded: Boolean = false,
 )
 
 internal enum class PlaybackPersistenceDecision {
@@ -241,6 +264,7 @@ internal class PlaybackPersistenceGate(
             positionBucket = observation.positionMs.coerceAtLeast(0) / positionBucketMs,
             shuffleEnabled = observation.shuffleEnabled,
             repeatMode = observation.repeatMode,
+            queueEnded = observation.queueEnded,
         )
         if (!force && hasPersistedQueue && signature == lastSignature) {
             return PlaybackPersistenceDecision.SKIP
@@ -265,4 +289,5 @@ private data class PlaybackPersistenceSignature(
     val positionBucket: Long,
     val shuffleEnabled: Boolean,
     val repeatMode: PlaybackRepeatMode,
+    val queueEnded: Boolean,
 )

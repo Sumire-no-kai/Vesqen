@@ -1055,14 +1055,14 @@ private fun NowLinerNotesBody(
             )
             TextButton(
                 onClick = actions.onOpenOutputMode,
-                modifier = Modifier
+                modifier = Modifier.heightIn(min = 48.dp)
                     .testTag("vesqen.now.output-mode")
                     .semantics { stateDescription = outputModeDescription },
             ) { Text(stringResource(R.string.player_output_mode)) }
             TextButton(
                 onClick = actions.onOpenDetails,
                 enabled = actions.canOpenDetails && currentTrack != null,
-                modifier = Modifier.testTag("vesqen.now.info"),
+                modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.now.info"),
             ) { Text(stringResource(R.string.track_information)) }
         }
     }
@@ -1346,7 +1346,7 @@ private fun PlaybackProblemBanner(
             .semantics { liveRegion = LiveRegionMode.Polite }
             .testTag("vesqen.now.playback-problem"),
         action = {
-            TextButton(onClick = onRetry) {
+            TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) {
                 Text(stringResource(R.string.retry_playback))
             }
         },
@@ -1421,7 +1421,7 @@ private fun OutputModeDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.player_output_done)) }
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.player_output_done)) }
         },
     )
 }

@@ -132,6 +132,7 @@ import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.library.LibraryBrowseMode
+import io.github.sumirenokai.vesqen.library.LibraryNameOrder
 import io.github.sumirenokai.vesqen.library.LibraryCollection
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
 import io.github.sumirenokai.vesqen.library.LibraryScanState
@@ -306,10 +307,14 @@ fun LibraryScreen(
     val visibleTracks = if (favoritesOnly) favoriteVisibleTracks else rootVisibleTracks
     val filteredTracks = if (favoritesOnly) favoriteTracks else searchedTracks
     val collections = remember(browseMode, searchedTracks, state.playlists, rootSortOrder) {
-        sortLibraryCollections(
-            buildLibraryCollections(browseMode, searchedTracks, state.playlists),
-            rootSortOrder,
-        )
+        // Songs has no collections. The others share one name order, so each title is measured once;
+        // its ICU index is first built off the main thread by the Songs index.
+        if (browseMode == LibraryBrowseMode.SONGS) {
+            emptyList()
+        } else {
+            val names = LibraryNameOrder()
+            sortLibraryCollections(buildLibraryCollections(browseMode, searchedTracks, state.playlists, names), rootSortOrder, names)
+        }
     }
     val selectedCollection = remember(collections, selectedCollectionKey) {
         collections.firstOrNull { it.key == selectedCollectionKey }
@@ -451,11 +456,11 @@ fun LibraryScreen(
                             orderTarget = selectedCollection?.let { it.playlistId to it.tracks } ?: (null to visibleTracks)
                         },
                         enabled = query.isBlank() && (!favoritesOnly || favoriteCustomOrder),
-                        modifier = Modifier.testTag("vesqen.library.edit-order"),
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.library.edit-order"),
                     ) { Text(stringResource(R.string.edit_track_order)) }
                 } else {
                     Text(stringResource(R.string.drag_track_order), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                    TextButton(onClick = { orderTarget = null }, enabled = !orderSaving) { Text(stringResource(R.string.cancel)) }
+                    TextButton(onClick = { orderTarget = null }, enabled = !orderSaving, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.cancel)) }
                     TextButton(
                         onClick = {
                             val target = orderTarget ?: return@TextButton
@@ -469,7 +474,7 @@ fun LibraryScreen(
                             }
                         },
                         enabled = !orderSaving,
-                        modifier = Modifier.testTag("vesqen.library.save-order"),
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.library.save-order"),
                     ) { Text(stringResource(R.string.save)) }
                 }
             }
@@ -1320,12 +1325,12 @@ private fun PlaylistNameDialog(
         title = { Text(title) },
         text = { PlaylistNameField(name, taken) { name = it } },
         confirmButton = {
-            TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank() && !taken) {
+            TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank() && !taken, modifier = Modifier.heightIn(min = 48.dp)) {
                 Text(confirmLabel)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.cancel)) }
         },
     )
 }
@@ -1378,7 +1383,7 @@ private fun PlaylistEditDialog(
         title = { Text(stringResource(R.string.edit_playlist)) },
         text = { PlaylistNameField(name, taken) { name = it } },
         confirmButton = {
-            TextButton(onClick = { onRename(name) }, enabled = name.isNotBlank() && !taken) {
+            TextButton(onClick = { onRename(name) }, enabled = name.isNotBlank() && !taken, modifier = Modifier.heightIn(min = 48.dp)) {
                 Text(stringResource(R.string.save))
             }
         },
@@ -1387,13 +1392,13 @@ private fun PlaylistEditDialog(
                 TextButton(
                     onClick = { confirmingDelete = true },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    modifier = Modifier.testTag("vesqen.library.playlist.delete"),
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.library.playlist.delete"),
                 ) {
                     Icon(Icons.Filled.Delete, contentDescription = null)
                     Spacer(Modifier.width(VesqenSpacing.xxs))
                     Text(stringResource(R.string.delete_playlist))
                 }
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+                TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.cancel)) }
             }
         },
     )
@@ -1639,7 +1644,7 @@ private fun LibrarySourcesCard(
                         { showSourceManager = true }
                     },
                     enabled = !state.isLoading,
-                    modifier = Modifier.testTag(
+                    modifier = Modifier.heightIn(min = 48.dp).testTag(
                         if (folders.isEmpty()) {
                             "vesqen.library.sources.add"
                         } else {
@@ -1687,7 +1692,7 @@ private fun LibrarySourcesCard(
                     )
                     TextButton(
                         onClick = if (state.isScanPaused) onResumeLibraryScan else onPauseLibraryScan,
-                        modifier = Modifier.testTag(
+                        modifier = Modifier.heightIn(min = 48.dp).testTag(
                             if (state.isScanPaused) {
                                 "vesqen.library.resume-scan"
                             } else {
@@ -1777,6 +1782,7 @@ private fun LibrarySourcesSheet(
                 TextButton(
                     onClick = onAddLibraryFolder,
                     enabled = !scanInProgress,
+                    modifier = Modifier.heightIn(min = 48.dp),
                 ) {
                     Text(stringResource(R.string.add_music_folder))
                 }
@@ -1801,7 +1807,7 @@ private fun LibrarySourcesSheet(
                         TextButton(
                             enabled = !scanInProgress,
                             onClick = { pendingRemoval = source },
-                            modifier = Modifier.testTag("vesqen.library.source.${source.id}.remove"),
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.library.source.${source.id}.remove"),
                         ) {
                             Text(stringResource(R.string.remove_music_folder))
                         }

@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.playback
 
+import androidx.media3.common.Player
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -13,6 +14,28 @@ class PlaybackPersistenceGateTest {
             PlaybackPersistenceDecision.SAVE_PROGRESS,
             gate.decide(observation().copy(currentQueueIndex = 2)),
         )
+    }
+
+    @Test
+    fun `reaching the end of the queue is saved within the same position bucket`() {
+        gate.decide(observation(positionMs = 60_000))
+        assertEquals(
+            PlaybackPersistenceDecision.SAVE_PROGRESS,
+            gate.decide(observation(positionMs = 60_000).copy(queueEnded = true)),
+        )
+    }
+
+    @Test
+    fun `the end survives a stop until the player moves away`() {
+        // The album ended; dismissing the notification then stops the player, which goes idle at the end.
+        assertEquals(true, queueEndedAfter(previous = false, playbackState = Player.STATE_ENDED, movedAway = false))
+        assertEquals(true, queueEndedAfter(previous = true, playbackState = Player.STATE_IDLE, movedAway = false))
+        // A seek, another item or a new queue ends it; so does playing again.
+        assertEquals(false, queueEndedAfter(previous = true, playbackState = Player.STATE_IDLE, movedAway = true))
+        assertEquals(false, queueEndedAfter(previous = true, playbackState = Player.STATE_READY, movedAway = false))
+        assertEquals(false, queueEndedAfter(previous = true, playbackState = Player.STATE_BUFFERING, movedAway = false))
+        // A stop before any end is not an end.
+        assertEquals(false, queueEndedAfter(previous = false, playbackState = Player.STATE_IDLE, movedAway = false))
     }
 
     @Test

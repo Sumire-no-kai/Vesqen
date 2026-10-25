@@ -134,13 +134,15 @@ internal object BluetoothCodecFields {
     private val bitDepths = mapOf(0x1 to 16, 0x2 to 24, 0x4 to 32)
     private val channels = mapOf(0x1 to 1, 0x2 to 2)
 
-    /** AOSP codec type numbers, public since API 33; Opus (6) since API 34. */
-    private val standardNames = mapOf(0 to "SBC", 1 to "AAC", 2 to "aptX", 3 to "aptX HD", 4 to "LDAC", 5 to "LC3", 6 to "Opus")
-    private const val OPUS_TYPE = 6
+    /**
+     * The AOSP codec types no vendor stack is known to reuse. AOSP numbers LC3 5 and Opus 6, but a
+     * vendor stack may use those numbers for its own codecs (aptX Adaptive, unconfirmed), and LE
+     * Audio sends no A2DP report at all, so 5 and 6 are named only by the system's own name from
+     * API 35 (#160).
+     */
+    private val standardNames = mapOf(0 to "SBC", 1 to "AAC", 2 to "aptX", 3 to "aptX HD", 4 to "LDAC")
 
-    /** Before API 34 type 6 is not AOSP's Opus and may be a vendor codec, so it stays unnamed (#73). */
-    fun standardCodecName(type: Int, apiLevel: Int): String? =
-        if (type == OPUS_TYPE && apiLevel < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) null else standardNames[type]
+    fun standardCodecName(type: Int): String? = standardNames[type]
 
     fun settings(isLdac: Boolean, sampleRate: Int, bits: Int, channelMode: Int, codecSpecific1: Long) =
         BluetoothCodecSettings(
@@ -222,7 +224,7 @@ internal class AndroidBluetoothCodecObserver(
             config.extendedCodecType?.codecName?.takeIf(String::isNotBlank)
         } else {
             null
-        } ?: BluetoothCodecFields.standardCodecName(type, Build.VERSION.SDK_INT)
+        } ?: BluetoothCodecFields.standardCodecName(type)
         return BluetoothCodecReport(
             codecName = name,
             settings = BluetoothCodecFields.settings(
