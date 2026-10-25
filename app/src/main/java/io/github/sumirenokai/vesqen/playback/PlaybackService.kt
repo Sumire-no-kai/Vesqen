@@ -267,6 +267,13 @@ class PlaybackService : MediaSessionService() {
             }
         player.addListener((application as VesqenApplication).deviceReportRuntime.playbackListener(player))
         player.addListener(playbackListener)
+        player.addListener(object : Player.Listener {
+            // Turning shuffle on, here or when a shuffled queue is restored, starts the play order
+            // at the current track, so none of the others is skipped (#158).
+            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+                if (shuffleModeEnabled) player.playCurrentItemFirst()
+            }
+        })
         telemetry.attachPlayer(player)
         outputCoordinator.attachPlayer(player)
         playbackStateKeeper = PlaybackStateKeeper(

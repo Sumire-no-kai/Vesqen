@@ -91,6 +91,19 @@ internal fun ExoPlayer.moveInPlayOrder(move: PlayOrderSessionContract.Move): Boo
     return true
 }
 
+/**
+ * Puts the current item first in the shuffled order. Media3 keeps its order when shuffle turns on,
+ * so the current item could sit anywhere in it and the items before it would not play.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+internal fun ExoPlayer.playCurrentItemFirst() {
+    val current = currentMediaItemIndex
+    if (!shuffleModeEnabled || current !in 0 until mediaItemCount) return
+    val order = shuffleOrder.playOrder()
+    if (order.firstOrNull() == current) return
+    setShuffleOrder(ShuffleOrder.DefaultShuffleOrder(intArrayOf(current) + order.filter { it != current }, Random.nextLong()))
+}
+
 /** List indices in the order they play. */
 @androidx.annotation.OptIn(UnstableApi::class)
 internal fun ShuffleOrder.playOrder(): IntArray {

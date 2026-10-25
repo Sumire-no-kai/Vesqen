@@ -34,7 +34,12 @@ class ShuffleQueueEditDeviceTest {
             main { controller.playQueue(queued, 0) }
             awaitPlayback { it.trackId == queued[0].id && it.queueSize == 6 }
             main { controller.cyclePlaybackOrderMode() }
-            awaitPlayback { it.playbackOrderMode == PlaybackOrderMode.SHUFFLE }
+            // Shuffle starts at the current track, so all the others still play. The service sets
+            // that order after the mode change reaches the controller.
+            awaitPlayback {
+                it.playbackOrderMode == PlaybackOrderMode.SHUFFLE && it.queueIndex == 0 &&
+                    it.queue.firstOrNull()?.trackId == queued[0].id
+            }
             val shuffled = playback.get().queue.map(PlaybackQueueItem::trackId)
 
             main { controller.playNext(next) }
