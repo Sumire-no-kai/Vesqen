@@ -71,7 +71,8 @@ internal class PlaybackStateStore(context: Context) {
             putLong(KEY_POSITION_MS, state.positionMs.coerceAtLeast(0))
             putBoolean(KEY_SHUFFLE_ENABLED, state.shuffleEnabled)
             putString(KEY_REPEAT_MODE, state.repeatMode.name)
-            putBoolean(KEY_QUEUE_ENDED, state.queueEnded == true)
+            // Unknown stays unknown, so a 1.0.0 save keeps its position rule until the player saves again.
+            state.queueEnded?.let { putBoolean(KEY_QUEUE_ENDED, it) } ?: remove(KEY_QUEUE_ENDED)
         }
     }
 
