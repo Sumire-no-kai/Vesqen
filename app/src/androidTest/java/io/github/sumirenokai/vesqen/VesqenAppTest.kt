@@ -212,6 +212,7 @@ class VesqenAppTest {
         val modes = mutableListOf<UsbOutputMode>()
         render(state, stateProvider = { state }, onSetUsbOutputMode = { modes += it })
         composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertIsDisplayed()
+        assertClickablesAtLeast48Dp("Strict USB failure dialog")
         composeRule.onNodeWithText(context.getString(
             R.string.player_strict_failure_body, context.getString(R.string.usb_failure_no_device),
         )).assertIsDisplayed()
@@ -781,6 +782,7 @@ class VesqenAppTest {
         composeRule.onNodeWithContentDescription(context.getString(R.string.edit_playlist)).performClick()
         composeRule.onNodeWithTag("vesqen.library.playlist.delete").performClick()
         composeRule.onNodeWithTag("vesqen.library.playlist.delete-confirm").assertIsDisplayed()
+        assertClickablesAtLeast48Dp("Delete playlist dialog")
         composeRule.onNodeWithTag("vesqen.library.playlist.delete-confirm.cancel").performClick()
         composeRule.runOnIdle { assertNull(deletedId) }
 
@@ -1197,6 +1199,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.crash-prompt").assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.crash_prompt_title)).assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.crash_prompt_body)).assertIsDisplayed()
+        assertClickablesAtLeast48Dp("Crash prompt")
         composeRule.runOnIdle { assertEquals(1, crash.shown) }
         composeRule.onNodeWithTag("vesqen.crash-prompt.review")
             .assertTextEquals(context.getString(R.string.crash_prompt_review)).performClick()
@@ -1267,6 +1270,7 @@ class VesqenAppTest {
         render(grantedState(), supportPrompt = support, supportUrl = UnopenableSupportUrl)
 
         composeRule.onNodeWithTag("vesqen.support-prompt").assertIsDisplayed()
+        assertClickablesAtLeast48Dp("Support prompt")
         composeRule.onNodeWithText(context.getString(R.string.support_prompt_title)).assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.support_prompt_body)).assertIsDisplayed()
         composeRule.runOnIdle {

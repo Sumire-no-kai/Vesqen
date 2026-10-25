@@ -110,6 +110,50 @@ class LibraryBrowseTest {
     }
 
     @Test
+    fun `disc folders beside each other stay one album without an album artist`() {
+        val discs = listOf("Music/Pink Floyd/The Wall (Disc 1)", "Music/Pink Floyd/The Wall (Disc 2)").mapIndexed { index, folder ->
+            track(50L + index, "Side $index", "Pink Floyd", "The Wall", trackNumber = 1, genre = "Rock", playCount = 0)
+                .copy(discNumber = index + 1, folderName = folder)
+        }
+
+        val album = buildLibraryCollections(LibraryBrowseMode.ALBUMS, discs, emptyList(), names).single()
+
+        assertEquals(listOf(50L, 51L), album.tracks.map(AudioTrack::id))
+        assertEquals("Music/A/Long Night", albumFolder("Music/A/Long Night CD2"))
+        assertEquals("Music/A/Long Night", albumFolder("Music/A/Long Night [Disc 1]"))
+        assertEquals("Music/A/Long Night", albumFolder("Music/A/Long Night - CD 1"))
+        assertEquals("Music/A/Long Night", albumFolder("Music/A/Long Night/CD1/"))
+        // A name that only ends in letters and a digit is not a disc.
+        assertEquals("Music/A/ABCD1", albumFolder("Music/A/ABCD1"))
+    }
+
+    @Test
+    fun `same-named albums stay apart in the songs list and the artist count`() {
+        val hits = listOf(
+            track(60, "One", "Mori", "Greatest Hits", trackNumber = 1, genre = "Pop", playCount = 0).copy(folderName = "Music/A/Greatest Hits"),
+            track(61, "One", "Mori", "Greatest Hits", trackNumber = 1, genre = "Pop", playCount = 0).copy(folderName = "Music/B/Greatest Hits"),
+            track(62, "Two", "Mori", "Greatest Hits", trackNumber = 2, genre = "Pop", playCount = 0).copy(folderName = "Music/A/Greatest Hits"),
+        )
+
+        // Sorted by album, one album's tracks follow each other instead of interleaving.
+        val order = sortLibraryTracks(hits, LibrarySortOrder.ALBUM, names).map(AudioTrack::id)
+        assertEquals(listOf(60L, 62L), order.filter { it != 61L })
+        assertEquals(1, kotlin.math.abs(order.indexOf(60L) - order.indexOf(62L)))
+        assertEquals("2", buildLibraryCollections(LibraryBrowseMode.ARTISTS, hits, emptyList(), names).single().subtitle)
+    }
+
+    @Test
+    fun `files in a folder keep the plain order with digits first`() {
+        val files = listOf("Bonus Track.flac", "02 Song.flac", "01 Intro.flac").mapIndexed { index, file ->
+            tracks[0].copy(id = 70L + index, fileName = file, folderName = "Music/Album")
+        }
+
+        val folder = buildLibraryCollections(LibraryBrowseMode.FOLDERS, files, emptyList(), names).single()
+
+        assertEquals(listOf("01 Intro.flac", "02 Song.flac", "Bonus Track.flac"), folder.tracks.map(AudioTrack::fileName))
+    }
+
+    @Test
     fun `an album artist keeps one album across folders`() {
         val split = listOf(
             tracks[0].copy(albumArtist = "Mori", folderName = "Music/One"),

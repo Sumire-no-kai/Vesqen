@@ -24,6 +24,19 @@ class PlaybackStateStoreTest {
     }
 
     @Test
+    fun `an ended queue with repeat all or shuffle restarts from the beginning`() {
+        val tracks = listOf(track(1), track(2), track(3))
+        // Repeat all turned on after the end: the queue plays again from its first track.
+        val all = saved(2, 60_000, PlaybackRepeatMode.ALL, queueEnded = true).restoreAgainst(tracks)!!
+        assertEquals(0, all.startIndex)
+        assertEquals(0, all.positionMs)
+        // A shuffled queue ends on the last track of its shuffled order, here list index 0.
+        val shuffled = saved(0, 60_000, queueEnded = true).copy(shuffleEnabled = true).restoreAgainst(tracks)!!
+        assertEquals(0, shuffled.startIndex)
+        assertEquals(0, shuffled.positionMs)
+    }
+
+    @Test
     fun `a pause near the end of a track restores the saved position in every repeat mode`() {
         val tracks = listOf(track(1), track(2), track(3))
         for (repeatMode in PlaybackRepeatMode.entries) {

@@ -57,6 +57,24 @@ class PlaybackStateStoreDeviceTest {
     }
 
     @Test
+    fun anUnknownEndStateStaysUnknownWhenSaved() {
+        val store = PlaybackStateStore(isolatedContext)
+        val state = PersistedPlaybackState(
+            queueTrackIds = listOf(1, 2),
+            currentTrackId = 2,
+            currentQueueIndex = 1,
+            positionMs = 59_500,
+            shuffleEnabled = false,
+            repeatMode = PlaybackRepeatMode.OFF,
+            queueEnded = true,
+        )
+        store.save(state)
+        store.save(state.copy(queueEnded = null))
+
+        assertNull(PlaybackStateStore(isolatedContext).load()!!.queueEnded)
+    }
+
+    @Test
     fun legacyPreferencesWithoutOccurrenceStillLoad() {
         preferences.edit()
             .putString("queue_track_ids", "1,2,1")

@@ -132,6 +132,7 @@ import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.library.LibraryBrowseMode
+import io.github.sumirenokai.vesqen.library.LibraryNameOrder
 import io.github.sumirenokai.vesqen.library.LibraryCollection
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
 import io.github.sumirenokai.vesqen.library.LibraryScanState
@@ -306,10 +307,14 @@ fun LibraryScreen(
     val visibleTracks = if (favoritesOnly) favoriteVisibleTracks else rootVisibleTracks
     val filteredTracks = if (favoritesOnly) favoriteTracks else searchedTracks
     val collections = remember(browseMode, searchedTracks, state.playlists, rootSortOrder) {
-        sortLibraryCollections(
-            buildLibraryCollections(browseMode, searchedTracks, state.playlists),
-            rootSortOrder,
-        )
+        // Songs has no collections. The others share one name order, so each title is measured once;
+        // its ICU index is first built off the main thread by the Songs index.
+        if (browseMode == LibraryBrowseMode.SONGS) {
+            emptyList()
+        } else {
+            val names = LibraryNameOrder()
+            sortLibraryCollections(buildLibraryCollections(browseMode, searchedTracks, state.playlists, names), rootSortOrder, names)
+        }
     }
     val selectedCollection = remember(collections, selectedCollectionKey) {
         collections.firstOrNull { it.key == selectedCollectionKey }

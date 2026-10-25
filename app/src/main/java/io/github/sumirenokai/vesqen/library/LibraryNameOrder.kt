@@ -22,7 +22,7 @@ internal class LibraryNameOrder : Comparator<String> {
     override fun compare(first: String, second: String): Int {
         val a = key(first)
         val b = key(second)
-        return if (a.group != b.group) a.groupRank.compareTo(b.groupRank) else a.collation.compareTo(b.collation)
+        return compareValuesBy(a, b, NameKey::groupRank, NameKey::collation)
     }
 
     private fun key(name: String): NameKey = keys.getOrPut(name) {

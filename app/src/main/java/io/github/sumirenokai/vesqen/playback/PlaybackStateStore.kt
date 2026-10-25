@@ -71,8 +71,9 @@ internal class PlaybackStateStore(context: Context) {
             putLong(KEY_POSITION_MS, state.positionMs.coerceAtLeast(0))
             putBoolean(KEY_SHUFFLE_ENABLED, state.shuffleEnabled)
             putString(KEY_REPEAT_MODE, state.repeatMode.name)
-            // Unknown stays unknown, so a 1.0.0 save keeps its position rule until the player saves again.
-            state.queueEnded?.let { putBoolean(KEY_QUEUE_ENDED, it) } ?: remove(KEY_QUEUE_ENDED)
+            // Only states built without the field (tests, a 1.0.0 save loaded and saved back) lack it;
+            // the state keeper always knows it. Unknown stays unknown, so the position rule still applies.
+            if (state.queueEnded == null) remove(KEY_QUEUE_ENDED) else putBoolean(KEY_QUEUE_ENDED, state.queueEnded)
         }
     }
 
@@ -132,7 +133,8 @@ internal fun PersistedPlaybackState.restoreAgainst(tracks: List<AudioTrack>): Re
         currentEntryIndex < 0 -> 0 to 0L
         !finished -> currentEntryIndex to positionMs
         repeatMode == PlaybackRepeatMode.ONE -> currentEntryIndex to 0L
-        currentEntryIndex < restoredEntries.lastIndex -> currentEntryIndex + 1 to 0L
+        // A shuffled queue ends on the last track of its shuffled order, anywhere in the list.
+        !shuffleEnabled && currentEntryIndex < restoredEntries.lastIndex -> currentEntryIndex + 1 to 0L
         else -> 0 to 0L
     }
     return RestoredPlaybackQueue(
