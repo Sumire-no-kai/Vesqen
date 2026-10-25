@@ -867,6 +867,118 @@ class LibraryCatalogStoreTest {
         assertTrue(track.isFavorite)
     }
 
+    @Test
+    fun aFileRenamedOrMovedInAnAddedFolderKeepsItsUserData() = withStore("library-folder-rename") { store ->
+        // A rename or move inside an added folder gives the file a new document ID (#164).
+        val source = store.addTestFolder()
+        store.scanFolder(source, folderFile("doc:1", "Music/A", "Aira.flac", 1_000, 60_000), folderFile("doc:2", "Music/A", "Tide.flac", 2_000, 90_000))
+        val before = store.readTracks(listOf(source)).associateBy(AudioTrack::fileName)
+        val aira = before.getValue("Aira.flac")
+        val tide = before.getValue("Tide.flac")
+        store.setFavorite(aira.id, true)
+        store.recordPlayback(tide.id, playedAtMs = 100)
+        val playlistId = requireNotNull(store.createPlaylist("Mix"))
+        store.addTrackToPlaylist(playlistId, aira.id)
+
+        // Aira moves to a subfolder; Tide is renamed.
+        store.scanFolder(source, folderFile("doc:3", "Music/A/Live", "Aira.flac", 1_000, 60_000), folderFile("doc:4", "Music/A", "02 Tide.flac", 2_000, 90_000))
+
+        val after = store.readTracks(listOf(source)).associateBy(AudioTrack::id)
+        assertEquals(setOf(aira.id, tide.id), after.keys)
+        assertEquals("Music/A/Live", after.getValue(aira.id).folderName)
+        assertEquals("content://tree/doc:3", after.getValue(aira.id).contentUri)
+        assertTrue(after.getValue(aira.id).isFavorite)
+        assertEquals("02 Tide.flac", after.getValue(tide.id).fileName)
+        assertEquals(1, after.getValue(tide.id).playCount)
+        assertEquals(listOf(aira.id), store.readPlaylists().single().trackIds)
+        assertTrue(store.readHiddenFolderTrackIds().isEmpty())
+        // The next scan sees the reattached rows as unchanged.
+        store.scanFolder(source, folderFile("doc:3", "Music/A/Live", "Aira.flac", 1_000, 60_000), folderFile("doc:4", "Music/A", "02 Tide.flac", 2_000, 90_000))
+        assertEquals(setOf(aira.id, tide.id), store.readTracks(listOf(source)).map(AudioTrack::id).toSet())
+    }
+
+    @Test
+    fun aFolderFileThatLeavesStaysHiddenUntilItIsListedAgain() = withStore("library-folder-hidden") { store ->
+        val source = store.addTestFolder()
+        store.scanFolder(source, folderFile("doc:1", "Music", "Aira.flac", 1_000, 60_000), folderFile("doc:2", "Music", "Plain.flac", 3_000, 30_000))
+        val aira = store.readTracks(listOf(source)).single { it.fileName == "Aira.flac" }
+        store.setFavorite(aira.id, true)
+
+        store.scanFolder(source)
+
+        // Plain had no user data and is pruned as before; Aira is kept but hidden and not counted.
+        assertEquals(setOf(aira.id), store.readHiddenFolderTrackIds())
+        assertEquals(listOf(aira.id), store.readTracks(listOf(source)).map(AudioTrack::id))
+        assertEquals(0, store.readSources().single { it.id == source }.trackCount)
+
+        store.scanFolder(source, folderFile("doc:9", "Music/Back", "Aira.flac", 1_000, 60_000))
+
+        val back = store.readTracks(listOf(source)).single()
+        assertEquals(aira.id, back.id)
+        assertEquals("content://tree/doc:9", back.contentUri)
+        assertTrue(back.isFavorite)
+        assertTrue(store.readHiddenFolderTrackIds().isEmpty())
+        assertEquals(1, store.readSources().single { it.id == source }.trackCount)
+    }
+
+    @Test
+    fun anAmbiguousFolderMatchKeepsTheDataHidden() = withStore("library-folder-ambiguous") { store ->
+        val source = store.addTestFolder()
+        store.scanFolder(source, folderFile("doc:1", "Music", "Aira.flac", 1_000, 60_000))
+        val aira = store.readTracks(listOf(source)).single()
+        store.setFavorite(aira.id, true)
+
+        // Two renamed copies: neither may take the favorite.
+        store.scanFolder(source, folderFile("doc:2", "Music", "x.flac", 1_000, 60_000), folderFile("doc:3", "Music", "y.flac", 1_000, 60_000))
+
+        assertEquals(setOf(aira.id), store.readHiddenFolderTrackIds())
+        assertEquals(2, store.readTracks(listOf(source)).count { !it.isFavorite })
+    }
+
+    @Test
+    fun aPausedFolderScanHidesAndMovesNothing() = withStore("library-folder-paused") { store ->
+        val source = store.addTestFolder()
+        store.scanFolder(source, folderFile("doc:1", "Music", "Aira.flac", 1_000, 60_000))
+        val aira = store.readTracks(listOf(source)).single()
+        store.setFavorite(aira.id, true)
+
+        store.scanFolder(source, folderFile("doc:2", "Music/Live", "Aira.flac", 1_000, 60_000), complete = false)
+
+        val rows = store.readTracks(listOf(source)).associateBy(AudioTrack::id)
+        assertEquals("content://tree/doc:1", rows.getValue(aira.id).contentUri)
+        assertTrue(rows.getValue(aira.id).isFavorite)
+        assertTrue(store.readHiddenFolderTrackIds().isEmpty())
+    }
+
+    private fun LibraryCatalogStore.addTestFolder(): String {
+        val treeUri = "content://tree/test"
+        upsertFolderSource(treeUri, "Test music")
+        return LibrarySourceId.forTree(treeUri)
+    }
+
+    /** Runs a folder scan the way `AndroidLibraryCatalog.scanTreeSource` does, without the tree walk. */
+    private fun LibraryCatalogStore.scanFolder(sourceId: String, vararg files: LibraryTrackCandidate, complete: Boolean = true) {
+        val session = beginSourceScan(sourceId)
+        files.forEach { file ->
+            if (!markSeenIfFingerprintMatches(session, file.remoteId, file.fingerprint)) upsertTrack(session, file)
+        }
+        if (complete) completeSourceScan(session) else markSourcePaused(sourceId)
+    }
+
+    private fun folderFile(documentId: String, folder: String, fileName: String, sizeBytes: Long, durationMs: Long) =
+        LibraryTrackCandidate(
+            remoteId = documentId,
+            contentUri = "content://tree/$documentId",
+            title = fileName.substringBeforeLast('.'),
+            artist = "Artist",
+            album = "Album",
+            durationMs = durationMs,
+            sizeBytes = sizeBytes,
+            fileName = fileName,
+            folderName = folder,
+            fingerprint = "$documentId|$sizeBytes",
+        )
+
     private fun withStore(name: String, block: (LibraryCatalogStore) -> Unit) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val databaseName = "$name-${System.nanoTime()}.db"
