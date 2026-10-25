@@ -378,8 +378,10 @@ internal class AndroidLibraryCatalog(
             }
             .map { it.key }
             .toSet() + displacedDeviceTrackIds
+        // Folder rows whose file a completed scan did not find keep their user data but cannot play (#164).
+        val hiddenFolderTrackIds = store.readHiddenFolderTrackIds()
         val visibleTracks = store.readTracks(visibleSourceIds).filterNot { track ->
-            track.id in hiddenDeviceTrackIds
+            track.id in hiddenDeviceTrackIds || track.id in hiddenFolderTrackIds
         }
         val visibleDeviceTrackCount = deviceTrackLocations.size - hiddenDeviceTrackIds.size
         return LibraryCatalogSnapshot(

@@ -163,6 +163,7 @@ internal class LibraryCatalogStore(
                COUNT(t.$TRACK_ID) AS track_count
           FROM $SOURCES_TABLE s
           LEFT JOIN $TRACKS_TABLE t ON t.$TRACK_SOURCE_ID = s.$SOURCE_ID
+               AND t.$TRACK_REMOTE_ID NOT GLOB '$HIDDEN_FOLDER_PREFIX*'
          GROUP BY s.$SOURCE_ID
          ORDER BY s.$SOURCE_KIND ASC, s.$SOURCE_DISPLAY_NAME COLLATE NOCASE ASC
         """.trimIndent(),
@@ -827,14 +828,105 @@ internal class LibraryCatalogStore(
                     pruneArguments,
                 )
             }
+            val keepsUserState = prunePatterns != null || session.sourceId != LibrarySourceId.DEVICE
+            if (prunePatterns == null && session.sourceId != LibrarySourceId.DEVICE) {
+                // A file renamed or moved inside an added folder comes back under a new document
+                // ID, so a scan wrote it as a new row. Its old row, with the user's data, takes that
+                // file over; rows still unmatched are hidden until their file is listed again, like
+                // MediaStore's (#164).
+                reattachFolderTracks(database, session)
+                database.execSQL(
+                    "UPDATE $TRACKS_TABLE SET $TRACK_REMOTE_ID = '$HIDDEN_FOLDER_PREFIX' || $TRACK_ID " +
+                        "WHERE $pruneSelection AND $TRACK_REMOTE_ID NOT GLOB '$HIDDEN_FOLDER_PREFIX*' " +
+                        "AND $HOLDS_USER_STATE",
+                    pruneArguments,
+                )
+            }
             database.delete(
                 TRACKS_TABLE,
-                if (prunePatterns != null) "$pruneSelection AND NOT $HOLDS_USER_STATE" else pruneSelection,
+                if (keepsUserState) "$pruneSelection AND NOT $HOLDS_USER_STATE" else pruneSelection,
                 pruneArguments,
             )
             check(updateCompletedSource(database, session.sourceId, generation) == 1) {
                 "Cannot complete a scan for a missing source"
             }
+        }
+    }
+
+    /**
+     * Pairs this folder's rows that hold user data but were not listed by this scan with listed rows
+     * written since (see [planFolderReattachments]). The old row keeps its catalog ID, so favorites,
+     * plays and playlist places stay; it takes the listed file's columns and the listed row goes.
+     * Runs inside the completing transaction.
+     */
+    private fun reattachFolderTracks(database: SQLiteDatabase, session: SourceScanSession) {
+        fun identities(selection: String): List<FolderTrackIdentity> = database.query(
+            TRACKS_TABLE,
+            arrayOf(
+                TRACK_ID, TRACK_FILE_NAME, TRACK_SIZE_BYTES, TRACK_DATE_MODIFIED_SECONDS,
+                "CASE WHEN $HOLDS_USER_STATE THEN 1 ELSE 0 END", TRACK_SEEN_EPOCH, TRACK_ARTWORK_REVISION,
+            ),
+            "$TRACK_SOURCE_ID = ? AND $selection",
+            arrayOf(session.sourceId, session.epoch.toString()),
+            null,
+            null,
+            null,
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(
+                        FolderTrackIdentity(
+                            trackId = cursor.getLong(0),
+                            fileName = cursor.getString(1),
+                            sizeBytes = cursor.getLong(2),
+                            modifiedSeconds = cursor.getLong(3),
+                            holdsUserState = cursor.getInt(4) != 0,
+                            seenEpoch = cursor.getLong(5),
+                            // A scan writes the artwork revision with every row it inserts or updates.
+                            writtenEpoch = cursor.getLong(6),
+                        ),
+                    )
+                }
+            }
+        }
+        val missing = identities("$TRACK_SEEN_EPOCH != ?")
+        if (missing.none(FolderTrackIdentity::holdsUserState)) return
+        val listed = identities("$TRACK_SEEN_EPOCH = ?")
+        val copied = scannedTrackColumns.filter { it != TRACK_REMOTE_ID }.joinToString(", ")
+        for ((oldTrackId, listedTrackId) in planFolderReattachments(missing, listed)) {
+            val remoteId = database.query(
+                TRACKS_TABLE, arrayOf(TRACK_REMOTE_ID), "$TRACK_ID = ?", arrayOf(listedTrackId.toString()),
+                null, null, null,
+            ).use { cursor -> check(cursor.moveToFirst()) { "A listed row disappeared during its scan" }; cursor.getString(0) }
+            // Copy, delete, then take the remote ID: UNIQUE(source, remote ID) forbids two rows with it.
+            database.execSQL(
+                "UPDATE $TRACKS_TABLE SET ($copied) = (SELECT $copied FROM $TRACKS_TABLE WHERE $TRACK_ID = ?) " +
+                    "WHERE $TRACK_ID = ?",
+                arrayOf(listedTrackId, oldTrackId),
+            )
+            // The listed row holds no playlist place, so deleting it cascades to nothing.
+            check(database.delete(TRACKS_TABLE, "$TRACK_ID = ?", arrayOf(listedTrackId.toString())) == 1)
+            database.update(
+                TRACKS_TABLE,
+                ContentValues().apply { put(TRACK_REMOTE_ID, remoteId) },
+                "$TRACK_ID = ?",
+                arrayOf(oldTrackId.toString()),
+            )
+        }
+    }
+
+    /** Folder rows whose file a completed scan did not find; they keep user data but cannot play. */
+    fun readHiddenFolderTrackIds(): Set<Long> = readableDatabase.query(
+        TRACKS_TABLE,
+        arrayOf(TRACK_ID),
+        "$TRACK_REMOTE_ID GLOB ?",
+        arrayOf("$HIDDEN_FOLDER_PREFIX*"),
+        null,
+        null,
+        null,
+    ).use { cursor ->
+        buildSet {
+            while (cursor.moveToNext()) add(cursor.getLong(0))
         }
     }
 
@@ -972,6 +1064,13 @@ internal class LibraryCatalogStore(
         lastPlayedAtMs = getLong(getColumnIndexOrThrow(TRACK_LAST_PLAYED_AT_MS)),
         playCount = getInt(getColumnIndexOrThrow(TRACK_PLAY_COUNT)),
     )
+
+    /** Exactly the columns a scan writes, taken from [toContentValues], so a reattach copies all of them. */
+    private val scannedTrackColumns: Set<String> by lazy {
+        LibraryTrackCandidate(
+            remoteId = "", contentUri = "", title = "", artist = "", album = "", durationMs = 0, fingerprint = "",
+        ).toContentValues(SourceScanSession(sourceId = "", epoch = 0)).keySet()
+    }
 
     private fun LibraryTrackCandidate.toContentValues(session: SourceScanSession): ContentValues = ContentValues().apply {
         put(TRACK_REMOTE_ID, remoteId)
@@ -1198,6 +1297,7 @@ internal class LibraryCatalogStore(
         private const val TRACK_SEEN_EPOCH = "seen_epoch"
         private const val UNRESOLVED_LEGACY_MEDIASTORE_PREFIX = "legacy-unresolved:"
         private const val DISPLACED_MEDIASTORE_PREFIX = "mediastore-displaced:"
+        private const val HIDDEN_FOLDER_PREFIX = "folder-hidden:"
 
         private const val PLAYLISTS_TABLE = "library_playlists"
         private const val PLAYLIST_ID = "playlist_id"
@@ -1266,6 +1366,59 @@ internal data class StoredLibrarySource(
     val scanEpoch: Long,
     val trackCount: Int,
 )
+
+/** What a folder row's file looks like to [planFolderReattachments]. */
+internal data class FolderTrackIdentity(
+    val trackId: Long,
+    val fileName: String,
+    val sizeBytes: Long,
+    /** The document's last-modified time, which a rename or a move within the folder keeps. */
+    val modifiedSeconds: Long,
+    val holdsUserState: Boolean,
+    /** The scan epoch that last listed the row. */
+    val seenEpoch: Long,
+    /** The scan epoch that last wrote the row. */
+    val writtenEpoch: Long,
+)
+
+/**
+ * Pairs an old folder row (user data, not listed by the completed scan) with a listed row that
+ * holds none, when both hold the same file: first by file name, size and modified time (moved to
+ * another folder), then by size and modified time (renamed). Duration alone is no identity: an
+ * uncompressed rip's duration follows from its size. The listed row must have been written after
+ * the old row was last seen, so a file that sat beside it all along keeps its own row.
+ *
+ * A key shared by more than one row on either side, counting rows with or without user data and
+ * rows the first key already paired, pairs nothing: the data stays hidden rather than moving to the
+ * wrong file. Returns (old track ID, listed track ID).
+ */
+internal fun planFolderReattachments(
+    missing: List<FolderTrackIdentity>,
+    listed: List<FolderTrackIdentity>,
+): List<Pair<Long, Long>> {
+    val keys = listOf<(FolderTrackIdentity) -> Any?>(
+        { track -> track.fileName.takeIf(String::isNotEmpty)?.let { Triple(it, track.sizeBytes, track.modifiedSeconds) } },
+        { track -> track.sizeBytes to track.modifiedSeconds },
+    )
+    val oldRows = missing.filter { it.sizeBytes > 0 && it.modifiedSeconds > 0 }
+    val newRows = listed.filter { it.sizeBytes > 0 && it.modifiedSeconds > 0 }
+    val pairs = mutableListOf<Pair<Long, Long>>()
+    val pairedOld = HashSet<Long>()
+    val pairedNew = HashSet<Long>()
+    for (key in keys) {
+        val newByKey = newRows.groupBy(key)
+        for ((value, olds) in oldRows.groupBy(key)) {
+            val old = olds.singleOrNull() ?: continue
+            val new = newByKey[value]?.singleOrNull() ?: continue
+            if (value == null || !old.holdsUserState || new.holdsUserState || new.writtenEpoch <= old.seenEpoch) continue
+            if (old.trackId in pairedOld || new.trackId in pairedNew) continue
+            pairs += old.trackId to new.trackId
+            pairedOld += old.trackId
+            pairedNew += new.trackId
+        }
+    }
+    return pairs
+}
 
 internal data class SourceScanSession(
     val sourceId: String,
