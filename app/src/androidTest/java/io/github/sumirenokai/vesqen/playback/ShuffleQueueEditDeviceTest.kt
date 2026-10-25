@@ -120,6 +120,7 @@ class ShuffleQueueEditDeviceTest {
 
     private fun entry(trackId: String, occurrence: String) = MediaItem.Builder()
         .setMediaId(trackId)
+        .setUri("content://fixture/$occurrence")
         .setMediaMetadata(MediaMetadata.Builder().setExtras(Bundle().apply { putString(PLAYBACK_OCCURRENCE_EXTRA, occurrence) }).build())
         .build()
 
