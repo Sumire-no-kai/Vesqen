@@ -102,13 +102,19 @@ Play 正式版的时间取决于 Google：2026-10-16 查看时封闭测试已满
 
 发 1.0.1 时：`versionName` 1.0.1、`versionCode` 14；重新生成 Baseline Profile；发布说明；官网更新日志加一条，"已知问题与计划"页和 #163 去掉已修好的条目。
 
-### 2.0 之前（1.0.1 之后的 1.0.x 版本）
+### 2.0 之前（1.0.1 之后的 1.x 版本）
+
+按[版本规则](VERSIONING.md)，只有修复的版本升修订号（1.0.2 等），带新功能的版本升次版本号（1.1.0 等）。
 
 | Issue | 内容 |
 | --- | --- |
 | [#159](https://github.com/Sumire-no-kai/Vesqen/issues/159)、[#139](https://github.com/Sumire-no-kai/Vesqen/issues/139) | 媒体库重建时的匹配，以及对不上的旧记录让用户选择归属。都要改扫描流程，一起做 |
 | [#161](https://github.com/Sumire-no-kai/Vesqen/issues/161) | 中文"高级功能"和"高级链路"撞名，先由所有者定新名称 |
 | [#165](https://github.com/Sumire-no-kai/Vesqen/issues/165) | 审计里"之后处理"的条目按影响挑选；其中多个 SQLiteOpenHelper 必须在下一次改表结构之前合成一个，A36（两个渠道的版本号和降级）要在 2.0 之前定 |
+| [#168](https://github.com/Sumire-no-kai/Vesqen/issues/168) | "艺术家"页把几位艺术家合写的标签按分隔符拆开分组，只在显示层计算，不改表结构（PRD"2026-10-24 多位艺术家拆分"） |
+| [#169](https://github.com/Sumire-no-kai/Vesqen/issues/169) | Now 页显示本地歌词：手动导入、同名 `.lrc`、内嵌标签，完全离线（PRD"2026-10-24 本地歌词"） |
+
+#168、#169 暂不写进 README、官网"已知问题与计划"和 #163（2026-10-25 所有者决定）。
 
 ### Google Play 正式版
 
@@ -127,11 +133,10 @@ Play 正式版的时间取决于 Google：2026-10-16 查看时封闭测试已满
 | [#65](https://github.com/Sumire-no-kai/Vesqen/issues/65) | 严格 USB：16 位音源补零后送入 24 位 bit-perfect 通道 |
 | [#139](https://github.com/Sumire-no-kai/Vesqen/issues/139) | 曲库：媒体库重建后匹配不唯一的旧记录先隐藏保留，让用户选择归哪首歌或丢掉（#136 R9 的后续） |
 
-2.0 开始收费（2026-10-13 所有者决定），以下随 2.0 完成：
+2.0 开始收费（2026-10-13 所有者决定），买断先在 GitHub 版上线（2026-10-19 [商业模式](MONETIZATION.md)"GitHub 优先"），以下随 2.0 完成：
 
 | Issue | 内容 |
 | --- | --- |
-| [#46](https://github.com/Sumire-no-kai/Vesqen/issues/46)、[#48](https://github.com/Sumire-no-kai/Vesqen/issues/48) | Play 版应用内购买和 Billing 组件的披露 |
 | [#120](https://github.com/Sumire-no-kai/Vesqen/issues/120) | 官网购买页、付款成功页和激活页（官网 PR #7），隐私政策购买一节，条款和退款政策，正式签名密钥和激活码，Stripe 正式开通 |
 | | 定价（付费功能表已定，见[商业模式](MONETIZATION.md)），打开收费开关 `vesqen.premiumEnforced` |
 
@@ -150,14 +155,14 @@ Play 正式版的时间取决于 Google：2026-10-16 查看时封闭测试已满
 | Issue | 内容 |
 | --- | --- |
 | [#45](https://github.com/Sumire-no-kai/Vesqen/issues/45) | 封闭测试 12 人连续 14 天，然后申请正式版 |
-| [#46](https://github.com/Sumire-no-kai/Vesqen/issues/46)、[#48](https://github.com/Sumire-no-kai/Vesqen/issues/48) | 应用内解锁和 Billing 组件的披露，随 2.0 |
+| [#46](https://github.com/Sumire-no-kai/Vesqen/issues/46)、[#48](https://github.com/Sumire-no-kai/Vesqen/issues/48) | 应用内解锁和 Billing 组件的披露。不随 2.0：按[商业模式](MONETIZATION.md)"GitHub 优先"（2026-10-19），2.0 的买断先在 GitHub 版上线（#120），Play 版大概率停在 1.x、只做小修；Play 版是否收费以后再定 |
 
 ## 依赖关系
 
 - #45 依赖 beta.2（#69 设备报告）、#44、#56，以及 #47 的构建拆分。Play 构建不能包含 #68 的自行更新和“安装未知应用”权限。
 - #44 的截图要等 #35 重做完成后再拍。
 - #70 上线前，隐私政策要先改好并完成核查；#69 的上传接口也依赖 #70 的服务端。
-- #46 依赖 #48，随 2.0 上线；收费方案 2026-10-13 已确定，见[商业模式](MONETIZATION.md)。
+- #46 依赖 #48；只有决定在 Play 版收费时才做，见上面"Google Play"一节。
 - #49 需要一台开放了官方 bit-perfect 通道的手机，或者走 #71 的路径。
 - #74 以后再评估时，和 #47 的构建拆分一起考虑。
 - #72 的文案和版式随 #35 的链路页一起做。#73 要靠 #69 的设备报告收集各 ROM 能否收到 codec 广播。
