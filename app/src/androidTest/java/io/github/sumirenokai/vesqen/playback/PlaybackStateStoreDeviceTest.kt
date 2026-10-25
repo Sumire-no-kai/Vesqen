@@ -44,6 +44,7 @@ class PlaybackStateStoreDeviceTest {
             positionMs = 12_345,
             shuffleEnabled = true,
             repeatMode = PlaybackRepeatMode.ALL,
+            queueEnded = true,
         )
 
         val loaded = PlaybackStateStore(isolatedContext).load()!!
@@ -52,6 +53,7 @@ class PlaybackStateStoreDeviceTest {
         assertEquals(12_345, loaded.positionMs)
         assertEquals(true, loaded.shuffleEnabled)
         assertEquals(PlaybackRepeatMode.ALL, loaded.repeatMode)
+        assertEquals(true, loaded.queueEnded)
     }
 
     @Test
@@ -64,6 +66,7 @@ class PlaybackStateStoreDeviceTest {
 
         val loaded = PlaybackStateStore(isolatedContext).load()!!
         assertNull(loaded.currentQueueIndex)
+        assertNull(loaded.queueEnded)
         assertEquals(listOf(1L, 2L, 1L), loaded.queueTrackIds)
         assertEquals(9_876, loaded.positionMs)
     }

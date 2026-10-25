@@ -16,6 +16,15 @@ class PlaybackPersistenceGateTest {
     }
 
     @Test
+    fun `reaching the end of the queue is saved within the same position bucket`() {
+        gate.decide(observation(positionMs = 60_000))
+        assertEquals(
+            PlaybackPersistenceDecision.SAVE_PROGRESS,
+            gate.decide(observation(positionMs = 60_000).copy(queueEnded = true)),
+        )
+    }
+
+    @Test
     fun `an initially empty player does not erase a restorable queue`() {
         assertEquals(
             PlaybackPersistenceDecision.SKIP,

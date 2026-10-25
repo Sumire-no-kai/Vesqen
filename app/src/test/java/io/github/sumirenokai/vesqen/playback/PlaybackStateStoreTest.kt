@@ -7,12 +7,50 @@ import org.junit.Test
 
 class PlaybackStateStoreTest {
     @Test
-    fun `a queue saved at the end of its last track restarts from the beginning`() {
+    fun `a queue that played to the end restarts from the beginning`() {
+        val tracks = listOf(track(1), track(2), track(3))
+
+        val ended = saved(2, 60_000, queueEnded = true).restoreAgainst(tracks)!!
+        assertEquals(0, ended.startIndex)
+        assertEquals(0, ended.positionMs)
+        // Tracks added after the end: playback continues with the first of them.
+        val extended = saved(0, 60_000, queueEnded = true).restoreAgainst(tracks)!!
+        assertEquals(1, extended.startIndex)
+        assertEquals(0, extended.positionMs)
+        // Repeat one turned on after the end restarts that track.
+        val repeatOne = saved(2, 60_000, PlaybackRepeatMode.ONE, queueEnded = true).restoreAgainst(tracks)!!
+        assertEquals(2, repeatOne.startIndex)
+        assertEquals(0, repeatOne.positionMs)
+    }
+
+    @Test
+    fun `a pause near the end of a track restores the saved position in every repeat mode`() {
+        val tracks = listOf(track(1), track(2), track(3))
+        for (repeatMode in PlaybackRepeatMode.entries) {
+            val restored = saved(0, 59_500, repeatMode, queueEnded = false).restoreAgainst(tracks)!!
+            assertEquals(repeatMode.name, 0, restored.startIndex)
+            assertEquals(repeatMode.name, 59_500, restored.positionMs)
+            assertEquals(repeatMode, restored.repeatMode)
+        }
+    }
+
+    @Test
+    fun `a 1_0_0 save with repeat one keeps its track near the end`() {
+        val restored = saved(0, 59_500, PlaybackRepeatMode.ONE).restoreAgainst(listOf(track(1), track(2)))!!
+        assertEquals(0, restored.startIndex)
+        assertEquals(59_500, restored.positionMs)
+    }
+
+    @Test
+    fun `a 1_0_0 save at the start of a track shorter than a second keeps that track`() {
+        val restored = saved(0, 0).restoreAgainst(listOf(track(1, durationMs = 500), track(2)))!!
+        assertEquals(0, restored.startIndex)
+        assertEquals(0, restored.positionMs)
+    }
+
+    @Test
+    fun `a 1_0_0 save at the end of its last track restarts from the beginning`() {
         // An album ended with repeat off: the position was saved at the end of the last track.
-        fun saved(index: Int, positionMs: Long) = PersistedPlaybackState(
-            listOf(1L, 2L, 3L), currentTrackId = index + 1L, positionMs = positionMs,
-            shuffleEnabled = false, repeatMode = PlaybackRepeatMode.OFF, currentQueueIndex = index,
-        )
         val tracks = listOf(track(1), track(2), track(3))
 
         val ended = saved(2, 59_800).restoreAgainst(tracks)!!
@@ -104,12 +142,23 @@ class PlaybackStateStoreTest {
         )
     }
 
-    private fun track(id: Long) = AudioTrack(
+    /** A save of a three-track queue; [queueEnded] null is a save from 1.0.0. */
+    private fun saved(
+        index: Int,
+        positionMs: Long,
+        repeatMode: PlaybackRepeatMode = PlaybackRepeatMode.OFF,
+        queueEnded: Boolean? = null,
+    ) = PersistedPlaybackState(
+        listOf(1L, 2L, 3L), currentTrackId = index + 1L, positionMs = positionMs,
+        shuffleEnabled = false, repeatMode = repeatMode, currentQueueIndex = index, queueEnded = queueEnded,
+    )
+
+    private fun track(id: Long, durationMs: Long = 60_000) = AudioTrack(
         id = id,
         contentUri = "content://track/$id",
         title = "Track $id",
         artist = "Artist",
         album = "Album",
-        durationMs = 60_000,
+        durationMs = durationMs,
     )
 }

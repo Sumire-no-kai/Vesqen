@@ -12,6 +12,8 @@ internal data class PersistedPlaybackState(
     val repeatMode: PlaybackRepeatMode,
     /** Queue occurrence, since one track can appear more than once. Null for legacy saves. */
     val currentQueueIndex: Int? = null,
+    /** Whether the player had played to the end (`STATE_ENDED`). Null for saves before 1.0.1. */
+    val queueEnded: Boolean? = null,
 )
 
 internal data class RestoredPlaybackQueue(
@@ -47,6 +49,7 @@ internal class PlaybackStateStore(context: Context) {
             shuffleEnabled = preferences.getBoolean(KEY_SHUFFLE_ENABLED, false),
             repeatMode = repeatMode,
             currentQueueIndex = preferences.getInt(KEY_CURRENT_QUEUE_INDEX, -1).takeIf { it >= 0 },
+            queueEnded = if (preferences.contains(KEY_QUEUE_ENDED)) preferences.getBoolean(KEY_QUEUE_ENDED, false) else null,
         )
     }
 
@@ -68,6 +71,7 @@ internal class PlaybackStateStore(context: Context) {
             putLong(KEY_POSITION_MS, state.positionMs.coerceAtLeast(0))
             putBoolean(KEY_SHUFFLE_ENABLED, state.shuffleEnabled)
             putString(KEY_REPEAT_MODE, state.repeatMode.name)
+            putBoolean(KEY_QUEUE_ENDED, state.queueEnded == true)
         }
     }
 
@@ -78,6 +82,7 @@ internal class PlaybackStateStore(context: Context) {
         shuffleEnabled: Boolean,
         repeatMode: PlaybackRepeatMode,
         currentQueueIndex: Int,
+        queueEnded: Boolean,
     ) {
         preferences.edit {
             putLong(KEY_CURRENT_TRACK_ID, currentTrackId ?: NO_TRACK_ID)
@@ -85,6 +90,7 @@ internal class PlaybackStateStore(context: Context) {
             putLong(KEY_POSITION_MS, positionMs.coerceAtLeast(0))
             putBoolean(KEY_SHUFFLE_ENABLED, shuffleEnabled)
             putString(KEY_REPEAT_MODE, repeatMode.name)
+            putBoolean(KEY_QUEUE_ENDED, queueEnded)
         }
     }
 
@@ -100,6 +106,7 @@ internal class PlaybackStateStore(context: Context) {
         const val KEY_POSITION_MS = "position_ms"
         const val KEY_SHUFFLE_ENABLED = "shuffle_enabled"
         const val KEY_REPEAT_MODE = "repeat_mode"
+        const val KEY_QUEUE_ENDED = "queue_ended"
         const val NO_TRACK_ID = Long.MIN_VALUE
     }
 }
@@ -115,14 +122,15 @@ internal fun PersistedPlaybackState.restoreAgainst(tracks: List<AudioTrack>): Re
         it in queueTrackIds.indices && queueTrackIds[it] == currentTrackId
     } ?: queueTrackIds.indexOfFirst { it == currentTrackId }
     val currentEntryIndex = restoredEntries.indexOfFirst { it.first == savedIndex }
-    // A queue saved when its track had (almost) finished, typically the end of an album with repeat
-    // off, would restore at the end and play nothing. It continues with the next track instead, or
-    // from the start of the queue after the last one.
+    // A queue saved after it played to the end, typically an album with repeat off, would restore
+    // at the end and play nothing. It continues with the next track instead, or from the start of
+    // the queue after the last one. A position near the end alone is a pause, not an end (#170 P2).
     val finished = currentEntryIndex >= 0 &&
-        restoredEntries[currentEntryIndex].second.durationMs.let { it > 0 && positionMs >= it - FINISHED_TRACK_TOLERANCE_MS }
+        (queueEnded ?: savedAtLegacyEnd(restoredEntries[currentEntryIndex].second))
     val (startIndex, startPositionMs) = when {
         currentEntryIndex < 0 -> 0 to 0L
         !finished -> currentEntryIndex to positionMs
+        repeatMode == PlaybackRepeatMode.ONE -> currentEntryIndex to 0L
         currentEntryIndex < restoredEntries.lastIndex -> currentEntryIndex + 1 to 0L
         else -> 0 to 0L
     }
@@ -135,5 +143,14 @@ internal fun PersistedPlaybackState.restoreAgainst(tracks: List<AudioTrack>): Re
     )
 }
 
-/** Within this of a track's end, a saved position counts as the track having finished. */
-private const val FINISHED_TRACK_TOLERANCE_MS = 1_000L
+/**
+ * Saves before 1.0.1 carry no end state, only the position. Only repeat off can end a queue, and a
+ * track no longer than the tolerance would count as finished at its start.
+ */
+private fun PersistedPlaybackState.savedAtLegacyEnd(track: AudioTrack): Boolean =
+    repeatMode == PlaybackRepeatMode.OFF &&
+        track.durationMs > LEGACY_FINISHED_TOLERANCE_MS &&
+        positionMs >= track.durationMs - LEGACY_FINISHED_TOLERANCE_MS
+
+/** For saves before 1.0.1: within this of a track's end, a saved position counts as finished. */
+private const val LEGACY_FINISHED_TOLERANCE_MS = 1_000L
