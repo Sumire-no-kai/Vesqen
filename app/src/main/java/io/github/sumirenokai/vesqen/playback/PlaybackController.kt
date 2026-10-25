@@ -49,6 +49,8 @@ class PlaybackController(
     private var connectionGeneration = 0L
     private var released = false
     private val usbOutputCommand = SessionCommand(UsbOutputSessionContract.SET_MODE_ACTION, Bundle.EMPTY)
+    private val insertCommand = SessionCommand(PlayOrderSessionContract.INSERT_ACTION, Bundle.EMPTY)
+    private val moveCommand = SessionCommand(PlayOrderSessionContract.MOVE_ACTION, Bundle.EMPTY)
     private var usbOutputStatus = UsbOutputStatus()
 
     private var latestSnapshot = PlaybackSnapshot()
@@ -227,19 +229,27 @@ class PlaybackController(
 
     fun playNext(track: AudioTrack) {
         controller?.let { player ->
-            tracksById[track.id.toString()] = track
-            availableTracksById[track.id.toString()] = track
-            val insertionIndex = (player.currentMediaItemIndex + 1).coerceIn(0, player.mediaItemCount)
-            player.addMediaItem(insertionIndex, track.toPlaybackMediaItem())
-            publish(player, rebuildQueue = true)
+            insert(player, track, afterCurrent = true)
         }
     }
 
     fun addToQueue(track: AudioTrack) {
-        controller?.let { player ->
-            tracksById[track.id.toString()] = track
-            availableTracksById[track.id.toString()] = track
-            player.addMediaItem(track.toPlaybackMediaItem())
+        controller?.let { player -> insert(player, track, afterCurrent = false) }
+    }
+
+    /**
+     * Inserts through the service, which also places the track in the shuffled play order (#158).
+     * The session's timeline change then rebuilds the queue.
+     */
+    private fun insert(player: MediaController, track: AudioTrack, afterCurrent: Boolean) {
+        tracksById[track.id.toString()] = track
+        availableTracksById[track.id.toString()] = track
+        val item = track.toPlaybackMediaItem()
+        if (player.isSessionCommandAvailable(insertCommand)) {
+            player.sendCustomCommand(insertCommand, PlayOrderSessionContract.insertArgs(PlayOrderSessionContract.Insert(item, afterCurrent)))
+        } else {
+            val listIndex = if (afterCurrent) (player.currentMediaItemIndex + 1).coerceIn(0, player.mediaItemCount) else player.mediaItemCount
+            player.addMediaItem(listIndex, item)
             publish(player, rebuildQueue = true)
         }
     }
@@ -263,9 +273,25 @@ class PlaybackController(
         }
     }
 
+    /**
+     * Moves the item at list index [fromIndex] to the place of [toIndex], its neighbor in the
+     * queue's play order. While shuffled only the play order changes, so the list keeps its order
+     * for when shuffle is turned off (#158).
+     */
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         controller?.let { player ->
             if (fromIndex !in 0 until player.mediaItemCount || toIndex !in 0 until player.mediaItemCount) return
+            if (player.isSessionCommandAvailable(moveCommand)) {
+                // The service decides from its own shuffle mode; a refusal leaves the queue as shown.
+                val move = PlayOrderSessionContract.Move(
+                    item = fromIndex,
+                    itemId = player.getMediaItemAt(fromIndex).queueEntryId(),
+                    anchor = toIndex,
+                    anchorId = player.getMediaItemAt(toIndex).queueEntryId(),
+                )
+                player.sendCustomCommand(moveCommand, PlayOrderSessionContract.moveArgs(move))
+                return
+            }
             player.moveMediaItem(fromIndex, toIndex)
             publish(player, rebuildQueue = true)
         }
@@ -454,7 +480,7 @@ class PlaybackController(
                 ),
                 shuffleEnabled = player.shuffleModeEnabled,
                 repeatMode = player.repeatMode.toPlaybackRepeatMode(),
-                queueIndex = player.currentMediaItemIndex.coerceAtLeast(0),
+                queueIndex = queueCache.projection.indexOfFirst(PlaybackQueueItem::isCurrent).coerceAtLeast(0),
                 queueSize = player.mediaItemCount,
                 queue = queueCache.projection,
                 problem = currentProblem,
@@ -476,25 +502,26 @@ class PlaybackController(
         return true
     }
 
+    /** The queue in play order, which is the shuffled order while shuffle is on (#158). */
     private fun buildQueueCache(player: Player): PlaybackQueueCache {
         val currentIndex = player.currentMediaItemIndex
-        val mediaIds = ArrayList<String>(player.mediaItemCount)
-        val projection = ArrayList<PlaybackQueueItem>(player.mediaItemCount)
-        repeat(player.mediaItemCount) { index ->
+        val mediaIds = List(player.mediaItemCount) { index -> player.getMediaItemAt(index).mediaId }
+        val projection = player.playOrder().mapNotNull { index ->
             val queueItem = player.getMediaItemAt(index)
-            mediaIds += queueItem.mediaId
             val queueTrack = tracksById[queueItem.mediaId] ?: availableTracksById[queueItem.mediaId]
-            val queueTrackId = queueItem.mediaId.toLongOrNull() ?: return@repeat
-            projection += PlaybackQueueItem(
+            val queueTrackId = queueItem.mediaId.toLongOrNull() ?: return@mapNotNull null
+            PlaybackQueueItem(
                 trackId = queueTrackId,
                 title = queueTrack?.title ?: queueItem.mediaMetadata.title?.toString().orEmpty(),
                 artist = queueTrack?.artist ?: queueItem.mediaMetadata.artist?.toString().orEmpty(),
                 isCurrent = index == currentIndex,
+                listIndex = index,
             )
         }
         return PlaybackQueueCache(
             mediaIds = mediaIds,
             currentIndex = currentIndex,
+            shuffleEnabled = player.shuffleModeEnabled,
             projection = projection,
         )
     }
@@ -686,10 +713,15 @@ internal fun PlaybackRepeatMode.toMedia3RepeatMode(): Int = when (this) {
 private data class PlaybackQueueCache(
     val mediaIds: List<String> = emptyList(),
     val currentIndex: Int = C.INDEX_UNSET,
+    val shuffleEnabled: Boolean = false,
     val projection: List<PlaybackQueueItem> = emptyList(),
 ) {
     fun matches(player: Player): Boolean {
-        if (player.mediaItemCount != mediaIds.size || player.currentMediaItemIndex != currentIndex) {
+        if (
+            player.mediaItemCount != mediaIds.size ||
+            player.currentMediaItemIndex != currentIndex ||
+            player.shuffleModeEnabled != shuffleEnabled
+        ) {
             return false
         }
         if (mediaIds.isEmpty()) return true

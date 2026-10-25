@@ -60,6 +60,8 @@ class PlaybackService : MediaSessionService() {
     private val mediaButtonStart = MediaButtonStartObligation()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val usbOutputCommand = SessionCommand(UsbOutputSessionContract.SET_MODE_ACTION, android.os.Bundle.EMPTY)
+    private val insertCommand = SessionCommand(PlayOrderSessionContract.INSERT_ACTION, android.os.Bundle.EMPTY)
+    private val moveCommand = SessionCommand(PlayOrderSessionContract.MOVE_ACTION, android.os.Bundle.EMPTY)
     private val outputStateListener: (UsbOutputStatus) -> Unit = { status ->
         mainHandler.post {
             mediaSession?.setSessionExtras(UsbOutputSessionContract.toBundle(status))
@@ -108,7 +110,7 @@ class PlaybackService : MediaSessionService() {
             val base = MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller).build()
             if (controller.packageName != packageName) return Futures.immediateFuture(base)
             return Futures.immediateFuture(MediaSession.ConnectionResult.accept(
-                base.availableSessionCommands.buildUpon().add(usbOutputCommand).build(),
+                base.availableSessionCommands.buildUpon().add(usbOutputCommand).add(insertCommand).add(moveCommand).build(),
                 base.availablePlayerCommands,
             ))
         }
@@ -119,15 +121,32 @@ class PlaybackService : MediaSessionService() {
             customCommand: SessionCommand,
             args: android.os.Bundle,
         ): ListenableFuture<SessionResult> {
-            if (
-                controller.packageName != packageName ||
-                customCommand.customAction != UsbOutputSessionContract.SET_MODE_ACTION
-            ) {
+            if (controller.packageName != packageName) {
                 return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
             }
-            val mode = UsbOutputSessionContract.readMode(args)
-                ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
-            return applyUsbOutputMode(mode)
+            val player = session.player as ExoPlayer
+            return when (customCommand.customAction) {
+                UsbOutputSessionContract.SET_MODE_ACTION -> UsbOutputSessionContract.readMode(args)
+                    ?.let(::applyUsbOutputMode)
+                    ?: Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
+                PlayOrderSessionContract.INSERT_ACTION -> {
+                    val insert = PlayOrderSessionContract.readInsert(args)
+                        ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
+                    onMainThread {
+                        player.insertInPlayOrder(insert)
+                        SessionResult(SessionResult.RESULT_SUCCESS)
+                    }
+                }
+                PlayOrderSessionContract.MOVE_ACTION -> {
+                    val move = PlayOrderSessionContract.readMove(args)
+                        ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
+                    onMainThread {
+                        // A refusal means the queue changed since the controller read it.
+                        SessionResult(if (player.moveInPlayOrder(move)) SessionResult.RESULT_SUCCESS else SessionError.ERROR_BAD_VALUE)
+                    }
+                }
+                else -> Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
+            }
         }
 
         /**
@@ -142,14 +161,16 @@ class PlaybackService : MediaSessionService() {
             resumeSavedQueue(mediaSession.player, isForPlayback)
     }
 
-    private fun applyUsbOutputMode(mode: UsbOutputMode): ListenableFuture<SessionResult> {
-        fun apply(): SessionResult {
-            usbOutputCoordinator?.requestMode(mode)
-            val extras = UsbOutputSessionContract.toBundle(
-                usbOutputCoordinator?.currentStatus() ?: UsbOutputStatus(),
-            )
-            return SessionResult(SessionResult.RESULT_SUCCESS, extras)
-        }
+    private fun applyUsbOutputMode(mode: UsbOutputMode): ListenableFuture<SessionResult> = onMainThread {
+        usbOutputCoordinator?.requestMode(mode)
+        val extras = UsbOutputSessionContract.toBundle(
+            usbOutputCoordinator?.currentStatus() ?: UsbOutputStatus(),
+        )
+        SessionResult(SessionResult.RESULT_SUCCESS, extras)
+    }
+
+    /** The player and the output coordinator belong to the main thread. */
+    private fun onMainThread(apply: () -> SessionResult): ListenableFuture<SessionResult> {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             return Futures.immediateFuture(apply())
         }
@@ -201,10 +222,12 @@ class PlaybackService : MediaSessionService() {
                     )
                 }
             }
-            // Runs after Media3 applied the result and the Play request to the player.
+            // Runs after Media3 applied the result and the Play request to the player. Shuffle was set
+            // on the empty player, so the new queue's shuffled order starts at its track only now.
             if (isForPlayback) {
                 mainHandler.post {
                     if (player.currentMediaItem == null) endMediaButtonStartWithoutPlayback()
+                    (player as? ExoPlayer)?.playCurrentItemFirst()
                 }
             }
         }
@@ -246,6 +269,14 @@ class PlaybackService : MediaSessionService() {
             }
         player.addListener((application as VesqenApplication).deviceReportRuntime.playbackListener(player))
         player.addListener(playbackListener)
+        player.addListener(object : Player.Listener {
+            // Turning shuffle on, here or when the app restores a shuffled queue, starts the play order
+            // at the current track, so none of the others is skipped (#158). A media-button
+            // resumption sets shuffle before its items; resumeSavedQueue handles that one.
+            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+                if (shuffleModeEnabled) player.playCurrentItemFirst()
+            }
+        })
         telemetry.attachPlayer(player)
         outputCoordinator.attachPlayer(player)
         playbackStateKeeper = PlaybackStateKeeper(

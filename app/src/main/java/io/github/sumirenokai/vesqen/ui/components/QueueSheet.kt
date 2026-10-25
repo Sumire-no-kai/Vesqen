@@ -113,9 +113,10 @@ fun QueueSheet(
                             enabled = snapshot.isControllerReady,
                             isLast = index == snapshot.queue.lastIndex,
                             isPlaying = snapshot.isPlaying,
-                            onPlay = { onPlayItem(index) },
-                            onMove = { to -> onMoveItem(index, to) },
-                            onRemove = { onRemoveItem(index) },
+                            // Rows follow the play order; edits name the player's list index (#158).
+                            onPlay = { onPlayItem(item.listIndex) },
+                            onMove = { to -> onMoveItem(item.listIndex, snapshot.queue[to].listIndex) },
+                            onRemove = { onRemoveItem(item.listIndex) },
                         )
                     }
                 }

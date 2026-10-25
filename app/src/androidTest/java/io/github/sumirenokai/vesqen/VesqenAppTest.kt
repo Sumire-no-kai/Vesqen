@@ -3943,8 +3943,8 @@ class VesqenAppTest {
                     queueIndex = 0,
                     queueSize = 2,
                     queue = listOf(
-                        PlaybackQueueItem(1, "Dawn Signal", "Mori", true),
-                        PlaybackQueueItem(2, "Long Light", "Mori", false),
+                        PlaybackQueueItem(1, "Dawn Signal", "Mori", true, listIndex = 0),
+                        PlaybackQueueItem(2, "Long Light", "Mori", false, listIndex = 1),
                     ),
                 ),
             ),
@@ -3966,7 +3966,7 @@ class VesqenAppTest {
                     snapshot = PlaybackSnapshot(
                         isControllerReady = true,
                         isPlaying = true,
-                        queue = listOf(PlaybackQueueItem(1, "Dawn Signal", "Mori", true)),
+                        queue = listOf(PlaybackQueueItem(1, "Dawn Signal", "Mori", true, listIndex = 0)),
                     ),
                     onDismiss = {},
                     onPlayItem = {},
@@ -3993,8 +3993,9 @@ class VesqenAppTest {
                     snapshot = PlaybackSnapshot(
                         isControllerReady = true,
                         queue = listOf(
-                            PlaybackQueueItem(1, "Dawn Signal", "Mori", true),
-                            PlaybackQueueItem(2, "Long Light", "Mori", false),
+                            // Shuffled: rows follow the play order, edits name the list index (#158).
+                            PlaybackQueueItem(1, "Dawn Signal", "Mori", true, listIndex = 2),
+                            PlaybackQueueItem(2, "Long Light", "Mori", false, listIndex = 0),
                         ),
                     ),
                     onDismiss = {},
@@ -4017,9 +4018,9 @@ class VesqenAppTest {
         composeRule.onAllNodesWithContentDescription(context.getString(R.string.move_up))[1].performClick()
         composeRule.onAllNodesWithContentDescription(context.getString(R.string.remove_from_queue))[0].performClick()
         composeRule.runOnIdle {
-            assertEquals(listOf(1), played)
-            assertEquals(listOf(1 to 0), moved)
-            assertEquals(listOf(0), removed)
+            assertEquals(listOf(0), played)
+            assertEquals(listOf(0 to 2), moved)
+            assertEquals(listOf(2), removed)
         }
     }
 
