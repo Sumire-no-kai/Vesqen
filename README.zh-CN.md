@@ -107,6 +107,7 @@ Vesqen 1.x 免费。曲库、播放和链路功能永久免费。严格 USB 输�
 ## 反馈与支持
 
 - **问题与疑问**：请发送邮件至 vesqen@sumirenokai.com，中文或英文均可。
+- **讨论区**：如有使用疑问、手机与 DAC 的搭配经验或功能建议，欢迎在 [GitHub Discussions](https://github.com/Sumire-no-kai/Vesqen/discussions) 发帖交流。
 - **错误报告与建议**：请[新建 issue](https://github.com/Sumire-no-kai/Vesqen/issues/new/choose)，并注明应用版本、手机型号、Android 版本、DAC 或耳机，以及文件格式。如为输出相关问题，请附上链路页截图。无需开启任何日志功能。
 - **安全问题**：请按照 [SECURITY.md](SECURITY.md) 的方式私下报告，切勿公开发布。
 - **支持开发**：如果 Vesqen 对你有所帮助，欢迎通过 [Buy Me a Coffee](https://buymeacoffee.com/edward_lee) 支持开发。赞助完全自愿，不会解锁任何功能。

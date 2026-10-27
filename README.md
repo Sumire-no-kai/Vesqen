@@ -107,6 +107,7 @@ Each release lists its own limitations in the release notes, and the [changelog]
 ## Feedback and support
 
 - **Questions and problems:** email vesqen@sumirenokai.com, in English or Chinese.
+- **Discussions:** ask questions, share your phone and DAC setup, or suggest ideas in [GitHub Discussions](https://github.com/Sumire-no-kai/Vesqen/discussions).
 - **Bugs and ideas:** [open an issue](https://github.com/Sumire-no-kai/Vesqen/issues/new/choose). Include the app version, phone model, Android version, DAC or headphones and the file format. For output problems, a screenshot of the Chain page helps. You don't need to turn on any logging.
 - **Security issues:** follow [SECURITY.md](SECURITY.md) and please don't report them in public.
 - **Support development:** if Vesqen is useful to you, you can support its development on [Buy Me a Coffee](https://buymeacoffee.com/edward_lee). It is voluntary and doesn't unlock any features.

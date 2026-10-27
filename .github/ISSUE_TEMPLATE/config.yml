@@ -3,6 +3,9 @@ contact_links:
   - name: Report a security problem / 报告安全问题
     url: https://github.com/Sumire-no-kai/Vesqen/security/advisories/new
     about: Please report vulnerabilities privately. / 请私下报告漏洞。
+  - name: Questions and discussions / 疑问与讨论
+    url: https://github.com/Sumire-no-kai/Vesqen/discussions
+    about: Ask questions and share ideas in GitHub Discussions. / 在 GitHub Discussions 提问和交流。
   - name: Support and questions / 支持与疑问
     url: https://vesqen.sumirenokai.com/support/
     about: Common questions and the support email address. / 常见问题和支持邮箱。
