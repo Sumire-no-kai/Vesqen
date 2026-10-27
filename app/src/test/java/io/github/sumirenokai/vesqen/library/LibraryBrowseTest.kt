@@ -123,6 +123,7 @@ class LibraryBrowseTest {
         assertEquals("Music/A/Long Night", albumFolder("Music/A/Long Night [Disc 1]"))
         assertEquals("Music/A/Long Night", albumFolder("Music/A/Long Night - CD 1"))
         assertEquals("Music/A/Long Night", albumFolder("Music/A/Long Night/CD1/"))
+        assertEquals("Music/A/Long Night", albumFolder("Music/A/Long Night/(Disc 1)"))
         // A name that only ends in letters and a digit is not a disc.
         assertEquals("Music/A/ABCD1", albumFolder("Music/A/ABCD1"))
     }
@@ -143,14 +144,29 @@ class LibraryBrowseTest {
     }
 
     @Test
-    fun `files in a folder keep the plain order with digits first`() {
-        val files = listOf("Bonus Track.flac", "02 Song.flac", "01 Intro.flac").mapIndexed { index, file ->
-            tracks[0].copy(id = 70L + index, fileName = file, folderName = "Music/Album")
+    fun `songs inside a folder or a genre keep the plain order with digits first`() {
+        // Like the Songs index, this collection order puts names that start with a digit last.
+        val digitsLast = compareBy<String> { it.firstOrNull()?.isDigit() == true }.then(String.CASE_INSENSITIVE_ORDER)
+        val files = listOf("Bonus Track", "02 Song", "01 Intro").mapIndexed { index, name ->
+            tracks[0].copy(id = 70L + index, title = name, fileName = "$name.flac", folderName = "Music/Album")
         }
 
-        val folder = buildLibraryCollections(LibraryBrowseMode.FOLDERS, files, emptyList(), names).single()
+        val folder = buildLibraryCollections(LibraryBrowseMode.FOLDERS, files, emptyList(), digitsLast).single()
+        val genre = buildLibraryCollections(LibraryBrowseMode.GENRES, files, emptyList(), digitsLast).single()
 
         assertEquals(listOf("01 Intro.flac", "02 Song.flac", "Bonus Track.flac"), folder.tracks.map(AudioTrack::fileName))
+        assertEquals(listOf("01 Intro", "02 Song", "Bonus Track"), genre.tracks.map(AudioTrack::title))
+    }
+
+    @Test
+    fun `songs without an album stay one group in the album sort`() {
+        val untagged = listOf(
+            track(80, "x", "Mori", "", trackNumber = 1, genre = "Pop", playCount = 0).copy(folderName = "Music/A"),
+            track(81, "y", "Mori", "", trackNumber = 1, genre = "Pop", playCount = 0).copy(folderName = "Music/B"),
+            track(82, "z", "Mori", "", trackNumber = 2, genre = "Pop", playCount = 0).copy(folderName = "Music/A"),
+        )
+
+        assertEquals(listOf(80L, 81L, 82L), sortLibraryTracks(untagged, LibrarySortOrder.ALBUM, names).map(AudioTrack::id))
     }
 
     @Test

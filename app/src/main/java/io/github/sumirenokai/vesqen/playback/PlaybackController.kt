@@ -283,11 +283,13 @@ class PlaybackController(
             if (fromIndex !in 0 until player.mediaItemCount || toIndex !in 0 until player.mediaItemCount) return
             if (player.isSessionCommandAvailable(moveCommand)) {
                 // The service decides from its own shuffle mode; a refusal leaves the queue as shown.
+                val order = player.playOrder()
                 val move = PlayOrderSessionContract.Move(
                     item = fromIndex,
                     itemId = player.getMediaItemAt(fromIndex).queueEntryId(),
                     anchor = toIndex,
                     anchorId = player.getMediaItemAt(toIndex).queueEntryId(),
+                    after = order.indexOf(fromIndex) < order.indexOf(toIndex),
                 )
                 player.sendCustomCommand(moveCommand, PlayOrderSessionContract.moveArgs(move))
                 return
@@ -505,9 +507,10 @@ class PlaybackController(
     /** The queue in play order, which is the shuffled order while shuffle is on (#158). */
     private fun buildQueueCache(player: Player): PlaybackQueueCache {
         val currentIndex = player.currentMediaItemIndex
-        val mediaIds = List(player.mediaItemCount) { index -> player.getMediaItemAt(index).mediaId }
+        // One timeline read per item: each one is a window lookup on the main thread.
+        val queueItems = List(player.mediaItemCount, player::getMediaItemAt)
         val projection = player.playOrder().mapNotNull { index ->
-            val queueItem = player.getMediaItemAt(index)
+            val queueItem = queueItems[index]
             val queueTrack = tracksById[queueItem.mediaId] ?: availableTracksById[queueItem.mediaId]
             val queueTrackId = queueItem.mediaId.toLongOrNull() ?: return@mapNotNull null
             PlaybackQueueItem(
@@ -519,7 +522,7 @@ class PlaybackController(
             )
         }
         return PlaybackQueueCache(
-            mediaIds = mediaIds,
+            mediaIds = queueItems.map(MediaItem::mediaId),
             currentIndex = currentIndex,
             shuffleEnabled = player.shuffleModeEnabled,
             projection = projection,
@@ -595,22 +598,31 @@ class PlaybackController(
             suppressListenerPublishing = true
             try {
                 val queuedItems = List(player.mediaItemCount, player::getMediaItemAt)
-                val replacement = buildSinglePlaybackReplacementBatch(queuedItems) { _, queuedItem ->
+                val currentIndex = player.currentMediaItemIndex
+                val ranges = buildPlaybackReplacementRanges(
+                    currentItems = queuedItems,
+                    keepsSource = { queued, replacement ->
+                        queued.localConfiguration?.uri == replacement.localConfiguration?.uri
+                    },
+                ) { index, queuedItem ->
                     availableTracksById[queuedItem.mediaId]?.let { updatedTrack ->
                         tracksById[queuedItem.mediaId] = updatedTrack
                         val updatedFingerprint = updatedTrack.productionPlaybackMediaFingerprint()
-                        if (queuedItem.matches(updatedFingerprint)) null else updatedTrack.toPlaybackMediaItem(
+                        if (queuedItem.matches(updatedFingerprint)) return@let null
+                        // The playing item keeps its open source when its file was renamed or moved
+                        // (#164): replacing it would stop playback. A later sync updates it.
+                        if (index == currentIndex && queuedItem.localConfiguration?.uri?.toString() != updatedTrack.contentUri) {
+                            return@let null
+                        }
+                        updatedTrack.toPlaybackMediaItem(
                             occurrenceId = queuedItem.mediaMetadata.extras?.getString(PLAYBACK_OCCURRENCE_EXTRA)
                                 ?: java.util.UUID.randomUUID().toString(),
                         )
                     }
                 }
-                if (replacement != null) {
-                    // A single range replacement produces one structural reconciliation instead
-                    // of one timeline event per changed item. Compatible current items (same
-                    // source URI, metadata-only changes) remain eligible for seamless playback.
-                    player.replaceMediaItems(0, queuedItems.size, replacement)
-                }
+                // Replacing a range that holds an item with a new URI re-creates every item in it,
+                // and the current one, if inside, would end. Only changed items are replaced.
+                ranges.forEach { (fromIndex, items) -> player.replaceMediaItems(fromIndex, fromIndex + items.size, items) }
             } finally {
                 suppressListenerPublishing = false
             }
@@ -655,18 +667,25 @@ internal inline fun <T> applyPlaybackConnectionState(
 }
 
 /**
- * Builds the one range payload used to reconcile queue metadata. A null replacement means the
- * existing item is already current; null for the whole result means no player mutation is needed.
+ * The queue ranges a library reconciliation replaces, as (first index, replacements); a null
+ * replacement means the item is already current. Unchanged items keep their media sources and their
+ * place in a shuffled order. Replacements that [keepsSource] update in place, so neighbors share a
+ * range and one timeline event; any other is re-created and gets a range of its own.
  */
-internal inline fun <T> buildSinglePlaybackReplacementBatch(
+internal inline fun <T> buildPlaybackReplacementRanges(
     currentItems: List<T>,
+    keepsSource: (current: T, replacement: T) -> Boolean,
     replacementAt: (index: Int, current: T) -> T?,
-): List<T>? {
-    var changed = false
-    val reconciled = currentItems.mapIndexed { index, current ->
-        replacementAt(index, current)?.also { changed = true } ?: current
+): List<Pair<Int, List<T>>> {
+    val ranges = mutableListOf<Pair<Int, MutableList<T>>>()
+    var inPlaceRangeEnd = -1
+    currentItems.forEachIndexed { index, current ->
+        val replacement = replacementAt(index, current) ?: return@forEachIndexed
+        val inPlace = keepsSource(current, replacement)
+        if (inPlace && index == inPlaceRangeEnd) ranges.last().second += replacement else ranges += index to mutableListOf(replacement)
+        inPlaceRangeEnd = if (inPlace) index + 1 else -1
     }
-    return reconciled.takeIf { changed }
+    return ranges
 }
 
 internal const val PLAYBACK_ARTWORK_REVISION_EXTRA =

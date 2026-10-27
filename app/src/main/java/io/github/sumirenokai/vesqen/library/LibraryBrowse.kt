@@ -103,7 +103,7 @@ fun buildLibraryCollections(
             key = { track -> collectionKey("genre", track.genre) },
             title = AudioTrack::genre,
             subtitle = { group -> group.size.toString() },
-            trackOrder = compareBy<AudioTrack, String>(names) { it.artist }.thenBy(names) { it.title },
+            trackOrder = compareBy<AudioTrack, String>(within) { it.artist }.thenBy(within) { it.title },
             names = names,
         )
         LibraryBrowseMode.PLAYLISTS -> {
@@ -206,7 +206,8 @@ private class AlbumKeys {
     fun of(track: AudioTrack): String {
         val albumArtist = track.albumArtist.trim()
         val album = track.album.trim()
-        if (albumArtist.isNotEmpty()) return collectionKey(AlbumNamespace, albumArtist, album)
+        // Songs without an album tag stay one group, as before #170 P3.
+        if (albumArtist.isNotEmpty() || album.isEmpty()) return collectionKey(AlbumNamespace, albumArtist, album)
         return collectionKey(AlbumNamespace, "", album, folders.getOrPut(track.folderName) { albumFolder(track.folderName) })
     }
 }
@@ -216,6 +217,8 @@ internal fun albumFolder(folderName: String): String {
     val (parent, name) = folderPathParts(folderName)
     if (DiscFolder.matches(name)) return parent
     val album = name.replace(DiscSuffix, "")
+    // A folder named only "(Disc 1)" or "[CD1]" is a disc of its parent.
+    if (album.isBlank()) return parent
     return if (parent.isEmpty()) album else "$parent/$album"
 }
 

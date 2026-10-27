@@ -9,13 +9,13 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.telemetry.isolatedPlaybackTestApplication
 import java.io.File
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -82,15 +82,55 @@ class ShuffleQueueEditDeviceTest {
                 playback.get().queue.map(PlaybackQueueItem::trackId),
             )
         } finally {
-            main {
-                if (playback.get().showsPauseAction) controller.togglePlayback()
-                controller.clearQueue()
-                controller.release()
-                // Later tests expect a service that has never played.
-                app.stopService(Intent(app, PlaybackService::class.java))
-            }
-            File(app.cacheDir, FIXTURE_DIR).deleteRecursively()
+            releasePlayback()
         }
+    }
+
+    @Test
+    fun aMovedQueuedFileLeavesTheCurrentTrackPlaying() = runBlocking {
+        val queued = (1L..4L).map(::silentTrack)
+        try {
+            main { controller = PlaybackController(app) { playback.set(it) } }
+            awaitPlayback { it.isControllerReady }
+            main { controller.playQueue(queued, 1) }
+            awaitPlayback { it.trackId == queued[1].id && it.positionMs >= 1_000 }
+            val position = playback.get().positionMs
+
+            // A library refresh after a rename keeps the catalog ID with a new URI (#164), next to a
+            // tag edit of the current track. The URI change used to replace the whole queue, which
+            // ended the current track and started the first one.
+            val renamed = File(app.cacheDir, "$FIXTURE_DIR/renamed.wav").also { writeSilentWav(it, durationMs = 20_000) }
+            val library = listOf(queued[0], queued[1].copy(title = "Retitled"), queued[2], queued[3].copy(contentUri = renamed.toURI().toString()))
+            main { controller.syncLibrary(library) }
+            // Long enough for the session's own timeline to reach the controller.
+            awaitPlayback { it.trackId != queued[1].id || (it.title == "Retitled" && it.positionMs >= position + 1_000) }
+
+            val after = playback.get()
+            assertEquals(queued[1].id, after.trackId)
+            assertTrue("${after.positionMs} < $position", after.positionMs >= position)
+            assertEquals(queued.map(AudioTrack::id), after.queue.map(PlaybackQueueItem::trackId))
+        } finally {
+            releasePlayback()
+        }
+    }
+
+    @Test
+    fun requestsWithoutTheirKeysAreRefused() {
+        assertNull(PlayOrderSessionContract.readInsert(Bundle().apply { putBundle("item", MediaItem.Builder().setMediaId("1").build().toBundle()) }))
+        val move = PlayOrderSessionContract.moveArgs(PlayOrderSessionContract.Move(0, "a", 1, "b", after = true))
+        assertEquals(PlayOrderSessionContract.Move(0, "a", 1, "b", after = true), PlayOrderSessionContract.readMove(move))
+        assertNull(PlayOrderSessionContract.readMove(Bundle(move).apply { remove("after") }))
+    }
+
+    private fun releasePlayback() {
+        main {
+            if (playback.get().showsPauseAction) controller.togglePlayback()
+            controller.clearQueue()
+            controller.release()
+            // Later tests expect a service that has never played.
+            app.stopService(Intent(app, PlaybackService::class.java))
+        }
+        File(app.cacheDir, FIXTURE_DIR).deleteRecursively()
     }
 
     @Test
@@ -106,9 +146,9 @@ class ShuffleQueueEditDeviceTest {
                 player.setMediaItems(listOf(entry("1", "a"), entry("2", "b"), entry("1", "c")))
                 player.shuffleModeEnabled = true
                 before = player.shuffleOrder.playOrder().toList()
-                stale = player.moveInPlayOrder(PlayOrderSessionContract.Move(0, "c", 1, "b"))
+                stale = player.moveInPlayOrder(PlayOrderSessionContract.Move(0, "c", 1, "b", after = true))
                 after = player.shuffleOrder.playOrder().toList()
-                current = player.moveInPlayOrder(PlayOrderSessionContract.Move(0, "a", 1, "b"))
+                current = player.moveInPlayOrder(PlayOrderSessionContract.Move(0, "a", 1, "b", after = true))
             } finally {
                 player.release()
             }
@@ -134,22 +174,12 @@ class ShuffleQueueEditDeviceTest {
 
     private fun main(action: () -> Unit) = instrumentation.runOnMainSync(action)
 
-    /** Twenty seconds of 8 kHz mono silence; private to the deviceTest app, never in MediaStore. */
+    /** Twenty seconds of silence, private to the deviceTest app. */
     private fun silentTrack(id: Long): AudioTrack {
-        val rate = 8_000
-        val dataSize = rate * 2 * 20
-        val file = File(File(app.cacheDir, FIXTURE_DIR).apply { mkdirs() }, "VESQEN_QA_PRIVATE_$id.wav")
-        file.outputStream().buffered().use { output ->
-            output.write(ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN).apply {
-                put("RIFF".toByteArray()); putInt(36 + dataSize); put("WAVEfmt ".toByteArray())
-                putInt(16); putShort(1); putShort(1); putInt(rate)
-                putInt(rate * 2); putShort(2); putShort(16); put("data".toByteArray()); putInt(dataSize)
-            }.array())
-            output.write(ByteArray(dataSize))
-        }
+        val file = File(File(app.cacheDir, FIXTURE_DIR), "VESQEN_QA_PRIVATE_$id.wav").also { writeSilentWav(it, durationMs = 20_000) }
         return AudioTrack(-1_000 - id, file.toURI().toString(), "Track $id", "", "", 20_000,
             fileName = file.name, fileSizeBytes = file.length(), mimeType = "audio/wav", codec = "PCM",
-            sampleRateHz = rate, bitDepth = 16, channelCount = 1)
+            sampleRateHz = 8_000, bitDepth = 16, channelCount = 1)
     }
 
     private companion object {

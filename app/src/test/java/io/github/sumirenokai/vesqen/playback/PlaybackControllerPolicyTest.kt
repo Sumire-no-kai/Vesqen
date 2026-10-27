@@ -163,20 +163,22 @@ class PlaybackControllerPolicyTest {
     }
 
     @Test
-    fun `queue metadata changes are emitted as one replacement batch`() {
-        val batch = buildSinglePlaybackReplacementBatch(
-            currentItems = listOf("old-a", "same", "old-b"),
-        ) { index, _ ->
-            when (index) {
-                0 -> "new-a"
-                2 -> "new-b"
-                else -> null
-            }
-        }
+    fun `only changed queue items are replaced, and a moved file alone`() {
+        // "a:1" is item a at source 1: a new tag keeps the source, a renamed file changes it.
+        val queue = listOf("a:1", "b:1", "c:1", "d:1", "e:1", "f:1")
+        val updates = mapOf(0 to "a:1+tag", 1 to "b:1+tag", 2 to "c:2", 3 to "d:1+tag", 5 to "f:1+tag")
+        val ranges = buildPlaybackReplacementRanges(
+            currentItems = queue,
+            keepsSource = { current, replacement -> current.substringBefore('+') == replacement.substringBefore('+') },
+        ) { index, _ -> updates[index] }
 
-        assertEquals(listOf("new-a", "same", "new-b"), batch)
-        assertNull(
-            buildSinglePlaybackReplacementBatch(listOf("already-current")) { _, _ -> null },
+        assertEquals(
+            listOf(0 to listOf("a:1+tag", "b:1+tag"), 2 to listOf("c:2"), 3 to listOf("d:1+tag"), 5 to listOf("f:1+tag")),
+            ranges,
+        )
+        assertEquals(
+            emptyList<Pair<Int, List<String>>>(),
+            buildPlaybackReplacementRanges(listOf("already-current"), { _, _ -> true }) { _, _ -> null },
         )
     }
 

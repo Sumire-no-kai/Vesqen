@@ -66,7 +66,9 @@ internal class PlaybackStateKeeper(
         val playingChanged = events.contains(Player.EVENT_IS_PLAYING_CHANGED)
         val mediaItemTransition = events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)
         val positionDiscontinuity = events.contains(Player.EVENT_POSITION_DISCONTINUITY)
-        if (mediaItemTransition || positionDiscontinuity || timelineChanged) {
+        // A new queue or another item is a transition; editing other items or a library refresh
+        // changes the timeline but leaves the queue at its end.
+        if (mediaItemTransition || positionDiscontinuity) {
             queueEnded = queueEndedAfter(queueEnded, player.playbackState, movedAway = true)
         }
         if (mediaItemTransition || playingChanged) {
