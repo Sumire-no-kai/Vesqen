@@ -328,3 +328,4 @@
 - 清理：在“管理音乐来源”里移除测试文件夹，删除 `/sdcard/Music/Vesqen QA 1.0.1/`。媒体音量为静音，借此从歌曲列表重新播放第 6 / 112 首“brave heart”，暂停在 0:50（原来是 0:39），回到桌面。
 - 没有覆盖：#160（MediaStore 重建期间的匹配）、同名不同艺术家专辑和分碟文件夹的分组（手机曲库里没有这样的专辑）、应用内更新器（要等发布和官网 `updates/` 上线后再测）、浏览器下载后用系统安装器安装、蓝牙和重启。
 - 结论：安装、versionCode 增大的同签名升级和数据保留通过（Android 9 和 Android 15 都从 GitHub 版 1.0.0 升级）；#164、#175、#158 和 #170 P2 在 iQOO 上的行为符合发布说明。
+- 发布后（2026-10-27 20:44，[Publish run #40483022708](https://github.com/Sumire-no-kai/Vesqen/actions/runs/40483022708)）：`v1.0.1` 为 Latest，附件 APK 的 SHA-256 为 `db8149fe…6d1a`。官网 `c1caef0` 上线后，线上 `updates/stable.json` 和 `beta.json` 与仓库文件一致，指向 1.0.1。1.0.0 和 1.0.1 之间 `app/src/github` 与 `tools/github_update_manifest.py` 没有改动，完整的应用内更新流程沿用 1.0.0 时在模拟器上的结果；这次只在 iQOO 的 1.0.1 上点“检查更新”，读到线上的清单后显示“已是最新版本”。没有再从 1.0.0 通过应用内更新器升级。
