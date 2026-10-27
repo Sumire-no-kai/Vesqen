@@ -133,8 +133,8 @@ internal fun PersistedPlaybackState.restoreAgainst(tracks: List<AudioTrack>): Re
         currentEntryIndex < 0 -> 0 to 0L
         !finished -> currentEntryIndex to positionMs
         repeatMode == PlaybackRepeatMode.ONE -> currentEntryIndex to 0L
-        // A shuffled queue ends on the last track of its shuffled order, anywhere in the list.
-        !shuffleEnabled && currentEntryIndex < restoredEntries.lastIndex -> currentEntryIndex + 1 to 0L
+        // Play next after the end, shuffled or not, puts its track right after the ended one.
+        currentEntryIndex < restoredEntries.lastIndex -> currentEntryIndex + 1 to 0L
         else -> 0 to 0L
     }
     return RestoredPlaybackQueue(

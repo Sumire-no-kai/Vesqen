@@ -969,6 +969,47 @@ class LibraryCatalogStoreTest {
     }
 
     @Test
+    fun aCopyRewrittenByTheScanDoesNotTakeOverADeletedFile() = withStore("library-folder-rewrite") { store ->
+        val source = store.addTestFolder()
+        store.scanFolder(source, folderFile("doc:1", "Music/Album", "Aira.flac", 1_000, 60_000), folderFile("doc:2", "Music/Backup", "Aira.flac", 1_000, 60_000))
+        val album = store.readTracks(listOf(source)).single { it.contentUri == "content://tree/doc:1" }
+        store.setFavorite(album.id, true)
+
+        // The album copy is deleted while the backup copy's fingerprint changes, as after a tag edit
+        // that kept the time or a new metadata revision: the scan rewrites the backup's row.
+        store.scanFolder(source, folderFile("doc:2", "Music/Backup", "Aira.flac", 1_000, 60_000, revision = 2))
+
+        assertEquals(setOf(album.id), store.readHiddenFolderTrackIds())
+        assertTrue(store.readTracks(listOf(source)).single { it.contentUri == "content://tree/doc:2" }.let { !it.isFavorite })
+    }
+
+    @Test
+    fun aMovedFileThatPlayedDuringAPausedScanMergesIntoItsOldRow() = withStore("library-folder-paused-play") { store ->
+        val source = store.addTestFolder()
+        store.scanFolder(source, folderFile("doc:1", "Music", "Aira.flac", 1_000, 60_000))
+        val aira = store.readTracks(listOf(source)).single()
+        store.setFavorite(aira.id, true)
+        store.recordPlayback(aira.id, playedAtMs = 100)
+        val playlistId = requireNotNull(store.createPlaylist("Mix"))
+
+        // A paused scan lists the moved file as a new row, which plays and joins a playlist.
+        store.scanFolder(source, folderFile("doc:2", "Music/Live", "Aira.flac", 1_000, 60_000), complete = false)
+        val moved = store.readTracks(listOf(source)).single { it.contentUri == "content://tree/doc:2" }
+        store.recordPlayback(moved.id, playedAtMs = 200)
+        store.addTrackToPlaylist(playlistId, moved.id)
+
+        store.scanFolder(source, folderFile("doc:2", "Music/Live", "Aira.flac", 1_000, 60_000))
+
+        val row = store.readTracks(listOf(source)).single()
+        assertEquals(aira.id, row.id)
+        assertEquals("content://tree/doc:2", row.contentUri)
+        assertTrue(row.isFavorite)
+        assertEquals(2, row.playCount)
+        assertEquals(listOf(aira.id), store.readPlaylists().single().trackIds)
+        assertTrue(store.readHiddenFolderTrackIds().isEmpty())
+    }
+
+    @Test
     fun aPausedFolderScanHidesAndMovesNothing() = withStore("library-folder-paused") { store ->
         val source = store.addTestFolder()
         store.scanFolder(source, folderFile("doc:1", "Music", "Aira.flac", 1_000, 60_000))
@@ -1006,6 +1047,7 @@ class LibraryCatalogStoreTest {
         sizeBytes: Long,
         durationMs: Long,
         modifiedSeconds: Long = 1_700_000_000 + sizeBytes,
+        revision: Int = 1,
     ) = LibraryTrackCandidate(
         remoteId = documentId,
         contentUri = "content://tree/$documentId",
@@ -1017,7 +1059,7 @@ class LibraryCatalogStoreTest {
         sizeBytes = sizeBytes,
         fileName = fileName,
         folderName = folder,
-        fingerprint = "$documentId|$sizeBytes|$modifiedSeconds",
+        fingerprint = "$documentId|$sizeBytes|$modifiedSeconds|$revision",
     )
 
     private fun withStore(name: String, block: (LibraryCatalogStore) -> Unit) {

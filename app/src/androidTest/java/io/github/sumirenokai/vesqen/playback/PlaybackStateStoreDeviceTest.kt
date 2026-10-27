@@ -3,7 +3,15 @@ package io.github.sumirenokai.vesqen.playback
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.SharedPreferences
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
 import java.util.UUID
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -73,6 +81,57 @@ class PlaybackStateStoreDeviceTest {
 
         assertNull(PlaybackStateStore(isolatedContext).load()!!.queueEnded)
     }
+
+    @Test
+    fun theKeeperKeepsTheEndThroughAStopUntilTheQueueMovesAway() {
+        val store = PlaybackStateStore(isolatedContext)
+        val fixtures = File(context.cacheDir, "keeper-end-${UUID.randomUUID()}")
+        val items = (1..2).map { id ->
+            val file = File(fixtures, "$id.wav").also { writeSilentWav(it, durationMs = 300) }
+            MediaItem.Builder().setMediaId("$id").setUri(Uri.fromFile(file)).build()
+        }
+        lateinit var player: ExoPlayer
+        lateinit var keeper: PlaybackStateKeeper
+        // The keeper hears a player's events in a later main-thread message.
+        fun savedEnd(): Boolean? {
+            main {}
+            return store.load()?.queueEnded
+        }
+        try {
+            main {
+                player = ExoPlayer.Builder(context).build()
+                keeper = PlaybackStateKeeper(player, store, Handler(Looper.getMainLooper()))
+                keeper.start()
+                player.setMediaItems(items)
+                player.prepare()
+                player.play()
+            }
+            val deadline = SystemClock.uptimeMillis() + 10_000
+            var state = Player.STATE_IDLE
+            while (state != Player.STATE_ENDED) {
+                check(SystemClock.uptimeMillis() < deadline) { "The queue never ended" }
+                Thread.sleep(50)
+                main { state = player.playbackState }
+            }
+            assertEquals(true, savedEnd())
+            // A dismissed notification stops the player at the end of its last track (#170 P2).
+            main { player.stop() }
+            assertEquals(true, savedEnd())
+            // Removing an earlier item, as a library refresh can, changes the timeline only.
+            main { player.removeMediaItem(0) }
+            assertEquals(true, savedEnd())
+            main { player.seekTo(0, 0) }
+            assertEquals(false, savedEnd())
+        } finally {
+            main {
+                keeper.stop()
+                player.release()
+            }
+            fixtures.deleteRecursively()
+        }
+    }
+
+    private fun main(action: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(action)
 
     @Test
     fun legacyPreferencesWithoutOccurrenceStillLoad() {

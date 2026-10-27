@@ -24,6 +24,7 @@ internal object PlayOrderSessionContract {
     private const val KEY_ITEM_ID = "item_id"
     private const val KEY_ANCHOR = "anchor"
     private const val KEY_ANCHOR_ID = "anchor_id"
+    private const val KEY_AFTER = "after"
 
     /**
      * Plays [item] right after the current item, or after every other item. The service picks the
@@ -33,10 +34,11 @@ internal object PlayOrderSessionContract {
 
     /**
      * The item at list index [item] takes the place of the item at list index [anchor], its
-     * neighbor in the play order. The entry IDs ([queueEntryId]) let the service refuse a request
-     * made against a queue that has changed since.
+     * neighbor in the play order, and so plays right [after] it or right before it. The entry IDs
+     * ([queueEntryId]) let the service refuse a request made against a queue that has changed
+     * since; a shuffled move keeps the list, so the direction makes a repeated request harmless.
      */
-    data class Move(val item: Int, val itemId: String, val anchor: Int, val anchorId: String)
+    data class Move(val item: Int, val itemId: String, val anchor: Int, val anchorId: String, val after: Boolean)
 
     fun insertArgs(insert: Insert): Bundle = Bundle().apply {
         // The service runs in the app's process, so the item keeps its local URI.
@@ -45,6 +47,7 @@ internal object PlayOrderSessionContract {
     }
 
     fun readInsert(args: Bundle): Insert? {
+        if (!args.containsKey(KEY_AFTER_CURRENT)) return null
         val item = args.getBundle(KEY_ITEM)?.let(MediaItem::fromBundle) ?: return null
         return Insert(item, args.getBoolean(KEY_AFTER_CURRENT))
     }
@@ -54,15 +57,17 @@ internal object PlayOrderSessionContract {
         putString(KEY_ITEM_ID, move.itemId)
         putInt(KEY_ANCHOR, move.anchor)
         putString(KEY_ANCHOR_ID, move.anchorId)
+        putBoolean(KEY_AFTER, move.after)
     }
 
     fun readMove(args: Bundle): Move? {
-        if (!args.containsKey(KEY_ITEM) || !args.containsKey(KEY_ANCHOR)) return null
+        if (!args.containsKey(KEY_ITEM) || !args.containsKey(KEY_ANCHOR) || !args.containsKey(KEY_AFTER)) return null
         return Move(
             item = args.getInt(KEY_ITEM),
             itemId = args.getString(KEY_ITEM_ID) ?: return null,
             anchor = args.getInt(KEY_ANCHOR),
             anchorId = args.getString(KEY_ANCHOR_ID) ?: return null,
+            after = args.getBoolean(KEY_AFTER),
         )
     }
 }
@@ -103,8 +108,7 @@ internal fun ExoPlayer.moveInPlayOrder(move: PlayOrderSessionContract.Move): Boo
         return true
     }
     val order = shuffleOrder.playOrder()
-    val after = order.indexOf(move.item) < order.indexOf(move.anchor)
-    setShuffleOrder(ShuffleOrder.DefaultShuffleOrder(order.withMoved(move.item, move.anchor, after), Random.nextLong()))
+    setShuffleOrder(ShuffleOrder.DefaultShuffleOrder(order.withMoved(move.item, move.anchor, move.after), Random.nextLong()))
     return true
 }
 
