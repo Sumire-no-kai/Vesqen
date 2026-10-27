@@ -247,47 +247,7 @@ internal class LibraryCatalogStore(
                     requireSyntheticExternalUri = false,
                 )
                 if (target != null && target.trackId != legacy.trackId) {
-                    val mergedFavorite = legacy.isFavorite || target.isFavorite
-                    val mergedFavoritePosition = when {
-                        !mergedFavorite -> null
-                        legacy.isFavorite && target.isFavorite ->
-                            listOfNotNull(legacy.favoritePosition, target.favoritePosition).minOrNull()
-                        legacy.isFavorite -> legacy.favoritePosition
-                        else -> target.favoritePosition
-                    }
-                    update(
-                        TRACKS_TABLE,
-                        ContentValues().apply {
-                            put(TRACK_IS_FAVORITE, if (mergedFavorite) 1 else 0)
-                            putNullableLong(TRACK_FAVORITE_POSITION, mergedFavoritePosition)
-                            put(
-                                TRACK_PLAY_COUNT,
-                                (legacy.playCount.toLong() + target.playCount.toLong())
-                                    .coerceAtMost(Int.MAX_VALUE.toLong()),
-                            )
-                            put(
-                                TRACK_LAST_PLAYED_AT_MS,
-                                maxOf(legacy.lastPlayedAtMs, target.lastPlayedAtMs),
-                            )
-                        },
-                        "$TRACK_ID = ?",
-                        arrayOf(legacy.trackId.toString()),
-                    )
-                    execSQL(
-                        """
-                        INSERT OR IGNORE INTO $PLAYLIST_ITEMS_TABLE (
-                            $PLAYLIST_ITEM_PLAYLIST_ID,
-                            $PLAYLIST_ITEM_TRACK_ID,
-                            $PLAYLIST_ITEM_POSITION,
-                            $PLAYLIST_ITEM_ADDED_AT_MS
-                        )
-                        SELECT $PLAYLIST_ITEM_PLAYLIST_ID, ?, $PLAYLIST_ITEM_POSITION,
-                               $PLAYLIST_ITEM_ADDED_AT_MS
-                          FROM $PLAYLIST_ITEMS_TABLE
-                         WHERE $PLAYLIST_ITEM_TRACK_ID = ?
-                        """.trimIndent(),
-                        arrayOf(legacy.trackId, target.trackId),
-                    )
+                    foldUserState(this, into = legacy, from = target)
                     delete(TRACKS_TABLE, "$TRACK_ID = ?", arrayOf(target.trackId.toString()))
                 }
                 val updated = update(
@@ -755,7 +715,7 @@ internal class LibraryCatalogStore(
             )
         } else {
             values.put(TRACK_SOURCE_ID, session.sourceId)
-            writableDatabase.insertOrThrow(TRACKS_TABLE, null, values)
+            session.insertedTrackIds += writableDatabase.insertOrThrow(TRACKS_TABLE, null, values)
         }
     }
 
@@ -855,9 +815,9 @@ internal class LibraryCatalogStore(
 
     /**
      * Pairs this folder's rows that hold user data but were not listed by this scan with listed rows
-     * written since (see [planFolderReattachments]). The old row keeps its catalog ID, so favorites,
-     * plays and playlist places stay; it takes the listed file's columns and the listed row goes.
-     * Runs inside the completing transaction.
+     * new since (see [planFolderReattachments]). The old row keeps its catalog ID, so favorites,
+     * plays and playlist places stay; it takes the listed file's columns and any data the listed row
+     * gathered, and the listed row goes. Runs inside the completing transaction.
      */
     private fun reattachFolderTracks(database: SQLiteDatabase, session: SourceScanSession) {
         fun identities(selection: String): List<FolderTrackIdentity> = database.query(
@@ -865,6 +825,7 @@ internal class LibraryCatalogStore(
             arrayOf(
                 TRACK_ID, TRACK_FILE_NAME, TRACK_SIZE_BYTES, TRACK_DATE_MODIFIED_SECONDS,
                 "CASE WHEN $HOLDS_USER_STATE THEN 1 ELSE 0 END", TRACK_SEEN_EPOCH, TRACK_ARTWORK_REVISION,
+                "CASE WHEN $TRACK_REMOTE_ID GLOB '$HIDDEN_FOLDER_PREFIX*' THEN 1 ELSE 0 END",
             ),
             "$TRACK_SOURCE_ID = ? AND $selection",
             arrayOf(session.sourceId, session.epoch.toString()),
@@ -884,6 +845,8 @@ internal class LibraryCatalogStore(
                             seenEpoch = cursor.getLong(5),
                             // A scan writes the artwork revision with every row it inserts or updates.
                             writtenEpoch = cursor.getLong(6),
+                            hidden = cursor.getInt(7) != 0,
+                            insertedThisScan = cursor.getLong(0) in session.insertedTrackIds,
                         ),
                     )
                 }
@@ -893,7 +856,7 @@ internal class LibraryCatalogStore(
         if (missing.none(FolderTrackIdentity::holdsUserState)) return
         val listed = identities("$TRACK_SEEN_EPOCH = ?")
         val copied = scannedTrackColumns.filter { it != TRACK_REMOTE_ID }.joinToString(", ")
-        for ((oldTrackId, listedTrackId) in planFolderReattachments(missing, listed)) {
+        for ((oldTrackId, listedTrackId) in planFolderReattachments(missing, listed, session.epoch)) {
             val remoteId = database.query(
                 TRACKS_TABLE, arrayOf(TRACK_REMOTE_ID), "$TRACK_ID = ?", arrayOf(listedTrackId.toString()),
                 null, null, null,
@@ -904,7 +867,8 @@ internal class LibraryCatalogStore(
                     "WHERE $TRACK_ID = ?",
                 arrayOf(listedTrackId, oldTrackId),
             )
-            // The listed row holds no playlist place, so deleting it cascades to nothing.
+            // A listed row can hold data when it played before this scan completed.
+            foldUserState(database, into = readTrackState(database, oldTrackId), from = readTrackState(database, listedTrackId))
             check(database.delete(TRACKS_TABLE, "$TRACK_ID = ?", arrayOf(listedTrackId.toString())) == 1)
             database.update(
                 TRACKS_TABLE,
@@ -986,6 +950,69 @@ internal class LibraryCatalogStore(
         scanEpoch = getLong(getColumnIndexOrThrow(SOURCE_SCAN_EPOCH)),
         trackCount = trackCount ?: getInt(getColumnIndexOrThrow("track_count")),
     )
+
+    /**
+     * Adds [from]'s favorite, play count, last play and playlist places to [into], for two rows that
+     * turned out to be one file. The caller deletes [from], which removes its own playlist items.
+     */
+    private fun foldUserState(database: SQLiteDatabase, into: TrackMigrationState, from: TrackMigrationState) {
+        val mergedFavorite = into.isFavorite || from.isFavorite
+        val mergedFavoritePosition = when {
+            !mergedFavorite -> null
+            into.isFavorite && from.isFavorite ->
+                listOfNotNull(into.favoritePosition, from.favoritePosition).minOrNull()
+            into.isFavorite -> into.favoritePosition
+            else -> from.favoritePosition
+        }
+        database.update(
+            TRACKS_TABLE,
+            ContentValues().apply {
+                put(TRACK_IS_FAVORITE, if (mergedFavorite) 1 else 0)
+                putNullableLong(TRACK_FAVORITE_POSITION, mergedFavoritePosition)
+                put(
+                    TRACK_PLAY_COUNT,
+                    (into.playCount.toLong() + from.playCount.toLong()).coerceAtMost(Int.MAX_VALUE.toLong()),
+                )
+                put(TRACK_LAST_PLAYED_AT_MS, maxOf(into.lastPlayedAtMs, from.lastPlayedAtMs))
+            },
+            "$TRACK_ID = ?",
+            arrayOf(into.trackId.toString()),
+        )
+        database.execSQL(
+            """
+            INSERT OR IGNORE INTO $PLAYLIST_ITEMS_TABLE (
+                $PLAYLIST_ITEM_PLAYLIST_ID,
+                $PLAYLIST_ITEM_TRACK_ID,
+                $PLAYLIST_ITEM_POSITION,
+                $PLAYLIST_ITEM_ADDED_AT_MS
+            )
+            SELECT $PLAYLIST_ITEM_PLAYLIST_ID, ?, $PLAYLIST_ITEM_POSITION,
+                   $PLAYLIST_ITEM_ADDED_AT_MS
+              FROM $PLAYLIST_ITEMS_TABLE
+             WHERE $PLAYLIST_ITEM_TRACK_ID = ?
+            """.trimIndent(),
+            arrayOf(into.trackId, from.trackId),
+        )
+    }
+
+    private fun readTrackState(database: SQLiteDatabase, trackId: Long): TrackMigrationState = database.query(
+        TRACKS_TABLE,
+        arrayOf(TRACK_ID, TRACK_IS_FAVORITE, TRACK_FAVORITE_POSITION, TRACK_LAST_PLAYED_AT_MS, TRACK_PLAY_COUNT),
+        "$TRACK_ID = ?",
+        arrayOf(trackId.toString()),
+        null,
+        null,
+        null,
+    ).use { cursor ->
+        check(cursor.moveToFirst()) { "A paired row disappeared during its scan" }
+        TrackMigrationState(
+            trackId = cursor.getLong(0),
+            isFavorite = cursor.getInt(1) != 0,
+            favoritePosition = if (cursor.isNull(2)) null else cursor.getLong(2),
+            lastPlayedAtMs = cursor.getLong(3),
+            playCount = cursor.getInt(4),
+        )
+    }
 
     private fun readTrackMigrationState(
         database: SQLiteDatabase,
@@ -1377,16 +1404,24 @@ internal data class FolderTrackIdentity(
     val holdsUserState: Boolean,
     /** The scan epoch that last listed the row. */
     val seenEpoch: Long,
-    /** The scan epoch that last wrote the row. */
+    /** The scan epoch that last wrote the row: inserted it, or rewrote it for a changed fingerprint. */
     val writtenEpoch: Long,
+    /** Hidden by an earlier completed scan that did not list its file. */
+    val hidden: Boolean = false,
+    val insertedThisScan: Boolean = false,
 )
 
 /**
- * Pairs an old folder row (user data, not listed by the completed scan) with a listed row that
- * holds none, when both hold the same file: first by file name, size and modified time (moved to
- * another folder), then by size and modified time (renamed). Duration alone is no identity: an
- * uncompressed rip's duration follows from its size. The listed row must have been written after
- * the old row was last seen, so a file that sat beside it all along keeps its own row.
+ * Pairs an old folder row (user data, not listed by the completed scan) with a listed row when both
+ * hold the same file: first by file name, size and modified time (moved to another folder), then by
+ * size and modified time (renamed). Duration alone is no identity: an uncompressed rip's duration
+ * follows from its size.
+ *
+ * The listed row must be new, so a file that sat beside the old one all along keeps its own row:
+ * inserted by this scan, or by a paused or failed scan since the old row was last seen. A row
+ * rewritten in place also carries a newer written epoch, so one written by this scan counts only
+ * when inserted. A hidden row was missed by a completed scan that already paired whatever was new
+ * then, so only a row inserted by this scan can take it over.
  *
  * A key shared by more than one row on either side, counting rows with or without user data and
  * rows the first key already paired, pairs nothing: the data stays hidden rather than moving to the
@@ -1395,7 +1430,10 @@ internal data class FolderTrackIdentity(
 internal fun planFolderReattachments(
     missing: List<FolderTrackIdentity>,
     listed: List<FolderTrackIdentity>,
+    scanEpoch: Long,
 ): List<Pair<Long, Long>> {
+    fun isNewSince(old: FolderTrackIdentity, new: FolderTrackIdentity) = new.insertedThisScan ||
+        (!old.hidden && new.writtenEpoch > old.seenEpoch && new.writtenEpoch < scanEpoch)
     val keys = listOf<(FolderTrackIdentity) -> Any?>(
         { track -> track.fileName.takeIf(String::isNotEmpty)?.let { Triple(it, track.sizeBytes, track.modifiedSeconds) } },
         { track -> track.sizeBytes to track.modifiedSeconds },
@@ -1410,7 +1448,7 @@ internal fun planFolderReattachments(
         for ((value, olds) in oldRows.groupBy(key)) {
             val old = olds.singleOrNull() ?: continue
             val new = newByKey[value]?.singleOrNull() ?: continue
-            if (value == null || !old.holdsUserState || new.holdsUserState || new.writtenEpoch <= old.seenEpoch) continue
+            if (value == null || !old.holdsUserState || !isNewSince(old, new)) continue
             if (old.trackId in pairedOld || new.trackId in pairedNew) continue
             pairs += old.trackId to new.trackId
             pairedOld += old.trackId
@@ -1423,7 +1461,10 @@ internal fun planFolderReattachments(
 internal data class SourceScanSession(
     val sourceId: String,
     val epoch: Long,
-)
+) {
+    /** Rows this scan inserted, which [planFolderReattachments] tells apart from rows it rewrote. */
+    val insertedTrackIds = HashSet<Long>()
+}
 
 internal class MediaStoreScanSession(
     val session: SourceScanSession,

@@ -36,4 +36,11 @@ class PlayOrderEditsTest {
         assertArrayEquals(intArrayOf(1, 2, 0, 3), shuffled.withMoved(item = 1, anchor = 2, after = false))
         assertArrayEquals(intArrayOf(0, 3, 1, 2), shuffled.withMoved(item = 2, anchor = 1, after = true))
     }
+
+    @Test
+    fun `a repeated move leaves the item where the first one put it`() {
+        // A second tap sent before the queue sheet showed the first move.
+        val once = shuffled.withMoved(item = 0, anchor = 3, after = true)
+        assertArrayEquals(once, once.withMoved(item = 0, anchor = 3, after = true))
+    }
 }

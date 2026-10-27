@@ -6,12 +6,27 @@ import org.junit.Test
 /** #164: which listed folder row takes over an old row's user data. */
 class FolderReattachmentPlanTest {
     /** An old row last seen by scan 1, holding user data unless [data] is false. */
-    private fun old(id: Long, name: String, size: Long, modified: Long, data: Boolean = true) =
-        FolderTrackIdentity(id, name, size, modified, holdsUserState = data, seenEpoch = 1, writtenEpoch = 1)
+    private fun old(id: Long, name: String, size: Long, modified: Long, data: Boolean = true, hidden: Boolean = false) =
+        FolderTrackIdentity(id, name, size, modified, holdsUserState = data, seenEpoch = 1, writtenEpoch = 1, hidden = hidden)
 
-    /** A listed row written by scan [written], holding no user data unless [data] is true. */
-    private fun listed(id: Long, name: String, size: Long, modified: Long, written: Long = 2, data: Boolean = false) =
-        FolderTrackIdentity(id, name, size, modified, holdsUserState = data, seenEpoch = 2, writtenEpoch = written)
+    /**
+     * A row listed by the completing scan 3: inserted by it unless [inserted] is false, else last
+     * written by scan [written]. It holds no user data unless [data] is true.
+     */
+    private fun listed(
+        id: Long,
+        name: String,
+        size: Long,
+        modified: Long,
+        inserted: Boolean = true,
+        written: Long = if (inserted) SCAN else 1,
+        data: Boolean = false,
+    ) = FolderTrackIdentity(
+        id, name, size, modified, holdsUserState = data, seenEpoch = SCAN, writtenEpoch = written, insertedThisScan = inserted,
+    )
+
+    private fun planFolderReattachments(missing: List<FolderTrackIdentity>, listed: List<FolderTrackIdentity>) =
+        planFolderReattachments(missing, listed, scanEpoch = SCAN)
 
     private val none = emptyList<Pair<Long, Long>>()
 
@@ -33,7 +48,21 @@ class FolderReattachmentPlanTest {
     @Test
     fun `a file that sat beside the old row all along keeps its own row`() {
         // An identical copy written in scan 1, when the old row was still listed.
-        assertEquals(none, planFolderReattachments(listOf(old(1, "Aira.flac", 1_000, 100)), listOf(listed(11, "Aira.flac", 1_000, 100, written = 1))))
+        assertEquals(none, planFolderReattachments(listOf(old(1, "Aira.flac", 1_000, 100)), listOf(listed(11, "Aira.flac", 1_000, 100, inserted = false))))
+        // The same copy rewritten in place by this scan, for new tags or a new metadata revision.
+        assertEquals(none, planFolderReattachments(listOf(old(1, "Aira.flac", 1_000, 100)), listOf(listed(11, "Aira.flac", 1_000, 100, inserted = false, written = SCAN))))
+    }
+
+    @Test
+    fun `a file a paused scan inserted pairs, unless a completed scan hid the old row since`() {
+        val moved = listed(11, "Aira.flac", 1_000, 100, inserted = false, written = 2)
+        assertEquals(listOf(1L to 11L), planFolderReattachments(listOf(old(1, "Aira.flac", 1_000, 100)), listOf(moved)))
+        // A hidden row's completed scan already saw what scan 2 wrote; only a new file takes it over.
+        assertEquals(none, planFolderReattachments(listOf(old(1, "Aira.flac", 1_000, 100, hidden = true)), listOf(moved)))
+        assertEquals(
+            listOf(1L to 11L),
+            planFolderReattachments(listOf(old(1, "Aira.flac", 1_000, 100, hidden = true)), listOf(listed(11, "Aira.flac", 1_000, 100))),
+        )
     }
 
     @Test
@@ -58,11 +87,20 @@ class FolderReattachmentPlanTest {
     }
 
     @Test
-    fun `unknown size or time never pairs, and a listed row with user data takes nothing`() {
+    fun `unknown size or time never pairs`() {
         assertEquals(none, planFolderReattachments(
             listOf(old(1, "a.flac", 0, 100), old(2, "b.flac", 1_000, 0)),
             listOf(listed(11, "a.flac", 0, 100), listed(12, "b.flac", 1_000, 0)),
         ))
-        assertEquals(none, planFolderReattachments(listOf(old(1, "a.flac", 1_000, 100)), listOf(listed(11, "a.flac", 1_000, 100, data = true))))
+    }
+
+    @Test
+    fun `a new row that played before the scan completed still pairs`() {
+        // Its data is merged into the old row, which keeps its catalog ID.
+        assertEquals(listOf(1L to 11L), planFolderReattachments(listOf(old(1, "a.flac", 1_000, 100)), listOf(listed(11, "a.flac", 1_000, 100, data = true))))
+    }
+
+    private companion object {
+        const val SCAN = 3L
     }
 }
