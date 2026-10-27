@@ -107,19 +107,43 @@ Play 正式版的时间取决于 Google：2026-10-16 查看时封闭测试已满
 
 发 1.0.1 时：`versionName` 1.0.1、`versionCode` 14；重新生成 Baseline Profile；发布说明；官网更新日志加一条，"已知问题与计划"页和 #163 去掉已修好的条目。
 
-### 2.0 之前（1.0.1 之后的 1.x 版本）
+### 1.1.0：下一个版本（[里程碑 1.1.0](https://github.com/Sumire-no-kai/Vesqen/milestone/6)）
 
-按[版本规则](VERSIONING.md)，只有修复的版本升修订号（1.0.2 等），带新功能的版本升次版本号（1.1.0 等）。
+2026-10-27 所有者决定：1.0.1 之后的修复和两项新功能合成一个 1.1.0，不单独发 1.0.2。1.1.0 之前遇到必须马上修的问题，再单独发 1.0.x。不定日期。按[版本规则](VERSIONING.md)，带新功能的版本升次版本号。
+
+官网"已知问题与计划"和 #163 只列修复；#168、#169 仍不写进 README、官网和 #163（2026-10-25 的决定，2026-10-27 确认不变）。
+
+新功能：
 
 | Issue | 内容 |
 | --- | --- |
-| [#159](https://github.com/Sumire-no-kai/Vesqen/issues/159)、[#139](https://github.com/Sumire-no-kai/Vesqen/issues/139) | 媒体库重建时的匹配，以及对不上的旧记录让用户选择归属。都要改扫描流程，一起做 |
-| [#161](https://github.com/Sumire-no-kai/Vesqen/issues/161) | 中文"高级功能"和"高级链路"撞名，先由所有者定新名称 |
-| [#165](https://github.com/Sumire-no-kai/Vesqen/issues/165) | 审计里"之后处理"的条目按影响挑选；其中多个 SQLiteOpenHelper 必须在下一次改表结构之前合成一个，A36（两个渠道的版本号和降级）要在 2.0 之前定 |
+| [#169](https://github.com/Sumire-no-kai/Vesqen/issues/169) | Now 页显示本地歌词：手动导入、同名 `.lrc`、内嵌标签，完全离线（PRD"2026-10-24 本地歌词"）。1.1.0 里工作量最大的一项 |
 | [#168](https://github.com/Sumire-no-kai/Vesqen/issues/168) | "艺术家"页把几位艺术家合写的标签按分隔符拆开分组，只在显示层计算，不改表结构（PRD"2026-10-24 多位艺术家拆分"） |
-| [#169](https://github.com/Sumire-no-kai/Vesqen/issues/169) | Now 页显示本地歌词：手动导入、同名 `.lrc`、内嵌标签，完全离线（PRD"2026-10-24 本地歌词"） |
 
-#168、#169 暂不写进 README、官网"已知问题与计划"和 #163（2026-10-25 所有者决定）。
+修复和优化：
+
+| Issue | 内容 |
+| --- | --- |
+| [#165](https://github.com/Sumire-no-kai/Vesqen/issues/165) 审计 | 最多四个 SQLiteOpenHelper 打开同一个数据库，合成一个。下一次改表结构之前必须完成，所以排在 #139 前面 |
+| [#159](https://github.com/Sumire-no-kai/Vesqen/issues/159)、[#139](https://github.com/Sumire-no-kai/Vesqen/issues/139) | 媒体库重建时的匹配，以及对不上的旧记录让用户选择归属。都要改扫描流程，一起做。#139 开工前要先定：保留多久，"待选择"的状态存在哪里（可能要改表结构），合并规则，入口和文案，范围 |
+| [#170](https://github.com/Sumire-no-kai/Vesqen/issues/170) F8–F10 | 随机播放改用自定义 `ShuffleOrder`：队列编辑没有 masking、每次插入重建两次平台队列、masking 时队列短暂按列表顺序显示。同时评估进程被结束后保留随机顺序（1.0.1 的已知限制） |
+| 审查遗留（[#136](https://github.com/Sumire-no-kai/Vesqen/issues/136)、[#143](https://github.com/Sumire-no-kai/Vesqen/issues/143)、[#156](https://github.com/Sumire-no-kai/Vesqen/issues/156)、#165） | 先做会丢数据或让操作没有反应的：暂停后进程被结束，恢复时同一首多算一次播放；恢复队列时暂时读不到的曲目被永久去掉；每 5 秒的进度检查点重写整个队列；数据库损坏时默认直接删除文件；扫描期间整个曲库被锁住（#136 R12）；扫描期间的媒体变化让很长的扫描一直完不成（R15）；详情页"播放"在播放次数更新后没有反应（R28）；链路页经过别的页面再回来时丢了返回目标（#156 V25）。R13、R14、R18、R22、#143 Q15、#156 V24 先核实是否已被后来的修复覆盖 |
+
+要所有者先定的：
+
+- A36（#165）：两个渠道共用包名和版本号序列。1.1.0 如果改表结构（#139），Play 版还停在 1.0.x，以后 Play 的 1.0.x 用更高的版本号覆盖安装 GitHub 1.1.0 时打不开数据库。改表结构之前要定版本号区间和降级处理；收费开关按渠道分开可以留到 2.0 之前。
+- [#161](https://github.com/Sumire-no-kai/Vesqen/issues/161)：中文"高级功能"和"高级链路"撞名，名称定了就随 1.1.0 改；最迟在 2.0 开始收费之前。
+- 新建队列时是否保留当前的随机和循环模式（#165 播放）；"清空队列"是否加确认（#165 列入之后处理，和 #136 R7"保持一次点击"的决定冲突）；迷你播放条标题在 320 dp、200% 字号下改跑马灯还是两行（#143 Q13）。
+
+发 1.1.0 时：`versionName` 1.1.0、`versionCode` 15；重新生成 Baseline Profile；发布说明；官网更新日志，"已知问题与计划"页和 #163 去掉已修好的条目；iQOO 和 Honor 从 1.0.1 覆盖升级验收。
+
+### 1.1.0 之后、2.0 之前
+
+| Issue | 内容 |
+| --- | --- |
+| [#147](https://github.com/Sumire-no-kai/Vesqen/issues/147) | 按音质筛选。入口、读不到采样率的曲目、有损格式的条件都没定，暂不排期 |
+| PRD | 睡眠定时器（PRD"稳定版后续的小型功能"），还没有 issue |
+| #136、#143、#156、#165 | 1.1.0 没挑中的审查遗留：链路和遥测的判断与文案、界面和无障碍的小问题、CI 跑设备测试和编译 `:baselineprofile`、`UsbOutputCoordinator` 单元测试、依赖校验、架构整理 |
 
 ### Google Play 正式版
 
