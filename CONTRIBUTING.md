@@ -38,6 +38,7 @@ On Windows, use `.\gradlew.bat`. Add unit tests for core logic and instrumentati
 - Don't commit `local.properties`, IDE state, SDKs, build outputs, music files, signing keys, device identifiers or private filesystem paths.
 - Keep the evidence levels separate: `SYSTEM MIXED`, `DIRECT SUPPORTED`, `BIT-PERFECT AVAILABLE`, `BIT-PERFECT REQUESTED`, `BIT-PERFECT ACTIVE` and `BIT-PERFECT VERIFIED`. No change may present a weaker level as a stronger one.
 - In the pull request, explain the test coverage and any device-dependent behavior you couldn't verify.
+- Contributions written with AI coding tools are welcome. Review, understand and test them as you would your own code; the same rules apply.
 
 Releases, tags and signing are handled by the maintainer ([beta checklist](docs/M4_BETA_RELEASE.md), [release signing](docs/RELEASE_SIGNING.md)).
 
