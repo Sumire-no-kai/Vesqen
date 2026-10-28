@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen.playback
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.core.content.edit
 import io.github.sumirenokai.vesqen.library.AudioTrack
 
@@ -24,11 +25,25 @@ internal data class RestoredPlaybackQueue(
     val repeatMode: PlaybackRepeatMode,
 )
 
+/**
+ * The queue and the cursor live in two preference files (#165). SharedPreferences rewrites its whole
+ * file on every change, so a five-second checkpoint in the queue's file rewrote the queue each time.
+ * The queue's file keeps the full state as of the last queue change, which is all that releases
+ * before 1.1.0 read. Later cursors go to the small progress file, which names the queue file's state
+ * it was written over and is ignored once that file was changed by anything else.
+ */
 internal class PlaybackStateStore(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences(
         PREFERENCES_NAME,
         Context.MODE_PRIVATE,
     )
+    private val progressPreferences = context.applicationContext.getSharedPreferences(
+        PROGRESS_PREFERENCES_NAME,
+        Context.MODE_PRIVATE,
+    )
+
+    /** [queueFileSignature] as of this store's last queue save, so a checkpoint does not hash the queue. */
+    private var savedQueueSignature: Int? = null
 
     fun load(): PersistedPlaybackState? {
         val queueIds = preferences.getString(KEY_QUEUE_IDS, null)
@@ -36,20 +51,21 @@ internal class PlaybackStateStore(context: Context) {
             ?.mapNotNull(String::toLongOrNull)
             ?.takeIf(List<Long>::isNotEmpty)
             ?: return null
+        val cursor = currentCursorPreferences()
         val repeatMode = runCatching {
             PlaybackRepeatMode.valueOf(
-                preferences.getString(KEY_REPEAT_MODE, PlaybackRepeatMode.OFF.name)
+                cursor.getString(KEY_REPEAT_MODE, PlaybackRepeatMode.OFF.name)
                     ?: PlaybackRepeatMode.OFF.name,
             )
         }.getOrDefault(PlaybackRepeatMode.OFF)
         return PersistedPlaybackState(
             queueTrackIds = queueIds,
-            currentTrackId = preferences.getLong(KEY_CURRENT_TRACK_ID, NO_TRACK_ID).takeIf { it != NO_TRACK_ID },
-            positionMs = preferences.getLong(KEY_POSITION_MS, 0).coerceAtLeast(0),
-            shuffleEnabled = preferences.getBoolean(KEY_SHUFFLE_ENABLED, false),
+            currentTrackId = cursor.getLong(KEY_CURRENT_TRACK_ID, NO_TRACK_ID).takeIf { it != NO_TRACK_ID },
+            positionMs = cursor.getLong(KEY_POSITION_MS, 0).coerceAtLeast(0),
+            shuffleEnabled = cursor.getBoolean(KEY_SHUFFLE_ENABLED, false),
             repeatMode = repeatMode,
-            currentQueueIndex = preferences.getInt(KEY_CURRENT_QUEUE_INDEX, -1).takeIf { it >= 0 },
-            queueEnded = if (preferences.contains(KEY_QUEUE_ENDED)) preferences.getBoolean(KEY_QUEUE_ENDED, false) else null,
+            currentQueueIndex = cursor.getInt(KEY_CURRENT_QUEUE_INDEX, -1).takeIf { it >= 0 },
+            queueEnded = if (cursor.contains(KEY_QUEUE_ENDED)) cursor.getBoolean(KEY_QUEUE_ENDED, false) else null,
         )
     }
 
@@ -66,18 +82,24 @@ internal class PlaybackStateStore(context: Context) {
         }
         preferences.edit {
             putString(KEY_QUEUE_IDS, state.queueTrackIds.joinToString(","))
-            putLong(KEY_CURRENT_TRACK_ID, state.currentTrackId ?: NO_TRACK_ID)
-            putInt(KEY_CURRENT_QUEUE_INDEX, state.currentQueueIndex ?: -1)
-            putLong(KEY_POSITION_MS, state.positionMs.coerceAtLeast(0))
-            putBoolean(KEY_SHUFFLE_ENABLED, state.shuffleEnabled)
-            putString(KEY_REPEAT_MODE, state.repeatMode.name)
-            // Only states built without the field (tests, a 1.0.0 save loaded and saved back) lack it;
-            // the state keeper always knows it. Unknown stays unknown, so the position rule still applies.
-            if (state.queueEnded == null) remove(KEY_QUEUE_ENDED) else putBoolean(KEY_QUEUE_ENDED, state.queueEnded)
+            putCursor(
+                currentTrackId = state.currentTrackId,
+                currentQueueIndex = state.currentQueueIndex ?: -1,
+                positionMs = state.positionMs,
+                shuffleEnabled = state.shuffleEnabled,
+                repeatMode = state.repeatMode,
+                // Only states built without the field (tests, a 1.0.0 save loaded and saved back) lack
+                // it; the state keeper always knows it. Unknown stays unknown, so the position rule
+                // still applies.
+                queueEnded = state.queueEnded,
+            )
         }
+        // The queue's file now holds this cursor; an older progress file must no longer apply.
+        savedQueueSignature = queueFileSignature()
+        progressPreferences.edit { clear() }
     }
 
-    /** Update only the scalar recovery cursor; the cached queue string is left untouched. */
+    /** Update only the cursor, in the progress file; the queue's file is left untouched. */
     fun saveProgress(
         currentTrackId: Long?,
         positionMs: Long,
@@ -86,22 +108,62 @@ internal class PlaybackStateStore(context: Context) {
         currentQueueIndex: Int,
         queueEnded: Boolean,
     ) {
-        preferences.edit {
-            putLong(KEY_CURRENT_TRACK_ID, currentTrackId ?: NO_TRACK_ID)
-            putInt(KEY_CURRENT_QUEUE_INDEX, currentQueueIndex)
-            putLong(KEY_POSITION_MS, positionMs.coerceAtLeast(0))
-            putBoolean(KEY_SHUFFLE_ENABLED, shuffleEnabled)
-            putString(KEY_REPEAT_MODE, repeatMode.name)
-            putBoolean(KEY_QUEUE_ENDED, queueEnded)
+        if (!hasSavedQueue()) return
+        val base = savedQueueSignature ?: queueFileSignature().also { savedQueueSignature = it }
+        progressPreferences.edit {
+            putInt(KEY_QUEUE_FILE_SIGNATURE, base)
+            putCursor(currentTrackId, currentQueueIndex, positionMs, shuffleEnabled, repeatMode, queueEnded)
         }
     }
 
     fun clear() {
+        savedQueueSignature = null
         preferences.edit { clear() }
+        progressPreferences.edit { clear() }
+    }
+
+    /** The progress file when it was written over the queue's file as it is now, else the queue's file. */
+    private fun currentCursorPreferences(): SharedPreferences {
+        val progressBase = progressPreferences.getInt(KEY_QUEUE_FILE_SIGNATURE, 0)
+            .takeIf { progressPreferences.contains(KEY_QUEUE_FILE_SIGNATURE) }
+            ?: return preferences
+        return if (progressBase == queueFileSignature()) progressPreferences else preferences
+    }
+
+    /**
+     * Identifies what the queue's file holds. A release before 1.1.0 writes its cursor there on every
+     * change (after a downgrade, say), which changes this, so a progress file from before is not
+     * applied over that newer state.
+     */
+    private fun queueFileSignature(): Int = listOf(
+        preferences.getString(KEY_QUEUE_IDS, null),
+        preferences.getLong(KEY_CURRENT_TRACK_ID, NO_TRACK_ID),
+        preferences.getInt(KEY_CURRENT_QUEUE_INDEX, -1),
+        preferences.getLong(KEY_POSITION_MS, 0),
+        preferences.getBoolean(KEY_SHUFFLE_ENABLED, false),
+        preferences.getString(KEY_REPEAT_MODE, null),
+        if (preferences.contains(KEY_QUEUE_ENDED)) preferences.getBoolean(KEY_QUEUE_ENDED, false) else null,
+    ).hashCode()
+
+    private fun SharedPreferences.Editor.putCursor(
+        currentTrackId: Long?,
+        currentQueueIndex: Int,
+        positionMs: Long,
+        shuffleEnabled: Boolean,
+        repeatMode: PlaybackRepeatMode,
+        queueEnded: Boolean?,
+    ) {
+        putLong(KEY_CURRENT_TRACK_ID, currentTrackId ?: NO_TRACK_ID)
+        putInt(KEY_CURRENT_QUEUE_INDEX, currentQueueIndex)
+        putLong(KEY_POSITION_MS, positionMs.coerceAtLeast(0))
+        putBoolean(KEY_SHUFFLE_ENABLED, shuffleEnabled)
+        putString(KEY_REPEAT_MODE, repeatMode.name)
+        if (queueEnded == null) remove(KEY_QUEUE_ENDED) else putBoolean(KEY_QUEUE_ENDED, queueEnded)
     }
 
     private companion object {
         const val PREFERENCES_NAME = "playback-state"
+        const val PROGRESS_PREFERENCES_NAME = "playback-progress"
         const val KEY_QUEUE_IDS = "queue_track_ids"
         const val KEY_CURRENT_TRACK_ID = "current_track_id"
         const val KEY_CURRENT_QUEUE_INDEX = "current_queue_index"
@@ -109,6 +171,7 @@ internal class PlaybackStateStore(context: Context) {
         const val KEY_SHUFFLE_ENABLED = "shuffle_enabled"
         const val KEY_REPEAT_MODE = "repeat_mode"
         const val KEY_QUEUE_ENDED = "queue_ended"
+        const val KEY_QUEUE_FILE_SIGNATURE = "queue_file_signature"
         const val NO_TRACK_ID = Long.MIN_VALUE
     }
 }

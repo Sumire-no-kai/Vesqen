@@ -20,17 +20,21 @@ import org.junit.Test
 
 class PlaybackStateStoreDeviceTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
-    private val preferencesName = "playback-state-test-${UUID.randomUUID()}"
-    private val preferences = context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
+    private val testPrefix = "playback-state-test-${UUID.randomUUID()}"
+    private val usedPreferences = mutableSetOf<String>()
     private val isolatedContext = object : ContextWrapper(context) {
         override fun getApplicationContext(): Context = this
 
-        override fun getSharedPreferences(name: String, mode: Int): SharedPreferences = preferences
+        override fun getSharedPreferences(name: String, mode: Int): SharedPreferences =
+            context.getSharedPreferences("$testPrefix-$name".also(usedPreferences::add), mode)
     }
+
+    /** The queue's file, as the store names it. */
+    private val preferences = isolatedContext.getSharedPreferences("playback-state", Context.MODE_PRIVATE)
 
     @After
     fun removeTestPreferences() {
-        context.deleteSharedPreferences(preferencesName)
+        usedPreferences.forEach(context::deleteSharedPreferences)
     }
 
     @Test
@@ -129,6 +133,89 @@ class PlaybackStateStoreDeviceTest {
             }
             fixtures.deleteRecursively()
         }
+    }
+
+    @Test
+    fun aProgressCheckpointLeavesTheQueueFileUntouched() {
+        // SharedPreferences rewrites a whole file on any change, so a cursor kept next to a long
+        // queue rewrote the queue every five seconds (#165).
+        val store = PlaybackStateStore(isolatedContext)
+        store.save(
+            PersistedPlaybackState(
+                queueTrackIds = (1L..5_000L).toList(),
+                currentTrackId = 1,
+                currentQueueIndex = 0,
+                positionMs = 0,
+                shuffleEnabled = false,
+                repeatMode = PlaybackRepeatMode.OFF,
+                queueEnded = false,
+            ),
+        )
+        val queueFileChanges = mutableListOf<String?>()
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key -> queueFileChanges += key }
+        preferences.registerOnSharedPreferenceChangeListener(listener)
+        try {
+            for (bucket in 1..3) {
+                store.saveProgress(
+                    currentTrackId = 2,
+                    currentQueueIndex = 1,
+                    positionMs = bucket * 5_000L,
+                    shuffleEnabled = false,
+                    repeatMode = PlaybackRepeatMode.OFF,
+                    queueEnded = false,
+                )
+            }
+        } finally {
+            preferences.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+
+        assertEquals(emptyList<String?>(), queueFileChanges)
+        val loaded = PlaybackStateStore(isolatedContext).load()!!
+        assertEquals(5_000, loaded.queueTrackIds.size)
+        assertEquals(2L, loaded.currentTrackId)
+        assertEquals(1, loaded.currentQueueIndex)
+        assertEquals(15_000, loaded.positionMs)
+    }
+
+    @Test
+    fun aCursorFromBeforeAnOlderReleaseWroteTheQueueFileIsIgnored() {
+        val store = PlaybackStateStore(isolatedContext)
+        store.save(
+            PersistedPlaybackState(
+                queueTrackIds = listOf(1, 2, 3),
+                currentTrackId = 1,
+                currentQueueIndex = 0,
+                positionMs = 0,
+                shuffleEnabled = false,
+                repeatMode = PlaybackRepeatMode.OFF,
+                queueEnded = false,
+            ),
+        )
+        store.saveProgress(
+            currentTrackId = 3,
+            currentQueueIndex = 2,
+            positionMs = 40_000,
+            shuffleEnabled = false,
+            repeatMode = PlaybackRepeatMode.OFF,
+            queueEnded = false,
+        )
+        // A release before 1.1.0 (after a downgrade) keeps its cursor in the queue's file only.
+        preferences.edit()
+            .putLong("current_track_id", 2)
+            .putInt("current_queue_index", 1)
+            .putLong("position_ms", 7_000)
+            .commit()
+
+        val loaded = PlaybackStateStore(isolatedContext).load()!!
+        assertEquals(listOf(1L, 2L, 3L), loaded.queueTrackIds)
+        assertEquals(2L, loaded.currentTrackId)
+        assertEquals(1, loaded.currentQueueIndex)
+        assertEquals(7_000, loaded.positionMs)
+        // A queue saved later replaces the cursor in both files.
+        store.save(loaded.copy(queueTrackIds = listOf(3, 2), currentTrackId = 3, currentQueueIndex = 0, positionMs = 0))
+        assertEquals(0, PlaybackStateStore(isolatedContext).load()!!.positionMs)
+        store.clear()
+        assertNull(PlaybackStateStore(isolatedContext).load())
     }
 
     private fun main(action: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(action)
