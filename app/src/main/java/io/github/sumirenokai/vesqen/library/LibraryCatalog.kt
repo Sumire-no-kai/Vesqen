@@ -423,7 +423,9 @@ internal class AndroidLibraryCatalog(
          * the first to complete prunes every row the other marked with its newer epoch, and folder rows
          * are deleted with their favorites and playlist entries. Scans therefore take this lock before
          * their own catalog's gate; other operations keep only the gate, so the playback service's
-         * reads never wait for a scan in another catalog.
+         * reads never wait for a whole scan in another catalog. All catalogs share the application's
+         * one database helper (#165), though: where Android gives it a single connection, a read can
+         * still wait for one of that scan's statements or transactions, such as its completion's prune.
          */
         val processScanLock = Mutex()
     }
