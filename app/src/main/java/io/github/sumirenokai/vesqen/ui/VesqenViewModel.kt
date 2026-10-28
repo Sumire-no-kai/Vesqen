@@ -57,7 +57,8 @@ data class VesqenUiState(
 )
 
 class VesqenViewModel(application: Application) : AndroidViewModel(application) {
-    private val catalog: LibraryCatalog = AndroidLibraryCatalog(application)
+    private val catalog: LibraryCatalog =
+        AndroidLibraryCatalog(application, (application as VesqenApplication).libraryCatalogStore)
     private val cachedLibraryReader = LibrarySnapshotReader()
     private var libraryRefreshEpoch = 0L
     private var playbackController: PlaybackController? = null

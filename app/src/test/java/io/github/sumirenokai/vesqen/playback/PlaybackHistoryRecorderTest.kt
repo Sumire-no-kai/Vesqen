@@ -39,7 +39,6 @@ class PlaybackHistoryRecorderTest {
         assertEquals(listOf(1L to 456L, 2L to 456L), backend.attempts.toList())
 
         ownerJob.cancel()
-        withTimeout(2_000) { backend.closed.await() }
     }
 
     @Test
@@ -67,14 +66,12 @@ class PlaybackHistoryRecorderTest {
         assertTrue(backend.attempts.size <= capacity + 1)
 
         ownerJob.cancel()
-        withTimeout(2_000) { backend.closed.await() }
     }
 
     private class FakePlaybackHistoryBackend(
         private val failTrackId: Long,
     ) : PlaybackHistoryBackend {
         val attempts = Collections.synchronizedList(mutableListOf<Pair<Long, Long>>())
-        val closed = CompletableDeferred<Unit>()
 
         override suspend fun recordPlayback(
             trackId: Long,
@@ -84,10 +81,6 @@ class PlaybackHistoryRecorderTest {
             if (trackId == failTrackId) error("simulated write failure")
             return PlaybackHistoryUpdate(trackId, playCount = 1, lastPlayedAtMs = playedAtMs)
         }
-
-        override fun close() {
-            closed.complete(Unit)
-        }
     }
 
     private class BlockingPlaybackHistoryBackend : PlaybackHistoryBackend {
@@ -95,7 +88,6 @@ class PlaybackHistoryRecorderTest {
         val firstWriteStarted = CompletableDeferred<Unit>()
         val releaseFirstWrite = CompletableDeferred<Unit>()
         val lastWriteCompleted = CompletableDeferred<Unit>()
-        val closed = CompletableDeferred<Unit>()
 
         override suspend fun recordPlayback(
             trackId: Long,
@@ -108,10 +100,6 @@ class PlaybackHistoryRecorderTest {
             }
             if (trackId == 6L) lastWriteCompleted.complete(Unit)
             return PlaybackHistoryUpdate(trackId, playCount = 1, lastPlayedAtMs = playedAtMs)
-        }
-
-        override fun close() {
-            closed.complete(Unit)
         }
     }
 }

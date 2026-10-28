@@ -1,8 +1,6 @@
 package io.github.sumirenokai.vesqen.playback
 
-import android.content.Context
 import io.github.sumirenokai.vesqen.library.LibraryCatalogStore
-import java.io.Closeable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,9 +23,10 @@ internal class PlaybackHistoryRecorder(
     private val clock: () -> Long = System::currentTimeMillis,
     requestCapacity: Int = PLAYBACK_HISTORY_REQUEST_CAPACITY,
 ) {
-    constructor(context: Context, scope: CoroutineScope) : this(
+    /** [store] is the application's one database helper (#165), shared with the catalogs. */
+    constructor(store: LibraryCatalogStore, scope: CoroutineScope) : this(
         scope = scope,
-        backend = AndroidPlaybackHistoryBackend(context.applicationContext),
+        backend = AndroidPlaybackHistoryBackend(store),
     )
 
     private val requests = Channel<PlaybackHistoryRequest>(
@@ -42,26 +41,20 @@ internal class PlaybackHistoryRecorder(
 
     init {
         scope.launch(Dispatchers.IO) {
-            try {
-                for (request in requests) {
-                    try {
-                        backend.recordPlayback(request.trackId, request.playedAtMs)?.let { update ->
-                            // UI refresh is secondary to the durable write. A slow catalog screen
-                            // must never suspend this application-lifetime writer and cause the
-                            // playback-facing request queue to overflow.
-                            _recordedUpdates.tryEmit(update)
-                        }
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        // Listening history is secondary state. A locked/corrupt store must never
-                        // take down the MediaSession or prevent a later transition from retrying.
+            for (request in requests) {
+                try {
+                    backend.recordPlayback(request.trackId, request.playedAtMs)?.let { update ->
+                        // UI refresh is secondary to the durable write. A slow catalog screen
+                        // must never suspend this application-lifetime writer and cause the
+                        // playback-facing request queue to overflow.
+                        _recordedUpdates.tryEmit(update)
                     }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // Listening history is secondary state. A locked/corrupt store must never
+                    // take down the MediaSession or prevent a later transition from retrying.
                 }
-            } finally {
-                // Process teardown and test-scope cancellation must not turn a secondary history
-                // store close failure into an uncaught application-scope coroutine failure.
-                runCatching(backend::close)
             }
         }
     }
@@ -76,13 +69,11 @@ internal class PlaybackHistoryRecorder(
 
 internal const val PLAYBACK_HISTORY_REQUEST_CAPACITY = 64
 
-internal interface PlaybackHistoryBackend : Closeable {
+internal interface PlaybackHistoryBackend {
     suspend fun recordPlayback(trackId: Long, playedAtMs: Long): PlaybackHistoryUpdate?
 }
 
-private class AndroidPlaybackHistoryBackend(context: Context) : PlaybackHistoryBackend {
-    private val store = LibraryCatalogStore(context)
-
+private class AndroidPlaybackHistoryBackend(private val store: LibraryCatalogStore) : PlaybackHistoryBackend {
     override suspend fun recordPlayback(trackId: Long, playedAtMs: Long): PlaybackHistoryUpdate? =
         store.recordPlayback(trackId, playedAtMs)?.let { history ->
             PlaybackHistoryUpdate(
@@ -91,10 +82,6 @@ private class AndroidPlaybackHistoryBackend(context: Context) : PlaybackHistoryB
                 lastPlayedAtMs = history.lastPlayedAtMs,
             )
         }
-
-    override fun close() {
-        store.close()
-    }
 }
 
 private data class PlaybackHistoryRequest(

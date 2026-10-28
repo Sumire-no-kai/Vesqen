@@ -90,7 +90,10 @@ class PlaybackService : MediaSessionService() {
         loadSavedState = { playbackStateStore.load() },
         readPlayableTracks = {
             val catalog = withContext(Dispatchers.Main.immediate) {
-                resumptionCatalog ?: AndroidLibraryCatalog(this@PlaybackService).also { resumptionCatalog = it }
+                resumptionCatalog ?: AndroidLibraryCatalog(
+                    this@PlaybackService,
+                    (application as VesqenApplication).libraryCatalogStore,
+                ).also { resumptionCatalog = it }
             }
             // The Library lists device music only while this permission is granted.
             catalog.playableTracks(

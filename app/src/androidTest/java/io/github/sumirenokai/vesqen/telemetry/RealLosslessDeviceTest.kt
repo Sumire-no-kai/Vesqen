@@ -42,7 +42,7 @@ class RealLosslessDeviceTest {
         val manifest = JSONArray(File(artifacts, "audio-manifest.json").readText())
         require(manifest.length() > 0)
         File(artifacts, "phase.txt").writeText("RUNNING")
-        val catalog = AndroidLibraryCatalog(app)
+        val catalog = AndroidLibraryCatalog(app, app.libraryCatalogStore)
         try {
             catalog.refresh(includeDeviceLibrary = true, onProgress = {})
             val catalogTracks = catalog.snapshot(includeDeviceLibrary = true).tracks
