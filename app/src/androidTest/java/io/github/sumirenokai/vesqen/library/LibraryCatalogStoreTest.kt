@@ -852,6 +852,30 @@ class LibraryCatalogStoreTest {
         assertTrue(store.readDisplacedTrackIds().isEmpty())
     }
 
+    @Test
+    fun aScanKeepsARowItsChangingCursorSkippedAndTakesARepeatedRowOnce() = withStore("library-shifting-cursor") { store ->
+        // MediaStore refills a long cursor by querying again. A file removed earlier in the order
+        // during the scan made it skip B (#136 R14); one added made it offer D twice.
+        store.scanMediaStore(songA.at(1), songB.at(2), songC.at(3))
+        val before = store.tracksByTitle()
+        val songD = MediaStoreFile(title = "D", fileName = "d.flac", sizeBytes = 40_000, durationMs = 500_000)
+        val scan = store.beginMediaStoreScan()
+        listOf(songA.at(1), songD.at(4), songD.at(4)).forEach { candidate ->
+            if (scan.firstOffer(candidate) && !store.markSeenIfUnchanged(scan, candidate)) {
+                store.upsertMediaStoreTrack(scan, candidate)
+            }
+        }
+        // MediaStore still lists B; C was deleted.
+        store.keepTracksStillListed(scan, setOf(songA.at(1), songB.at(2), songD.at(4)).mapTo(HashSet()) { it.remoteId })
+        store.completeMediaStoreScan(scan.session, generation = null, scannedVolumeNames = listOf(PRIMARY_VOLUME))
+
+        val after = store.tracksByTitle()
+        assertEquals(setOf("A", "B", "D"), after.keys)
+        assertEquals(before.getValue("A").id, after.getValue("A").id)
+        assertEquals(before.getValue("B").id, after.getValue("B").id)
+        assertEquals(1, store.readTracks(listOf(LibrarySourceId.DEVICE)).count { it.title == "D" })
+    }
+
     private fun assertEditKeepsRow(edit: (MediaStoreFile) -> MediaStoreFile) = withStore("library-edit") { store ->
         store.scanMediaStore(songA.at(1))
         val a = store.readTracks(listOf(LibrarySourceId.DEVICE)).single()

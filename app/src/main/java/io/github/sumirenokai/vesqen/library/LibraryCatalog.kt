@@ -250,16 +250,20 @@ internal class AndroidLibraryCatalog(
             scope = scanScope,
             shouldPause = scanGate::isPaused,
         ) { candidate ->
-            if (!store.markSeenIfUnchanged(scan, candidate)) {
+            if (scan.firstOffer(candidate) && !store.markSeenIfUnchanged(scan, candidate)) {
                 store.upsertMediaStoreTrack(scan, metadataReader.enrich(candidate))
             }
         }
-        if (
-            iteration.completed &&
-            !mediaStoreScanCanCommit(iteration, scanScope, mediaStore.currentScanScope())
-        ) {
-            store.markSourceInterrupted(source.id)
-            return SourceScanOutcome.INTERRUPTED
+        if (iteration.completed) {
+            val finalScope = mediaStore.currentScanScope()
+            if (!mediaStoreScanCanCommit(iteration, scanScope, finalScope)) {
+                store.markSourceInterrupted(source.id)
+                return SourceScanOutcome.INTERRUPTED
+            }
+            // Before Android 11 there is no generation to show that nothing changed.
+            if (finalScope.generation == null || finalScope.generation != scanScope.generation) {
+                store.keepTracksStillListed(scan, mediaStore.listFiles(scanScope).mapTo(HashSet()) { it.remoteId })
+            }
         }
         finishIteration(
             source = source,

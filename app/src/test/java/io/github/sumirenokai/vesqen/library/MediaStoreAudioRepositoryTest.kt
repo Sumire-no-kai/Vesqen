@@ -95,21 +95,34 @@ class MediaStoreAudioRepositoryTest {
     }
 
     @Test
-    fun `completed scan can commit only while volume generations remain unchanged`() {
+    fun `completed scan can commit only while volumes and their databases remain`() {
         val initialScope = MediaStoreScanScope(
             volumeNames = listOf("external_primary"),
             generation = "generation-1",
+            databaseVersions = mapOf("external_primary" to "version-1"),
         )
         val completed = ScanIterationResult(completed = true, processedTrackCount = 3)
 
         assertTrue(mediaStoreScanCanCommit(completed, initialScope, initialScope))
-        assertFalse(
+        // A photo or a screenshot during a long scan no longer interrupts it (#136 R15).
+        assertTrue(
             mediaStoreScanCanCommit(
                 completed,
                 initialScope,
                 initialScope.copy(generation = "generation-2"),
             ),
         )
+        // A rebuilt MediaStore can list nothing yet for files it still holds.
+        assertFalse(
+            mediaStoreScanCanCommit(
+                completed,
+                initialScope,
+                initialScope.copy(generation = "generation-2", databaseVersions = mapOf("external_primary" to "version-2")),
+            ),
+        )
+        // Before Android 11 only the volumes are known.
+        val legacyScope = MediaStoreScanScope(volumeNames = listOf("external"), generation = null)
+        assertTrue(mediaStoreScanCanCommit(completed, legacyScope, legacyScope))
         assertFalse(
             mediaStoreScanCanCommit(
                 completed,
