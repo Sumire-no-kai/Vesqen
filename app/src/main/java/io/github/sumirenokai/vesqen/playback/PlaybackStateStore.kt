@@ -81,15 +81,16 @@ internal class PlaybackStateStore(context: Context) {
                     ?: PlaybackRepeatMode.OFF.name,
             )
         }.getOrDefault(PlaybackRepeatMode.OFF)
+        val currentTrackId = cursor.getLong(KEY_CURRENT_TRACK_ID, NO_TRACK_ID).takeIf { it != NO_TRACK_ID }
         return PersistedPlaybackState(
             queueTrackIds = queueIds,
-            currentTrackId = cursor.getLong(KEY_CURRENT_TRACK_ID, NO_TRACK_ID).takeIf { it != NO_TRACK_ID },
+            currentTrackId = currentTrackId,
             positionMs = cursor.getLong(KEY_POSITION_MS, 0).coerceAtLeast(0),
             shuffleEnabled = cursor.getBoolean(KEY_SHUFFLE_ENABLED, false),
             repeatMode = repeatMode,
             currentQueueIndex = cursor.getInt(KEY_CURRENT_QUEUE_INDEX, -1).takeIf { it >= 0 },
             queueEnded = if (cursor.contains(KEY_QUEUE_ENDED)) cursor.getBoolean(KEY_QUEUE_ENDED, false) else null,
-            countedOccurrenceId = cursor.getString(KEY_COUNTED_OCCURRENCE_ID, null),
+            countedOccurrenceId = cursor.countedOccurrenceId(currentTrackId),
         )
     }
 
@@ -98,7 +99,7 @@ internal class PlaybackStateStore(context: Context) {
         if (!hasSavedQueue()) return null
         val cursor = currentCursorPreferences()
         val trackId = cursor.getLong(KEY_CURRENT_TRACK_ID, NO_TRACK_ID).takeIf { it != NO_TRACK_ID } ?: return null
-        val occurrenceId = cursor.getString(KEY_COUNTED_OCCURRENCE_ID, null) ?: return null
+        val occurrenceId = cursor.countedOccurrenceId(trackId) ?: return null
         return CountedPlayback(trackId, occurrenceId)
     }
 
@@ -233,8 +234,23 @@ internal class PlaybackStateStore(context: Context) {
         putBoolean(KEY_SHUFFLE_ENABLED, shuffleEnabled)
         putString(KEY_REPEAT_MODE, repeatMode.name)
         if (queueEnded == null) remove(KEY_QUEUE_ENDED) else putBoolean(KEY_QUEUE_ENDED, queueEnded)
-        if (countedOccurrenceId == null) remove(KEY_COUNTED_OCCURRENCE_ID) else putString(KEY_COUNTED_OCCURRENCE_ID, countedOccurrenceId)
+        if (countedOccurrenceId == null) {
+            remove(KEY_COUNTED_OCCURRENCE_ID)
+            remove(KEY_COUNTED_TRACK_ID)
+        } else {
+            putString(KEY_COUNTED_OCCURRENCE_ID, countedOccurrenceId)
+            putLong(KEY_COUNTED_TRACK_ID, currentTrackId ?: NO_TRACK_ID)
+        }
     }
+
+    /**
+     * The counted occurrence, only while the cursor's current track is the one it was counted for.
+     * A release before 1.1.0 changes the current track in the queue's file and leaves both keys, so
+     * after a downgrade and an upgrade the occurrence would pass to another track (#165 U3).
+     */
+    private fun SharedPreferences.countedOccurrenceId(currentTrackId: Long?): String? =
+        getString(KEY_COUNTED_OCCURRENCE_ID, null)
+            ?.takeIf { currentTrackId != null && getLong(KEY_COUNTED_TRACK_ID, NO_TRACK_ID) == currentTrackId }
 
     private companion object {
         const val PREFERENCES_NAME = "playback-state"
@@ -247,6 +263,7 @@ internal class PlaybackStateStore(context: Context) {
         const val KEY_REPEAT_MODE = "repeat_mode"
         const val KEY_QUEUE_ENDED = "queue_ended"
         const val KEY_COUNTED_OCCURRENCE_ID = "counted_occurrence_id"
+        const val KEY_COUNTED_TRACK_ID = "counted_track_id"
         const val KEY_HELD_BACK_TRACK_IDS = "held_back_track_ids"
         const val KEY_QUEUE_FILE_SIGNATURE = "queue_file_signature"
         const val NO_TRACK_ID = Long.MIN_VALUE
