@@ -24,6 +24,8 @@ class SharedLibraryCatalogStoreTest {
         val historyJob = SupervisorJob()
         try {
             val trackId = store.addDeviceTrack()
+            // The helper reopens a closed database on its next use, so check the open one itself.
+            val database = store.writableDatabase
             val screenCatalog = AndroidLibraryCatalog(context, store)
             val serviceCatalog = AndroidLibraryCatalog(context, store)
             val history = PlaybackHistoryRecorder(store, CoroutineScope(historyJob))
@@ -43,6 +45,7 @@ class SharedLibraryCatalogStoreTest {
             serviceCatalog.close()
             history.recordAndAwait(trackId)
             assertEquals(3L, store.totalPlayCount())
+            assertTrue(database.isOpen)
         } finally {
             historyJob.cancel()
             store.close()
