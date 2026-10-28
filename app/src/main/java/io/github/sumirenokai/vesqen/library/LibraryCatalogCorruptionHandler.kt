@@ -2,8 +2,6 @@ package io.github.sumirenokai.vesqen.library
 
 import android.database.DatabaseErrorHandler
 import android.database.sqlite.SQLiteDatabase
-import android.database.sqlite.SQLiteException
-import android.util.Log
 import java.io.File
 import java.util.Collections
 import java.util.WeakHashMap
@@ -33,24 +31,20 @@ internal class LibraryCatalogCorruptionHandler(
     override fun onCorruption(dbObj: SQLiteDatabase) {
         // Each statement that fails on the same open database reports it again.
         if (!handled.add(dbObj)) return
-        Log.e(TAG, "SQLite reported the library catalog corrupt; keeping a copy and starting an empty catalog")
         beforeRebuild()
-        if (dbObj.isOpen) {
+        try {
             // Later statements on this database fail; the helper opens a new one for the next caller.
-            try {
-                dbObj.close()
-            } catch (failure: SQLiteException) {
-                // The files are set aside anyway; a connection still open keeps reading the copy.
-                Log.w(TAG, "Closing the corrupt library catalog failed", failure)
-            }
+            if (dbObj.isOpen) dbObj.close()
+        } finally {
+            // A close that fails reaches the caller, but the files are still set aside: a connection
+            // left open keeps reading the copy, and the next open starts the empty catalog.
+            val path = dbObj.path
+            if (path != IN_MEMORY_PATH && path.isNotBlank()) keepCorruptCopy(File(path))
+            rebuildCount.update { it + 1 }
         }
-        val path = dbObj.path
-        if (path != IN_MEMORY_PATH && path.isNotBlank()) keepCorruptCopy(File(path))
-        rebuildCount.update { it + 1 }
     }
 
     private companion object {
-        const val TAG = "LibraryCatalog"
         const val IN_MEMORY_PATH = ":memory:"
     }
 }
