@@ -27,6 +27,7 @@ internal class LibraryCatalogCorruptionHandler(
     /** Rebuilds in this process. Catalog IDs read before one name other songs, or none, after it. */
     val rebuilds: StateFlow<Int> = rebuildCount.asStateFlow()
 
+    /** Holds this handler's lock, which [LibraryCatalogStore] also takes to open the database. */
     @Synchronized
     override fun onCorruption(dbObj: SQLiteDatabase) {
         // Each statement that fails on the same open database reports it again.

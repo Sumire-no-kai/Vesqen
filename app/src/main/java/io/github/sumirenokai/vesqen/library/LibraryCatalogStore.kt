@@ -37,6 +37,12 @@ internal class LibraryCatalogStore private constructor(
     /** See [LibraryCatalogCorruptionHandler.rebuilds]. */
     val rebuilds: StateFlow<Int> get() = corruptionHandler.rebuilds
 
+    // While the corruption handler closes the damaged database and moves its files, nothing may open
+    // it again: a connection to the moved file would later replace the copy with the new catalog.
+    override fun getWritableDatabase(): SQLiteDatabase = synchronized(corruptionHandler) { super.getWritableDatabase() }
+
+    override fun getReadableDatabase(): SQLiteDatabase = synchronized(corruptionHandler) { super.getReadableDatabase() }
+
     private val reconcileLock = Any()
 
     @Volatile
