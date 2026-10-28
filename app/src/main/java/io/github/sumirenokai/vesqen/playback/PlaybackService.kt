@@ -218,7 +218,7 @@ class PlaybackService : MediaSessionService() {
                     }
                     result.set(
                         MediaSession.MediaItemsWithStartPosition(
-                            restored.tracks.map { it.toPlaybackMediaItem() },
+                            playbackMediaItems(restored.tracks, restored.startIndex, restored.startOccurrenceId),
                             restored.startIndex,
                             restored.positionMs,
                         ),

@@ -123,6 +123,23 @@ class PlaybackStateStoreTest {
         assertEquals(0, restored.positionMs)
     }
 
+    @Test
+    fun `only the saved entry resumed where it was keeps its counted listen`() {
+        val tracks = listOf(track(1), track(2), track(3))
+        val paused = saved(1, 30_000, queueEnded = false).copy(countedOccurrenceId = "a")
+        val resumed = paused.restoreAgainst(tracks)!!
+        assertEquals(1, resumed.startIndex)
+        assertEquals("a", resumed.startOccurrenceId)
+        // Its entry is gone, so the restore starts elsewhere.
+        assertNull(paused.restoreAgainst(listOf(track(1), track(3)))!!.startOccurrenceId)
+        // The queue had ended: the next entry, or the same track from the start, is a new listen.
+        val ended = saved(1, 60_000, queueEnded = true).copy(countedOccurrenceId = "a")
+        assertNull(ended.restoreAgainst(tracks)!!.startOccurrenceId)
+        assertNull(ended.copy(repeatMode = PlaybackRepeatMode.ONE).restoreAgainst(tracks)!!.startOccurrenceId)
+        // Nothing was counted yet.
+        assertNull(saved(1, 30_000, queueEnded = false).restoreAgainst(tracks)!!.startOccurrenceId)
+    }
+
     private fun repeatedTrackState() = PersistedPlaybackState(
         queueTrackIds = listOf(1, 2, 1),
         currentTrackId = 1,

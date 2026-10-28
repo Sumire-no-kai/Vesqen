@@ -11,11 +11,14 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.sumirenokai.vesqen.library.AudioTrack
 import java.io.File
 import java.util.UUID
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlaybackStateStoreDeviceTest {
@@ -163,6 +166,7 @@ class PlaybackStateStoreDeviceTest {
                     shuffleEnabled = false,
                     repeatMode = PlaybackRepeatMode.OFF,
                     queueEnded = false,
+                    countedOccurrenceId = "a",
                 )
             }
         } finally {
@@ -175,6 +179,8 @@ class PlaybackStateStoreDeviceTest {
         assertEquals(2L, loaded.currentTrackId)
         assertEquals(1, loaded.currentQueueIndex)
         assertEquals(15_000, loaded.positionMs)
+        assertEquals("a", loaded.countedOccurrenceId)
+        assertEquals(CountedPlayback(2, "a"), PlaybackStateStore(isolatedContext).loadCountedPlayback())
     }
 
     @Test
@@ -198,6 +204,7 @@ class PlaybackStateStoreDeviceTest {
             shuffleEnabled = false,
             repeatMode = PlaybackRepeatMode.OFF,
             queueEnded = false,
+            countedOccurrenceId = "a",
         )
         // A release before 1.1.0 (after a downgrade) keeps its cursor in the queue's file only.
         preferences.edit()
@@ -211,11 +218,84 @@ class PlaybackStateStoreDeviceTest {
         assertEquals(2L, loaded.currentTrackId)
         assertEquals(1, loaded.currentQueueIndex)
         assertEquals(7_000, loaded.positionMs)
+        assertNull(loaded.countedOccurrenceId)
         // A queue saved later replaces the cursor in both files.
         store.save(loaded.copy(queueTrackIds = listOf(3, 2), currentTrackId = 3, currentQueueIndex = 0, positionMs = 0))
         assertEquals(0, PlaybackStateStore(isolatedContext).load()!!.positionMs)
         store.clear()
         assertNull(PlaybackStateStore(isolatedContext).load())
+        assertNull(PlaybackStateStore(isolatedContext).loadCountedPlayback())
+    }
+
+    @Test
+    fun aListenResumedByARestoreIsNotCountedAgain() {
+        val store = PlaybackStateStore(isolatedContext)
+        val fixtures = File(context.cacheDir, "keeper-listen-${UUID.randomUUID()}")
+        val tracks = (1L..2L).map { id ->
+            val file = File(fixtures, "$id.wav").also { writeSilentWav(it, durationMs = 3_000) }
+            AudioTrack(id = id, contentUri = Uri.fromFile(file).toString(), title = "$id", artist = "", album = "", durationMs = 3_000)
+        }
+        val counted = mutableListOf<Long>()
+        var player: ExoPlayer? = null
+        var keeper: PlaybackStateKeeper? = null
+        fun startService() {
+            player = ExoPlayer.Builder(context).build()
+            keeper = PlaybackStateKeeper(player!!, store, Handler(Looper.getMainLooper()), onPlaybackStarted = { counted += it })
+                .also(PlaybackStateKeeper::start)
+        }
+        // The service ends (Android ending a paused app's process, say); the keeper saves on the way out.
+        fun endService() {
+            keeper?.stop()
+            player?.release()
+        }
+        fun awaitCounted(expected: List<Long>) {
+            val deadline = SystemClock.uptimeMillis() + 10_000
+            var seen: List<Long> = emptyList()
+            while (seen != expected) {
+                check(SystemClock.uptimeMillis() < deadline) { "Counted $seen, expected $expected" }
+                Thread.sleep(50)
+                main { seen = counted.toList() }
+            }
+        }
+        try {
+            main {
+                startService()
+                player!!.setMediaItems(playbackMediaItems(tracks, startIndex = 0))
+                player!!.prepare()
+                player!!.play()
+            }
+            awaitCounted(listOf(1))
+            main {
+                player!!.pause()
+                endService()
+            }
+
+            val restored = store.load()!!.restoreAgainst(tracks)!!
+            assertEquals(0, restored.startIndex)
+            assertNotNull(restored.startOccurrenceId)
+            val items = playbackMediaItems(restored.tracks, restored.startIndex, restored.startOccurrenceId)
+            assertEquals(restored.startOccurrenceId, items[0].mediaMetadata.extras?.getString(PLAYBACK_OCCURRENCE_EXTRA))
+            assertTrue(items[1].mediaMetadata.extras?.getString(PLAYBACK_OCCURRENCE_EXTRA) != restored.startOccurrenceId)
+            var playing = false
+            main {
+                startService()
+                player!!.setMediaItems(items, restored.startIndex, restored.positionMs)
+                player!!.prepare()
+                player!!.play()
+            }
+            val deadline = SystemClock.uptimeMillis() + 10_000
+            while (!playing) {
+                check(SystemClock.uptimeMillis() < deadline) { "The restored queue never played" }
+                Thread.sleep(50)
+                main { playing = player!!.isPlaying }
+            }
+            main { player!!.seekToNextMediaItem() }
+            // Resuming track 1 was not a listen; the next track is.
+            awaitCounted(listOf(1, 2))
+        } finally {
+            main(::endService)
+            fixtures.deleteRecursively()
+        }
     }
 
     private fun main(action: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(action)

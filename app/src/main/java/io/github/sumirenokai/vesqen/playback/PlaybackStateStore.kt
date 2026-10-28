@@ -15,6 +15,11 @@ internal data class PersistedPlaybackState(
     val currentQueueIndex: Int? = null,
     /** Whether the player had played to the end (`STATE_ENDED`). Null for saves before 1.0.1. */
     val queueEnded: Boolean? = null,
+    /**
+     * The occurrence of the current entry when its listen was already counted, so restoring it
+     * resumes that listen instead of counting another (#165). Null when it was not counted yet.
+     */
+    val countedOccurrenceId: String? = null,
 )
 
 internal data class RestoredPlaybackQueue(
@@ -23,6 +28,14 @@ internal data class RestoredPlaybackQueue(
     val positionMs: Long,
     val shuffleEnabled: Boolean,
     val repeatMode: PlaybackRepeatMode,
+    /** The saved occurrence of the start entry when it resumes a listen already counted. */
+    val startOccurrenceId: String? = null,
+)
+
+/** The listen the state keeper already counted: a track in one queue occurrence. */
+internal data class CountedPlayback(
+    val trackId: Long,
+    val occurrenceId: String,
 )
 
 /**
@@ -66,7 +79,17 @@ internal class PlaybackStateStore(context: Context) {
             repeatMode = repeatMode,
             currentQueueIndex = cursor.getInt(KEY_CURRENT_QUEUE_INDEX, -1).takeIf { it >= 0 },
             queueEnded = if (cursor.contains(KEY_QUEUE_ENDED)) cursor.getBoolean(KEY_QUEUE_ENDED, false) else null,
+            countedOccurrenceId = cursor.getString(KEY_COUNTED_OCCURRENCE_ID, null),
         )
+    }
+
+    /** The listen counted for the saved current entry, without parsing the queue. */
+    fun loadCountedPlayback(): CountedPlayback? {
+        if (!hasSavedQueue()) return null
+        val cursor = currentCursorPreferences()
+        val trackId = cursor.getLong(KEY_CURRENT_TRACK_ID, NO_TRACK_ID).takeIf { it != NO_TRACK_ID } ?: return null
+        val occurrenceId = cursor.getString(KEY_COUNTED_OCCURRENCE_ID, null) ?: return null
+        return CountedPlayback(trackId, occurrenceId)
     }
 
     /**
@@ -92,6 +115,7 @@ internal class PlaybackStateStore(context: Context) {
                 // it; the state keeper always knows it. Unknown stays unknown, so the position rule
                 // still applies.
                 queueEnded = state.queueEnded,
+                countedOccurrenceId = state.countedOccurrenceId,
             )
         }
         // The queue's file now holds this cursor; an older progress file must no longer apply.
@@ -107,12 +131,13 @@ internal class PlaybackStateStore(context: Context) {
         repeatMode: PlaybackRepeatMode,
         currentQueueIndex: Int,
         queueEnded: Boolean,
+        countedOccurrenceId: String? = null,
     ) {
         if (!hasSavedQueue()) return
         val base = savedQueueSignature ?: queueFileSignature().also { savedQueueSignature = it }
         progressPreferences.edit {
             putInt(KEY_QUEUE_FILE_SIGNATURE, base)
-            putCursor(currentTrackId, currentQueueIndex, positionMs, shuffleEnabled, repeatMode, queueEnded)
+            putCursor(currentTrackId, currentQueueIndex, positionMs, shuffleEnabled, repeatMode, queueEnded, countedOccurrenceId)
         }
     }
 
@@ -143,6 +168,7 @@ internal class PlaybackStateStore(context: Context) {
         preferences.getBoolean(KEY_SHUFFLE_ENABLED, false),
         preferences.getString(KEY_REPEAT_MODE, null),
         if (preferences.contains(KEY_QUEUE_ENDED)) preferences.getBoolean(KEY_QUEUE_ENDED, false) else null,
+        preferences.getString(KEY_COUNTED_OCCURRENCE_ID, null),
     ).hashCode()
 
     private fun SharedPreferences.Editor.putCursor(
@@ -152,6 +178,7 @@ internal class PlaybackStateStore(context: Context) {
         shuffleEnabled: Boolean,
         repeatMode: PlaybackRepeatMode,
         queueEnded: Boolean?,
+        countedOccurrenceId: String?,
     ) {
         putLong(KEY_CURRENT_TRACK_ID, currentTrackId ?: NO_TRACK_ID)
         putInt(KEY_CURRENT_QUEUE_INDEX, currentQueueIndex)
@@ -159,6 +186,7 @@ internal class PlaybackStateStore(context: Context) {
         putBoolean(KEY_SHUFFLE_ENABLED, shuffleEnabled)
         putString(KEY_REPEAT_MODE, repeatMode.name)
         if (queueEnded == null) remove(KEY_QUEUE_ENDED) else putBoolean(KEY_QUEUE_ENDED, queueEnded)
+        if (countedOccurrenceId == null) remove(KEY_COUNTED_OCCURRENCE_ID) else putString(KEY_COUNTED_OCCURRENCE_ID, countedOccurrenceId)
     }
 
     private companion object {
@@ -171,6 +199,7 @@ internal class PlaybackStateStore(context: Context) {
         const val KEY_SHUFFLE_ENABLED = "shuffle_enabled"
         const val KEY_REPEAT_MODE = "repeat_mode"
         const val KEY_QUEUE_ENDED = "queue_ended"
+        const val KEY_COUNTED_OCCURRENCE_ID = "counted_occurrence_id"
         const val KEY_QUEUE_FILE_SIGNATURE = "queue_file_signature"
         const val NO_TRACK_ID = Long.MIN_VALUE
     }
@@ -206,6 +235,8 @@ internal fun PersistedPlaybackState.restoreAgainst(tracks: List<AudioTrack>): Re
         positionMs = startPositionMs,
         shuffleEnabled = shuffleEnabled,
         repeatMode = repeatMode,
+        // Only the saved entry, resumed where it was, continues its listen; any other start is new.
+        startOccurrenceId = countedOccurrenceId?.takeIf { currentEntryIndex >= 0 && !finished },
     )
 }
 

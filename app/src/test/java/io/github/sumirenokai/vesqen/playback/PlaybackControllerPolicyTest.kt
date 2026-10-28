@@ -242,6 +242,41 @@ class PlaybackControllerPolicyTest {
     }
 
     @Test
+    fun `a restore that resumes a counted listen does not count it again`() {
+        // Paused in occurrence a; Android then ended the process (#165). The next service's gate
+        // starts from the saved listen, and the restore sets occurrence a again.
+        val gate = PlaybackStartGate()
+        gate.resumeCounted(CountedPlayback(trackId = 1, occurrenceId = "a"))
+        gate.onMediaItemTransition(1, Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED, "a")
+        assertEquals("a", gate.countedOccurrence(currentTrackId = 1))
+        assertNull(gate.trackStarted(isPlaying = true, trackId = 1))
+
+        // Moving on is a new listen, and so is coming back to that entry.
+        gate.onMediaItemTransition(2, Player.MEDIA_ITEM_TRANSITION_REASON_SEEK, "b")
+        assertNull(gate.countedOccurrence(currentTrackId = 2))
+        assertEquals(2L, gate.trackStarted(isPlaying = true, trackId = 2))
+        assertEquals("b", gate.countedOccurrence(currentTrackId = 2))
+        gate.onMediaItemTransition(1, Player.MEDIA_ITEM_TRANSITION_REASON_SEEK, "a")
+        assertEquals(1L, gate.trackStarted(isPlaying = true, trackId = 1))
+    }
+
+    @Test
+    fun `a saved listen does not hold back another queue or another entry`() {
+        // A new queue, even of the same song, has new occurrences.
+        val newQueue = PlaybackStartGate()
+        newQueue.resumeCounted(CountedPlayback(trackId = 1, occurrenceId = "a"))
+        newQueue.onMediaItemTransition(1, Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED, "c")
+        assertNull(newQueue.countedOccurrence(currentTrackId = 1))
+        assertEquals(1L, newQueue.trackStarted(isPlaying = true, trackId = 1))
+
+        // The saved queue had ended, so the restore starts its next entry.
+        val nextEntry = PlaybackStartGate()
+        nextEntry.resumeCounted(CountedPlayback(trackId = 1, occurrenceId = "a"))
+        nextEntry.onMediaItemTransition(2, Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED, "d")
+        assertEquals(2L, nextEntry.trackStarted(isPlaying = true, trackId = 2))
+    }
+
+    @Test
     fun `unknown occurrence identity cannot suppress a new same song listen`() {
         val gate = PlaybackStartGate()
         assertEquals(1L, gate.trackStarted(true, 1))
