@@ -236,7 +236,15 @@ fun LibraryScreen(
     // The search field opens from the title bar; a typed query keeps it open.
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     val showSearch = searchOpen || query.isNotEmpty()
-    var detailsTrack by remember { mutableStateOf<AudioTrack?>(null) }
+    // The details sheet shows the Library's current copy of its track. A copy kept from when it
+    // opened went stale once a play count or favorite changed, and Play then found no list entry
+    // equal to it and did nothing (#136 R28).
+    var detailsTrackId by remember { mutableStateOf<Long?>(null) }
+    val detailsTrack = remember(state.tracks, detailsTrackId) {
+        detailsTrackId?.let { id -> state.tracks.firstOrNull { it.id == id } }
+    }
+    // A track that left the Library closes its sheet, which must not open again if it comes back.
+    if (detailsTrackId != null && detailsTrack == null) SideEffect { detailsTrackId = null }
     var browseModeName by rememberSaveable { mutableStateOf(LibraryBrowseMode.SONGS.name) }
     var sortOrderName by rememberSaveable { mutableStateOf(LibrarySortOrder.TITLE.name) }
     var favoritesOnly by rememberSaveable { mutableStateOf(false) }
@@ -580,7 +588,7 @@ fun LibraryScreen(
                                 playback = playback,
                                 onBack = { selectedCollectionKey = null },
                                 onPlayQueue = onPlayQueue,
-                                onTrackMore = { detailsTrack = it },
+                                onTrackMore = { detailsTrackId = it.id },
                             )
                         }
                     }
@@ -604,7 +612,7 @@ fun LibraryScreen(
                             onTrackSelected = { track ->
                                 onPlayQueue(activeCollection.tracks, activeCollection.tracks.indexOf(track))
                             },
-                            onTrackMore = { detailsTrack = it },
+                            onTrackMore = { detailsTrackId = it.id },
                             editing = orderTarget != null,
                             saving = orderSaving,
                             onReorder = { tracks -> orderTarget = orderTarget?.copy(second = tracks) },
@@ -633,7 +641,7 @@ fun LibraryScreen(
                             onTrackSelected = { track ->
                                 onPlayQueue(activeVisibleTracks, activeVisibleTracks.indexOf(track))
                             },
-                            onTrackMore = { detailsTrack = it },
+                            onTrackMore = { detailsTrackId = it.id },
                         )
                     }
 
@@ -662,43 +670,40 @@ fun LibraryScreen(
         TrackDetailsSheet(
             track = track,
             playlists = state.playlists,
-            onDismiss = { detailsTrack = null },
+            onDismiss = { detailsTrackId = null },
             onPlay = {
-                if (selectedCollection != null) {
-                    onPlayQueue(selectedCollection.tracks, selectedCollection.tracks.indexOf(track))
-                } else {
-                    val index = visibleTracks.indexOfFirst { it.id == track.id }
-                    if (index >= 0) onPlayQueue(visibleTracks, index)
-                }
-                detailsTrack = null
+                val queue = selectedCollection?.tracks ?: visibleTracks
+                val index = queue.indexOfFirst { it.id == track.id }
+                if (index >= 0) onPlayQueue(queue, index)
+                detailsTrackId = null
             },
             onToggleFavorite = {
                 onToggleFavorite(track.id, !track.isFavorite)
-                detailsTrack = null
+                detailsTrackId = null
             },
             onPlayNext = {
                 onPlayNext(track)
-                detailsTrack = null
+                detailsTrackId = null
             },
             onAddToQueue = {
                 onAddToQueue(track)
-                detailsTrack = null
+                detailsTrackId = null
             },
             queueActionsEnabled = playback.isControllerReady,
             onAddToPlaylist = { targetPlaylistId ->
                 onAddTrackToPlaylist(targetPlaylistId, track.id)
-                detailsTrack = null
+                detailsTrackId = null
             },
             onRemoveFromPlaylist = playlistId?.let {
                 {
                     onRemoveTrackFromPlaylist(it, track.id)
-                    detailsTrack = null
+                    detailsTrackId = null
                 }
             },
             onMoveUp = if (playlistId != null && query.isBlank() && !favoritesOnly && playlistTrackIndex > 0) {
                 {
                     onMovePlaylistTrack(playlistId, storedPlaylistOrder.indexOf(track.id), storedPlaylistOrder.indexOf(selectedCollection.tracks[playlistTrackIndex - 1].id))
-                    detailsTrack = null
+                    detailsTrackId = null
                 }
             } else null,
             onMoveDown = if (
@@ -708,7 +713,7 @@ fun LibraryScreen(
             ) {
                 {
                     onMovePlaylistTrack(playlistId, storedPlaylistOrder.indexOf(track.id), storedPlaylistOrder.indexOf(selectedCollection.tracks[playlistTrackIndex + 1].id))
-                    detailsTrack = null
+                    detailsTrackId = null
                 }
             } else null,
         )

@@ -1698,6 +1698,36 @@ class VesqenAppTest {
     }
 
     @Test
+    fun track_details_play_still_plays_after_its_play_count_changes() {
+        // #136 R28: the sheet kept the track as it was when opened. Once a listen raised its play
+        // count, Play looked that copy up in the album and found nothing, so the tap did nothing.
+        var state by mutableStateOf(grantedState(tracks = sampleTracks))
+        var queued = emptyList<Long>()
+        var startIndex = -1
+        render(
+            state,
+            stateProvider = { state },
+            onPlayQueue = { tracks, index ->
+                queued = tracks.map(AudioTrack::id)
+                startIndex = index
+            },
+        )
+        composeRule.onNodeWithTag("vesqen.library.mode.albums").performClick()
+        composeRule.onNodeWithText("Quiet Rooms").performClick()
+        composeRule.onNodeWithTag("vesqen.library.track.2.more").performClick()
+
+        composeRule.runOnIdle {
+            state = grantedState(tracks = sampleTracks.map { if (it.id == 2L) it.copy(playCount = 1) else it })
+        }
+        composeRule.onNodeWithText(context.getString(R.string.play_this_track)).performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(listOf(1L, 2L), queued)
+            assertEquals(1, startIndex)
+        }
+    }
+
+    @Test
     fun track_details_disables_queue_mutations_until_playback_controls_connect() {
         render(grantedState(tracks = sampleTracks))
 
