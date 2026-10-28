@@ -168,11 +168,12 @@ internal class PlaybackStateStore(context: Context) {
         }
     }
 
-    fun clear() {
+    /** [durable]: on disk before this returns, for a queue whose catalog IDs are about to name other songs (#165). */
+    fun clear(durable: Boolean = false) {
         savedQueueSignature = null
         savedQueueIndexes = null
-        preferences.edit { clear() }
-        progressPreferences.edit { clear() }
+        preferences.edit(commit = durable) { clear() }
+        progressPreferences.edit(commit = durable) { clear() }
     }
 
     /**

@@ -27,6 +27,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -92,7 +93,26 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                     playbackController?.refreshOutputVerification()
                 }
             }
+            viewModelScope.launch {
+                vesqenApplication.libraryCatalogStore.rebuilds.drop(1).collect { onCatalogRebuilt() }
+            }
         }
+    }
+
+    /**
+     * SQLite found the catalog corrupt and an empty one replaced it (#165). The rows on screen came
+     * from the old catalog, whose IDs name other songs, or none, in the new one: favoriting or playing
+     * them would reach the wrong song. They go, and the Library is scanned again.
+     */
+    private fun onCatalogRebuilt() {
+        // Reads and scans started before the rebuild publish nothing; a running scan ends into a new one.
+        libraryRefreshEpoch++
+        cachedLibraryReader.invalidate()
+        latestPlaybackHistory.clear()
+        updateLibrary {
+            it.copy(tracks = emptyList(), playlists = emptyList(), sources = emptyList(), isLoading = true)
+        }
+        refreshLibrary()
     }
 
     fun initialisePermissions(musicGranted: Boolean, notificationsGranted: Boolean) {

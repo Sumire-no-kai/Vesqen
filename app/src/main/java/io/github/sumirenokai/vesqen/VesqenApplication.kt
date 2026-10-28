@@ -9,6 +9,7 @@ import io.github.sumirenokai.vesqen.diagnostics.AndroidDiagnosticRecordingStore
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
 import io.github.sumirenokai.vesqen.library.LibraryCatalogStore
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryRecorder
+import io.github.sumirenokai.vesqen.playback.PlaybackStateStore
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStateRepository
 import io.github.sumirenokai.vesqen.premium.ActivationCodes
@@ -95,7 +96,11 @@ class VesqenApplication : Application() {
      * support question's play count share it, so each sees the others' writes; it stays open for
      * the life of the process, and nothing else may construct or close one.
      */
-    internal val libraryCatalogStore by lazy { LibraryCatalogStore(this) }
+    internal val libraryCatalogStore by lazy {
+        // The saved queue names its songs by catalog ID, and a rebuilt catalog gives those IDs to
+        // other songs (#165). The service and the Library drop what they hold when it is rebuilt.
+        LibraryCatalogStore(this, beforeRebuild = { PlaybackStateStore(this).clear(durable = true) })
+    }
 
     /** #151: the GitHub build's occasional support question; null in a build without a support link. */
     val supportPrompt: SupportPrompt? by lazy {

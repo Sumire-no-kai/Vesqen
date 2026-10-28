@@ -7,20 +7,36 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import androidx.core.database.sqlite.transaction
 import java.io.Closeable
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Private, small SQLite store for the discoverable catalog. It contains only metadata and opaque
  * content URIs; no audio, artwork, or filesystem paths are copied into app storage.
  */
-internal class LibraryCatalogStore(
+internal class LibraryCatalogStore private constructor(
     context: Context,
-    databaseName: String = DATABASE_NAME,
+    databaseName: String,
+    private val corruptionHandler: LibraryCatalogCorruptionHandler,
 ) : SQLiteOpenHelper(
     context.applicationContext,
     databaseName,
     null,
     DATABASE_VERSION,
+    corruptionHandler,
 ), Closeable {
+    /**
+     * [beforeRebuild] runs when SQLite reports the database corrupt, before its files are set aside
+     * and an empty catalog replaces them (#165).
+     */
+    constructor(
+        context: Context,
+        databaseName: String = DATABASE_NAME,
+        beforeRebuild: () -> Unit = {},
+    ) : this(context, databaseName, LibraryCatalogCorruptionHandler(beforeRebuild))
+
+    /** See [LibraryCatalogCorruptionHandler.rebuilds]. */
+    val rebuilds: StateFlow<Int> get() = corruptionHandler.rebuilds
+
     private val reconcileLock = Any()
 
     @Volatile
