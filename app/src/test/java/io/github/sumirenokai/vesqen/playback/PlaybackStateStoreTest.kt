@@ -169,6 +169,20 @@ class PlaybackStateStoreTest {
     }
 
     @Test
+    fun `restore names the saved tracks it could not play`() {
+        val saved = PersistedPlaybackState(
+            queueTrackIds = listOf(1, 2, 3, 2, 4),
+            currentTrackId = 3,
+            positionMs = 0,
+            shuffleEnabled = false,
+            repeatMode = PlaybackRepeatMode.OFF,
+        )
+
+        assertEquals(setOf(2L, 4L), saved.restoreAgainst(listOf(track(1), track(3)))!!.heldBackTrackIds)
+        assertEquals(emptySet<Long>(), saved.restoreAgainst((1L..4L).map(::track))!!.heldBackTrackIds)
+    }
+
+    @Test
     fun `restore refuses a queue whose sources no longer exist`() {
         assertNull(
             PersistedPlaybackState(

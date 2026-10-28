@@ -30,6 +30,8 @@ internal data class RestoredPlaybackQueue(
     val repeatMode: PlaybackRepeatMode,
     /** The saved occurrence of the start entry when it resumes a listen already counted. */
     val startOccurrenceId: String? = null,
+    /** Saved tracks the Library cannot play now; see [PlaybackStateStore.holdBack]. */
+    val heldBackTrackIds: Set<Long> = emptySet(),
 )
 
 /** The listen the state keeper already counted: a track in one queue occurrence. */
@@ -44,6 +46,9 @@ internal data class CountedPlayback(
  * The queue's file keeps the full state as of the last queue change, which is all that releases
  * before 1.1.0 read. Later cursors go to the small progress file, which names the queue file's state
  * it was written over and is ignored once that file was changed by anything else.
+ *
+ * While the player holds a restored queue unchanged, the saved queue also keeps the tracks the
+ * restore held back, and the saved cursor indexes that queue ([holdBack]).
  */
 internal class PlaybackStateStore(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences(
@@ -58,10 +63,15 @@ internal class PlaybackStateStore(context: Context) {
     /** [queueFileSignature] as of this store's last queue save, so a checkpoint does not hash the queue. */
     private var savedQueueSignature: Int? = null
 
+    /**
+     * As of this store's last queue save, the saved queue index of each player queue entry while the
+     * saved queue keeps held-back tracks; null when the player's queue was saved as it is.
+     */
+    private var savedQueueIndexes: IntArray? = null
+
     fun load(): PersistedPlaybackState? {
         val queueIds = preferences.getString(KEY_QUEUE_IDS, null)
-            ?.split(',')
-            ?.mapNotNull(String::toLongOrNull)
+            ?.toTrackIds()
             ?.takeIf(List<Long>::isNotEmpty)
             ?: return null
         val cursor = currentCursorPreferences()
@@ -98,16 +108,33 @@ internal class PlaybackStateStore(context: Context) {
      */
     fun hasSavedQueue(): Boolean = !preferences.getString(KEY_QUEUE_IDS, null).isNullOrEmpty()
 
+    /**
+     * Keeps [trackIds], saved tracks a restore could not play (#165), in the saved queue for as long
+     * as the player's queue is that restore's. A card that is not mounted yet or a lost folder grant
+     * then takes no track out of the queue for good: a later restore brings back those the Library
+     * can play by then. Once the queue is edited, it is saved as the player holds it.
+     */
+    fun holdBack(trackIds: Set<Long>) {
+        preferences.edit {
+            if (trackIds.isEmpty()) remove(KEY_HELD_BACK_TRACK_IDS) else putString(KEY_HELD_BACK_TRACK_IDS, trackIds.joinToString(","))
+        }
+    }
+
     fun save(state: PersistedPlaybackState) {
         if (state.queueTrackIds.isEmpty()) {
             clear()
             return
         }
+        val savedIndexes = heldBackSavedQueueIndexes(state.queueTrackIds)
+        savedQueueIndexes = savedIndexes
         preferences.edit {
-            putString(KEY_QUEUE_IDS, state.queueTrackIds.joinToString(","))
+            if (savedIndexes == null) {
+                putString(KEY_QUEUE_IDS, state.queueTrackIds.joinToString(","))
+                remove(KEY_HELD_BACK_TRACK_IDS)
+            }
             putCursor(
                 currentTrackId = state.currentTrackId,
-                currentQueueIndex = state.currentQueueIndex ?: -1,
+                currentQueueIndex = savedQueueIndex(state.currentQueueIndex ?: -1),
                 positionMs = state.positionMs,
                 shuffleEnabled = state.shuffleEnabled,
                 repeatMode = state.repeatMode,
@@ -137,15 +164,34 @@ internal class PlaybackStateStore(context: Context) {
         val base = savedQueueSignature ?: queueFileSignature().also { savedQueueSignature = it }
         progressPreferences.edit {
             putInt(KEY_QUEUE_FILE_SIGNATURE, base)
-            putCursor(currentTrackId, currentQueueIndex, positionMs, shuffleEnabled, repeatMode, queueEnded, countedOccurrenceId)
+            putCursor(currentTrackId, savedQueueIndex(currentQueueIndex), positionMs, shuffleEnabled, repeatMode, queueEnded, countedOccurrenceId)
         }
     }
 
     fun clear() {
         savedQueueSignature = null
+        savedQueueIndexes = null
         preferences.edit { clear() }
         progressPreferences.edit { clear() }
     }
+
+    /**
+     * Where each entry of [playerQueue] is in the saved queue, when [playerQueue] is the saved queue
+     * without its held-back tracks: the player still holds the restored queue.
+     */
+    private fun heldBackSavedQueueIndexes(playerQueue: List<Long>): IntArray? {
+        val heldBack = preferences.getString(KEY_HELD_BACK_TRACK_IDS, null)?.toTrackIds()?.toSet()
+            ?.takeIf(Set<Long>::isNotEmpty)
+            ?: return null
+        val savedQueue = preferences.getString(KEY_QUEUE_IDS, null)?.toTrackIds() ?: return null
+        val kept = savedQueue.indices.filter { savedQueue[it] !in heldBack }
+        return kept.toIntArray().takeIf { kept.map(savedQueue::get) == playerQueue }
+    }
+
+    private fun savedQueueIndex(playerQueueIndex: Int): Int =
+        savedQueueIndexes?.getOrNull(playerQueueIndex) ?: playerQueueIndex
+
+    private fun String.toTrackIds(): List<Long> = split(',').mapNotNull(String::toLongOrNull)
 
     /** The progress file when it was written over the queue's file as it is now, else the queue's file. */
     private fun currentCursorPreferences(): SharedPreferences {
@@ -200,6 +246,7 @@ internal class PlaybackStateStore(context: Context) {
         const val KEY_REPEAT_MODE = "repeat_mode"
         const val KEY_QUEUE_ENDED = "queue_ended"
         const val KEY_COUNTED_OCCURRENCE_ID = "counted_occurrence_id"
+        const val KEY_HELD_BACK_TRACK_IDS = "held_back_track_ids"
         const val KEY_QUEUE_FILE_SIGNATURE = "queue_file_signature"
         const val NO_TRACK_ID = Long.MIN_VALUE
     }
@@ -237,6 +284,7 @@ internal fun PersistedPlaybackState.restoreAgainst(tracks: List<AudioTrack>): Re
         repeatMode = repeatMode,
         // Only the saved entry, resumed where it was, continues its listen; any other start is new.
         startOccurrenceId = countedOccurrenceId?.takeIf { currentEntryIndex >= 0 && !finished },
+        heldBackTrackIds = queueTrackIds.filterNot(tracksById::containsKey).toSet(),
     )
 }
 

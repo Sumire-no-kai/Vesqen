@@ -298,6 +298,54 @@ class PlaybackStateStoreDeviceTest {
         }
     }
 
+    @Test
+    fun aTrackARestoreCouldNotPlayComesBackUntilTheQueueIsEdited() {
+        // A card not mounted yet or a folder grant lost makes saved tracks unreadable for a while (#165).
+        val store = PlaybackStateStore(isolatedContext)
+        val tracks = (1L..4L).map { id ->
+            AudioTrack(id = id, contentUri = "content://track/$id", title = "$id", artist = "", album = "", durationMs = 60_000)
+        }
+        fun playerState(queue: List<Long>, index: Int, positionMs: Long) = PersistedPlaybackState(
+            queueTrackIds = queue,
+            currentTrackId = queue[index],
+            currentQueueIndex = index,
+            positionMs = positionMs,
+            shuffleEnabled = false,
+            repeatMode = PlaybackRepeatMode.OFF,
+            queueEnded = false,
+        )
+        store.save(playerState(listOf(1, 2, 3, 2, 4), index = 2, positionMs = 30_000))
+
+        val first = store.load()!!.restoreAgainst(tracks.filter { it.id != 2L })!!
+        assertEquals(listOf(1L, 3L, 4L), first.tracks.map(AudioTrack::id))
+        store.holdBack(first.heldBackTrackIds)
+        // The state keeper saves the player's queue, then checkpoints.
+        store.save(playerState(listOf(1, 3, 4), index = 1, positionMs = 30_000))
+        store.saveProgress(
+            currentTrackId = 4,
+            currentQueueIndex = 2,
+            positionMs = 5_000,
+            shuffleEnabled = false,
+            repeatMode = PlaybackRepeatMode.OFF,
+            queueEnded = false,
+        )
+
+        val second = PlaybackStateStore(isolatedContext).load()!!
+        assertEquals(listOf(1L, 2L, 3L, 2L, 4L), second.queueTrackIds)
+        // Releases before 1.1.0 read only the queue's file; its cursor is the saved queue's too.
+        assertEquals(2, preferences.getInt("current_queue_index", -1))
+        val restored = second.restoreAgainst(tracks)!!
+        assertEquals(listOf(1L, 2L, 3L, 2L, 4L), restored.tracks.map(AudioTrack::id))
+        assertEquals(4, restored.startIndex)
+        assertEquals(5_000, restored.positionMs)
+
+        // An edit saves the player's queue as it is; the held-back tracks go with it.
+        store.save(playerState(listOf(1, 4), index = 1, positionMs = 0))
+        assertEquals(listOf(1L, 4L), PlaybackStateStore(isolatedContext).load()!!.queueTrackIds)
+        store.save(playerState(listOf(1, 3, 4), index = 2, positionMs = 0))
+        assertEquals(listOf(1L, 3L, 4L), PlaybackStateStore(isolatedContext).load()!!.queueTrackIds)
+    }
+
     private fun main(action: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(action)
 
     @Test

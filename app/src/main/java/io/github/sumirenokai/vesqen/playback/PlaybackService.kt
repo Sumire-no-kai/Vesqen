@@ -216,6 +216,7 @@ class PlaybackService : MediaSessionService() {
                         player.shuffleModeEnabled = restored.shuffleEnabled
                         player.repeatMode = restored.repeatMode.toMedia3RepeatMode()
                     }
+                    playbackStateStore.holdBack(restored.heldBackTrackIds)
                     result.set(
                         MediaSession.MediaItemsWithStartPosition(
                             playbackMediaItems(restored.tracks, restored.startIndex, restored.startOccurrenceId),

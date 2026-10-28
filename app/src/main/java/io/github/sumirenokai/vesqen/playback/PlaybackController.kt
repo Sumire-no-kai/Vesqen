@@ -634,6 +634,7 @@ class PlaybackController(
             publish(player)
             return
         }
+        stateStore.holdBack(restored.heldBackTrackIds)
         startQueue(
             activeController = player,
             tracks = restored.tracks,
