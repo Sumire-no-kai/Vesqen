@@ -7,6 +7,7 @@ import android.database.sqlite.SQLiteException
 import android.os.Bundle
 import io.github.sumirenokai.vesqen.diagnostics.AndroidDiagnosticRecordingStore
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
+import io.github.sumirenokai.vesqen.library.AndroidLibraryRebuildNotice
 import io.github.sumirenokai.vesqen.library.LibraryCatalogStore
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryRecorder
 import io.github.sumirenokai.vesqen.playback.PlaybackStateStore
@@ -99,8 +100,17 @@ class VesqenApplication : Application() {
     internal val libraryCatalogStore by lazy {
         // The saved queue names its songs by catalog ID, and a rebuilt catalog gives those IDs to
         // other songs (#165). The service and the Library drop what they hold when it is rebuilt.
-        LibraryCatalogStore(this, beforeRebuild = { PlaybackStateStore(this).clear(durable = true) })
+        LibraryCatalogStore(
+            this,
+            beforeRebuild = {
+                PlaybackStateStore(this).clear(durable = true)
+                libraryRebuildNotice.markDue()
+            },
+        )
     }
+
+    /** #165: says once that a corrupt catalog was rebuilt and what was lost with it. */
+    internal val libraryRebuildNotice by lazy { AndroidLibraryRebuildNotice(this) }
 
     /** #151: the GitHub build's occasional support question; null in a build without a support link. */
     val supportPrompt: SupportPrompt? by lazy {

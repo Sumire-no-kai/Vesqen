@@ -191,6 +191,9 @@
     <string name="crash_prompt_body">A report can help find the cause. It shows the error type and where in the code it happened. You can read all of it before you send it.</string>
     <string name="crash_prompt_review">Review and send</string>
     <string name="crash_prompt_decline">No thanks</string>
+    <string name="library_rebuilt_title">Library data was rebuilt</string>
+    <string name="library_rebuilt_body">The library data was damaged, so Vesqen rebuilt the library from the music on your phone. Favorites, play counts, recently played history and playlists could not be kept, and the queue was cleared. Music folders you added need to be added again. The music files on your phone are not affected.</string>
+    <string name="library_rebuilt_ok">OK</string>
     <string name="licenses_title">Open source licenses</string>
     <string name="licenses_intro">Vesqen uses the following open-source software.</string>
     <string name="licenses_loading">Loading…</string>
