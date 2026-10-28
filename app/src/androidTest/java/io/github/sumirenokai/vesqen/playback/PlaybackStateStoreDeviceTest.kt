@@ -299,6 +299,38 @@ class PlaybackStateStoreDeviceTest {
     }
 
     @Test
+    fun aCountedListenDoesNotPassToTheTrackAnOlderReleaseMadeCurrent() {
+        val store = PlaybackStateStore(isolatedContext)
+        store.save(
+            PersistedPlaybackState(
+                queueTrackIds = listOf(1, 2, 3),
+                currentTrackId = 1,
+                currentQueueIndex = 0,
+                positionMs = 20_000,
+                shuffleEnabled = false,
+                repeatMode = PlaybackRepeatMode.OFF,
+                queueEnded = false,
+                countedOccurrenceId = "a",
+            ),
+        )
+        // After a downgrade, a release before 1.1.0 moves to track 2 and leaves the keys it does not know.
+        preferences.edit()
+            .putLong("current_track_id", 2)
+            .putInt("current_queue_index", 1)
+            .putLong("position_ms", 0)
+            .commit()
+
+        val loaded = PlaybackStateStore(isolatedContext).load()!!
+        assertEquals(2L, loaded.currentTrackId)
+        assertNull(loaded.countedOccurrenceId)
+        assertNull(PlaybackStateStore(isolatedContext).loadCountedPlayback())
+        val tracks = (1L..3L).map { id ->
+            AudioTrack(id = id, contentUri = "content://track/$id", title = "$id", artist = "", album = "", durationMs = 60_000)
+        }
+        assertNull(loaded.restoreAgainst(tracks)!!.startOccurrenceId)
+    }
+
+    @Test
     fun aTrackARestoreCouldNotPlayComesBackUntilTheQueueIsEdited() {
         // A card not mounted yet or a folder grant lost makes saved tracks unreadable for a while (#165).
         val store = PlaybackStateStore(isolatedContext)
