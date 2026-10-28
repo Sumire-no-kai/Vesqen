@@ -488,6 +488,24 @@ class VesqenAppTest {
     }
 
     @Test
+    fun chain_opened_from_settings_keeps_its_way_back_after_now() {
+        // #156 V25: after a visit to Now, Back reached Chain without its arrow, and Chain then
+        // returned to Library instead of Settings.
+        render(grantedState())
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        composeRule.onNodeWithTag("vesqen.nav.now").performClick()
+        composeRule.onNodeWithTag("vesqen.nav.now").assertIsSelected()
+
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag("vesqen.nav.chain").assertIsSelected()
+        composeRule.onNodeWithTag("vesqen.chain.back").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("vesqen.nav.settings").assertIsSelected()
+    }
+
+    @Test
     fun empty_library_without_access_makes_allowing_access_the_main_action() {
         var accessRequests = 0
         var addFolderCalls = 0

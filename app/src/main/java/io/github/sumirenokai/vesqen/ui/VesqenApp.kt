@@ -463,6 +463,7 @@ fun VesqenAppContent(
     var returnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
     var playerReturnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
     var parentReturnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
+    var chainReturnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
     // Actions read the saved state when they run. The bar and the mini player get them as function
     // references, which compare equal, so Compose keeps the first one; a copy of the state taken in
     // that composition would make Now return to Library from every tab (#136 R8).
@@ -471,6 +472,7 @@ fun VesqenAppContent(
         returnDestination = VesqenDestination.valueOf(returnDestinationName),
         playerReturnDestination = VesqenDestination.valueOf(playerReturnDestinationName),
         parentReturnDestination = VesqenDestination.valueOf(parentReturnDestinationName),
+        chainReturnDestination = VesqenDestination.valueOf(chainReturnDestinationName),
     )
     val navigationState = currentNavigation()
     val destination = navigationState.destination
@@ -518,6 +520,7 @@ fun VesqenAppContent(
         returnDestinationName = updated.returnDestination.name
         playerReturnDestinationName = updated.playerReturnDestination.name
         parentReturnDestinationName = updated.parentReturnDestination.name
+        chainReturnDestinationName = updated.chainReturnDestination.name
     }
 
     fun selectTopLevel(destination: VesqenDestination) {

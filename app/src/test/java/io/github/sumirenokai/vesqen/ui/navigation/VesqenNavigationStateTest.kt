@@ -241,6 +241,59 @@ class VesqenNavigationStateTest {
     }
 
     @Test
+    fun `chain opened from settings keeps its way back through now`() {
+        // #156 V25: Back from Now reached Chain without its arrow, and Chain then left to Library.
+        val chain = VesqenNavigationState().selectTopLevel(VesqenDestination.SETTINGS).openChain()
+        val now = chain.selectTopLevel(VesqenDestination.NOW)
+        assertEquals(VesqenDestination.NOW, now.destination)
+
+        val back = now.back()
+        assertEquals(chain, back)
+        assertTrue(back.chainOpenedInContext)
+        assertTrue(back.settingsUnderneath)
+        assertEquals(VesqenDestination.SETTINGS, back.back().destination)
+        assertEquals(VesqenDestination.LIBRARY, back.back().back().destination)
+        // A detail opened from that Now unwinds through it too.
+        val premium = now.openPremium()
+        assertEquals(VesqenDestination.NOW, premium.back().destination)
+        assertEquals(chain, premium.back().back())
+    }
+
+    @Test
+    fun `now from a chain opened in the player goes back to that player`() {
+        val now = VesqenNavigationState().selectTopLevel(VesqenDestination.SETTINGS).selectTopLevel(VesqenDestination.NOW)
+        val chain = now.openChain()
+
+        assertEquals(now, chain.selectTopLevel(VesqenDestination.NOW))
+        assertEquals(VesqenDestination.SETTINGS, chain.selectTopLevel(VesqenDestination.NOW).back().destination)
+    }
+
+    @Test
+    fun `a detail opened over a chain in context returns to it with its way back`() {
+        listOf(
+            VesqenNavigationState().selectTopLevel(VesqenDestination.SETTINGS).openChain(),
+            VesqenNavigationState().selectTopLevel(VesqenDestination.NOW).openChain(),
+        ).forEach { chain ->
+            listOf(VesqenNavigationState::openPremium, VesqenNavigationState::openDeviceReport).forEach { open ->
+                val detail = open(chain)
+                assertEquals(chain, detail.back())
+                // A second level (the privacy policy from a report) unwinds through both.
+                val nested = detail.openPrivacyPolicy()
+                assertEquals(chain, nested.back().back())
+            }
+        }
+    }
+
+    @Test
+    fun `chain from its tab still returns to library after a detour`() {
+        val chain = VesqenNavigationState().selectTopLevel(VesqenDestination.SETTINGS).selectTopLevel(VesqenDestination.CHAIN)
+
+        assertEquals(chain, chain.selectTopLevel(VesqenDestination.NOW).back())
+        assertEquals(chain, chain.openPremium().back())
+        assertFalse(chain.openPremium().back().chainOpenedInContext)
+    }
+
+    @Test
     fun `every sequence of up to five actions stays consistent`() {
         // Architecture audit: the reducer simulates a stack in four saved slots, and each fix added a
         // rule. This walks every action sequence up to five steps and checks the stack's promises.
@@ -263,16 +316,27 @@ class VesqenNavigationStateTest {
             if (state.destination.isSecondaryDetail && state.returnDestination.isSecondaryDetail) {
                 assertFalse("$path: $state", state.parentReturnDestination.isSecondaryDetail)
             }
-            // Back always reaches Library.
+            // Back always reaches Library. The deepest way back is Settings, a Chain opened from it,
+            // Now over that Chain, and two details over Now.
             var unwound = state
-            repeat(4) { unwound = unwound.back() }
+            repeat(5) { unwound = unwound.back() }
             assertEquals("$path: $state", VesqenDestination.LIBRARY, unwound.destination)
             if (path.size == 5) return
             actions.forEach { (name, action) ->
                 val next = action(state)
-                // A page opened from a screen returns to it.
+                // A page opened from a screen returns to it, and that screen keeps its own way back.
                 if (returnsToOpener.any { it.first == name } && next.destination != state.destination) {
                     assertEquals("${path + name}: $state -> $next", state.destination, next.back().destination)
+                    assertEquals("${path + name}: $state -> $next", state.returnDestination, next.back().returnDestination)
+                }
+                // Now opened from a Chain in context comes back to it with its way back (#156 V25).
+                if (name == "tab NOW" && state.chainOpenedInContext) {
+                    if (state.returnDestination == VesqenDestination.NOW) {
+                        assertEquals("${path + name}: $state -> $next", state.back(), next)
+                    } else {
+                        assertEquals("${path + name}: $state -> $next", VesqenDestination.CHAIN, next.back().destination)
+                        assertEquals("${path + name}: $state -> $next", state.returnDestination, next.back().returnDestination)
+                    }
                 }
                 walk(next, path + name)
             }
