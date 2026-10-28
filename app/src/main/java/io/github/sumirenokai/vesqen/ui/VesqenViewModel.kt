@@ -424,8 +424,11 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                         tracks = refreshedTracks,
                         playlists = snapshot.playlists,
                         sources = snapshot.sources,
-                        scanProgress = snapshot.pausedProgress()
-                            ?: current.scanProgress?.takeIf(LibraryScanProgress::isPaused),
+                        scanProgress = scanProgressAfterRead(
+                            current = current.scanProgress,
+                            snapshot = snapshot,
+                            scanRunning = activeLibraryScan?.isActive == true,
+                        ),
                     )
                 }
                 playbackController().syncLibrary(refreshedTracks)
@@ -469,6 +472,21 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+}
+
+/**
+ * The scan progress a catalog read publishes. A scan reports progress only as each source starts and
+ * ends, so a read while it runs keeps the last report: the scanning row and its Pause button stay
+ * until the scan reports again (#136 U1). Otherwise only a paused scan keeps its row.
+ */
+internal fun scanProgressAfterRead(
+    current: LibraryScanProgress?,
+    snapshot: LibraryCatalogSnapshot,
+    scanRunning: Boolean,
+): LibraryScanProgress? = if (scanRunning) {
+    current
+} else {
+    snapshot.pausedProgress() ?: current?.takeIf(LibraryScanProgress::isPaused)
 }
 
 private fun LibraryCatalogSnapshot.pausedProgress(): LibraryScanProgress? = sources.firstOrNull {
