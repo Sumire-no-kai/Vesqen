@@ -63,13 +63,10 @@ internal class AndroidLibraryCatalog(
     private val scanGate = LibraryScanGate()
     private val operationGate = LibraryCatalogOperationGate()
 
-    @Volatile
-    private var interruptedStateReconciled = false
-
     private val resumePausedSourcesRequested = AtomicBoolean()
 
     override suspend fun snapshot(includeDeviceLibrary: Boolean): LibraryCatalogSnapshot = serialized {
-        reconcileInterruptedStates()
+        store.reconcileInterruptedScans()
         snapshotInternal(includeDeviceLibrary)
     }
 
@@ -172,7 +169,7 @@ internal class AndroidLibraryCatalog(
         includeDeviceLibrary: Boolean,
         onProgress: suspend (LibraryScanProgress) -> Unit,
     ): LibraryRefreshResult {
-        reconcileInterruptedStates()
+        store.reconcileInterruptedScans()
         if (resumePausedSourcesRequested.getAndSet(false)) {
             store.preparePausedSourcesForResume()
         }
@@ -397,13 +394,6 @@ internal class AndroidLibraryCatalog(
         .filter { it.isReadPermission }
         .map { it.uri.toString() }
         .toSet()
-
-    private fun reconcileInterruptedStates() {
-        if (!interruptedStateReconciled) {
-            store.markInterruptedScans()
-            interruptedStateReconciled = true
-        }
-    }
 
     /**
      * Refuses new operations. The store stays open: the other catalogs and listening history keep

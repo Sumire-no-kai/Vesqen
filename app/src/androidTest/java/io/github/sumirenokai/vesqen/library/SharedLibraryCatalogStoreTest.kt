@@ -14,7 +14,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** #165: the screen and service catalogs, listening history and the play count share one helper. */
+/**
+ * #165: the screen and service catalogs, listening history and the play count share one helper,
+ * which also reconciles scans an earlier process left running once for the whole process.
+ */
 class SharedLibraryCatalogStoreTest {
     @Test
     fun writesThroughOneUserReachTheOthersAndClosingACatalogKeepsTheStoreOpen() = runBlocking {
@@ -53,6 +56,34 @@ class SharedLibraryCatalogStoreTest {
         }
     }
 
+    @Test
+    fun aSecondCatalogLeavesAScanStartedInThisProcessRunning() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val databaseName = "library-catalog-shared-${System.nanoTime()}.db"
+        val store = LibraryCatalogStore(context, databaseName)
+        try {
+            // An earlier process stopped during a scan; the first catalog marks it interrupted.
+            store.ensureDeviceSource()
+            store.markSourceScanning(LibrarySourceId.DEVICE)
+            val firstCatalog = AndroidLibraryCatalog(context, store)
+            assertEquals(LibraryScanState.INTERRUPTED, firstCatalog.deviceScanState())
+
+            // The first screen's catalog scans while a second screen opens its own catalog.
+            val scan = store.beginSourceScan(LibrarySourceId.DEVICE)
+            val secondCatalog = AndroidLibraryCatalog(context, store)
+            assertEquals(LibraryScanState.SCANNING, secondCatalog.deviceScanState())
+            assertEquals(LibraryScanState.SCANNING, firstCatalog.deviceScanState())
+
+            store.completeSourceScan(scan)
+            assertEquals(LibraryScanState.IDLE, secondCatalog.deviceScanState())
+            firstCatalog.close()
+            secondCatalog.close()
+        } finally {
+            store.close()
+            context.deleteDatabase(databaseName)
+        }
+    }
+
     private fun LibraryCatalogStore.addDeviceTrack(): Long {
         val session = beginSourceScan(ensureDeviceSource().id)
         upsertTrack(
@@ -73,6 +104,9 @@ class SharedLibraryCatalogStoreTest {
 
     private suspend fun AndroidLibraryCatalog.track(trackId: Long): AudioTrack =
         playableTracks(includeDeviceLibrary = true).single { it.id == trackId }
+
+    private suspend fun AndroidLibraryCatalog.deviceScanState(): LibraryScanState =
+        snapshot(includeDeviceLibrary = true).sources.single { it.id == LibrarySourceId.DEVICE }.scanState
 
     private suspend fun PlaybackHistoryRecorder.recordAndAwait(trackId: Long) = coroutineScope {
         val recorded = async(start = CoroutineStart.UNDISPATCHED) {

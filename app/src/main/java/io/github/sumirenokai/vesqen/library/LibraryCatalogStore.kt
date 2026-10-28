@@ -21,6 +21,11 @@ internal class LibraryCatalogStore(
     null,
     DATABASE_VERSION,
 ), Closeable {
+    private val reconcileLock = Any()
+
+    @Volatile
+    private var interruptedScansReconciled = false
+
     override fun onConfigure(db: SQLiteDatabase) {
         super.onConfigure(db)
         db.setForeignKeyConstraintsEnabled(true)
@@ -517,13 +522,23 @@ internal class LibraryCatalogStore(
         }
     }
 
-    fun markInterruptedScans() {
-        writableDatabase.update(
-            SOURCES_TABLE,
-            ContentValues().apply { put(SOURCE_SCAN_STATE, LibraryScanState.INTERRUPTED.name) },
-            "$SOURCE_SCAN_STATE = ?",
-            arrayOf(LibraryScanState.SCANNING.name),
-        )
+    /**
+     * Marks the scans an earlier process left SCANNING as interrupted, once for this store. The
+     * application keeps one store for the process (#165), so a scan that a catalog started in this
+     * process is never marked. A call made while the first one runs waits for it to finish.
+     */
+    fun reconcileInterruptedScans() {
+        if (interruptedScansReconciled) return
+        synchronized(reconcileLock) {
+            if (interruptedScansReconciled) return
+            writableDatabase.update(
+                SOURCES_TABLE,
+                ContentValues().apply { put(SOURCE_SCAN_STATE, LibraryScanState.INTERRUPTED.name) },
+                "$SOURCE_SCAN_STATE = ?",
+                arrayOf(LibraryScanState.SCANNING.name),
+            )
+            interruptedScansReconciled = true
+        }
     }
 
     fun preparePausedSourcesForResume() {
