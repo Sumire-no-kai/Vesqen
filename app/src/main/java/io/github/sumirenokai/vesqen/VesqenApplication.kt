@@ -90,6 +90,13 @@ class VesqenApplication : Application() {
     val crashPrompt: io.github.sumirenokai.vesqen.reports.CrashPrompt
         get() = deviceReportRuntime.crashes
 
+    /**
+     * #165: the only helper for the library database. The catalogs, listening history and the
+     * support question's play count share it, so each sees the others' writes; it stays open for
+     * the life of the process, and nothing else may construct or close one.
+     */
+    internal val libraryCatalogStore by lazy { LibraryCatalogStore(this) }
+
     /** #151: the GitHub build's occasional support question; null in a build without a support link. */
     val supportPrompt: SupportPrompt? by lazy {
         if (supportDevelopmentUrl == null) return@lazy null
@@ -103,7 +110,7 @@ class VesqenApplication : Application() {
 
     /** A library that cannot be read counts no plays, so the support question waits for a later open. */
     private fun totalLibraryPlays(): Long = try {
-        LibraryCatalogStore(this).use { it.totalPlayCount() }
+        libraryCatalogStore.totalPlayCount()
     } catch (_: SQLiteException) {
         0
     }
@@ -124,7 +131,7 @@ class VesqenApplication : Application() {
         get() = telemetryRuntime
 
     internal val playbackHistoryRecorder: PlaybackHistoryRecorder by lazy {
-        PlaybackHistoryRecorder(this, applicationScope)
+        PlaybackHistoryRecorder(libraryCatalogStore, applicationScope)
     }
 
     private val developerDiagnosticRecorder: DiagnosticRecorder? by lazy {

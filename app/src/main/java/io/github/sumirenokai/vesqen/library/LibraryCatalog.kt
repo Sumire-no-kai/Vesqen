@@ -6,11 +6,6 @@ import android.content.Intent
 import android.net.Uri
 import androidx.core.net.toUri
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.Closeable
@@ -55,9 +50,10 @@ interface LibraryCatalog : Closeable {
     ): LibraryRefreshResult
 }
 
+/** [store] is the application's one database helper (#165); every catalog shares it and none closes it. */
 internal class AndroidLibraryCatalog(
     context: Context,
-    private val store: LibraryCatalogStore = LibraryCatalogStore(context),
+    private val store: LibraryCatalogStore,
 ) : LibraryCatalog {
     private val appContext = context.applicationContext
     private val contentResolver: ContentResolver = appContext.contentResolver
@@ -66,7 +62,6 @@ internal class AndroidLibraryCatalog(
     private val metadataReader = LocalAudioMetadataReader(appContext)
     private val scanGate = LibraryScanGate()
     private val operationGate = LibraryCatalogOperationGate()
-    private val closeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @Volatile
     private var interruptedStateReconciled = false
@@ -410,19 +405,12 @@ internal class AndroidLibraryCatalog(
         }
     }
 
+    /**
+     * Refuses new operations. The store stays open: the other catalogs and listening history keep
+     * using it, and a cancelled scan that is still unwinding can still mark its source interrupted.
+     */
     override fun close() {
-        if (!operationGate.requestClose()) return
-        // ViewModel cancellation is asynchronous. Closing SQLite on the caller (normally main)
-        // thread can therefore race the cancelled scan while it unwinds its provider cursor and
-        // marks the source interrupted. Queue the close behind the same gate used by every catalog
-        // operation, without blocking the main thread.
-        closeScope.launch {
-            try {
-                operationGate.closeWhenIdle(store::close)
-            } finally {
-                closeScope.cancel()
-            }
-        }
+        operationGate.requestClose()
     }
 
     private suspend fun <T> serialized(operation: suspend () -> T): T =
@@ -442,10 +430,10 @@ internal class AndroidLibraryCatalog(
 }
 
 /**
- * Serializes catalog work and gives [Closeable.close] a non-blocking hand-off point.
+ * Serializes catalog work and refuses it once [Closeable.close] is requested.
  *
  * The open check is deliberately repeated after acquiring the mutex: an operation can begin
- * waiting just before close is requested, but must never reach an already-closing store.
+ * waiting just before close is requested, but must never start on a closed catalog.
  */
 internal class LibraryCatalogOperationGate {
     private val mutex = Mutex()
@@ -463,15 +451,6 @@ internal class LibraryCatalogOperationGate {
     }
 
     fun requestClose(): Boolean = closeRequested.compareAndSet(false, true)
-
-    suspend fun closeWhenIdle(closeAction: () -> Unit) {
-        mutex.lock()
-        try {
-            closeAction()
-        } finally {
-            mutex.unlock()
-        }
-    }
 
     private companion object {
         const val CLOSED_MESSAGE = "Library catalog is closing"
