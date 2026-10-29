@@ -1,15 +1,26 @@
 package io.github.sumirenokai.vesqen.library
 
+import android.content.ContentUris
+import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteDatabaseCorruptException
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.os.SystemClock
+import android.provider.MediaStore
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.sumirenokai.vesqen.playback.writeSilentWav
 import java.io.File
 import java.io.RandomAccessFile
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 /** #165: a corrupt catalog is set aside as one copy instead of deleted, then rebuilt empty. */
@@ -85,6 +96,84 @@ class LibraryCatalogCorruptionDeviceTest {
         }
         assertEquals(1, beforeRebuildCalls)
     }
+
+    @Test
+    fun aScanStopsWhenAnotherCallerFindsTheCatalogCorrupt() = runBlocking {
+        // Without the music permission, Android 10 and later list this app's own audio only, which
+        // this test adds to MediaStore and removes again.
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+        val handler = LibraryCatalogCorruptionHandler(beforeRebuild = {})
+        val store = LibraryCatalogStore(context, databaseName, handler)
+        val catalog = AndroidLibraryCatalog(context, store)
+        val inserted = mutableListOf<Uri>()
+        fun LibraryRefreshResult.fixtureIds() =
+            snapshot.tracks.map { it.contentUri.substringAfterLast('/').toLong() }.filter { id -> inserted.any { ContentUris.parseId(it) == id } }.toSet()
+        try {
+            repeat(3) { inserted += insertAudio("catalog-rebuild-scan-$it") }
+            assertEquals(3, catalog.refresh(includeDeviceLibrary = true) {}.fixtureIds().size)
+            // A new file moves MediaStore's generation, so the next scan reads every row again.
+            inserted += insertAudio("catalog-rebuild-scan-3")
+
+            // #165 U5: another caller finds the catalog corrupt as the scan starts on its rows.
+            var reported = false
+            val stopped = catalog.refresh(includeDeviceLibrary = true) {
+                if (!reported) {
+                    reported = true
+                    handler.onCorruption(store.writableDatabase)
+                }
+            }
+            assertTrue(reported)
+            assertEquals(1, store.rebuilds.value)
+            assertFalse("The scan stops instead of failing on the new catalog", stopped.hadFailure)
+            assertEquals(emptyList<AudioTrack>(), stopped.snapshot.tracks)
+
+            // The next scan reads the new catalog in full.
+            val rescanned = catalog.refresh(includeDeviceLibrary = true) {}
+            assertFalse(rescanned.hadFailure)
+            assertEquals(inserted.map(ContentUris::parseId).toSet(), rescanned.fixtureIds())
+        } finally {
+            inserted.forEach { context.contentResolver.delete(it, null, null) }
+            catalog.close()
+            store.close()
+        }
+    }
+
+    /** Adds one second of silence as this app's own audio, and waits until MediaStore lists it as music. */
+    private fun insertAudio(name: String): Uri {
+        val resolver = context.contentResolver
+        val uri = requireNotNull(
+            resolver.insert(
+                MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY),
+                ContentValues().apply {
+                    put(MediaStore.Audio.Media.DISPLAY_NAME, "$name.wav")
+                    put(MediaStore.Audio.Media.MIME_TYPE, "audio/x-wav")
+                    put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/VesqenTest")
+                    put(MediaStore.Audio.Media.IS_PENDING, 1)
+                },
+            ),
+        )
+        val wav = File(context.cacheDir, "$name.wav").also { writeSilentWav(it, durationMs = 1_000) }
+        try {
+            requireNotNull(resolver.openOutputStream(uri)).use { output -> wav.inputStream().use { it.copyTo(output) } }
+        } finally {
+            wav.delete()
+        }
+        resolver.update(uri, ContentValues().apply { put(MediaStore.Audio.Media.IS_PENDING, 0) }, null, null)
+        val deadline = SystemClock.uptimeMillis() + 10_000
+        while (!listedAsMusic(uri)) {
+            check(SystemClock.uptimeMillis() < deadline) { "MediaStore never listed $name as music" }
+            Thread.sleep(100)
+        }
+        return uri
+    }
+
+    private fun listedAsMusic(uri: Uri): Boolean = context.contentResolver.query(
+        uri,
+        arrayOf(MediaStore.Audio.Media.IS_MUSIC, MediaStore.Audio.Media.DURATION),
+        null,
+        null,
+        null,
+    ).use { cursor -> cursor != null && cursor.moveToFirst() && cursor.getInt(0) != 0 && cursor.getLong(1) > 0 }
 
     /** Overwrites [length] bytes from [fromByte] and returns the whole damaged file. */
     private fun damage(file: File, fromByte: Long, length: Int): ByteArray {

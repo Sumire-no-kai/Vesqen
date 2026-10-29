@@ -13,9 +13,10 @@ import kotlinx.coroutines.flow.StateFlow
  * Private, small SQLite store for the discoverable catalog. It contains only metadata and opaque
  * content URIs; no audio, artwork, or filesystem paths are copied into app storage.
  */
-internal class LibraryCatalogStore private constructor(
+internal class LibraryCatalogStore internal constructor(
     context: Context,
     databaseName: String,
+    /** Tests call it to report corruption at a chosen moment, as SQLite would. */
     private val corruptionHandler: LibraryCatalogCorruptionHandler,
 ) : SQLiteOpenHelper(
     context.applicationContext,
