@@ -170,9 +170,8 @@ class LibraryCatalogCorruptionDeviceTest {
     }
 
     /**
-     * MediaStore keeps moving its generation for a while after files are added. On this branch a moved
-     * generation still interrupts a device scan (#136 R15 is fixed in #179), so scans that must
-     * complete wait until it stays put for a second.
+     * MediaStore keeps working on files for a while after they are added, moving its generation. The
+     * scans that must complete wait until it stays put for a second, so they do not race that work.
      */
     private fun awaitMediaStoreSettled() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
