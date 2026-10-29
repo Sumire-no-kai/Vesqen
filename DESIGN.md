@@ -275,6 +275,12 @@ Vesqen's voice is plain, concrete and calm. It tells people what happened and wh
 | Usage statistics | 使用统计 |
 | Device report | 设备报告 |
 | Open source licenses | 开源许可 |
+| Pro features | 高级功能 |
+| Advanced chain | 链路详情 |
+| Advanced dashboard | 详细仪表盘 |
+| Advanced (settings group) | 更多设置 |
+
+In Chinese, 高级 (Traditional 進階) appears only in 高级功能, the paid tier, so free screens never read as paid (#161).
 
 ## Accessibility
 
