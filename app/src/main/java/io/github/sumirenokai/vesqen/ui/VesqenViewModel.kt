@@ -16,6 +16,7 @@ import io.github.sumirenokai.vesqen.library.LibraryCatalog
 import io.github.sumirenokai.vesqen.library.LibraryCatalogSnapshot
 import io.github.sumirenokai.vesqen.library.LibraryScanProgress
 import io.github.sumirenokai.vesqen.library.LibraryScanState
+import io.github.sumirenokai.vesqen.library.UnmatchedLibraryRecord
 import io.github.sumirenokai.vesqen.library.LibrarySource
 import io.github.sumirenokai.vesqen.library.LibrarySourceKind
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
@@ -47,9 +48,16 @@ data class LibraryUiState(
     val scanProgress: LibraryScanProgress? = null,
     val loadingFailed: Boolean = false,
     val catalogMutationFailed: Boolean = false,
+    val unmatchedRecords: List<UnmatchedLibraryRecord> = emptyList(),
+    /** Records the user put off with "Later"; see [UnmatchedRecordPrompt]. */
+    val dismissedUnmatchedRecordIds: Set<Long> = emptySet(),
 ) {
     val isScanPaused: Boolean
         get() = scanProgress?.isPaused == true || sources.any { it.scanState == LibraryScanState.PAUSED }
+
+    /** The Library mentions unmatched records while one waits that "Later" was not pressed for. */
+    val promptsUnmatchedRecords: Boolean
+        get() = unmatchedRecords.any { it.record.id !in dismissedUnmatchedRecordIds }
 }
 
 data class VesqenUiState(
@@ -70,10 +78,18 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     private var catalogEditedDuringScan = false
     private var lastMusicPermissionGranted: Boolean? = null
     private val latestPlaybackHistory = mutableMapOf<Long, PlaybackHistoryUpdate>()
+    private val unmatchedRecordPrompt = UnmatchedRecordPrompt(application)
 
     // Until the private catalog has been read once, an empty list means "not read yet", not "no
     // music": the first frames show the loading rows instead of flashing the empty state.
-    var uiState by mutableStateOf(VesqenUiState(library = LibraryUiState(isLoading = true)))
+    var uiState by mutableStateOf(
+        VesqenUiState(
+            library = LibraryUiState(
+                isLoading = true,
+                dismissedUnmatchedRecordIds = unmatchedRecordPrompt.dismissedRecordIds(),
+            ),
+        ),
+    )
         private set
 
     init {
@@ -113,7 +129,13 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         cachedLibraryReader.invalidate()
         latestPlaybackHistory.clear()
         updateLibrary {
-            it.copy(tracks = emptyList(), playlists = emptyList(), sources = emptyList(), isLoading = true)
+            it.copy(
+                tracks = emptyList(),
+                playlists = emptyList(),
+                sources = emptyList(),
+                unmatchedRecords = emptyList(),
+                isLoading = true,
+            )
         }
         refreshLibrary()
     }
@@ -244,6 +266,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                     tracks = refreshedTracks ?: it.tracks,
                     playlists = snapshot?.playlists ?: it.playlists,
                     sources = snapshot?.sources ?: it.sources,
+                    unmatchedRecords = snapshot?.unmatchedRecords ?: it.unmatchedRecords,
                     scanProgress = it.scanProgress?.takeIf(LibraryScanProgress::isPaused)
                         ?: snapshot?.pausedProgress(),
                     loadingFailed = result.getOrNull()?.hadFailure ?: result.isFailure,
@@ -368,6 +391,28 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         mutateCatalog { catalog.movePlaylistTrack(playlistId, fromIndex, toIndex) }
     }
 
+    /**
+     * The record keeps its ID and takes over the chosen song's row (#139), so queue entries of that
+     * song move to the record. The controller waits for a library read that holds the record, which
+     * is this reload unless a newer read replaced it.
+     */
+    fun assignUnmatchedRecord(recordId: Long, trackId: Long) {
+        var assigned = false
+        mutateCatalog(afterReload = { if (assigned) playbackController().replaceQueueTrack(trackId, recordId) }) {
+            assigned = catalog.assignUnmatchedRecord(recordId, trackId)
+        }
+    }
+
+    fun discardUnmatchedRecord(recordId: Long) {
+        mutateCatalog { catalog.discardUnmatchedRecord(recordId) }
+    }
+
+    fun dismissUnmatchedRecords() {
+        val recordIds = uiState.library.unmatchedRecords.mapTo(HashSet()) { it.record.id }
+        unmatchedRecordPrompt.dismiss(recordIds)
+        updateLibrary { it.copy(dismissedUnmatchedRecordIds = recordIds) }
+    }
+
     fun togglePlayback() = playbackController?.togglePlayback()
 
     fun skipToPrevious() = playbackController?.skipToPrevious()
@@ -451,6 +496,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                         tracks = refreshedTracks,
                         playlists = snapshot.playlists,
                         sources = snapshot.sources,
+                        unmatchedRecords = snapshot.unmatchedRecords,
                         scanProgress = scanProgressAfterRead(
                             current = current.scanProgress,
                             snapshot = snapshot,
@@ -485,7 +531,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         if (activeLibraryScan?.isActive == true) catalogEditedDuringScan = true
     }
 
-    private fun mutateCatalog(action: suspend () -> Unit) {
+    private fun mutateCatalog(afterReload: () -> Unit = {}, action: suspend () -> Unit) {
         viewModelScope.launch {
             updateLibrary { it.copy(catalogMutationFailed = false) }
             val rebuildsBefore = catalogRebuilds.value
@@ -493,6 +539,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                 withContext(Dispatchers.IO) { action() }
                 noteEditDuringScan()
                 loadCachedLibrary()
+                afterReload()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: SQLiteException) {

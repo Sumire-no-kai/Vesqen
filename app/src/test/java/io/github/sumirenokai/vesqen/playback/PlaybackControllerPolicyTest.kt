@@ -253,6 +253,22 @@ class PlaybackControllerPolicyTest {
     }
 
     @Test
+    fun `a playing song merged into a record is not counted again`() {
+        // #139: the entry keeps its occurrence while its track ID becomes the record's.
+        val gate = PlaybackStartGate()
+        gate.onMediaItemTransition(2, Player.MEDIA_ITEM_TRANSITION_REASON_SEEK, "a")
+        assertEquals(2L, gate.trackStarted(isPlaying = true, trackId = 2))
+
+        gate.onMediaItemTransition(7, Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED, "a")
+        assertNull(gate.trackStarted(isPlaying = true, trackId = 7))
+        assertEquals("a", gate.countedOccurrence(currentTrackId = 7))
+
+        // Another entry, even of the record, is a new listen.
+        gate.onMediaItemTransition(7, Player.MEDIA_ITEM_TRANSITION_REASON_SEEK, "b")
+        assertEquals(7L, gate.trackStarted(isPlaying = true, trackId = 7))
+    }
+
+    @Test
     fun `explicit same song queue replacement counts only after playback starts`() {
         val gate = PlaybackStartGate()
         gate.onMediaItemTransition(1, Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED, "a")

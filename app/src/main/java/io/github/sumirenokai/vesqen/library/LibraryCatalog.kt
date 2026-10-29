@@ -46,6 +46,15 @@ interface LibraryCatalog : Closeable {
 
     suspend fun movePlaylistTrack(playlistId: Long, fromIndex: Int, toIndex: Int)
 
+    /**
+     * Gives an unmatched record the song [trackId] the user chose for it (#139). The record keeps its
+     * ID and [trackId]'s row goes. False when the record no longer waits for a choice.
+     */
+    suspend fun assignUnmatchedRecord(recordId: Long, trackId: Long): Boolean
+
+    /** Deletes an unmatched record with its favorite, plays and playlist places (#139). */
+    suspend fun discardUnmatchedRecord(recordId: Long)
+
     suspend fun refresh(
         includeDeviceLibrary: Boolean,
         onProgress: suspend (LibraryScanProgress) -> Unit,
@@ -163,6 +172,16 @@ internal class AndroidLibraryCatalog(
 
     override suspend fun movePlaylistTrack(playlistId: Long, fromIndex: Int, toIndex: Int) = serialized {
         store.movePlaylistTrack(playlistId, fromIndex, toIndex)
+    }
+
+    // A scan holds the rows it read at its start and marks them seen as it goes, so a record that took
+    // over another row during it would be hidden again at its completion: a choice waits for any scan.
+    override suspend fun assignUnmatchedRecord(recordId: Long, trackId: Long): Boolean = processScanLock.withLock {
+        serialized { store.assignUnmatchedRecord(recordId, trackId) }
+    }
+
+    override suspend fun discardUnmatchedRecord(recordId: Long): Unit = processScanLock.withLock {
+        serialized { store.discardUnmatchedRecord(recordId) }
     }
 
     /**
@@ -403,7 +422,8 @@ internal class AndroidLibraryCatalog(
             .toSet() + displacedDeviceTrackIds
         // Folder rows whose file a completed scan did not find keep their user data but cannot play (#164).
         val hiddenFolderTrackIds = store.readHiddenFolderTrackIds()
-        val visibleTracks = store.readTracks(visibleSourceIds).filterNot { track ->
+        val sourceTracks = store.readTracks(visibleSourceIds)
+        val visibleTracks = sourceTracks.filterNot { track ->
             track.id in hiddenDeviceTrackIds || track.id in hiddenFolderTrackIds
         }
         val visibleDeviceTrackCount = deviceTrackLocations.size - hiddenDeviceTrackIds.size
@@ -417,7 +437,28 @@ internal class AndroidLibraryCatalog(
                 }
             },
             playlists = store.readPlaylists(),
+            unmatchedRecords = if (displacedDeviceTrackIds.isEmpty() && hiddenFolderTrackIds.isEmpty()) {
+                emptyList()
+            } else {
+                unmatchedRecords(sourceTracks, visibleTracks)
+            },
         )
+    }
+
+    /** Records of the sources shown, each with the songs it could belong to that the Library shows. */
+    private fun unmatchedRecords(
+        sourceTracks: List<AudioTrack>,
+        visibleTracks: List<AudioTrack>,
+    ): List<UnmatchedLibraryRecord> {
+        val records = store.readUnmatchedRecords()
+        if (records.isEmpty()) return emptyList()
+        val tracksById = sourceTracks.associateBy(AudioTrack::id)
+        val visibleTrackIds = visibleTracks.mapTo(HashSet(), AudioTrack::id)
+        return records.mapNotNull { (recordId, candidateIds) ->
+            val record = tracksById[recordId] ?: return@mapNotNull null
+            val candidates = candidateIds.filter(visibleTrackIds::contains).mapNotNull(tracksById::get)
+            if (candidates.isEmpty()) null else UnmatchedLibraryRecord(record, candidates)
+        }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.record.title })
     }
 
     private fun persistedReadableTreeUris(): Set<String> = contentResolver.persistedUriPermissions

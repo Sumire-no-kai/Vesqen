@@ -210,12 +210,17 @@ internal class PlaybackStartGate {
     fun onMediaItemTransition(trackId: Long?, reason: Int, occurrenceId: String? = null) {
         // Catalog refreshes preserve the queue occurrence token; an explicit queue replacement
         // allocates new tokens even for the same song. Unknown identity must not suppress a listen.
+        // The token is unique to its queue entry, so the same token under another track ID is the
+        // same entry after the Library merged its song into a record (#139): the listen follows it.
         val metadataOnly =
             reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED &&
             trackId != null &&
-            trackId == lastCountedTrackId &&
             occurrenceId != null && occurrenceId == currentOccurrenceId
-        if (!metadataOnly) reset()
+        if (!metadataOnly) {
+            reset()
+        } else if (lastCountedTrackId != null) {
+            lastCountedTrackId = trackId
+        }
         currentOccurrenceId = occurrenceId
     }
 

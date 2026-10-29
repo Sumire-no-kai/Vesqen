@@ -41,6 +41,16 @@ data class LibraryCatalogSnapshot(
     val tracks: List<AudioTrack>,
     val sources: List<LibrarySource>,
     val playlists: List<LibraryPlaylist> = emptyList(),
+    val unmatchedRecords: List<UnmatchedLibraryRecord> = emptyList(),
+)
+
+/**
+ * A hidden song's favorite, plays and playlist places that the Library could not give to one file
+ * (#139). The user picks which of [candidates] it belongs to, or discards it.
+ */
+data class UnmatchedLibraryRecord(
+    val record: AudioTrack,
+    val candidates: List<AudioTrack>,
 )
 
 data class LibraryPlaylist(
