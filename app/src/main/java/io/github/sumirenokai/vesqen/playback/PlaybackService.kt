@@ -43,6 +43,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -290,6 +291,14 @@ class PlaybackService : MediaSessionService() {
             onPlaybackStarted = (application as VesqenApplication)
                 .playbackHistoryRecorder::recordPlayback,
         ).also(PlaybackStateKeeper::start)
+        serviceScope.launch {
+            // The queue's catalog IDs name other songs, or none, in a rebuilt catalog (#165): playing,
+            // counting or saving it would mix them up. The saved queue was cleared before the rebuild.
+            (application as VesqenApplication).libraryCatalogStore.rebuilds.drop(1).collect {
+                player.stop()
+                player.clearMediaItems()
+            }
+        }
         val artworkLoader = SessionArtworkLoader(this).also { sessionArtworkLoader = it }
         val sessionActivity = PendingIntent.getActivity(this, 0,
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),

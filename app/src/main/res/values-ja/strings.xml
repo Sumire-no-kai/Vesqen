@@ -188,6 +188,9 @@
     <string name="crash_prompt_body">レポートを送信すると、原因の調査に役立ちます。エラーの種類と、コード内の発生箇所が含まれます。送信前に内容をすべて確認できます。</string>
     <string name="crash_prompt_review">確認して送信</string>
     <string name="crash_prompt_decline">送信しない</string>
+    <string name="library_rebuilt_title">ライブラリのデータを再構築しました</string>
+    <string name="library_rebuilt_body">ライブラリのデータが破損していたため、端末内の音楽からライブラリを再構築しました。お気に入り、再生回数、再生履歴、プレイリストは引き継ぐことができませんでした。キューもクリアしました。追加済みの音楽フォルダは、再度追加してください。端末内の音楽ファイルに影響はありません。</string>
+    <string name="library_rebuilt_ok">OK</string>
     <string name="licenses_title">オープンソースライセンス</string>
     <string name="licenses_intro">Vesqen は次のオープンソースソフトウェアを使用しています。</string>
     <string name="licenses_loading">読み込み中…</string>

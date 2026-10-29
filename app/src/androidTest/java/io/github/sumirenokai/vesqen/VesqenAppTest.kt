@@ -77,6 +77,7 @@ import io.github.sumirenokai.vesqen.chain.AppSegmentMetricIds
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecordingState
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
+import io.github.sumirenokai.vesqen.library.LibraryRebuildNotice
 import io.github.sumirenokai.vesqen.library.LibraryScanProgress
 import io.github.sumirenokai.vesqen.library.LibraryScanState
 import io.github.sumirenokai.vesqen.library.LibrarySource
@@ -1385,6 +1386,47 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.crash-prompt").assertDoesNotExist()
         composeRule.onNodeWithTag("vesqen.support-prompt").assertDoesNotExist()
         composeRule.runOnIdle { assertEquals(0, support.shown) }
+    }
+
+    @Test
+    fun after_a_catalog_rebuild_the_notice_comes_once_before_the_other_questions() {
+        val rebuilt = FakeLibraryRebuildNotice(due = true)
+        val crash = FakeCrashPrompt(due = true)
+        val support = FakeSupportPrompt(due = true)
+        render(grantedState(), deviceReporter = FakeDeviceReporter(), crashPrompt = crash,
+            supportPrompt = support, supportUrl = UnopenableSupportUrl, rebuildNotice = rebuilt)
+
+        composeRule.onNodeWithTag("vesqen.library.rebuilt-dialog").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.library_rebuilt_title)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.library_rebuilt_body)).assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.crash-prompt").assertDoesNotExist()
+        assertClickablesAtLeast48Dp("Library rebuilt notice")
+        composeRule.runOnIdle { assertEquals(1, rebuilt.shown) }
+        composeRule.onNodeWithTag("vesqen.library.rebuilt-ok")
+            .assertTextEquals(context.getString(R.string.library_rebuilt_ok)).performClick()
+
+        // The crash question follows it; this open asks for nothing else.
+        composeRule.onNodeWithTag("vesqen.library.rebuilt-dialog").assertDoesNotExist()
+        composeRule.onNodeWithTag("vesqen.crash-prompt").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.crash-prompt.decline").performClick()
+        composeRule.onNodeWithTag("vesqen.support-prompt").assertDoesNotExist()
+        composeRule.runOnIdle {
+            assertEquals(1, rebuilt.shown)
+            assertEquals(0, support.shown)
+        }
+    }
+
+    @Test
+    fun a_catalog_rebuilt_while_the_app_is_open_is_announced_at_once() {
+        val rebuilt = FakeLibraryRebuildNotice(due = false)
+        render(grantedState(), rebuildNotice = rebuilt)
+        composeRule.onNodeWithTag("vesqen.library.rebuilt-dialog").assertDoesNotExist()
+
+        composeRule.runOnIdle { rebuilt.emit(true) }
+        composeRule.onNodeWithTag("vesqen.library.rebuilt-dialog").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.library.rebuilt-ok").performClick()
+        composeRule.onNodeWithTag("vesqen.library.rebuilt-dialog").assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals(1, rebuilt.shown) }
     }
 
     @Test
@@ -4398,6 +4440,7 @@ class VesqenAppTest {
         crashPrompt: CrashPrompt? = null,
         supportPrompt: SupportPrompt? = null,
         supportUrl: String? = null,
+        rebuildNotice: LibraryRebuildNotice? = null,
     ) {
         composeRule.setContent {
             VesqenTheme(darkTheme = darkTheme) {
@@ -4442,6 +4485,7 @@ class VesqenAppTest {
                         crashPrompt = crashPrompt,
                         supportPrompt = supportPrompt,
                         supportUrl = supportUrl,
+                        rebuildNotice = rebuildNotice,
                     )
                 }
                 val renderWithinSize: @Composable () -> Unit = {
@@ -4662,6 +4706,15 @@ private class FakeCrashPrompt(due: Boolean, checked: Boolean = true) : CrashProm
 private const val UnopenableSupportUrl = "vesqen-test-unopenable://support"
 
 /** Counts what the app shell asks of the support question; no preferences or library behind it. */
+private class FakeLibraryRebuildNotice(due: Boolean) : LibraryRebuildNotice {
+    private val mutableDue = MutableStateFlow(due)
+    override val due: StateFlow<Boolean> = mutableDue.asStateFlow()
+    var shown = 0
+        private set
+    fun emit(value: Boolean) { mutableDue.value = value }
+    override fun markShown() { shown++; mutableDue.value = false }
+}
+
 private class FakeSupportPrompt(due: Boolean) : SupportPrompt {
     private val mutableDue = MutableStateFlow(due)
     override val due: StateFlow<Boolean> = mutableDue.asStateFlow()

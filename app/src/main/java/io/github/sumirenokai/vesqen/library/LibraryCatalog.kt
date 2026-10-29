@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.core.net.toUri
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.Closeable
@@ -61,7 +62,7 @@ internal class AndroidLibraryCatalog(
     private val mediaStore = MediaStoreAudioRepository(appContext, contentResolver)
     private val treeScanner = TreeAudioScanner(contentResolver)
     private val metadataReader = LocalAudioMetadataReader(appContext)
-    private val scanGate = LibraryScanGate()
+    private val scanGate = LibraryScanGate(store.rebuilds)
     private val operationGate = LibraryCatalogOperationGate()
 
     private val resumePausedSourcesRequested = AtomicBoolean()
@@ -182,6 +183,7 @@ internal class AndroidLibraryCatalog(
         includeDeviceLibrary: Boolean,
         onProgress: suspend (LibraryScanProgress) -> Unit,
     ): LibraryRefreshResult {
+        scanGate.startScan()
         store.reconcileInterruptedScans()
         if (resumePausedSourcesRequested.getAndSet(false)) {
             store.preparePausedSourcesForResume()
@@ -194,7 +196,10 @@ internal class AndroidLibraryCatalog(
                 SourceScanOutcome.FAILED,
                 SourceScanOutcome.INTERRUPTED,
                 -> hadFailure = true
-                SourceScanOutcome.PAUSED -> scanPaused = true
+                // A rebuilt catalog has no sources left to scan; the Library starts a full scan of it.
+                SourceScanOutcome.PAUSED,
+                SourceScanOutcome.REBUILT,
+                -> scanPaused = true
                 else -> Unit
             }
         }
@@ -210,7 +215,9 @@ internal class AndroidLibraryCatalog(
                         SourceScanOutcome.FAILED,
                         SourceScanOutcome.INTERRUPTED,
                         -> hadFailure = true
-                        SourceScanOutcome.PAUSED -> scanPaused = true
+                        SourceScanOutcome.PAUSED,
+                        SourceScanOutcome.REBUILT,
+                        -> scanPaused = true
                         else -> Unit
                     }
                 }
@@ -254,7 +261,8 @@ internal class AndroidLibraryCatalog(
                 store.upsertMediaStoreTrack(scan, metadataReader.enrich(candidate))
             }
         }
-        if (iteration.completed) {
+        // After a rebuild the scan's rows belong to the old catalog; finishIteration ends it (#165 U5).
+        if (iteration.completed && !scanGate.catalogRebuilt()) {
             val finalScope = mediaStore.currentScanScope()
             if (!mediaStoreScanCanCommit(iteration, scanScope, finalScope)) {
                 store.markSourceInterrupted(source.id)
@@ -325,6 +333,8 @@ internal class AndroidLibraryCatalog(
         scannedMediaStoreVolumes: Collection<String>? = null,
         onProgress: suspend (LibraryScanProgress) -> Unit,
     ): SourceScanOutcome {
+        // The session and the rows it saw belong to the catalog that was set aside (#165 U5).
+        if (scanGate.catalogRebuilt()) return SourceScanOutcome.REBUILT
         if (!iteration.completed) {
             store.markSourcePaused(source.id)
             onProgress(
@@ -477,12 +487,29 @@ private enum class SourceScanOutcome {
     INTERRUPTED,
     SKIPPED,
     FAILED,
+
+    /** The catalog was rebuilt after corruption during the scan, which stopped without writing more. */
+    REBUILT,
 }
 
-/** A pause is observed between provider rows; the scanner then closes its cursor before returning. */
-private class LibraryScanGate {
+/**
+ * A pause is observed between provider rows; the scanner then closes its cursor before returning.
+ * A catalog rebuild since the scan started stops it the same way (#165 U5): its later writes would
+ * go to the new, empty catalog by IDs from the old one, so an unchanged row updates nothing and the
+ * scan would walk the whole library before failing, while the full scan of the new catalog waits.
+ */
+private class LibraryScanGate(private val rebuilds: StateFlow<Int>) {
     @Volatile
     private var paused = false
+
+    @Volatile
+    private var rebuildsAtScanStart = rebuilds.value
+
+    fun startScan() {
+        rebuildsAtScanStart = rebuilds.value
+    }
+
+    fun catalogRebuilt(): Boolean = rebuilds.value != rebuildsAtScanStart
 
     fun pause() {
         paused = true
@@ -492,5 +519,5 @@ private class LibraryScanGate {
         paused = false
     }
 
-    fun isPaused(): Boolean = paused
+    fun isPaused(): Boolean = paused || catalogRebuilt()
 }

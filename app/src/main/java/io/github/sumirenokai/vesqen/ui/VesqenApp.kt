@@ -84,6 +84,7 @@ import io.github.sumirenokai.vesqen.diagnostics.DiagnosticExportResult
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
 import io.github.sumirenokai.vesqen.diagnostics.exportTo
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.library.LibraryRebuildNotice
 import io.github.sumirenokai.vesqen.library.musicLibraryPermission
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
@@ -366,6 +367,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
         supportPrompt = application.supportPrompt.takeUnless {
             usageIntroductionShown || usageSnapshot.status == UsageSettingsStatus.LOADING
         },
+        rebuildNotice = application.libraryRebuildNotice,
     )
 }
 
@@ -435,6 +437,7 @@ fun VesqenAppContent(
     crashPrompt: CrashPrompt? = null,
     supportPrompt: SupportPrompt? = null,
     supportUrl: String? = supportDevelopmentUrl,
+    rebuildNotice: LibraryRebuildNotice? = null,
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     var showStrictUsbUnavailable by rememberSaveable { mutableStateOf(false) }
@@ -577,6 +580,17 @@ fun VesqenAppContent(
         }
     }
 
+    // #165: after a corrupt catalog was rebuilt, say once what was lost, before any other question.
+    val rebuildNoticeDue = rebuildNotice?.due?.collectAsStateWithLifecycle()?.value == true
+    var showRebuildNotice by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(rebuildNoticeDue) {
+        if (rebuildNoticeDue) {
+            showRebuildNotice = true
+            askedThisOpen = true
+            rebuildNotice?.markShown()
+        }
+    }
+
     // #151: now and then the GitHub build asks for support, only in an open that asks nothing else:
     // it waits until the crash records are read, and an open with the crash question is left alone.
     val crashPromptChecked = crashPrompt?.checked?.collectAsStateWithLifecycle()?.value ?: true
@@ -592,7 +606,9 @@ fun VesqenAppContent(
         }
     }
 
-    if (showCrashPrompt && deviceReporter != null) {
+    if (showRebuildNotice) {
+        LibraryRebuiltDialog(onDismiss = { showRebuildNotice = false })
+    } else if (showCrashPrompt && deviceReporter != null) {
         CrashPromptDialog(
             onReview = {
                 showCrashPrompt = false
