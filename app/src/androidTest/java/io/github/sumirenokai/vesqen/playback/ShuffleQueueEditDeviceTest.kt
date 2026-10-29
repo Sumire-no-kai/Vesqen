@@ -1,7 +1,9 @@
 package io.github.sumirenokai.vesqen.playback
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -267,6 +269,96 @@ class ShuffleQueueEditDeviceTest {
     }
 
     @Test
+    fun aShuffledQueueRestoredAfterTheProcessEndsKeepsItsPlayOrder() = runBlocking {
+        val queued = (1L..6L).map(::silentTrack)
+        try {
+            main { controller = PlaybackController(app) { playback.set(it) } }
+            awaitPlayback { it.isControllerReady }
+            main { controller.playQueue(queued, 0) }
+            awaitPlayback { it.trackId == queued[0].id && it.queueSize == 6 }
+            main { controller.cyclePlaybackOrderMode() }
+            awaitPlayback { it.shuffleEnabled && it.queue.firstOrNull()?.trackId == queued[0].id }
+            val second = playback.get().queue[1].trackId
+            main { controller.skipToNext() }
+            awaitPlayback { it.trackId == second }
+            // A shuffled move changes only the order (#158), which the queue's file saves too.
+            val before = playback.get().queue
+            main { controller.moveQueueItem(before.last().listIndex, before[before.lastIndex - 1].listIndex) }
+            val order = before.dropLast(2).map(PlaybackQueueItem::trackId) + listOf(before.last().trackId, before[before.lastIndex - 1].trackId)
+            awaitPlayback { snapshot -> snapshot.queue.map(PlaybackQueueItem::trackId) == order }
+            main { controller.togglePlayback() }
+            withTimeout(15_000) { while (savedTracksInPlayOrder() != order) delay(50) }
+
+            // Android ends the paused app: its files stay as they are, and the next process starts with
+            // an empty player. Here the service and this controller live on (releasing the controller
+            // could end a service an earlier test stopped), so the player is emptied, which clears the
+            // saved queue, and the files are put back.
+            val files = savedPlaybackFiles()
+            main { controller.clearQueue() }
+            withTimeout(15_000) { while (PlaybackStateStore(app).load() != null) delay(50) }
+            restorePlaybackFiles(files)
+
+            // The queue is restored once the Library is read (#170), as in the next process: the same
+            // order and current track, listed at once.
+            assertEquals(order, shownAfter { controller.syncLibrary(queued) })
+            assertEquals(second, playback.get().trackId)
+            main { controller.togglePlayback() }
+            assertSettledQueue(order)
+            // What the queue lists after the current track is what Next plays.
+            val upcoming = order.drop(playback.get().queueIndex + 1)
+            assertEquals(order.drop(2), upcoming)
+            val played = upcoming.map { expectedId ->
+                main { controller.skipToNext() }
+                awaitPlayback { it.trackId == expectedId || !it.hasNext }
+                playback.get().trackId
+            }
+            assertEquals(upcoming, played)
+        } finally {
+            releasePlayback()
+        }
+    }
+
+    @Test
+    fun aRestoredQueueIsSetInItsSavedPlayOrder() {
+        val reasons = mutableListOf<Int>()
+        var restoredReasons = emptyList<Int>()
+        var order = emptyList<Int>()
+        var current = C.INDEX_UNSET
+        var requests = emptyList<MediaItem.RequestMetadata>()
+        var unnamed = emptyList<Int>()
+        main {
+            val player = ExoPlayer.Builder(app).build().apply { setShuffleOrder(PlayOrder(IntArray(0))) }
+            try {
+                val session = PlayOrderSessionPlayer(player)
+                session.shuffleModeEnabled = true
+                player.addListener(object : Player.Listener {
+                    override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                        reasons += reason
+                    }
+                })
+                // As the app's controller sends them through the session.
+                val items = (1..5).map { entry("$it", "o$it") }.withPlayOrder(listOf(3, 0, 4, 1, 2))
+                    .map { MediaItem.fromBundle(it.toBundleIncludeLocalConfiguration()) }
+                session.setMediaItems(items, 1, 0)
+                restoredReasons = reasons.toList()
+                order = player.shuffleOrder.playOrder().toList()
+                current = player.currentMediaItemIndex
+                requests = List(player.mediaItemCount) { player.getMediaItemAt(it).requestMetadata }
+                // Places that do not name one item each are no order: a new queue plays its start first.
+                session.setMediaItems(items.take(4), 1, 0)
+                unnamed = player.shuffleOrder.playOrder().toList()
+            } finally {
+                player.release()
+            }
+        }
+        assertEquals(listOf(Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED), restoredReasons)
+        assertEquals(listOf(3, 0, 4, 1, 2), order)
+        assertEquals(1, current)
+        assertEquals(List(5) { MediaItem.RequestMetadata.EMPTY }, requests)
+        assertEquals(1, unnamed.first())
+    }
+
+    @Test
     fun requestsWithoutTheirKeysAreRefused() {
         // The session reads an insert's placement from the item the controller sent.
         val sent = MediaItem.fromBundle(entry("1", "a").withPlayOrderPlacement(PlayOrderPlacement.LAST).toBundle())
@@ -311,6 +403,27 @@ class ShuffleQueueEditDeviceTest {
         assertEquals(false, stale)
         assertEquals(before, after)
         assertEquals(true, current)
+    }
+
+    /** The saved queue's tracks in its saved play order. */
+    private fun savedTracksInPlayOrder(): List<Long>? =
+        PlaybackStateStore(app).load()?.let { saved -> saved.playOrder?.map(saved.queueTrackIds::get) }
+
+    private fun savedPlaybackFiles(): Map<String, Map<String, *>> =
+        PLAYBACK_FILES.associateWith { app.getSharedPreferences(it, Context.MODE_PRIVATE).all.toMap() }
+
+    private fun restorePlaybackFiles(files: Map<String, Map<String, *>>) = files.forEach { (name, values) ->
+        val editor = app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear()
+        values.forEach { (key, value) ->
+            when (value) {
+                is String -> editor.putString(key, value)
+                is Long -> editor.putLong(key, value)
+                is Int -> editor.putInt(key, value)
+                is Boolean -> editor.putBoolean(key, value)
+                else -> error("Unexpected $key: $value")
+            }
+        }
+        check(editor.commit())
     }
 
     private fun ExoPlayer.entriesInPlayOrder(): List<String> = shuffleOrder.playOrder().map { getMediaItemAt(it).queueEntryId() }
@@ -360,5 +473,6 @@ class ShuffleQueueEditDeviceTest {
 
     private companion object {
         const val FIXTURE_DIR = "shuffle-queue-edits"
+        val PLAYBACK_FILES = listOf("playback-state", "playback-progress")
     }
 }

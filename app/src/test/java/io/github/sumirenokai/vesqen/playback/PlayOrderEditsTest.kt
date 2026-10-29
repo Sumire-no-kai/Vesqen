@@ -59,6 +59,18 @@ class PlayOrderEditsTest {
     }
 
     @Test
+    fun `a restored queue is set in its saved play order once`() {
+        // #170: the order before the restore hands its saved order to the queue set next.
+        val restored = PlayOrder(IntArray(0), nextSetOrder = shuffled).cloneAndSet(insertionCount = 4, startIndex = 1)
+        assertArrayEquals(shuffled, restored.playOrder())
+        // The order is spent: the next queue starts at its start item again, also after another edit.
+        assertEquals(1, restored.cloneAndSet(4, 1).playOrder().first())
+        assertEquals(1, PlayOrder(IntArray(0), nextSetOrder = shuffled).cloneAndInsert(0, 1).cloneAndClear().cloneAndSet(4, 1).playOrder().first())
+        // A queue of another length is not the one the order was saved for.
+        assertEquals(2, PlayOrder(IntArray(0), nextSetOrder = shuffled).cloneAndSet(insertionCount = 5, startIndex = 2).playOrder().first())
+    }
+
+    @Test
     fun `the order walks both ways and ends with unset`() {
         val order: ShuffleOrder = PlayOrder(shuffled)
         assertEquals(2, order.firstIndex)

@@ -128,7 +128,7 @@ Play 正式版的时间取决于 Google：2026-10-16 查看时封闭测试已满
 | --- | --- |
 | [#165](https://github.com/Sumire-no-kai/Vesqen/issues/165) 审计 | 最多四个 SQLiteOpenHelper 打开同一个数据库，合成一个。下一次改表结构之前必须完成，所以排在 #139 前面 |
 | [#159](https://github.com/Sumire-no-kai/Vesqen/issues/159)、[#139](https://github.com/Sumire-no-kai/Vesqen/issues/139) | 媒体库重建时的匹配，以及对不上的旧记录让用户选择归属。都要改扫描流程，一起做。2026-10-29 所有者定下 #139 的五件事：一直保留到用户处理；"待选择"状态沿用现有隐藏行，不改表结构；合并时收藏任一有即算有、播放次数相加、最后播放时间取较晚者、歌单位置去重；只在有这类记录时于来源卡片显示一行提示，不弹窗；只处理匹配不唯一的记录 |
-| [#170](https://github.com/Sumire-no-kai/Vesqen/issues/170) F8–F10 | 随机播放改用自定义 `ShuffleOrder`：队列编辑没有 masking、每次插入重建两次平台队列、masking 时队列短暂按列表顺序显示。同时评估进程被结束后保留随机顺序（1.0.1 的已知限制） |
+| [#170](https://github.com/Sumire-no-kai/Vesqen/issues/170) F8–F10 | 随机播放改用自定义 `ShuffleOrder`：队列编辑没有 masking、每次插入重建两次平台队列、masking 时队列短暂按列表顺序显示（PR #183）。进程被结束后保留随机顺序（1.0.1 的已知限制）：`playback-state` 增加 `play_order` 和 `play_order_signature` 两个键，两条恢复路径都按保存的顺序恢复（PR #184，基于 #183） |
 | 审查遗留（[#136](https://github.com/Sumire-no-kai/Vesqen/issues/136)、[#143](https://github.com/Sumire-no-kai/Vesqen/issues/143)、[#156](https://github.com/Sumire-no-kai/Vesqen/issues/156)、#165） | 先做会丢数据或让操作没有反应的：暂停后进程被结束，恢复时同一首多算一次播放；恢复队列时暂时读不到的曲目被永久去掉；每 5 秒的进度检查点重写整个队列；数据库损坏时默认直接删除文件；扫描期间整个曲库被锁住（#136 R12）；扫描期间的媒体变化让很长的扫描一直完不成（R15）；详情页"播放"在播放次数更新后没有反应（R28）；链路页经过别的页面再回来时丢了返回目标（#156 V25）。R13、R14、R18、R22、#143 Q15、#156 V24 先核实是否已被后来的修复覆盖 |
 
 要所有者先定的：

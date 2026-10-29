@@ -46,6 +46,41 @@ class PlaybackStateStoreTest {
     }
 
     @Test
+    fun `a shuffled restore keeps the saved play order without the tracks it leaves out`() {
+        // #170: saved indices in the order they play; track 2 (saved index 1) is not in the Library now.
+        val saved = PersistedPlaybackState(
+            queueTrackIds = listOf(1, 2, 3, 4, 5), currentTrackId = 5, currentQueueIndex = 4, positionMs = 12_345,
+            shuffleEnabled = true, repeatMode = PlaybackRepeatMode.OFF, queueEnded = false, playOrder = listOf(3, 0, 4, 1, 2),
+        )
+        val restored = saved.restoreAgainst(listOf(track(1), track(3), track(4), track(5)))!!
+        assertEquals(listOf(1L, 3L, 4L, 5L), restored.tracks.map(AudioTrack::id))
+        assertEquals(listOf(2, 0, 3, 1), restored.playOrder)
+        assertEquals(3, restored.startIndex)
+        assertEquals(12_345, restored.positionMs)
+        // Without shuffle the list is the order; an order alone does not shuffle.
+        assertNull(saved.copy(shuffleEnabled = false).restoreAgainst(listOf(track(1), track(3)))!!.playOrder)
+        // Saves before 1.1.0 carry none and shuffle anew.
+        assertNull(saved.copy(playOrder = null).restoreAgainst(listOf(track(1)))!!.playOrder)
+    }
+
+    @Test
+    fun `an ended shuffled queue continues in its play order`() {
+        val tracks = listOf(track(1), track(2), track(3))
+        fun ended(index: Int) = saved(index, 60_000, queueEnded = true).copy(shuffleEnabled = true, playOrder = listOf(2, 1, 0))
+        // The next one in the play order, not in the list.
+        assertEquals(1, ended(2).restoreAgainst(tracks)!!.startIndex)
+        // After the last one in the play order, its first.
+        val last = ended(0).restoreAgainst(tracks)!!
+        assertEquals(2, last.startIndex)
+        assertEquals(0, last.positionMs)
+        // A current track that is gone starts the play order from its first track too.
+        val gone = ended(0).copy(queueEnded = false).restoreAgainst(listOf(track(2), track(3)))!!
+        assertEquals(listOf(1, 0), gone.playOrder)
+        assertEquals(1, gone.startIndex)
+        assertEquals(0, gone.positionMs)
+    }
+
+    @Test
     fun `a pause near the end of a track restores the saved position in every repeat mode`() {
         val tracks = listOf(track(1), track(2), track(3))
         for (repeatMode in PlaybackRepeatMode.entries) {
