@@ -13,6 +13,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionCommands
@@ -47,11 +48,11 @@ class PlaybackController(
     private var suppressListenerPublishing = false
     private var currentProblem: PlaybackProblem? = null
     private var queueCache = PlaybackQueueCache()
+    private var expectedPlayOrder: ExpectedPlayOrder? = null
     private var reconnectAttempt = 0
     private var connectionGeneration = 0L
     private var released = false
     private val usbOutputCommand = SessionCommand(UsbOutputSessionContract.SET_MODE_ACTION, Bundle.EMPTY)
-    private val insertCommand = SessionCommand(PlayOrderSessionContract.INSERT_ACTION, Bundle.EMPTY)
     private val moveCommand = SessionCommand(PlayOrderSessionContract.MOVE_ACTION, Bundle.EMPTY)
     private var usbOutputStatus = UsbOutputStatus()
 
@@ -253,16 +254,18 @@ class PlaybackController(
         shuffleEnabled: Boolean = false,
         repeatMode: PlaybackRepeatMode = PlaybackRepeatMode.OFF,
         startOccurrenceId: String? = null,
+        playOrder: List<Int>? = null,
     ) {
         tracksById.clear()
         tracks.forEach { track -> tracksById[track.id.toString()] = track }
-        activeController.setMediaItems(
-            playbackMediaItems(tracks, startIndex, startOccurrenceId),
-            startIndex,
-            positionMs,
-        )
+        // The modes before the queue, as the service's own restore sets them: shuffle turned on after
+        // the queue would put the current item first in a restored queue's saved order (#170).
         activeController.shuffleModeEnabled = shuffleEnabled
         activeController.repeatMode = repeatMode.toMedia3RepeatMode()
+        val items = playbackMediaItems(tracks, startIndex, startOccurrenceId).withPlayOrder(playOrder)
+        activeController.setMediaItems(items, startIndex, positionMs)
+        // Listed in that order until the session's queue arrives (#170 F10).
+        expectPlayOrder(activeController, playOrder?.map { items[it].queueEntryId() })
         // Restoring a paused queue is metadata recovery, not a request to create an audio output.
         if (playWhenReady) {
             activeController.prepare()
@@ -274,30 +277,31 @@ class PlaybackController(
     }
 
     fun playNext(track: AudioTrack) {
-        controller?.let { player ->
-            insert(player, track, afterCurrent = true)
-        }
+        controller?.let { player -> insert(player, track, PlayOrderPlacement.NEXT) }
     }
 
     fun addToQueue(track: AudioTrack) {
-        controller?.let { player -> insert(player, track, afterCurrent = false) }
+        controller?.let { player -> insert(player, track, PlayOrderPlacement.LAST) }
     }
 
     /**
-     * Inserts through the service, which also places the track in the shuffled play order (#158).
-     * The session's timeline change then rebuilds the queue.
+     * Inserts as an ordinary queue edit, which Media3 shows here at once (#170 F8), so a library
+     * refresh right after it works on the new queue. The service places the item from its own current
+     * item and, while shuffled, in the play order too (#158, PlayOrderSessionPlayer).
      */
-    private fun insert(player: MediaController, track: AudioTrack, afterCurrent: Boolean) {
+    private fun insert(player: MediaController, track: AudioTrack, placement: PlayOrderPlacement) {
         tracksById[track.id.toString()] = track
         availableTracksById[track.id.toString()] = track
         val item = track.toPlaybackMediaItem()
-        if (player.isSessionCommandAvailable(insertCommand)) {
-            player.sendCustomCommand(insertCommand, PlayOrderSessionContract.insertArgs(PlayOrderSessionContract.Insert(item, afterCurrent)))
-        } else {
-            val listIndex = if (afterCurrent) (player.currentMediaItemIndex + 1).coerceIn(0, player.mediaItemCount) else player.mediaItemCount
-            player.addMediaItem(listIndex, item)
-            publish(player, rebuildQueue = true)
+        val order = shuffledEntryIds(player)
+        val (listIndex, playsAfter) = when (placement) {
+            PlayOrderPlacement.NEXT ->
+                (player.currentMediaItemIndex + 1).coerceIn(0, player.mediaItemCount) to player.currentMediaItem?.queueEntryId()
+            PlayOrderPlacement.LAST -> player.mediaItemCount to order?.lastOrNull()
         }
+        player.addMediaItem(listIndex, item.withPlayOrderPlacement(placement))
+        expectPlayOrder(player, order?.withEntryAfter(item.queueEntryId(), playsAfter))
+        publish(player, rebuildQueue = true)
     }
 
     fun playQueueIndex(index: Int) {
@@ -311,7 +315,10 @@ class PlaybackController(
 
     fun removeQueueItem(index: Int) {
         controller?.takeIf { index in 0 until it.mediaItemCount }?.let { player ->
+            val order = shuffledEntryIds(player)
+            val removed = player.getMediaItemAt(index).queueEntryId()
             player.removeMediaItem(index)
+            expectPlayOrder(player, order?.minus(removed))
             if (player.mediaItemCount == 0) {
                 currentProblem = null
             }
@@ -329,7 +336,7 @@ class PlaybackController(
             if (fromIndex !in 0 until player.mediaItemCount || toIndex !in 0 until player.mediaItemCount) return
             if (player.isSessionCommandAvailable(moveCommand)) {
                 // The service decides from its own shuffle mode; a refusal leaves the queue as shown.
-                val order = player.playOrder()
+                val order = playOrderOf(player, List(player.mediaItemCount, player::getMediaItemAt))
                 val move = PlayOrderSessionContract.Move(
                     item = fromIndex,
                     itemId = player.getMediaItemAt(fromIndex).queueEntryId(),
@@ -420,11 +427,17 @@ class PlaybackController(
 
     fun cyclePlaybackOrderMode() {
         controller?.let { activeController ->
+            val wasShuffled = activeController.shuffleModeEnabled
             suppressListenerPublishing = true
             try {
                 activeController.applyPlaybackOrderMode(activeController.playbackOrderMode.next())
             } finally {
                 suppressListenerPublishing = false
+            }
+            if (!wasShuffled) {
+                // The service then starts the play order at the current track (#158).
+                val current = activeController.currentMediaItem?.queueEntryId()
+                expectPlayOrder(activeController, shuffledEntryIds(activeController)?.withEntryAfter(current, anchor = null))
             }
             publish(activeController)
         }
@@ -555,7 +568,7 @@ class PlaybackController(
         val currentIndex = player.currentMediaItemIndex
         // One timeline read per item: each one is a window lookup on the main thread.
         val queueItems = List(player.mediaItemCount, player::getMediaItemAt)
-        val projection = player.playOrder().mapNotNull { index ->
+        val projection = playOrderOf(player, queueItems).mapNotNull { index ->
             val queueItem = queueItems[index]
             val queueTrack = tracksById[queueItem.mediaId] ?: availableTracksById[queueItem.mediaId]
             val queueTrackId = queueItem.mediaId.toLongOrNull() ?: return@mapNotNull null
@@ -574,6 +587,31 @@ class PlaybackController(
             projection = projection,
         )
     }
+
+    /**
+     * List indices in the order they play. Media3 shows this controller's own queue edits at once in a
+     * timeline without the shuffle order, in list order, until the session's timeline arrives (#170
+     * F10). While the controller holds that timeline, the order is the one the edit leads to.
+     */
+    private fun playOrderOf(player: Player, queueItems: List<MediaItem>): List<Int> =
+        expectedPlayOrder
+            ?.takeIf { player.shuffleModeEnabled && it.timeline === player.currentTimeline }
+            ?.let { expectedPlayOrderIndices(it.entryIds, queueItems.map(MediaItem::queueEntryId)) }
+            ?: player.playOrder()
+
+    /** The queue entries in play order while shuffled, read before one of this controller's own edits. */
+    private fun shuffledEntryIds(player: Player, queueItems: List<MediaItem>? = null): List<String>? {
+        if (!player.shuffleModeEnabled) return null
+        val items = queueItems ?: List(player.mediaItemCount, player::getMediaItemAt)
+        return playOrderOf(player, items).map { items[it].queueEntryId() }
+    }
+
+    /** The play order after this controller's own edit, for the timeline Media3 now shows for it. */
+    private fun expectPlayOrder(player: Player, entryIds: List<String>?) {
+        expectedPlayOrder = entryIds?.takeIf { player.shuffleModeEnabled }?.let { ExpectedPlayOrder(player.currentTimeline, it) }
+    }
+
+    private class ExpectedPlayOrder(val timeline: Timeline, val entryIds: List<String>)
 
     private fun Int.toPlaybackRepeatMode(): PlaybackRepeatMode = when (this) {
         Player.REPEAT_MODE_ALL -> PlaybackRepeatMode.ALL
@@ -668,9 +706,12 @@ class PlaybackController(
                         )
                     }
                 }
+                // Replacements keep their entries and their places in the play order (PlayOrder).
+                val order = if (ranges.isEmpty()) null else shuffledEntryIds(player, queuedItems)
                 // Replacing a range that holds an item with a new URI re-creates every item in it,
                 // and the current one, if inside, would end. Only changed items are replaced.
                 ranges.forEach { (fromIndex, items) -> player.replaceMediaItems(fromIndex, fromIndex + items.size, items) }
+                order?.let { expectPlayOrder(player, it) }
             } finally {
                 suppressListenerPublishing = false
             }
@@ -691,8 +732,27 @@ class PlaybackController(
             shuffleEnabled = restored.shuffleEnabled,
             repeatMode = restored.repeatMode,
             startOccurrenceId = restored.startOccurrenceId,
+            playOrder = restored.playOrder,
         )
     }
+}
+
+/**
+ * Maps the expected play order (queue entries) to list indices; null unless it holds exactly the
+ * queue's entries, each once.
+ */
+internal fun expectedPlayOrderIndices(entryIds: List<String>, listEntryIds: List<String>): List<Int>? {
+    val listIndexOf = listEntryIds.withIndex().associate { (index, entryId) -> entryId to index }
+    if (entryIds.size != listEntryIds.size || listIndexOf.size != listEntryIds.size) return null
+    return entryIds.map { listIndexOf[it] ?: return null }.takeIf { it.distinct().size == it.size }
+}
+
+/** The order with [entryId] put right after [anchor], or first without one, as PlayOrder places it. */
+internal fun List<String>.withEntryAfter(entryId: String?, anchor: String?): List<String> {
+    if (entryId == null) return this
+    val order = filter { it != entryId }.toMutableList()
+    order.add(anchor?.let(order::indexOf)?.plus(1) ?: 0, entryId)
+    return order
 }
 
 /** Retains an immutable catalog view so a later controller connection can restore persisted state. */

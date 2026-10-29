@@ -378,6 +378,125 @@ class PlaybackStateStoreDeviceTest {
         assertEquals(listOf(1L, 3L, 4L), PlaybackStateStore(isolatedContext).load()!!.queueTrackIds)
     }
 
+    @Test
+    fun aShuffledPlayOrderIsSavedWithTheQueueAndAnOlderReleasesLeftoverIsIgnored() {
+        val store = PlaybackStateStore(isolatedContext)
+        val shuffled = PersistedPlaybackState(
+            queueTrackIds = listOf(1, 2, 3),
+            currentTrackId = 2,
+            currentQueueIndex = 1,
+            positionMs = 10_000,
+            shuffleEnabled = true,
+            repeatMode = PlaybackRepeatMode.OFF,
+            queueEnded = false,
+            playOrder = listOf(2, 1, 0),
+        )
+        store.save(shuffled)
+        store.saveProgress(
+            currentTrackId = 1,
+            currentQueueIndex = 0,
+            positionMs = 3_000,
+            shuffleEnabled = true,
+            repeatMode = PlaybackRepeatMode.OFF,
+            queueEnded = false,
+        )
+        assertEquals(listOf(2, 1, 0), PlaybackStateStore(isolatedContext).load()!!.playOrder)
+        // Without shuffle the list is the order, and none is kept.
+        store.save(shuffled.copy(shuffleEnabled = false, playOrder = null))
+        assertNull(PlaybackStateStore(isolatedContext).load()!!.playOrder)
+        assertEquals(false, preferences.contains("play_order"))
+
+        // After a downgrade, a release before 1.1.0 rewrites the queue's file and keeps the order.
+        store.save(shuffled)
+        preferences.edit()
+            .putLong("current_track_id", 3)
+            .putInt("current_queue_index", 2)
+            .putLong("position_ms", 0)
+            .commit()
+        val loaded = PlaybackStateStore(isolatedContext).load()!!
+        assertEquals(3L, loaded.currentTrackId)
+        assertNull(loaded.playOrder)
+        store.save(shuffled)
+        preferences.edit().putString("queue_track_ids", "1,2,3,4").commit()
+        assertNull(PlaybackStateStore(isolatedContext).load()!!.playOrder)
+    }
+
+    @Test
+    fun theKeeperSavesTheShuffledOrderWhenOnlyTheOrderChanges() {
+        val store = PlaybackStateStore(isolatedContext)
+        val items = (1..4).map { MediaItem.Builder().setMediaId("$it").setUri("content://fixture/$it").build() }
+        lateinit var player: ExoPlayer
+        lateinit var keeper: PlaybackStateKeeper
+        // The keeper hears a player's events in a later main-thread message.
+        fun savedOrder(): List<Int>? {
+            main {}
+            return store.load()?.playOrder
+        }
+        try {
+            main {
+                player = ExoPlayer.Builder(context).build().apply { setShuffleOrder(PlayOrder(IntArray(0))) }
+                keeper = PlaybackStateKeeper(player, store, Handler(Looper.getMainLooper())).also(PlaybackStateKeeper::start)
+                player.setMediaItems(items, 1, 0)
+            }
+            assertNull(savedOrder())
+            var order = emptyList<Int>()
+            main {
+                player.shuffleModeEnabled = true
+                order = player.shuffleOrder.playOrder().toList()
+            }
+            assertEquals(order, savedOrder())
+            // A shuffled move changes only the order (#158).
+            main { player.setShuffleOrder(PlayOrder(intArrayOf(3, 1, 0, 2))) }
+            assertEquals(listOf(3, 1, 0, 2), savedOrder())
+            main { player.shuffleModeEnabled = false }
+            assertNull(savedOrder())
+        } finally {
+            main {
+                keeper.stop()
+                player.release()
+            }
+        }
+    }
+
+    @Test
+    fun aHeldBackTrackKeepsItsPlaceInTheSavedPlayOrder() {
+        val store = PlaybackStateStore(isolatedContext)
+        val tracks = (1L..4L).map { id ->
+            AudioTrack(id = id, contentUri = "content://track/$id", title = "$id", artist = "", album = "", durationMs = 60_000)
+        }
+        fun playerState(queue: List<Long>, index: Int, order: List<Int>?) = PersistedPlaybackState(
+            queueTrackIds = queue,
+            currentTrackId = queue[index],
+            currentQueueIndex = index,
+            positionMs = 0,
+            shuffleEnabled = order != null,
+            repeatMode = PlaybackRepeatMode.OFF,
+            queueEnded = false,
+            playOrder = order,
+        )
+        store.save(playerState(listOf(1, 2, 3, 2, 4), index = 2, order = listOf(4, 1, 0, 3, 2)))
+        val first = store.load()!!.restoreAgainst(tracks.filter { it.id != 2L })!!
+        assertEquals(listOf(1L, 3L, 4L), first.tracks.map(AudioTrack::id))
+        assertEquals(listOf(2, 0, 1), first.playOrder)
+        store.holdBack(first.heldBackTrackIds)
+        // While the player holds that restore, a shuffled move puts track 1 last.
+        store.save(playerState(listOf(1, 3, 4), index = 1, order = listOf(2, 1, 0)))
+
+        val second = PlaybackStateStore(isolatedContext).load()!!
+        assertEquals(listOf(1L, 2L, 3L, 2L, 4L), second.queueTrackIds)
+        // Both copies of track 2 keep their places; the others are in the player's order.
+        assertEquals(listOf(4, 1, 2, 3, 0), second.playOrder)
+        assertEquals(listOf(4, 1, 2, 3, 0), second.restoreAgainst(tracks)!!.playOrder)
+
+        // A restore that was not shuffled has no order to keep: once shuffle is on, a held-back track
+        // plays right after its list predecessor.
+        store.clear()
+        store.save(playerState(listOf(1, 2, 3, 2, 4), index = 2, order = null))
+        store.holdBack(store.load()!!.restoreAgainst(tracks.filter { it.id != 2L })!!.heldBackTrackIds)
+        store.save(playerState(listOf(1, 3, 4), index = 1, order = listOf(1, 2, 0)))
+        assertEquals(listOf(2, 3, 4, 0, 1), PlaybackStateStore(isolatedContext).load()!!.playOrder)
+    }
+
     private fun main(action: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(action)
 
     @Test

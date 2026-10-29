@@ -373,6 +373,23 @@ internal fun mediaStoreScanCanCommit(
     initialScope.databaseVersions == finalScope.databaseVersions
 
 /**
+ * The volumes whose MediaStore database is the one the last completed scan read, recorded in its
+ * [completedGeneration]. MediaStore renumbers `_ID`s only in a new database, which has a new version,
+ * and a completed scan leaves no row on its volumes with an `_ID` from an older one: it took or
+ * displaced each row it reached, kept others only while their `_ID` is still listed for them, and
+ * pruned or hid the rest. On these volumes a stored `_ID` therefore still names its entry (#159).
+ */
+internal fun mediaStoreVolumesWithStableIds(
+    completedGeneration: String?,
+    scope: MediaStoreScanScope,
+): Set<String> {
+    val completedVersions = completedGeneration?.let(::libraryScanDatabaseVersions) ?: return emptySet()
+    return scope.databaseVersions.orEmpty()
+        .filter { (volumeName, version) -> completedVersions[volumeName] == version }
+        .keys
+}
+
+/**
  * Android 8/9 expose only the deprecated absolute DATA column. Keep the raw path inside the
  * MediaStore adapter and persist only its immediate parent label.
  */

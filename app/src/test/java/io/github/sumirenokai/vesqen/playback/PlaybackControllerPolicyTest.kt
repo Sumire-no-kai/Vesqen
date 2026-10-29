@@ -183,6 +183,28 @@ class PlaybackControllerPolicyTest {
     }
 
     @Test
+    fun `an edit shown before the session's queue keeps the play order`() {
+        // #170 F10: the play order by queue entry, with Play next, Add to queue and shuffle turned on.
+        val order = listOf("c", "a", "d", "b")
+        assertEquals(listOf("c", "next", "a", "d", "b"), order.withEntryAfter("next", anchor = "c"))
+        assertEquals(listOf("c", "a", "d", "b", "last"), order.withEntryAfter("last", anchor = order.last()))
+        assertEquals(listOf("d", "c", "a", "b"), order.withEntryAfter("d", anchor = null))
+        assertEquals(listOf("only"), emptyList<String>().withEntryAfter("only", anchor = null))
+        // Back to list indices for the list Media3 shows.
+        assertEquals(listOf(2, 0, 3, 1), expectedPlayOrderIndices(order, listEntryIds = listOf("a", "b", "c", "d")))
+    }
+
+    @Test
+    fun `an expected order that is not exactly the queue is not used`() {
+        val list = listOf("a", "b", "c")
+        assertNull(expectedPlayOrderIndices(listOf("c", "a"), list))
+        assertNull(expectedPlayOrderIndices(listOf("c", "a", "x"), list))
+        assertNull(expectedPlayOrderIndices(listOf("c", "a", "a"), list))
+        // Entries without their own ID (the same track twice) cannot be told apart.
+        assertNull(expectedPlayOrderIndices(listOf("a", "a", "b"), listOf("a", "b", "a")))
+    }
+
+    @Test
     fun `queue media fingerprint ignores catalog-only state`() {
         val original = track().playbackMediaFingerprint()
         val catalogOnlyUpdate = track().copy(

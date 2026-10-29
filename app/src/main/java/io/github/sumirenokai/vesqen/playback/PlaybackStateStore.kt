@@ -20,6 +20,11 @@ internal data class PersistedPlaybackState(
      * resumes that listen instead of counting another (#165). Null when it was not counted yet.
      */
     val countedOccurrenceId: String? = null,
+    /**
+     * While shuffled, the queue's indices in the order they play (#170), so a restore continues in the
+     * same order. Null without shuffle and for saves before 1.1.0.
+     */
+    val playOrder: List<Int>? = null,
 )
 
 internal data class RestoredPlaybackQueue(
@@ -32,6 +37,8 @@ internal data class RestoredPlaybackQueue(
     val startOccurrenceId: String? = null,
     /** Saved tracks the Library cannot play now; see [PlaybackStateStore.holdBack]. */
     val heldBackTrackIds: Set<Long> = emptySet(),
+    /** While shuffled, the restored queue's indices in the saved play order; null to shuffle anew. */
+    val playOrder: List<Int>? = null,
 )
 
 /** The listen the state keeper already counted: a track in one queue occurrence. */
@@ -49,6 +56,10 @@ internal data class CountedPlayback(
  *
  * While the player holds a restored queue unchanged, the saved queue also keeps the tracks the
  * restore held back, and the saved cursor indexes that queue ([holdBack]).
+ *
+ * A shuffled queue's play order is saved with the queue (#170). It names the queue file it was
+ * written with: a release before 1.1.0 rewrites that file but keeps keys it does not know, and the
+ * order it leaves behind is then ignored.
  */
 internal class PlaybackStateStore(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences(
@@ -91,6 +102,7 @@ internal class PlaybackStateStore(context: Context) {
             currentQueueIndex = cursor.getInt(KEY_CURRENT_QUEUE_INDEX, -1).takeIf { it >= 0 },
             queueEnded = if (cursor.contains(KEY_QUEUE_ENDED)) cursor.getBoolean(KEY_QUEUE_ENDED, false) else null,
             countedOccurrenceId = cursor.countedOccurrenceId(currentTrackId),
+            playOrder = savedPlayOrder(queueIds.size),
         )
     }
 
@@ -126,13 +138,17 @@ internal class PlaybackStateStore(context: Context) {
             clear()
             return
         }
-        val savedIndexes = heldBackSavedQueueIndexes(state.queueTrackIds)
+        val heldBack = heldBackSavedQueue(state.queueTrackIds)
+        val savedIndexes = heldBack?.indexes
         savedQueueIndexes = savedIndexes
+        val playOrder = state.playOrder?.let { order -> heldBack?.let { heldBackPlayOrder(order, it) } ?: order }
         preferences.edit {
             if (savedIndexes == null) {
                 putString(KEY_QUEUE_IDS, state.queueTrackIds.joinToString(","))
                 remove(KEY_HELD_BACK_TRACK_IDS)
             }
+            if (playOrder == null) remove(KEY_PLAY_ORDER) else putString(KEY_PLAY_ORDER, playOrder.joinToString(","))
+            remove(KEY_PLAY_ORDER_SIGNATURE)
             putCursor(
                 currentTrackId = state.currentTrackId,
                 currentQueueIndex = savedQueueIndex(state.currentQueueIndex ?: -1),
@@ -147,7 +163,9 @@ internal class PlaybackStateStore(context: Context) {
             )
         }
         // The queue's file now holds this cursor; an older progress file must no longer apply.
-        savedQueueSignature = queueFileSignature()
+        val signature = queueFileSignature().also { savedQueueSignature = it }
+        // The order names the file it was written with, which is known only once the file holds it.
+        if (playOrder != null) preferences.edit { putInt(KEY_PLAY_ORDER_SIGNATURE, signature) }
         progressPreferences.edit { clear() }
     }
 
@@ -211,13 +229,41 @@ internal class PlaybackStateStore(context: Context) {
      * Where each entry of [playerQueue] is in the saved queue, when [playerQueue] is the saved queue
      * without its held-back tracks: the player still holds the restored queue.
      */
-    private fun heldBackSavedQueueIndexes(playerQueue: List<Long>): IntArray? {
+    private fun heldBackSavedQueue(playerQueue: List<Long>): HeldBackSavedQueue? {
         val heldBack = preferences.getString(KEY_HELD_BACK_TRACK_IDS, null)?.toTrackIds()?.toSet()
             ?.takeIf(Set<Long>::isNotEmpty)
             ?: return null
         val savedQueue = preferences.getString(KEY_QUEUE_IDS, null)?.toTrackIds() ?: return null
         val kept = savedQueue.indices.filter { savedQueue[it] !in heldBack }
-        return kept.toIntArray().takeIf { kept.map(savedQueue::get) == playerQueue }
+        return HeldBackSavedQueue(kept.toIntArray(), savedQueue.size).takeIf { kept.map(savedQueue::get) == playerQueue }
+    }
+
+    /** [indexes]: the saved queue index of each player queue entry, in a saved queue of [size] entries. */
+    private class HeldBackSavedQueue(val indexes: IntArray, val size: Int)
+
+    /**
+     * The player's play order over the saved queue. A held-back entry keeps its place in the order
+     * saved before; without one, it plays right after its list predecessor, as PlayOrder places an
+     * insert, so a later restore that brings it back finds it there.
+     */
+    private fun heldBackPlayOrder(playerOrder: List<Int>, savedQueue: HeldBackSavedQueue): List<Int> {
+        val order = playerOrder.map(savedQueue.indexes::get)
+        val kept = BooleanArray(savedQueue.size).also { kept -> savedQueue.indexes.forEach { kept[it] = true } }
+        savedPlayOrder(savedQueue.size)?.let { previous ->
+            val next = order.iterator()
+            return previous.map { if (kept[it]) next.next() else it }
+        }
+        fun heldBackFrom(index: Int) = (index until savedQueue.size).takeWhile { !kept[it] }
+        return heldBackFrom(0) + order.flatMap { listOf(it) + heldBackFrom(it + 1) }
+    }
+
+    /** The saved play order, while it belongs to the queue's file as it is and orders all [queueSize] entries. */
+    private fun savedPlayOrder(queueSize: Int): List<Int>? {
+        if (!preferences.contains(KEY_PLAY_ORDER_SIGNATURE) || preferences.getInt(KEY_PLAY_ORDER_SIGNATURE, 0) != queueFileSignature()) {
+            return null
+        }
+        val order = preferences.getString(KEY_PLAY_ORDER, null)?.split(',')?.map { it.toIntOrNull() ?: return null } ?: return null
+        return order.takeIf { it.sorted() == List(queueSize) { index -> index } }
     }
 
     private fun savedQueueIndex(playerQueueIndex: Int): Int =
@@ -296,6 +342,8 @@ internal class PlaybackStateStore(context: Context) {
         const val KEY_COUNTED_TRACK_ID = "counted_track_id"
         const val KEY_HELD_BACK_TRACK_IDS = "held_back_track_ids"
         const val KEY_QUEUE_FILE_SIGNATURE = "queue_file_signature"
+        const val KEY_PLAY_ORDER = "play_order"
+        const val KEY_PLAY_ORDER_SIGNATURE = "play_order_signature"
         const val NO_TRACK_ID = Long.MIN_VALUE
     }
 }
@@ -311,18 +359,29 @@ internal fun PersistedPlaybackState.restoreAgainst(tracks: List<AudioTrack>): Re
         it in queueTrackIds.indices && queueTrackIds[it] == currentTrackId
     } ?: queueTrackIds.indexOfFirst { it == currentTrackId }
     val currentEntryIndex = restoredEntries.indexOfFirst { it.first == savedIndex }
+    // The saved play order without the tracks left out, in restored indices (#170).
+    val restoredPlayOrder = playOrder?.takeIf { shuffleEnabled }?.let { order ->
+        val restoredIndexOf = restoredEntries.withIndex().associate { (restoredIndex, entry) -> entry.first to restoredIndex }
+        order.mapNotNull(restoredIndexOf::get).takeIf { it.sorted() == restoredEntries.indices.toList() }
+    }
     // A queue saved after it played to the end, typically an album with repeat off, would restore
     // at the end and play nothing. It continues with the next track instead, or from the start of
     // the queue after the last one. A position near the end alone is a pause, not an end (#170 P2).
     val finished = currentEntryIndex >= 0 &&
         (queueEnded ?: savedAtLegacyEnd(restoredEntries[currentEntryIndex].second))
+    // Next and first in the play order; without a saved one, in the list. Play next after the end,
+    // shuffled or not, puts its track right after the ended one in both.
+    val nextIndex = when (restoredPlayOrder) {
+        null -> (currentEntryIndex + 1).takeIf { it in restoredEntries.indices }
+        else -> restoredPlayOrder.getOrNull(restoredPlayOrder.indexOf(currentEntryIndex) + 1)
+    }
+    val firstIndex = restoredPlayOrder?.firstOrNull() ?: 0
     val (startIndex, startPositionMs) = when {
-        currentEntryIndex < 0 -> 0 to 0L
+        currentEntryIndex < 0 -> firstIndex to 0L
         !finished -> currentEntryIndex to positionMs
         repeatMode == PlaybackRepeatMode.ONE -> currentEntryIndex to 0L
-        // Play next after the end, shuffled or not, puts its track right after the ended one.
-        currentEntryIndex < restoredEntries.lastIndex -> currentEntryIndex + 1 to 0L
-        else -> 0 to 0L
+        nextIndex != null -> nextIndex to 0L
+        else -> firstIndex to 0L
     }
     return RestoredPlaybackQueue(
         tracks = restoredEntries.map { it.second },
@@ -333,6 +392,7 @@ internal fun PersistedPlaybackState.restoreAgainst(tracks: List<AudioTrack>): Re
         // Only the saved entry, resumed where it was, continues its listen; any other start is new.
         startOccurrenceId = countedOccurrenceId?.takeIf { currentEntryIndex >= 0 && !finished },
         heldBackTrackIds = queueTrackIds.filterNot(tracksById::containsKey).toSet(),
+        playOrder = restoredPlayOrder,
     )
 }
 

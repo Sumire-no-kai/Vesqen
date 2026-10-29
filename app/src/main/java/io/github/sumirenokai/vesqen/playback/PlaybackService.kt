@@ -61,7 +61,6 @@ class PlaybackService : MediaSessionService() {
     private val mediaButtonStart = MediaButtonStartObligation()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val usbOutputCommand = SessionCommand(UsbOutputSessionContract.SET_MODE_ACTION, android.os.Bundle.EMPTY)
-    private val insertCommand = SessionCommand(PlayOrderSessionContract.INSERT_ACTION, android.os.Bundle.EMPTY)
     private val moveCommand = SessionCommand(PlayOrderSessionContract.MOVE_ACTION, android.os.Bundle.EMPTY)
     private val outputStateListener: (UsbOutputStatus) -> Unit = { status ->
         mainHandler.post {
@@ -114,7 +113,7 @@ class PlaybackService : MediaSessionService() {
             val base = MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller).build()
             if (controller.packageName != packageName) return Futures.immediateFuture(base)
             return Futures.immediateFuture(MediaSession.ConnectionResult.accept(
-                base.availableSessionCommands.buildUpon().add(usbOutputCommand).add(insertCommand).add(moveCommand).build(),
+                base.availableSessionCommands.buildUpon().add(usbOutputCommand).add(moveCommand).build(),
                 base.availablePlayerCommands,
             ))
         }
@@ -128,19 +127,11 @@ class PlaybackService : MediaSessionService() {
             if (controller.packageName != packageName) {
                 return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
             }
-            val player = session.player as ExoPlayer
+            val player = (session.player as PlayOrderSessionPlayer).exoPlayer
             return when (customCommand.customAction) {
                 UsbOutputSessionContract.SET_MODE_ACTION -> UsbOutputSessionContract.readMode(args)
                     ?.let(::applyUsbOutputMode)
                     ?: Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
-                PlayOrderSessionContract.INSERT_ACTION -> {
-                    val insert = PlayOrderSessionContract.readInsert(args)
-                        ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
-                    onMainThread {
-                        player.insertInPlayOrder(insert)
-                        SessionResult(SessionResult.RESULT_SUCCESS)
-                    }
-                }
                 PlayOrderSessionContract.MOVE_ACTION -> {
                     val move = PlayOrderSessionContract.readMove(args)
                         ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
@@ -220,19 +211,20 @@ class PlaybackService : MediaSessionService() {
                     playbackStateStore.holdBack(restored.heldBackTrackIds)
                     result.set(
                         MediaSession.MediaItemsWithStartPosition(
-                            playbackMediaItems(restored.tracks, restored.startIndex, restored.startOccurrenceId),
+                            // A shuffled queue plays in its saved order (PlayOrderSessionPlayer).
+                            playbackMediaItems(restored.tracks, restored.startIndex, restored.startOccurrenceId)
+                                .withPlayOrder(restored.playOrder),
                             restored.startIndex,
                             restored.positionMs,
                         ),
                     )
                 }
             }
-            // Runs after Media3 applied the result and the Play request to the player. Shuffle was set
-            // on the empty player, so the new queue's shuffled order starts at its track only now.
+            // Runs after Media3 applied the result and the Play request to the player. A shuffled
+            // queue without a saved order plays its start track first (PlayOrder.cloneAndSet).
             if (isForPlayback) {
                 mainHandler.post {
                     if (player.currentMediaItem == null) endMediaButtonStartWithoutPlayback()
-                    (player as? ExoPlayer)?.playCurrentItemFirst()
                 }
             }
         }
@@ -271,13 +263,13 @@ class PlaybackService : MediaSessionService() {
                 setHandleAudioBecomingNoisy(true)
                 setWakeMode(C.WAKE_MODE_LOCAL)
                 pauseAtEndOfMediaItems = false
+                setShuffleOrder(PlayOrder(IntArray(0)))
             }
         player.addListener((application as VesqenApplication).deviceReportRuntime.playbackListener(player))
         player.addListener(playbackListener)
         player.addListener(object : Player.Listener {
-            // Turning shuffle on, here or when the app restores a shuffled queue, starts the play order
-            // at the current track, so none of the others is skipped (#158). A media-button
-            // resumption sets shuffle before its items; resumeSavedQueue handles that one.
+            // Turning shuffle on starts the play order at the current track, so none of the others is
+            // skipped (#158). A queue set while shuffled starts there already (PlayOrder.cloneAndSet).
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
                 if (shuffleModeEnabled) player.playCurrentItemFirst()
             }
@@ -303,7 +295,7 @@ class PlaybackService : MediaSessionService() {
         val sessionActivity = PendingIntent.getActivity(this, 0,
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        mediaSession = MediaSession.Builder(this, player)
+        mediaSession = MediaSession.Builder(this, PlayOrderSessionPlayer(player))
             .setBitmapLoader(artworkLoader)
             .setSessionActivity(sessionActivity)
             .setCallback(sessionCallback)
@@ -413,9 +405,10 @@ class PlaybackService : MediaSessionService() {
         playbackStateKeeper?.stop()
         playbackStateKeeper = null
         mediaSession?.run {
-            player.removeListener(playbackListener)
-            (application as VesqenApplication).telemetryRuntime.detachPlayer(player as ExoPlayer)
-            player.release()
+            val exoPlayer = (player as PlayOrderSessionPlayer).exoPlayer
+            exoPlayer.removeListener(playbackListener)
+            (application as VesqenApplication).telemetryRuntime.detachPlayer(exoPlayer)
+            exoPlayer.release()
             release()
         }
         mediaSession = null

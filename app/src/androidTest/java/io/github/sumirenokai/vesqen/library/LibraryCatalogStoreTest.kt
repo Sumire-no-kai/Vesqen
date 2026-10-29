@@ -866,7 +866,7 @@ class LibraryCatalogStoreTest {
             }
         }
         // MediaStore still lists B; C was deleted.
-        store.keepTracksStillListed(scan, setOf(songA.at(1), songB.at(2), songD.at(4)).mapTo(HashSet()) { it.remoteId })
+        store.keepTracksStillListed(scan, listOf(songA.at(1), songB.at(2), songD.at(4)).map { it.listed() })
         store.completeMediaStoreScan(scan.session, generation = null, scannedVolumeNames = listOf(PRIMARY_VOLUME))
 
         val after = store.tracksByTitle()
@@ -876,13 +876,75 @@ class LibraryCatalogStoreTest {
         assertEquals(1, store.readTracks(listOf(LibrarySourceId.DEVICE)).count { it.title == "D" })
     }
 
+    @Test
+    fun aNewSongOnAReusedIdDoesNotTakeARowWhoseFileIsNotListedYet() = withStore("library-rebuild-partial") { store ->
+        // MediaStore was rebuilt and lists only part of the files so far. A new song got A's old _ID,
+        // and its duration is within a second of A's (#159).
+        store.scanMediaStore(songA.at(1))
+        val a = store.tracksByTitle().getValue("A")
+        store.setFavorite(a.id, true)
+        val playlistId = requireNotNull(store.createPlaylist("Mix"))
+        store.addTrackToPlaylist(playlistId, a.id)
+        val newSong = MediaStoreFile(
+            title = "N",
+            fileName = "n.flac",
+            sizeBytes = 55_555,
+            durationMs = songA.durationMs + 400,
+            folderName = "Music/New",
+        )
+
+        store.scanMediaStore(newSong.at(1))
+
+        assertEquals(setOf(a.id), store.readDisplacedTrackIds())
+        val n = store.tracksByTitle().getValue("N")
+        assertFalse(n.id == a.id)
+        assertFalse(n.isFavorite)
+        assertEquals(listOf(a.id), store.readPlaylists().single().trackIds)
+
+        store.scanMediaStore(newSong.at(1), songA.at(2))
+
+        val back = store.tracksByTitle().getValue("A")
+        assertEquals(a.id, back.id)
+        assertEquals(songA.at(2).contentUri, back.contentUri)
+        assertTrue(back.isFavorite)
+        assertTrue(store.readDisplacedTrackIds().isEmpty())
+    }
+
+    @Test
+    fun aRebuildScanKeepsNoRowByAnIdNowListedForAnotherFile() = withStore("library-rebuild-listed") { store ->
+        // MediaStore lists files while it rebuilds. C took A's old _ID; B's old _ID went to N after the
+        // scan's cursor had passed, so only the listing at the end shows it (#159).
+        store.scanMediaStore(songA.at(1), songB.at(2))
+        val b = store.tracksByTitle().getValue("B")
+        store.setFavorite(b.id, true)
+        val newSong = MediaStoreFile(title = "N", fileName = "n.flac", sizeBytes = 55_555, durationMs = 250_000)
+        val scan = store.beginMediaStoreScan(listedFiles = listOf(songC.at(1).listed()))
+        if (scan.firstOffer(songC.at(1)) && !store.markSeenIfUnchanged(scan, songC.at(1))) {
+            store.upsertMediaStoreTrack(scan, songC.at(1))
+        }
+        store.keepTracksStillListed(scan, listOf(songC.at(1), newSong.at(2)).map { it.listed() })
+        store.completeMediaStoreScan(scan.session, generation = null, scannedVolumeNames = listOf(PRIMARY_VOLUME))
+
+        // B waits hidden with its favorite; A had no user data and is pruned.
+        assertEquals(setOf(b.id), store.readDisplacedTrackIds())
+        assertEquals(setOf("B", "C"), store.tracksByTitle().keys)
+
+        store.scanMediaStore(songC.at(1), newSong.at(2), songB.at(3))
+
+        val after = store.tracksByTitle()
+        assertEquals(b.id, after.getValue("B").id)
+        assertTrue(after.getValue("B").isFavorite)
+        assertFalse(after.getValue("N").isFavorite)
+        assertTrue(store.readDisplacedTrackIds().isEmpty())
+    }
+
     private fun assertEditKeepsRow(edit: (MediaStoreFile) -> MediaStoreFile) = withStore("library-edit") { store ->
         store.scanMediaStore(songA.at(1))
         val a = store.readTracks(listOf(LibrarySourceId.DEVICE)).single()
         store.setFavorite(a.id, true)
         val edited = edit(songA).at(1)
 
-        store.scanMediaStore(edited)
+        store.scanMediaStore(edited, volumesWithStableIds = setOf(PRIMARY_VOLUME))
 
         val track = store.readTracks(listOf(LibrarySourceId.DEVICE)).single()
         assertEquals(a.id, track.id)
@@ -1104,8 +1166,9 @@ class LibraryCatalogStoreTest {
         vararg candidates: LibraryTrackCandidate,
         volumeName: String = PRIMARY_VOLUME,
         complete: Boolean = true,
+        volumesWithStableIds: Set<String> = emptySet(),
     ) {
-        val scan = beginMediaStoreScan()
+        val scan = beginMediaStoreScan(volumesWithStableIds = volumesWithStableIds)
         candidates.forEach { candidate ->
             if (!markSeenIfUnchanged(scan, candidate)) upsertMediaStoreTrack(scan, candidate)
         }
@@ -1113,6 +1176,14 @@ class LibraryCatalogStoreTest {
             completeMediaStoreScan(scan.session, generation = null, scannedVolumeNames = listOf(volumeName))
         }
     }
+
+    private fun LibraryTrackCandidate.listed() = ListedMediaStoreFile(
+        remoteId = remoteId,
+        contentUri = contentUri,
+        folderName = folderName,
+        fileName = fileName,
+        sizeBytes = sizeBytes,
+    )
 
     private fun LibraryCatalogStore.tracksByTitle(): Map<String, AudioTrack> =
         readTracks(listOf(LibrarySourceId.DEVICE)).associateBy(AudioTrack::title)
