@@ -222,6 +222,8 @@ class PlaybackController(
         }.toMap()
         if (merged.isEmpty()) return false
         pendingQueueTrackReplacements.keys.removeAll(merged.keys)
+        // The entries keep their occurrences and their places in the play order (PlayOrder).
+        val order = shuffledEntryIds(player)
         var replaced = false
         suppressListenerPublishing = true
         try {
@@ -239,6 +241,7 @@ class PlaybackController(
                 tracksById[track.id.toString()] = track
                 replaced = true
             }
+            if (replaced) order?.let { expectPlayOrder(player, it) }
         } finally {
             suppressListenerPublishing = false
         }

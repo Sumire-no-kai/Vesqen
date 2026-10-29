@@ -83,6 +83,29 @@ class MergedTrackQueueDeviceTest {
     }
 
     @Test
+    fun theSavedShuffledOrderStaysWithTheRecord() {
+        // #170 W1: the order names the queue's file it was saved with, which the new ID changes.
+        val store = PlaybackStateStore(isolatedContext)
+        store.save(
+            PersistedPlaybackState(
+                queueTrackIds = listOf(1, 2, 3, 2),
+                currentTrackId = 2,
+                currentQueueIndex = 3,
+                positionMs = 0,
+                shuffleEnabled = true,
+                repeatMode = PlaybackRepeatMode.OFF,
+                playOrder = listOf(3, 0, 2, 1),
+            ),
+        )
+
+        store.replaceTrackId(fromTrackId = 2, toTrackId = 7)
+
+        val restored = requireNotNull(PlaybackStateStore(isolatedContext).load())
+        assertEquals(listOf(1L, 7L, 3L, 7L), restored.queueTrackIds)
+        assertEquals(listOf(3, 0, 2, 1), restored.playOrder)
+    }
+
+    @Test
     fun thePlayingEntriesTakeTheRecordAndKeepPlaying() = playMergedQueue { queued, record ->
         main {
             controller.syncLibrary(listOf(queued[0], record, queued[2]))
@@ -102,26 +125,57 @@ class MergedTrackQueueDeviceTest {
         main { controller.syncLibrary(listOf(queued[0], record, queued[2])) }
     }
 
+    @Test
+    fun aShuffledQueueKeepsItsPlayOrderThroughTheMerge() = withPlayback { app ->
+        val queued = (1L..6L).map { silentTrack(app, it) }
+        // Shuffled from the third track, which plays first, so the play order is not the list order.
+        main { controller.playQueue(queued, 2) }
+        awaitPlayback { it.trackId == queued[2].id && it.queueSize == 6 }
+        main { controller.cyclePlaybackOrderMode() }
+        awaitPlayback { it.shuffleEnabled && it.queue.firstOrNull()?.trackId == queued[2].id }
+        val order = playback.get().queue.map(PlaybackQueueItem::trackId)
+        val merged = queued.first { it.id == order[3] }
+        val record = merged.copy(id = -2_000, title = "Record")
+        val expected = order.map { if (it == merged.id) record.id else it }
+
+        // Media3 shows the controller's own edit at once in list order (#170 F10); the queue still
+        // lists the play order, which the session's queue then confirms.
+        var shown = emptyList<Long>()
+        main {
+            controller.syncLibrary(queued.map { if (it.id == merged.id) record else it })
+            controller.replaceQueueTrack(fromTrackId = merged.id, toTrackId = record.id)
+            shown = playback.get().queue.map(PlaybackQueueItem::trackId)
+        }
+        assertEquals(expected, shown)
+        val position = playback.get().positionMs
+        awaitPlayback { it.positionMs >= position + 500 }
+        assertEquals(expected, playback.get().queue.map(PlaybackQueueItem::trackId))
+    }
+
     /** Plays tracks 1, 2, 3, 2 from the first 2, merges track 2 into a record, and checks the queue. */
-    private fun playMergedQueue(merge: (queued: List<AudioTrack>, record: AudioTrack) -> Unit): Unit = runBlocking {
-        val app = isolatedPlaybackTestApplication()
+    private fun playMergedQueue(merge: (queued: List<AudioTrack>, record: AudioTrack) -> Unit) = withPlayback { app ->
         val queued = (1L..3L).map { silentTrack(app, it) }
         // The record took over track 2's row: the same file under the record's catalog ID.
         val record = queued[1].copy(id = -2_000, title = "Record")
+        main { controller.playQueue(queued + queued[1], 1) }
+        awaitPlayback { it.trackId == queued[1].id && it.positionMs >= 1_000 }
+        val position = playback.get().positionMs
+
+        merge(queued, record)
+        awaitPlayback { it.trackId == record.id && it.positionMs >= position + 1_000 }
+
+        val after = playback.get()
+        assertTrue(after.isPlaying)
+        assertEquals(1, after.queueIndex)
+        assertEquals(listOf(queued[0].id, record.id, queued[2].id, record.id), after.queue.map(PlaybackQueueItem::trackId))
+    }
+
+    private fun withPlayback(test: suspend (app: Context) -> Unit): Unit = runBlocking {
+        val app = isolatedPlaybackTestApplication()
         try {
             main { controller = PlaybackController(app) { playback.set(it) } }
             awaitPlayback { it.isControllerReady }
-            main { controller.playQueue(queued + queued[1], 1) }
-            awaitPlayback { it.trackId == queued[1].id && it.positionMs >= 1_000 }
-            val position = playback.get().positionMs
-
-            merge(queued, record)
-            awaitPlayback { it.trackId == record.id && it.positionMs >= position + 1_000 }
-
-            val after = playback.get()
-            assertTrue(after.isPlaying)
-            assertEquals(1, after.queueIndex)
-            assertEquals(listOf(queued[0].id, record.id, queued[2].id, record.id), after.queue.map(PlaybackQueueItem::trackId))
+            test(app)
         } finally {
             main {
                 if (playback.get().showsPauseAction) controller.togglePlayback()
