@@ -83,7 +83,27 @@ class MergedTrackQueueDeviceTest {
     }
 
     @Test
-    fun thePlayingEntriesTakeTheRecordAndKeepPlaying() = runBlocking {
+    fun thePlayingEntriesTakeTheRecordAndKeepPlaying() = playMergedQueue { queued, record ->
+        main {
+            controller.syncLibrary(listOf(queued[0], record, queued[2]))
+            controller.replaceQueueTrack(fromTrackId = queued[1].id, toTrackId = record.id)
+        }
+    }
+
+    @Test
+    fun theEntriesWaitForALibraryThatHoldsTheRecord() = playMergedQueue { queued, record ->
+        // The read after the merge was dropped for a newer one: the controller still has the
+        // library from before the merge, and only the newer read brings the record.
+        main {
+            controller.syncLibrary(queued)
+            controller.replaceQueueTrack(fromTrackId = queued[1].id, toTrackId = record.id)
+        }
+        assertEquals((queued + queued[1]).map(AudioTrack::id), playback.get().queue.map(PlaybackQueueItem::trackId))
+        main { controller.syncLibrary(listOf(queued[0], record, queued[2])) }
+    }
+
+    /** Plays tracks 1, 2, 3, 2 from the first 2, merges track 2 into a record, and checks the queue. */
+    private fun playMergedQueue(merge: (queued: List<AudioTrack>, record: AudioTrack) -> Unit): Unit = runBlocking {
         val app = isolatedPlaybackTestApplication()
         val queued = (1L..3L).map { silentTrack(app, it) }
         // The record took over track 2's row: the same file under the record's catalog ID.
@@ -95,10 +115,7 @@ class MergedTrackQueueDeviceTest {
             awaitPlayback { it.trackId == queued[1].id && it.positionMs >= 1_000 }
             val position = playback.get().positionMs
 
-            main {
-                controller.syncLibrary(listOf(queued[0], record, queued[2]))
-                controller.replaceQueueTrack(fromTrackId = queued[1].id, toTrackId = record.id)
-            }
+            merge(queued, record)
             awaitPlayback { it.trackId == record.id && it.positionMs >= position + 1_000 }
 
             val after = playback.get()

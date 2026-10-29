@@ -393,7 +393,8 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     /**
      * The record keeps its ID and takes over the chosen song's row (#139), so queue entries of that
-     * song move to the record once the reload has given the controller the merged track.
+     * song move to the record. The controller waits for a library read that holds the record, which
+     * is this reload unless a newer read replaced it.
      */
     fun assignUnmatchedRecord(recordId: Long, trackId: Long) {
         var assigned = false
