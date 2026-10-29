@@ -44,18 +44,22 @@ internal class MediaStoreAudioRepository(
         if (volumeNames.isEmpty()) {
             throw IllegalStateException("MediaStore returned no external volumes")
         }
-        val generation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            libraryScanGeneration(volumeNames.map { volume ->
+        val versions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            volumeNames.map { volume ->
                 MediaStoreVolumeVersion(
                     volumeName = volume,
                     databaseVersion = MediaStore.getVersion(context, volume),
                     generation = MediaStore.getGeneration(context, volume),
                 )
-            })
+            }
         } else {
             null
         }
-        return MediaStoreScanScope(volumeNames = volumeNames, generation = generation)
+        return MediaStoreScanScope(
+            volumeNames = volumeNames,
+            generation = versions?.let(::libraryScanGeneration),
+            databaseVersions = versions?.associate { it.volumeName to it.databaseVersion },
+        )
     }
 
     /**
@@ -301,6 +305,8 @@ internal class MediaStoreAudioRepository(
 internal data class MediaStoreScanScope(
     val volumeNames: List<String>,
     val generation: String?,
+    /** Each volume's MediaStore database version, which changes when MediaStore is rebuilt; null before Android 11. */
+    val databaseVersions: Map<String, String>? = null,
 )
 
 internal data class MediaStoreLegacyIdentity(
@@ -351,12 +357,20 @@ internal fun mediaStoreTrackIsMounted(
     return volumeName in mountedVolumeNames
 }
 
-/** Only an unchanged scope can authorize publishing deletions from a completed scan. */
+/**
+ * A completed scan may publish deletions while MediaStore kept the same volumes and databases: a
+ * removed card or a rebuilt MediaStore lists nothing yet for files it still holds. Other media
+ * changes, a photo or a screenshot, move the generation only and no longer interrupt the scan, which
+ * could then never finish a large library (#136 R15); rows a changing cursor skipped are kept with
+ * [LibraryCatalogStore.keepTracksStillListed] before anything is pruned.
+ */
 internal fun mediaStoreScanCanCommit(
     iteration: ScanIterationResult,
     initialScope: MediaStoreScanScope,
     finalScope: MediaStoreScanScope,
-): Boolean = iteration.completed && initialScope == finalScope
+): Boolean = iteration.completed &&
+    initialScope.volumeNames == finalScope.volumeNames &&
+    initialScope.databaseVersions == finalScope.databaseVersions
 
 /**
  * Android 8/9 expose only the deprecated absolute DATA column. Keep the raw path inside the

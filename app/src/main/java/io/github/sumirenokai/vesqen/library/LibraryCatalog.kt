@@ -15,8 +15,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * Small ViewModel-facing seam for the durable local catalog. Provider-specific identities,
  * persisted SAF grants, delta detection, and reconciliation live behind this boundary. Stateful
- * operations are suspending so the production adapter can serialize scans, snapshots, and edits;
- * pause/resume remain immediate control signals observed between provider rows.
+ * operations are suspending so the production adapter can serialize snapshots and edits, and keep
+ * scans and folder removal apart; pause/resume remain immediate control signals observed between
+ * provider rows.
  */
 interface LibraryCatalog : Closeable {
     suspend fun snapshot(includeDeviceLibrary: Boolean): LibraryCatalogSnapshot
@@ -109,18 +110,21 @@ internal class AndroidLibraryCatalog(
         }
     }
 
-    override suspend fun removeFolder(sourceId: String): Unit = serialized {
-        val treeUri = store.removeFolderSource(sourceId) ?: return@serialized Unit
-        try {
-            contentResolver.releasePersistableUriPermission(
-                treeUri.toUri(),
-                Intent.FLAG_GRANT_READ_URI_PERMISSION,
-            )
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: RuntimeException) {
-            // The provider may already have revoked or rejected the grant; the local source is
-            // still removed and no provider failure is allowed to resurrect it.
+    // A scan of the folder must not run into its removal, so removal waits for any scan.
+    override suspend fun removeFolder(sourceId: String): Unit = processScanLock.withLock {
+        serialized {
+            val treeUri = store.removeFolderSource(sourceId) ?: return@serialized Unit
+            try {
+                contentResolver.releasePersistableUriPermission(
+                    treeUri.toUri(),
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: RuntimeException) {
+                // The provider may already have revoked or rejected the grant; the local source is
+                // still removed and no provider failure is allowed to resurrect it.
+            }
         }
     }
 
@@ -161,10 +165,19 @@ internal class AndroidLibraryCatalog(
         store.movePlaylistTrack(playlistId, fromIndex, toIndex)
     }
 
+    /**
+     * A scan holds only [processScanLock]. Holding this catalog's gate as well made favorites,
+     * playlist edits and reads wait for the whole scan, minutes for a large library (#136 R12).
+     * Edits touch the user's columns, which a scan never writes, and each store call is its own
+     * statement or transaction, so they now run between the scan's rows.
+     */
     override suspend fun refresh(
         includeDeviceLibrary: Boolean,
         onProgress: suspend (LibraryScanProgress) -> Unit,
-    ): LibraryRefreshResult = processScanLock.withLock { serialized { refreshLocked(includeDeviceLibrary, onProgress) } }
+    ): LibraryRefreshResult = processScanLock.withLock {
+        operationGate.checkOpen()
+        refreshLocked(includeDeviceLibrary, onProgress)
+    }
 
     private suspend fun refreshLocked(
         includeDeviceLibrary: Boolean,
@@ -211,7 +224,7 @@ internal class AndroidLibraryCatalog(
         }
 
         return LibraryRefreshResult(
-            snapshot = snapshotInternal(includeDeviceLibrary),
+            snapshot = serialized { snapshotInternal(includeDeviceLibrary) },
             hadFailure = hadFailure,
         )
     }
@@ -244,16 +257,20 @@ internal class AndroidLibraryCatalog(
             scope = scanScope,
             shouldPause = scanGate::isPaused,
         ) { candidate ->
-            if (!store.markSeenIfUnchanged(scan, candidate)) {
+            if (scan.firstOffer(candidate) && !store.markSeenIfUnchanged(scan, candidate)) {
                 store.upsertMediaStoreTrack(scan, metadataReader.enrich(candidate))
             }
         }
-        if (
-            iteration.completed &&
-            !mediaStoreScanCanCommit(iteration, scanScope, mediaStore.currentScanScope())
-        ) {
-            store.markSourceInterrupted(source.id)
-            return SourceScanOutcome.INTERRUPTED
+        if (iteration.completed) {
+            val finalScope = mediaStore.currentScanScope()
+            if (!mediaStoreScanCanCommit(iteration, scanScope, finalScope)) {
+                store.markSourceInterrupted(source.id)
+                return SourceScanOutcome.INTERRUPTED
+            }
+            // Before Android 11 there is no generation to show that nothing changed.
+            if (finalScope.generation == null || finalScope.generation != scanScope.generation) {
+                store.keepTracksStillListed(scan, mediaStore.listFiles(scanScope).mapTo(HashSet()) { it.remoteId })
+            }
         }
         finishIteration(
             source = source,
@@ -420,11 +437,11 @@ internal class AndroidLibraryCatalog(
          * Each screen's ViewModel has its own catalog, and two can exist at once (a second activity
          * opened from the media notification over a picker or dialog). Their scans must not interleave:
          * the first to complete prunes every row the other marked with its newer epoch, and folder rows
-         * are deleted with their favorites and playlist entries. Scans therefore take this lock before
-         * their own catalog's gate; other operations keep only the gate, so the playback service's
-         * reads never wait for a whole scan in another catalog. All catalogs share the application's
-         * one database helper (#165), though: where Android gives it a single connection, a read can
-         * still wait for one of that scan's statements or transactions, such as its completion's prune.
+         * are deleted with their favorites and playlist entries. Scans and folder removal therefore
+         * take this lock; other operations keep only their catalog's gate, so reads and edits never
+         * wait for a whole scan (#136 R12). All catalogs share the application's one database helper
+         * (#165), though: where Android gives it a single connection, a read or an edit can still wait
+         * for one of the scan's statements or transactions, such as its completion's prune.
          */
         val processScanLock = Mutex()
     }
@@ -452,6 +469,11 @@ internal class LibraryCatalogOperationGate {
     }
 
     fun requestClose(): Boolean = closeRequested.compareAndSet(false, true)
+
+    /** For work that does not take the gate, a scan: refuses to start once close is requested. */
+    fun checkOpen() {
+        check(!closeRequested.get()) { CLOSED_MESSAGE }
+    }
 
     private companion object {
         const val CLOSED_MESSAGE = "Library catalog is closing"

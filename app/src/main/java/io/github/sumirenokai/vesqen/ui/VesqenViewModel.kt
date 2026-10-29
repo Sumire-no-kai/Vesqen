@@ -66,6 +66,8 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     private var playbackController: PlaybackController? = null
     private var activeLibraryScan: Job? = null
     private var libraryRefreshQueued = false
+    /** An edit committed while a scan ran, possibly after the scan read its final snapshot. */
+    private var catalogEditedDuringScan = false
     private var lastMusicPermissionGranted: Boolean? = null
     private val latestPlaybackHistory = mutableMapOf<Long, PlaybackHistoryUpdate>()
 
@@ -192,6 +194,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         }
         val requestEpoch = ++libraryRefreshEpoch
         cachedLibraryReader.invalidate()
+        catalogEditedDuringScan = false
         AlbumArtworkLoader.clearMemoryCache()
         updateLibrary {
             it.copy(
@@ -230,6 +233,10 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
             val refreshedTracks = result.getOrNull()?.snapshot?.let { snapshot ->
                 mergeLatestPlaybackHistory(snapshot.tracks)
             }
+            // Edits no longer wait for a scan (#136 R12), so a read started during it shows the scan
+            // half done. The scan's own snapshot replaces it, and an edit that may have committed
+            // after that snapshot was read is read once more below.
+            cachedLibraryReader.invalidate()
             updateLibrary {
                 val snapshot = result.getOrNull()?.snapshot
                 it.copy(
@@ -249,6 +256,10 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                 controller.syncLibrary(refreshedTracks ?: snapshot.tracks)
             }
             activeLibraryScan = null
+            if (catalogEditedDuringScan) {
+                catalogEditedDuringScan = false
+                refreshCachedLibrary()
+            }
             refreshQueuedLibrary()
         }
     }
@@ -322,6 +333,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         val rebuildsBefore = catalogRebuilds.value
         return try {
             withContext(Dispatchers.IO) { catalog.saveTrackOrder(playlistId, trackIds) }
+            noteEditDuringScan()
             loadCachedLibrary()
             true
         } catch (failure: SQLiteException) {
@@ -439,8 +451,11 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                         tracks = refreshedTracks,
                         playlists = snapshot.playlists,
                         sources = snapshot.sources,
-                        scanProgress = snapshot.pausedProgress()
-                            ?: current.scanProgress?.takeIf(LibraryScanProgress::isPaused),
+                        scanProgress = scanProgressAfterRead(
+                            current = current.scanProgress,
+                            snapshot = snapshot,
+                            scanRunning = activeLibraryScan?.isActive == true,
+                        ),
                     )
                 }
                 playbackController().syncLibrary(refreshedTracks)
@@ -466,12 +481,17 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         return merged
     }
 
+    private fun noteEditDuringScan() {
+        if (activeLibraryScan?.isActive == true) catalogEditedDuringScan = true
+    }
+
     private fun mutateCatalog(action: suspend () -> Unit) {
         viewModelScope.launch {
             updateLibrary { it.copy(catalogMutationFailed = false) }
             val rebuildsBefore = catalogRebuilds.value
             try {
                 withContext(Dispatchers.IO) { action() }
+                noteEditDuringScan()
                 loadCachedLibrary()
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -493,6 +513,21 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         // Coroutine cancellation is an IllegalStateException too.
         if (this is CancellationException || catalogRebuilds.value == rebuildsBefore) throw this
     }
+}
+
+/**
+ * The scan progress a catalog read publishes. A scan reports progress only as each source starts and
+ * ends, so a read while it runs keeps the last report: the scanning row and its Pause button stay
+ * until the scan reports again (#136 U1). Otherwise only a paused scan keeps its row.
+ */
+internal fun scanProgressAfterRead(
+    current: LibraryScanProgress?,
+    snapshot: LibraryCatalogSnapshot,
+    scanRunning: Boolean,
+): LibraryScanProgress? = if (scanRunning) {
+    current
+} else {
+    snapshot.pausedProgress() ?: current?.takeIf(LibraryScanProgress::isPaused)
 }
 
 private fun LibraryCatalogSnapshot.pausedProgress(): LibraryScanProgress? = sources.firstOrNull {

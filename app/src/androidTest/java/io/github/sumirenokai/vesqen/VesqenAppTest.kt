@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.Lifecycle
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.library.LibraryCatalogSnapshot
 import io.github.sumirenokai.vesqen.chain.AppSegmentMetricIds
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecordingState
@@ -151,6 +152,7 @@ import io.github.sumirenokai.vesqen.ui.LibraryUiState
 import io.github.sumirenokai.vesqen.ui.MusicAccess
 import io.github.sumirenokai.vesqen.ui.VesqenAppContent
 import io.github.sumirenokai.vesqen.ui.VesqenUiState
+import io.github.sumirenokai.vesqen.ui.scanProgressAfterRead
 import io.github.sumirenokai.vesqen.ui.chain.ChainDashboardPreferences
 import io.github.sumirenokai.vesqen.ui.chain.ChainDashboardPreferencesRepository
 import io.github.sumirenokai.vesqen.ui.chain.ChainMetricViewMode
@@ -730,6 +732,47 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.library.resume-scan").performClick()
 
         composeRule.runOnIdle { assertEquals(1, resumeCalls) }
+    }
+
+    @Test
+    fun a_catalog_read_during_a_scan_keeps_the_pause_button() {
+        // #136 U1: a favorite, a playlist edit or a return to the app reads the catalog while the scan
+        // runs. The read lists the device source as scanning, not paused, and the scan reports its
+        // progress again only when the source ends.
+        val device = LibrarySource(
+            id = "media:external",
+            kind = LibrarySourceKind.DEVICE,
+            displayName = "Device music",
+            scanState = LibraryScanState.SCANNING,
+        )
+        var state by mutableStateOf(
+            VesqenUiState(
+                library = LibraryUiState(
+                    musicAccess = MusicAccess.GRANTED,
+                    tracks = sampleTracks.take(1),
+                    sources = listOf(device),
+                    scanProgress = LibraryScanProgress(
+                        sourceId = device.id,
+                        sourceName = device.displayName,
+                        scannedTrackCount = 0,
+                    ),
+                ),
+            ),
+        )
+        render(state, stateProvider = { state })
+        composeRule.onNodeWithTag("vesqen.library.pause-scan").assertIsDisplayed()
+
+        composeRule.runOnIdle {
+            val read = LibraryCatalogSnapshot(tracks = sampleTracks.take(2), sources = listOf(device))
+            state = state.copy(
+                library = state.library.copy(
+                    tracks = read.tracks,
+                    scanProgress = scanProgressAfterRead(state.library.scanProgress, read, scanRunning = true),
+                ),
+            )
+        }
+        composeRule.onNodeWithTag("vesqen.library.track.2").assertExists()
+        composeRule.onNodeWithTag("vesqen.library.pause-scan").assertIsDisplayed()
     }
 
     @Test
