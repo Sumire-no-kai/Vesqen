@@ -110,6 +110,7 @@ class LibraryCatalogCorruptionDeviceTest {
             snapshot.tracks.map { it.contentUri.substringAfterLast('/').toLong() }.filter { id -> inserted.any { ContentUris.parseId(it) == id } }.toSet()
         try {
             repeat(3) { inserted += insertAudio("catalog-rebuild-scan-$it") }
+            awaitMediaStoreSettled()
             assertEquals(3, catalog.refresh(includeDeviceLibrary = true) {}.fixtureIds().size)
             // A new file moves MediaStore's generation, so the next scan reads every row again.
             inserted += insertAudio("catalog-rebuild-scan-3")
@@ -128,8 +129,9 @@ class LibraryCatalogCorruptionDeviceTest {
             assertEquals(emptyList<AudioTrack>(), stopped.snapshot.tracks)
 
             // The next scan reads the new catalog in full.
+            awaitMediaStoreSettled()
             val rescanned = catalog.refresh(includeDeviceLibrary = true) {}
-            assertFalse(rescanned.hadFailure)
+            assertFalse("Rescan: ${rescanned.snapshot.sources}", rescanned.hadFailure)
             assertEquals(inserted.map(ContentUris::parseId).toSet(), rescanned.fixtureIds())
         } finally {
             inserted.forEach { context.contentResolver.delete(it, null, null) }
@@ -165,6 +167,28 @@ class LibraryCatalogCorruptionDeviceTest {
             Thread.sleep(100)
         }
         return uri
+    }
+
+    /**
+     * MediaStore keeps moving its generation for a while after files are added. On this branch a moved
+     * generation still interrupts a device scan (#136 R15 is fixed in #179), so scans that must
+     * complete wait until it stays put for a second.
+     */
+    private fun awaitMediaStoreSettled() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        fun generation() = MediaStore.getGeneration(context, MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val deadline = SystemClock.uptimeMillis() + 20_000
+        var last = generation()
+        var unchangedSince = SystemClock.uptimeMillis()
+        while (SystemClock.uptimeMillis() - unchangedSince < 1_000) {
+            check(SystemClock.uptimeMillis() < deadline) { "MediaStore kept changing" }
+            Thread.sleep(100)
+            val now = generation()
+            if (now != last) {
+                last = now
+                unchangedSince = SystemClock.uptimeMillis()
+            }
+        }
     }
 
     private fun listedAsMusic(uri: Uri): Boolean = context.contentResolver.query(
