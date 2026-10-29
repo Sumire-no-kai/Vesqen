@@ -60,6 +60,7 @@ data class VesqenUiState(
 class VesqenViewModel(application: Application) : AndroidViewModel(application) {
     private val catalog: LibraryCatalog =
         AndroidLibraryCatalog(application, (application as VesqenApplication).libraryCatalogStore)
+    private val catalogRebuilds = (application as VesqenApplication).libraryCatalogStore.rebuilds
     private val cachedLibraryReader = LibrarySnapshotReader()
     private var libraryRefreshEpoch = 0L
     private var playbackController: PlaybackController? = null
@@ -317,12 +318,18 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         mutateCatalog { catalog.setFavorite(trackId, favorite) }
     }
 
-    suspend fun saveTrackOrder(playlistId: Long?, trackIds: List<Long>): Boolean = try {
-        withContext(Dispatchers.IO) { catalog.saveTrackOrder(playlistId, trackIds) }
-        loadCachedLibrary()
-        true
-    } catch (failure: SQLiteException) {
-        false
+    suspend fun saveTrackOrder(playlistId: Long?, trackIds: List<Long>): Boolean {
+        val rebuildsBefore = catalogRebuilds.value
+        return try {
+            withContext(Dispatchers.IO) { catalog.saveTrackOrder(playlistId, trackIds) }
+            loadCachedLibrary()
+            true
+        } catch (failure: SQLiteException) {
+            false
+        } catch (failure: IllegalStateException) {
+            failure.rethrowUnlessCatalogRebuiltSince(rebuildsBefore)
+            false
+        }
     }
 
     fun createPlaylist(name: String) {
@@ -462,6 +469,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     private fun mutateCatalog(action: suspend () -> Unit) {
         viewModelScope.launch {
             updateLibrary { it.copy(catalogMutationFailed = false) }
+            val rebuildsBefore = catalogRebuilds.value
             try {
                 withContext(Dispatchers.IO) { action() }
                 loadCachedLibrary()
@@ -469,8 +477,21 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                 throw cancelled
             } catch (_: SQLiteException) {
                 updateLibrary { it.copy(catalogMutationFailed = true) }
+            } catch (failure: IllegalStateException) {
+                failure.rethrowUnlessCatalogRebuiltSince(rebuildsBefore)
             }
         }
+    }
+
+    /**
+     * #165 U4: when SQLite finds the catalog corrupt during a write, the handler closes the database
+     * under it. The write's transaction then ends on a closed database, or a statement runs on one,
+     * and fails with IllegalStateException instead of an SQLiteException. A failure while the catalog
+     * was rebuilt is that rebuild, which [onCatalogRebuilt] handles; any other is thrown as before.
+     */
+    private fun IllegalStateException.rethrowUnlessCatalogRebuiltSince(rebuildsBefore: Int) {
+        // Coroutine cancellation is an IllegalStateException too.
+        if (this is CancellationException || catalogRebuilds.value == rebuildsBefore) throw this
     }
 }
 
