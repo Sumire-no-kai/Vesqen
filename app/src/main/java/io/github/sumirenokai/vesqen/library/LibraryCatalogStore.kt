@@ -627,11 +627,13 @@ internal class LibraryCatalogStore internal constructor(
 
     /**
      * Starts a device scan that keeps catalog IDs on files rather than on MediaStore `_ID`s.
-     * [listedFiles] is what MediaStore lists at the start; see [MediaStoreIdentityIndex].
+     * [listedFiles] is what MediaStore lists at the start, and [volumesWithStableIds] come from
+     * [mediaStoreVolumesWithStableIds]; see [MediaStoreIdentityIndex].
      */
     fun beginMediaStoreScan(
         listedFiles: Collection<ListedMediaStoreFile> = emptyList(),
         pathIdentifiesFile: Boolean = true,
+        volumesWithStableIds: Set<String> = emptySet(),
     ): MediaStoreScanSession {
         val session = beginSourceScan(LibrarySourceId.DEVICE)
         val identities = readableDatabase.query(
@@ -669,7 +671,10 @@ internal class LibraryCatalogStore internal constructor(
                 }
             }
         }
-        return MediaStoreScanSession(session, MediaStoreIdentityIndex(identities, listedFiles, pathIdentifiesFile))
+        return MediaStoreScanSession(
+            session,
+            MediaStoreIdentityIndex(identities, listedFiles, pathIdentifiesFile, volumesWithStableIds),
+        )
     }
 
     fun markSeenIfUnchanged(scan: MediaStoreScanSession, candidate: LibraryTrackCandidate): Boolean {
@@ -715,13 +720,15 @@ internal class LibraryCatalogStore internal constructor(
     }
 
     /**
-     * Marks this scan's unseen rows seen when MediaStore still lists their `_ID` ([listedRemoteIds]).
-     * MediaStore refills a long cursor by running its query again, so a row added or removed earlier
-     * in the order while a scan runs shifts the rest, and the scan skips a row (#136 R14). Only rows
-     * MediaStore no longer lists may then be pruned. Displaced rows gave up their `_ID` and stay to
-     * the completion; a row kept here with changed metadata is read again by the next scan.
+     * Marks this scan's unseen rows seen when MediaStore still lists their `_ID` for them
+     * ([listedFiles], see [MediaStoreIdentityIndex.idsStillNamingTheirRows]). MediaStore refills a
+     * long cursor by running its query again, so a row added or removed earlier in the order while a
+     * scan runs shifts the rest, and the scan skips a row (#136 R14). Only rows MediaStore no longer
+     * lists may then be pruned. Displaced rows gave up their `_ID` and stay to the completion; a row
+     * kept here with changed metadata is read again by the next scan.
      */
-    fun keepTracksStillListed(scan: MediaStoreScanSession, listedRemoteIds: Set<String>) {
+    fun keepTracksStillListed(scan: MediaStoreScanSession, listedFiles: Collection<ListedMediaStoreFile>) {
+        val listedRemoteIds = scan.identities.idsStillNamingTheirRows(listedFiles)
         if (listedRemoteIds.isEmpty()) return
         val session = scan.session
         val database = writableDatabase
