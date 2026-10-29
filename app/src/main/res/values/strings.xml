@@ -192,7 +192,7 @@
     <string name="crash_prompt_review">Review and send</string>
     <string name="crash_prompt_decline">No thanks</string>
     <string name="library_rebuilt_title">Library data was rebuilt</string>
-    <string name="library_rebuilt_body">The library data was damaged, so Vesqen rebuilt the library from the music on your phone. Favorites, play counts, recently played history and playlists could not be kept, and the queue was cleared. Music folders you added need to be added again. The music files on your phone are not affected.</string>
+    <string name="library_rebuilt_body">Vesqen\'s library data was damaged and has been rebuilt from the music on this device. Favorites, play counts, recently played history and playlists could not be retained, and the queue has been cleared. Music folders added earlier must be added again. Music files on this device are not affected.</string>
     <string name="library_rebuilt_ok">OK</string>
     <string name="licenses_title">Open source licenses</string>
     <string name="licenses_intro">Vesqen uses the following open-source software.</string>
