@@ -59,7 +59,7 @@ if debuggable and not args.allow_debuggable:
     raise RuntimeError('Debug APK installed: use profile for acceptance, or --allow-debuggable for a Debug comparison')
 
 tree = ET.parse(args.xml)
-if args.surface == 'chain' and not any(n.get('text') in {'高级链路', 'Advanced chain'} for n in tree.iter('node')):
+if args.surface == 'chain' and not any(n.get('text') in {'链路详情', 'Advanced chain'} for n in tree.iter('node')):
     raise RuntimeError('Expected the advanced Chain page in the supplied UI XML')
 if any('正在扫描' in n.get('text', '') or n.get('text', '').startswith('Scanning ') for n in tree.iter('node')):
     raise RuntimeError('Wait for the library scan to finish and capture a fresh XML viewport')

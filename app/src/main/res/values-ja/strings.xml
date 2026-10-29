@@ -131,6 +131,15 @@
     <string name="settings_usage_off">オフ</string>
     <string name="settings_usage_paused">一時停止中</string>
     <string name="settings_device_report">デバイスレポートを書き出す</string>
+    <string name="settings_library">ライブラリ</string>
+    <string name="settings_artist_split">アーティストの分割</string>
+    <string name="settings_artist_split_body">「アーティスト」ページで、複数のアーティストをまとめて記載したタグを分けて表示します。音楽ファイルのタグは変更しません。</string>
+    <string name="settings_artist_separators">区切り文字</string>
+    <string name="settings_artist_separators_body">スペースで区切って入力します。英字を含む区切り文字（feat. など）は、前後にスペースがある場合にのみ分割します。</string>
+    <string name="settings_artist_kept_names">分割しない名前</string>
+    <string name="settings_artist_kept_names_body">1 行に 1 つずつ入力します。一覧の名前は分割しません（例：AC/DC）。</string>
+    <string name="settings_artist_list_empty">なし</string>
+    <string name="settings_artist_split_restore">初期設定に戻す</string>
     <string name="usage_title">利用統計</string>
     <string name="usage_body">Vesqen は、どの機種で使われているかを知るために、ID を付けずに 1 日 1 回まで利用統計を送信します。送る内容は次の項目だけです。</string>
     <string name="usage_field_app">アプリのバージョンと配布元</string>
@@ -929,4 +938,23 @@
     <string name="premium_activation_revoked">このアクティベーションコードは失効しています。Vesqen のウェブサイトで購入した場合は、新しいコードを受け取るため、vesqen@sumirenokai.com までメールでご連絡ください。</string>
     <string name="premium_open">Pro 機能を見る</string>
     <string name="player_trial_ended_body">%1$s\n\n厳格 USB 出力からシステム出力へ自動で切り替わることはありません。Pro 機能を買い切りで購入するか、「システム出力」に切り替えてもう一度再生してください。</string>
+    <plurals name="unmatched_records_prompt">
+        <item quantity="other">%1$d 曲のお気に入りと再生履歴を対応付けられませんでした</item>
+    </plurals>
+    <string name="unmatched_records_review">確認</string>
+    <string name="unmatched_records_later">後で</string>
+    <string name="unmatched_records_title">対応付けられなかった記録</string>
+    <string name="unmatched_records_body">以下の記録には、ファイル名とサイズが同じ曲が複数あるため、Vesqen はどの曲の記録か判断できません。記録ごとに対応する曲を選ぶか、記録を破棄してください。音楽ファイルは変更されません。</string>
+    <string name="unmatched_record_favorite">お気に入り</string>
+    <plurals name="unmatched_record_play_count">
+        <item quantity="other">%1$d 回再生</item>
+    </plurals>
+    <plurals name="unmatched_record_playlist_count">
+        <item quantity="other">%1$d 件のプレイリストに登録</item>
+    </plurals>
+    <string name="unmatched_record_choose">対応する曲</string>
+    <string name="unmatched_record_assign">この曲を選択</string>
+    <string name="unmatched_record_discard">記録を破棄</string>
+    <string name="unmatched_record_discard_confirm_title">「%1$s」の記録を破棄しますか？</string>
+    <string name="unmatched_record_discard_confirm_body">お気に入り、再生回数、プレイリスト内の位置が削除され、元に戻せません。音楽ファイルには影響しません。</string>
 </resources>

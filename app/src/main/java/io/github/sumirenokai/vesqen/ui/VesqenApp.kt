@@ -89,6 +89,7 @@ import io.github.sumirenokai.vesqen.diagnostics.DiagnosticExportFailure
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticExportResult
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
 import io.github.sumirenokai.vesqen.diagnostics.exportTo
+import io.github.sumirenokai.vesqen.library.ArtistSplitSettings
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.library.LibraryRebuildNotice
 import io.github.sumirenokai.vesqen.library.musicLibraryPermission
@@ -184,6 +185,8 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
     val chainPreferencesRepository = remember(application) {
         ChainDashboardPreferencesStore(application)
     }
+    val artistSplitPreferences = remember(application) { ArtistSplitPreferences(application) }
+    val artistSplit by artistSplitPreferences.settings.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
     val musicPermission = musicLibraryPermission
     val notificationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -328,6 +331,9 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
         onRemoveLibraryFolder = viewModel::removeLibraryFolder,
         onPauseLibraryScan = viewModel::pauseLibraryScan,
         onResumeLibraryScan = viewModel::resumeLibraryScan,
+        onAssignUnmatchedRecord = viewModel::assignUnmatchedRecord,
+        onDiscardUnmatchedRecord = viewModel::discardUnmatchedRecord,
+        onDismissUnmatchedRecords = viewModel::dismissUnmatchedRecords,
         onTrackSelected = viewModel::play,
         onPlayQueue = viewModel::playQueue,
         onToggleFavorite = viewModel::setFavorite,
@@ -376,6 +382,8 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
             usageIntroductionShown || usageSnapshot.status == UsageSettingsStatus.LOADING
         },
         rebuildNotice = application.libraryRebuildNotice,
+        artistSplit = artistSplit,
+        onArtistSplitChange = artistSplitPreferences::save,
     )
 }
 
@@ -422,6 +430,9 @@ fun VesqenAppContent(
     onRemoveLibraryFolder: (String) -> Unit = {},
     onPauseLibraryScan: () -> Unit = {},
     onResumeLibraryScan: () -> Unit = {},
+    onAssignUnmatchedRecord: (Long, Long) -> Unit = { _, _ -> },
+    onDiscardUnmatchedRecord: (Long) -> Unit = {},
+    onDismissUnmatchedRecords: () -> Unit = {},
     motionPolicy: VesqenMotionPolicy? = null,
     managePhoneOrientation: Boolean = false,
     versionName: String = BuildConfig.VERSION_NAME,
@@ -447,6 +458,8 @@ fun VesqenAppContent(
     supportPrompt: SupportPrompt? = null,
     supportUrl: String? = supportDevelopmentUrl,
     rebuildNotice: LibraryRebuildNotice? = null,
+    artistSplit: ArtistSplitSettings = ArtistSplitSettings(),
+    onArtistSplitChange: (ArtistSplitSettings) -> Unit = {},
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     // #165: after Clear queue, a notice offers Undo for a while.
@@ -757,6 +770,9 @@ fun VesqenAppContent(
                 onRemoveLibraryFolder = onRemoveLibraryFolder,
                 onPauseLibraryScan = onPauseLibraryScan,
                 onResumeLibraryScan = onResumeLibraryScan,
+                onAssignUnmatchedRecord = onAssignUnmatchedRecord,
+                onDiscardUnmatchedRecord = onDiscardUnmatchedRecord,
+                onDismissUnmatchedRecords = onDismissUnmatchedRecords,
                 onTrackSelected = onTrackSelected,
                 onPlayQueue = onPlayQueue,
                 onToggleFavorite = onToggleFavorite,
@@ -785,6 +801,8 @@ fun VesqenAppContent(
                 premiumAccess = premiumAccess,
                 activationCodes = activationCodes,
                 onOpenPremium = ::openPremium,
+                artistSplit = artistSplit,
+                onArtistSplitChange = onArtistSplitChange,
                 verificationRegistryState = verificationRegistryState,
                 verificationImportResult = verificationImportResult,
                 onImportVerificationRegistry = onImportVerificationRegistry,
@@ -831,6 +849,9 @@ fun VesqenAppContent(
             onRemoveLibraryFolder = onRemoveLibraryFolder,
             onPauseLibraryScan = onPauseLibraryScan,
             onResumeLibraryScan = onResumeLibraryScan,
+            onAssignUnmatchedRecord = onAssignUnmatchedRecord,
+            onDiscardUnmatchedRecord = onDiscardUnmatchedRecord,
+            onDismissUnmatchedRecords = onDismissUnmatchedRecords,
             onTrackSelected = onTrackSelected,
             onPlayQueue = onPlayQueue,
             onToggleFavorite = onToggleFavorite,
@@ -859,6 +880,8 @@ fun VesqenAppContent(
             premiumAccess = premiumAccess,
             activationCodes = activationCodes,
             onOpenPremium = ::openPremium,
+            artistSplit = artistSplit,
+            onArtistSplitChange = onArtistSplitChange,
             verificationRegistryState = verificationRegistryState,
             verificationImportResult = verificationImportResult,
             onImportVerificationRegistry = onImportVerificationRegistry,
@@ -1101,6 +1124,9 @@ private fun VesqenDestinationFrame(
     onRemoveLibraryFolder: (String) -> Unit,
     onPauseLibraryScan: () -> Unit,
     onResumeLibraryScan: () -> Unit,
+    onAssignUnmatchedRecord: (Long, Long) -> Unit,
+    onDiscardUnmatchedRecord: (Long) -> Unit,
+    onDismissUnmatchedRecords: () -> Unit,
     onTrackSelected: (AudioTrack) -> Unit,
     onPlayQueue: (List<AudioTrack>, Int) -> Unit,
     onToggleFavorite: (Long, Boolean) -> Unit,
@@ -1129,6 +1155,8 @@ private fun VesqenDestinationFrame(
     premiumAccess: PremiumAccess?,
     activationCodes: ActivationCodes?,
     onOpenPremium: () -> Unit,
+    artistSplit: ArtistSplitSettings,
+    onArtistSplitChange: (ArtistSplitSettings) -> Unit,
     verificationRegistryState: OutputVerificationRegistryState,
     verificationImportResult: OutputVerificationImportResult?,
     onImportVerificationRegistry: () -> Unit,
@@ -1277,6 +1305,9 @@ private fun VesqenDestinationFrame(
                             onRemoveLibraryFolder = onRemoveLibraryFolder,
                             onPauseLibraryScan = onPauseLibraryScan,
                             onResumeLibraryScan = onResumeLibraryScan,
+                            onAssignUnmatchedRecord = onAssignUnmatchedRecord,
+                            onDiscardUnmatchedRecord = onDiscardUnmatchedRecord,
+                            onDismissUnmatchedRecords = onDismissUnmatchedRecords,
                             onTrackSelected = onTrackSelected,
                             onPlayQueue = onPlayQueue,
                             onToggleFavorite = onToggleFavorite,
@@ -1290,6 +1321,7 @@ private fun VesqenDestinationFrame(
                             onMovePlaylistTrack = onMovePlaylistTrack,
                             onSaveTrackOrder = onSaveTrackOrder,
                             motionPolicy = motionPolicy,
+                            artistSplit = artistSplit,
                             modifier = destinationModifier,
                         )
                     }
@@ -1348,6 +1380,8 @@ private fun VesqenDestinationFrame(
                             modifier = destinationModifier,
                             premiumAccess = premiumAccess,
                             onOpenPremium = onOpenPremium,
+                            artistSplit = artistSplit,
+                            onArtistSplitChange = onArtistSplitChange,
                         )
                     }
 

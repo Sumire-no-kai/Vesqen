@@ -1506,7 +1506,7 @@
       "name": "Noto Serif SC",
       "version": "2.003",
       "files": {
-        "font/title_serif_semibold.otf": "f40df981b20f9dbc0ea19cd8d90b4852b52c2a02df5baf95e3432c5e44200cc9"
+        "font/title_serif_semibold.otf": "40a863c816b07b6e894a1537c136d6bf4068e9d0e5d45cea3fc850c1fcead9cb"
       },
       "licenses": [
         {
@@ -1522,7 +1522,7 @@
       "name": "Noto Serif TC",
       "version": "2.003",
       "files": {
-        "font-b+zh+Hant/title_serif_semibold.otf": "2cab0dad9712b7f5abace451af6ca624b66f421013061d63b5078d44ada0a1b3"
+        "font-b+zh+Hant/title_serif_semibold.otf": "d15e493ae467d4ed61f86d437ff75e99b14c60496a0dc4cfeb6dc70c5d990c6d"
       },
       "licenses": [
         {

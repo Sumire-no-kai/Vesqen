@@ -214,7 +214,7 @@ Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hai
 
 ### Settings
 
-Groups in this order: Playback output (System / Strict USB, radio group), Audio proof (Playback chain), Privacy & data (Usage statistics, Export device report), Updates (GitHub builds), Application (About, Privacy policy, Open source licenses), Advanced (Output verification records), then one footer line. Group titles are sans; each group is one paper card. When Strict USB is selected, a status box under the options says what happens next or why it stopped, never the option description again.
+Groups in this order: Playback output (System / Strict USB, radio group), Audio proof (Playback chain), Library (Artist splitting switch; while it is on, Separators and Names kept whole, each edited in a dialog with one text field, #168), Privacy & data (Usage statistics, Export device report), Updates (GitHub builds), Application (About, Privacy policy, Open source licenses), Advanced (Output verification records), then one footer line. Group titles are sans; each group is one paper card. When Strict USB is selected, a status box under the options says what happens next or why it stopped, never the option description again.
 
 ### About
 
@@ -277,6 +277,12 @@ Vesqen's voice is plain, concrete and calm. It tells people what happened and wh
 | Usage statistics | 使用统计 |
 | Device report | 设备报告 |
 | Open source licenses | 开源许可 |
+| Pro features | 高级功能 |
+| Advanced chain | 链路详情 |
+| Advanced dashboard | 详细仪表盘 |
+| Advanced (settings group) | 更多设置 |
+
+In Chinese, 高级 (Traditional 進階) appears only in 高级功能, the paid tier, so free screens never read as paid (#161).
 
 ## Accessibility
 

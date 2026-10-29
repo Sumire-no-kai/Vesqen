@@ -34,6 +34,8 @@ class PlaybackController(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val tracksById = mutableMapOf<String, AudioTrack>()
     private val availableTracksById = mutableMapOf<String, AudioTrack>()
+    /** Media IDs of merged tracks to the IDs of the records that took them over (#139). */
+    private val pendingQueueTrackReplacements = mutableMapOf<String, String>()
     private val stateStore = PlaybackStateStore(appContext)
     private val librarySnapshot = PlaybackLibrarySnapshot()
     private val sessionToken = SessionToken(
@@ -199,6 +201,52 @@ class PlaybackController(
         currentLibrary.forEach { track -> availableTracksById[track.id.toString()] = track }
         val activeController = controller
         if (activeController != null) synchronizeLibrary(activeController, currentLibrary)
+    }
+
+    /**
+     * The Library merged the track [fromTrackId] into [toTrackId], which now names the same file
+     * (#139). Queue entries take the merged track in their place and keep playing, and the saved queue
+     * follows for when no player holds it. The entries change once a library given to [syncLibrary]
+     * holds the merged track: the read after the merge can be dropped for a newer one.
+     */
+    fun replaceQueueTrack(fromTrackId: Long, toTrackId: Long) {
+        stateStore.replaceTrackId(fromTrackId, toTrackId)
+        pendingQueueTrackReplacements[fromTrackId.toString()] = toTrackId.toString()
+        val player = controller ?: return
+        if (replacePendingQueueTracks(player)) publish(player, rebuildQueue = true)
+    }
+
+    /** Applies the merges whose tracks the library holds; returns whether a queue entry changed. */
+    private fun replacePendingQueueTracks(player: MediaController): Boolean {
+        val merged = pendingQueueTrackReplacements.mapNotNull { (fromMediaId, toMediaId) ->
+            availableTracksById[toMediaId]?.let { fromMediaId to it }
+        }.toMap()
+        if (merged.isEmpty()) return false
+        pendingQueueTrackReplacements.keys.removeAll(merged.keys)
+        // The entries keep their occurrences and their places in the play order (PlayOrder).
+        val order = shuffledEntryIds(player)
+        var replaced = false
+        suppressListenerPublishing = true
+        try {
+            for (index in 0 until player.mediaItemCount) {
+                val item = player.getMediaItemAt(index)
+                val track = merged[item.mediaId] ?: continue
+                // The same file under another ID: Media3 updates the entry without reopening it.
+                player.replaceMediaItem(
+                    index,
+                    track.toPlaybackMediaItem(
+                        occurrenceId = item.mediaMetadata.extras?.getString(PLAYBACK_OCCURRENCE_EXTRA)
+                            ?: java.util.UUID.randomUUID().toString(),
+                    ),
+                )
+                tracksById[track.id.toString()] = track
+                replaced = true
+            }
+            if (replaced) order?.let { expectPlayOrder(player, it) }
+        } finally {
+            suppressListenerPublishing = false
+        }
+        return replaced
     }
 
     private fun startQueue(
@@ -702,6 +750,8 @@ class PlaybackController(
     )
 
     private fun synchronizeLibrary(player: MediaController, tracks: List<AudioTrack>) {
+        // Both branches below publish. An empty player restores the saved queue, which has the records.
+        replacePendingQueueTracks(player)
         if (player.mediaItemCount > 0) {
             suppressListenerPublishing = true
             try {

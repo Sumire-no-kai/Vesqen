@@ -43,12 +43,17 @@ internal data class ListedMediaStoreFile(
  * - The candidate first takes the one row not yet seen in this scan with the same volume, folder,
  *   file name and size, even when another row holds its `_ID`. A file that was deleted and copied
  *   back therefore keeps its row too.
- * - Without such a row, the same `_ID` stays on its row unless the path (folder and file name),
- *   size and duration (by a second or more) all changed: a rename or move, a tag edit, or both
- *   keep the duration. It does not stay when the row's own file is still listed under another
- *   `_ID` (#143 Q1): two songs within a second of each other are common in a large library.
+ * - Without such a row, the same `_ID` stays on its row while the file still matches it. It does
+ *   not stay when the row's own file is still listed under another `_ID` (#143 Q1): two songs
+ *   within a second of each other are common in a large library.
+ * - On a volume whose MediaStore database the last completed scan read ([volumesWithStableIds]),
+ *   an `_ID` still names one entry, so one of path (folder and file name), size and duration
+ *   (within a second) is enough: a rename or move, a tag edit, or both keep the duration.
+ * - Elsewhere the `_ID` may come from a rebuilt database and name a new file while the row's own
+ *   file is not listed yet (#159). There the path keeps the row, or two of path, size and duration.
+ *   This includes Android 9 and 10, where a scan records no database version.
  * - Before Android 10 the folder is only the parent directory's name, so there a same path alone
- *   does not keep a row; the size or duration has to match too ([pathIdentifiesFile], #143 Q6).
+ *   does not keep a row ([pathIdentifiesFile], #143 Q6).
  * - Otherwise the candidate becomes a new row. An ambiguous match never moves user data to another
  *   song.
  *
@@ -60,6 +65,7 @@ internal class MediaStoreIdentityIndex(
     rows: Collection<StoredTrackIdentity>,
     listedFiles: Collection<ListedMediaStoreFile> = emptyList(),
     private val pathIdentifiesFile: Boolean = true,
+    private val volumesWithStableIds: Set<String> = emptySet(),
 ) {
     private val rowsByRemoteId = rows.associateByTo(HashMap(), StoredTrackIdentity::remoteId)
     private val unseenRowsByFile = rows.groupByTo(HashMap(), StoredTrackIdentity::fileKey)
@@ -82,7 +88,7 @@ internal class MediaStoreIdentityIndex(
             sameFile === current ||
                 current.fileKey() == candidate.fileKey() ||
                 sameFile == null &&
-                current.namesSameFileAs(candidate, pathIdentifiesFile) &&
+                current.namesSameFileAs(candidate, pathIdentifiesFile, idsAreStable(candidate.contentUri)) &&
                 !current.isListedUnderAnotherId(candidate)
             )
         if (keepsCurrent) {
@@ -100,6 +106,20 @@ internal class MediaStoreIdentityIndex(
             displacedTrackId = current?.trackId,
         )
     }
+
+    /**
+     * The `_ID`s in [listedFiles] that still name the rows stored under them, for the rows this scan
+     * did not reach (#136 R14). Where the `_ID`s may come from a rebuilt database, a row is kept only
+     * when its own file is listed under its `_ID`: another file listed there would otherwise leave
+     * the row on an `_ID` that the next scan trusts (#159).
+     */
+    fun idsStillNamingTheirRows(listedFiles: Collection<ListedMediaStoreFile>): Set<String> = listedFiles
+        .filter { listed ->
+            idsAreStable(listed.contentUri) || rowsByRemoteId[listed.remoteId]?.fileKey() == listed.fileKey()
+        }
+        .mapTo(HashSet(), ListedMediaStoreFile::remoteId)
+
+    private fun idsAreStable(contentUri: String): Boolean = mediaStoreVolumeName(contentUri) in volumesWithStableIds
 
     /**
      * True when this row's file is listed under another `_ID`. Before Android 10 copies on two
@@ -130,10 +150,14 @@ internal const val SAME_FILE_DURATION_TOLERANCE_MS = 1_000L
 private fun StoredTrackIdentity.namesSameFileAs(
     candidate: LibraryTrackCandidate,
     pathIdentifiesFile: Boolean,
-): Boolean =
-    (pathIdentifiesFile && folderName == candidate.folderName && fileName == candidate.fileName) ||
-        sizeBytes == candidate.sizeBytes ||
-        abs(durationMs - candidate.durationMs) < SAME_FILE_DURATION_TOLERANCE_MS
+    idsAreStable: Boolean,
+): Boolean {
+    val samePath = folderName == candidate.folderName && fileName == candidate.fileName
+    val sameSize = sizeBytes == candidate.sizeBytes
+    val sameDuration = abs(durationMs - candidate.durationMs) < SAME_FILE_DURATION_TOLERANCE_MS
+    if (pathIdentifiesFile && samePath) return true
+    return if (idsAreStable) sameSize || sameDuration else listOf(samePath, sameSize, sameDuration).count { it } >= 2
+}
 
 private data class TrackFileKey(
     val volumeName: String?,
