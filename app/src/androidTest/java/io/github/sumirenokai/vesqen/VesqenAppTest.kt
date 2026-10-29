@@ -491,6 +491,24 @@ class VesqenAppTest {
     }
 
     @Test
+    fun chain_opened_from_settings_keeps_its_way_back_after_now() {
+        // #156 V25: after a visit to Now, Back reached Chain without its arrow, and Chain then
+        // returned to Library instead of Settings.
+        render(grantedState())
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.playback-chain"))
+        composeRule.onNodeWithTag("vesqen.settings.playback-chain").performClick()
+        composeRule.onNodeWithTag("vesqen.nav.now").performClick()
+        composeRule.onNodeWithTag("vesqen.nav.now").assertIsSelected()
+
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag("vesqen.nav.chain").assertIsSelected()
+        composeRule.onNodeWithTag("vesqen.chain.back").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("vesqen.nav.settings").assertIsSelected()
+    }
+
+    @Test
     fun empty_library_without_access_makes_allowing_access_the_main_action() {
         var accessRequests = 0
         var addFolderCalls = 0
@@ -1780,6 +1798,36 @@ class VesqenAppTest {
             "The details must end near the sheet bottom; gap=${viewportBottom - contentEnd}px",
             viewportBottom - contentEnd <= maximumBottomGap,
         )
+    }
+
+    @Test
+    fun track_details_play_still_plays_after_its_play_count_changes() {
+        // #136 R28: the sheet kept the track as it was when opened. Once a listen raised its play
+        // count, Play looked that copy up in the album and found nothing, so the tap did nothing.
+        var state by mutableStateOf(grantedState(tracks = sampleTracks))
+        var queued = emptyList<Long>()
+        var startIndex = -1
+        render(
+            state,
+            stateProvider = { state },
+            onPlayQueue = { tracks, index ->
+                queued = tracks.map(AudioTrack::id)
+                startIndex = index
+            },
+        )
+        composeRule.onNodeWithTag("vesqen.library.mode.albums").performClick()
+        composeRule.onNodeWithText("Quiet Rooms").performClick()
+        composeRule.onNodeWithTag("vesqen.library.track.2.more").performClick()
+
+        composeRule.runOnIdle {
+            state = grantedState(tracks = sampleTracks.map { if (it.id == 2L) it.copy(playCount = 1) else it })
+        }
+        composeRule.onNodeWithText(context.getString(R.string.play_this_track)).performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(listOf(1L, 2L), queued)
+            assertEquals(1, startIndex)
+        }
     }
 
     @Test

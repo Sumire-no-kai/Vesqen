@@ -18,16 +18,26 @@ data class VesqenNavigationState(
     val returnDestination: VesqenDestination = VesqenDestination.LIBRARY,
     val playerReturnDestination: VesqenDestination = VesqenDestination.LIBRARY,
     val parentReturnDestination: VesqenDestination = VesqenDestination.LIBRARY,
+    /**
+     * Where a Chain opened in context returns to while Now or a detail opened from it covers it.
+     * Back restores it when it reaches that Chain again (#156 V25).
+     */
+    val chainReturnDestination: VesqenDestination = VesqenDestination.LIBRARY,
 ) {
     fun selectTopLevel(destination: VesqenDestination): VesqenNavigationState {
         require(!destination.isSecondaryDetail) { "$destination is not a top-level destination" }
         // Tapping the tab that is already shown changes nothing. Chain opened from Settings keeps its
         // way back, and the Settings stack is not torn down to show the same page again (#143 Q4).
         if (destination == this.destination) return this
+        // Chain opened from the player: Now goes back to that player, which keeps its own way back.
+        if (chainOpenedInContext && returnDestination == VesqenDestination.NOW && destination == VesqenDestination.NOW) {
+            return back()
+        }
         val playerOrigin = this.destination.takeIf {
             it != VesqenDestination.NOW && !it.isSecondaryDetail
         } ?: playerReturnDestination.takeIf { !it.isSecondaryDetail }
             ?: VesqenDestination.LIBRARY
+        val nowOverChain = destination == VesqenDestination.NOW && playerOrigin == VesqenDestination.CHAIN
         return copy(
             destination = destination,
             returnDestination = VesqenDestination.LIBRARY,
@@ -35,6 +45,11 @@ data class VesqenNavigationState(
                 VesqenDestination.LIBRARY
             },
             parentReturnDestination = VesqenDestination.LIBRARY,
+            chainReturnDestination = when {
+                !nowOverChain -> VesqenDestination.LIBRARY
+                this.destination == VesqenDestination.CHAIN -> returnDestination
+                else -> chainReturnDestination
+            },
         )
     }
 
@@ -48,6 +63,9 @@ data class VesqenNavigationState(
             destination = destination,
             returnDestination = this.destination,
             parentReturnDestination = if (nested) returnDestination else VesqenDestination.LIBRARY,
+            chainReturnDestination = if (this.destination == VesqenDestination.CHAIN) returnDestination else {
+                chainReturnDestination
+            },
         )
     }
 
@@ -99,25 +117,38 @@ data class VesqenNavigationState(
             destination = returnDestination,
             returnDestination = VesqenDestination.LIBRARY,
             parentReturnDestination = VesqenDestination.LIBRARY,
+            // Only the player can lead back to an earlier Chain.
+            chainReturnDestination = if (returnDestination == VesqenDestination.NOW) chainReturnDestination else {
+                VesqenDestination.LIBRARY
+            },
         )
         destination.isSecondaryDetail -> copy(
             destination = returnDestination,
-            returnDestination = if (returnDestination.isSecondaryDetail) {
-                parentReturnDestination
+            returnDestination = when {
+                returnDestination.isSecondaryDetail -> parentReturnDestination
+                returnDestination == VesqenDestination.CHAIN -> chainReturnDestination
+                else -> VesqenDestination.LIBRARY
+            },
+            parentReturnDestination = VesqenDestination.LIBRARY,
+            chainReturnDestination = if (returnDestination.isSecondaryDetail || returnDestination == VesqenDestination.NOW) {
+                chainReturnDestination
             } else {
                 VesqenDestination.LIBRARY
             },
-            parentReturnDestination = VesqenDestination.LIBRARY,
         )
         destination == VesqenDestination.NOW -> copy(
             destination = playerReturnDestination,
-            returnDestination = VesqenDestination.LIBRARY,
+            returnDestination = if (playerReturnDestination == VesqenDestination.CHAIN) chainReturnDestination else {
+                VesqenDestination.LIBRARY
+            },
             playerReturnDestination = VesqenDestination.LIBRARY,
+            chainReturnDestination = VesqenDestination.LIBRARY,
         )
         else -> copy(
             destination = VesqenDestination.LIBRARY,
             returnDestination = VesqenDestination.LIBRARY,
             playerReturnDestination = VesqenDestination.LIBRARY,
+            chainReturnDestination = VesqenDestination.LIBRARY,
         )
     }
 }
