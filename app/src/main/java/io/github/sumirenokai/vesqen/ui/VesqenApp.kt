@@ -83,6 +83,7 @@ import io.github.sumirenokai.vesqen.diagnostics.DiagnosticExportFailure
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticExportResult
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
 import io.github.sumirenokai.vesqen.diagnostics.exportTo
+import io.github.sumirenokai.vesqen.library.ArtistSplitSettings
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.library.LibraryRebuildNotice
 import io.github.sumirenokai.vesqen.library.musicLibraryPermission
@@ -177,6 +178,8 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
     val chainPreferencesRepository = remember(application) {
         ChainDashboardPreferencesStore(application)
     }
+    val artistSplitPreferences = remember(application) { ArtistSplitPreferences(application) }
+    val artistSplit by artistSplitPreferences.settings.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
     val musicPermission = musicLibraryPermission
     val notificationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -371,6 +374,8 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
             usageIntroductionShown || usageSnapshot.status == UsageSettingsStatus.LOADING
         },
         rebuildNotice = application.libraryRebuildNotice,
+        artistSplit = artistSplit,
+        onArtistSplitChange = artistSplitPreferences::save,
     )
 }
 
@@ -444,6 +449,8 @@ fun VesqenAppContent(
     supportPrompt: SupportPrompt? = null,
     supportUrl: String? = supportDevelopmentUrl,
     rebuildNotice: LibraryRebuildNotice? = null,
+    artistSplit: ArtistSplitSettings = ArtistSplitSettings(),
+    onArtistSplitChange: (ArtistSplitSettings) -> Unit = {},
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     var showStrictUsbUnavailable by rememberSaveable { mutableStateOf(false) }
@@ -767,6 +774,8 @@ fun VesqenAppContent(
                 premiumAccess = premiumAccess,
                 activationCodes = activationCodes,
                 onOpenPremium = ::openPremium,
+                artistSplit = artistSplit,
+                onArtistSplitChange = onArtistSplitChange,
                 verificationRegistryState = verificationRegistryState,
                 verificationImportResult = verificationImportResult,
                 onImportVerificationRegistry = onImportVerificationRegistry,
@@ -843,6 +852,8 @@ fun VesqenAppContent(
             premiumAccess = premiumAccess,
             activationCodes = activationCodes,
             onOpenPremium = ::openPremium,
+            artistSplit = artistSplit,
+            onArtistSplitChange = onArtistSplitChange,
             verificationRegistryState = verificationRegistryState,
             verificationImportResult = verificationImportResult,
             onImportVerificationRegistry = onImportVerificationRegistry,
@@ -1115,6 +1126,8 @@ private fun VesqenDestinationFrame(
     premiumAccess: PremiumAccess?,
     activationCodes: ActivationCodes?,
     onOpenPremium: () -> Unit,
+    artistSplit: ArtistSplitSettings,
+    onArtistSplitChange: (ArtistSplitSettings) -> Unit,
     verificationRegistryState: OutputVerificationRegistryState,
     verificationImportResult: OutputVerificationImportResult?,
     onImportVerificationRegistry: () -> Unit,
@@ -1279,6 +1292,7 @@ private fun VesqenDestinationFrame(
                             onMovePlaylistTrack = onMovePlaylistTrack,
                             onSaveTrackOrder = onSaveTrackOrder,
                             motionPolicy = motionPolicy,
+                            artistSplit = artistSplit,
                             modifier = destinationModifier,
                         )
                     }
@@ -1337,6 +1351,8 @@ private fun VesqenDestinationFrame(
                             modifier = destinationModifier,
                             premiumAccess = premiumAccess,
                             onOpenPremium = onOpenPremium,
+                            artistSplit = artistSplit,
+                            onArtistSplitChange = onArtistSplitChange,
                         )
                     }
 

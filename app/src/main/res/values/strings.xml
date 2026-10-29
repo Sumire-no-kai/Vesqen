@@ -134,6 +134,15 @@
     <string name="settings_usage_off">Off</string>
     <string name="settings_usage_paused">Paused</string>
     <string name="settings_device_report">Export device report</string>
+    <string name="settings_library">Library</string>
+    <string name="settings_artist_split">Artist splitting</string>
+    <string name="settings_artist_split_body">The Artists page lists each artist of a shared artist tag separately. The tags in your music files are not changed.</string>
+    <string name="settings_artist_separators">Separators</string>
+    <string name="settings_artist_separators_body">Separate them with spaces. A separator that contains letters, such as feat., splits only where a space stands on both sides.</string>
+    <string name="settings_artist_kept_names">Names kept whole</string>
+    <string name="settings_artist_kept_names_body">One name per line. These names are never split, for example AC/DC.</string>
+    <string name="settings_artist_list_empty">None</string>
+    <string name="settings_artist_split_restore">Restore defaults</string>
     <string name="usage_title">Usage statistics</string>
     <string name="usage_body">Vesqen sends usage statistics at most once a day, with no ID attached, to learn which phones it runs on. They contain only:</string>
     <string name="usage_field_app">App version and distribution channel</string>

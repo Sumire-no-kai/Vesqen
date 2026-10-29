@@ -131,6 +131,15 @@
     <string name="settings_usage_off">關</string>
     <string name="settings_usage_paused">已暫停</string>
     <string name="settings_device_report">匯出裝置報告</string>
+    <string name="settings_library">音樂庫</string>
+    <string name="settings_artist_split">藝人拆分</string>
+    <string name="settings_artist_split_body">「藝人」頁會將多位藝人合寫的標籤分開顯示。音樂檔案中的標籤不會變更。</string>
+    <string name="settings_artist_separators">分隔符號</string>
+    <string name="settings_artist_separators_body">以空格分隔。含字母的分隔符號（例如 feat.）僅在前後均有空格時拆分。</string>
+    <string name="settings_artist_kept_names">不拆分的名稱</string>
+    <string name="settings_artist_kept_names_body">每行一個名稱。清單中的名稱不會被拆分，例如 AC/DC。</string>
+    <string name="settings_artist_list_empty">無</string>
+    <string name="settings_artist_split_restore">恢復預設設定</string>
     <string name="usage_title">使用統計</string>
     <string name="usage_body">Vesqen 每天最多傳送一次使用統計，不帶任何 ID，用來了解它在哪些手機上執行。內容只有：</string>
     <string name="usage_field_app">應用程式版本和安裝管道</string>

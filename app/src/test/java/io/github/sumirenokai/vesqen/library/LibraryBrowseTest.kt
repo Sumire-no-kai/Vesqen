@@ -231,6 +231,74 @@ class LibraryBrowseTest {
         assertEquals("" to "", folderPathParts(""))
     }
 
+    @Test
+    fun `a song with several artists is in each of their collections and counts there`() {
+        val shared = listOf(
+            track(70, "Theme", "塞壬唱片-MSR/Adam Gubman", "Arknights OST", trackNumber = 1, genre = "Game", playCount = 0),
+            track(71, "Solo", "Adam Gubman", "Solo", trackNumber = 1, genre = "Game", playCount = 0),
+            // No album artist: the folder keeps both Solo songs one album (#170 P3).
+            track(72, "Duet", "adam gubman feat. Nari", "Solo", trackNumber = 2, genre = "Game", playCount = 0)
+                .copy(folderName = "Music/Adam Gubman/Solo"),
+        )
+
+        val artists = buildLibraryCollections(LibraryBrowseMode.ARTISTS, shared, emptyList(), names)
+
+        assertEquals(listOf("Adam Gubman", "Nari", "塞壬唱片-MSR"), artists.map(LibraryCollection::title))
+        val adam = artists.first { it.title == "Adam Gubman" }
+        assertEquals(setOf(70L, 71L, 72L), adam.tracks.map(AudioTrack::id).toSet())
+        assertEquals("2", adam.subtitle)
+        assertEquals(listOf(70L), artists.first { it.title == "塞壬唱片-MSR" }.tracks.map(AudioTrack::id))
+        assertEquals(listOf(72L), artists.first { it.title == "Nari" }.tracks.map(AudioTrack::id))
+        assertEquals(artists.size, artists.map(LibraryCollection::key).distinct().size)
+    }
+
+    @Test
+    fun `names in different case are one artist shown in the spelling most songs use`() {
+        val spellings = listOf(
+            track(80, "One", "mori", "A", trackNumber = 1, genre = "Pop", playCount = 0),
+            track(81, "Two", "Mori", "B", trackNumber = 1, genre = "Pop", playCount = 0),
+            track(82, "Three", "Mori / Nari", "C", trackNumber = 1, genre = "Pop", playCount = 0),
+            track(83, "Four", "NARI", "D", trackNumber = 1, genre = "Pop", playCount = 0),
+        )
+
+        val artists = buildLibraryCollections(LibraryBrowseMode.ARTISTS, spellings, emptyList(), names)
+
+        // Mori twice against mori once; NARI and Nari once each, where the tie takes the first in code order.
+        assertEquals(listOf("Mori", "NARI"), artists.map(LibraryCollection::title))
+        assertEquals(listOf(3, 2), artists.map { it.tracks.size })
+    }
+
+    @Test
+    fun `switched off, artists group by the whole tag as before`() {
+        val shared = listOf(
+            track(90, "Theme", "Mori/Nari", "Duets", trackNumber = 1, genre = "Pop", playCount = 0),
+            track(91, "Solo", "Mori", "Solo", trackNumber = 1, genre = "Pop", playCount = 0),
+            track(92, "Again", "mori", "Solo", trackNumber = 2, genre = "Pop", playCount = 0),
+        )
+        val off = ArtistNames(ArtistSplitSettings(enabled = false))
+
+        val artists = buildLibraryCollections(LibraryBrowseMode.ARTISTS, shared, emptyList(), names, off)
+
+        assertEquals(listOf("Mori", "mori", "Mori/Nari"), artists.map(LibraryCollection::title))
+    }
+
+    @Test
+    fun `albums keep their artist tag whole while artists split`() {
+        val shared = listOf(
+            track(95, "Theme", "Mori/Nari", "Duets", trackNumber = 1, genre = "Pop", playCount = 0).copy(albumArtist = "Mori/Nari"),
+            track(96, "Reprise", "Mori", "Duets", trackNumber = 2, genre = "Pop", playCount = 0).copy(albumArtist = "Mori/Nari"),
+        )
+
+        val album = buildLibraryCollections(LibraryBrowseMode.ALBUMS, shared, emptyList(), names).single()
+
+        assertEquals("Mori/Nari", album.subtitle)
+        assertEquals(listOf(95L, 96L), album.tracks.map(AudioTrack::id))
+        assertEquals(
+            listOf("1", "1"),
+            buildLibraryCollections(LibraryBrowseMode.ARTISTS, shared, emptyList(), names).map(LibraryCollection::subtitle),
+        )
+    }
+
     private fun track(
         id: Long,
         title: String,

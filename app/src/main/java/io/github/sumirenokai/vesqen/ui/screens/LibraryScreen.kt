@@ -130,6 +130,8 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.library.ArtistNames
+import io.github.sumirenokai.vesqen.library.ArtistSplitSettings
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.library.LibraryBrowseMode
 import io.github.sumirenokai.vesqen.library.LibraryNameOrder
@@ -233,6 +235,7 @@ fun LibraryScreen(
     onDismissUnmatchedRecords: () -> Unit = {},
     motionPolicy: VesqenMotionPolicy? = null,
     onPageBackgroundChange: (Color) -> Unit = {},
+    artistSplit: ArtistSplitSettings = ArtistSplitSettings(),
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     val listStateHolder = rememberSaveableStateHolder()
@@ -318,14 +321,21 @@ fun LibraryScreen(
     }
     val visibleTracks = if (favoritesOnly) favoriteVisibleTracks else rootVisibleTracks
     val filteredTracks = if (favoritesOnly) favoriteTracks else searchedTracks
-    val collections = remember(browseMode, searchedTracks, state.playlists, rootSortOrder) {
+    // #168: kept for as long as the setting, so a search, a sort or a new play count regroups the
+    // Artists list without splitting every tag again.
+    val artistNames = remember(artistSplit) { ArtistNames(artistSplit) }
+    val collections = remember(browseMode, searchedTracks, state.playlists, rootSortOrder, artistNames) {
         // Songs has no collections. The others share one name order, so each title is measured once;
         // its ICU index is first built off the main thread by the Songs index.
         if (browseMode == LibraryBrowseMode.SONGS) {
             emptyList()
         } else {
             val names = LibraryNameOrder()
-            sortLibraryCollections(buildLibraryCollections(browseMode, searchedTracks, state.playlists, names), rootSortOrder, names)
+            sortLibraryCollections(
+                buildLibraryCollections(browseMode, searchedTracks, state.playlists, names, artistNames),
+                rootSortOrder,
+                names,
+            )
         }
     }
     val selectedCollection = remember(collections, selectedCollectionKey) {

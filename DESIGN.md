@@ -213,7 +213,7 @@ Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hai
 
 ### Settings
 
-Groups in this order: Playback output (System / Strict USB, radio group), Audio proof (Playback chain), Privacy & data (Usage statistics, Export device report), Updates (GitHub builds), Application (About, Privacy policy, Open source licenses), Advanced (Output verification records), then one footer line. Group titles are sans; each group is one paper card. When Strict USB is selected, a status box under the options says what happens next or why it stopped, never the option description again.
+Groups in this order: Playback output (System / Strict USB, radio group), Audio proof (Playback chain), Library (Artist splitting switch; while it is on, Separators and Names kept whole, each edited in a dialog with one text field, #168), Privacy & data (Usage statistics, Export device report), Updates (GitHub builds), Application (About, Privacy policy, Open source licenses), Advanced (Output verification records), then one footer line. Group titles are sans; each group is one paper card. When Strict USB is selected, a status box under the options says what happens next or why it stopped, never the option description again.
 
 ### About
 
