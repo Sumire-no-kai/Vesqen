@@ -141,7 +141,10 @@ internal class PlaybackStateKeeper(
             )
         ) {
             PlaybackPersistenceDecision.SKIP -> Unit
-            PlaybackPersistenceDecision.CLEAR -> stateStore.clear()
+            // The player keeps its modes for the next queue, and the store keeps them for a new service.
+            PlaybackPersistenceDecision.CLEAR -> stateStore.clear(
+                PlaybackOrderSettings(player.shuffleModeEnabled, player.repeatMode.toPlaybackRepeatMode()),
+            )
             PlaybackPersistenceDecision.SAVE_QUEUE -> stateStore.save(
                 PersistedPlaybackState(
                     queueTrackIds = queueTrackIds,

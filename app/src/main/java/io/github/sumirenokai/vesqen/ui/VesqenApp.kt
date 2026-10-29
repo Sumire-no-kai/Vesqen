@@ -630,6 +630,8 @@ fun VesqenAppContent(
             showRebuildNotice = true
             askedThisOpen = true
             rebuildNotice?.markShown()
+            // The rebuild drops the cleared queue, whose IDs name other songs now: Undo has nothing to put back.
+            queueClearedHostState.currentSnackbarData?.dismiss()
         }
     }
 

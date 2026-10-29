@@ -404,6 +404,48 @@ class ShuffleQueueEditDeviceTest {
     }
 
     @Test
+    fun aClearedQueueLeavesItsModesForTheNextServicesPlayer() = runBlocking {
+        val cleared = (1L..3L).map(::silentTrack)
+        try {
+            main { controller = PlaybackController(app) { playback.set(it) } }
+            awaitPlayback { it.isControllerReady }
+            main { controller.playQueue(cleared, 0) }
+            awaitPlayback { it.trackId == cleared[0].id }
+            main { controller.cycleTo(PlaybackOrderMode.SHUFFLE) { playback.get().playbackOrderMode } }
+            withTimeout(15_000) { while (PlaybackStateStore(app).load()?.shuffleEnabled != true) delay(50) }
+            main { controller.clearQueue() }
+            withTimeout(15_000) { while (PlaybackStateStore(app).hasSavedQueue()) delay(50) }
+
+            // #165 X2: the modes used to go with the saved queue. Once the service ended (the app was
+            // left, or the process ended), its next player started in order. The service here cannot
+            // be ended on cue, since System UI stays bound to it after playback, so the next player is
+            // built as the service builds its own.
+            assertEquals(PlaybackOrderSettings(true, PlaybackRepeatMode.OFF), PlaybackStateStore(app).loadKeptPlayModes())
+            var shuffled = false
+            var order = emptyList<Int>()
+            main {
+                val player = ExoPlayer.Builder(app).build().apply {
+                    setShuffleOrder(PlayOrder(IntArray(0)))
+                    applyKeptPlayModes(PlaybackStateStore(app))
+                }
+                try {
+                    // A new queue from the Library, as the controller sends it, started at its third track.
+                    PlayOrderSessionPlayer(player).setMediaItems((1..6).map { entry("$it", "o$it") }, 2, 0)
+                    shuffled = player.shuffleModeEnabled
+                    order = player.shuffleOrder.playOrder().toList()
+                } finally {
+                    player.release()
+                }
+            }
+            assertTrue(shuffled)
+            assertEquals(2, order.first())
+            assertEquals((0..5).toList(), order.sorted())
+        } finally {
+            releasePlayback()
+        }
+    }
+
+    @Test
     fun undoPutsBackAClearedShuffledQueuePaused() = runBlocking {
         val queued = (1L..6L).map(::silentTrack)
         try {
@@ -485,11 +527,10 @@ class ShuffleQueueEditDeviceTest {
     private fun releasePlayback() {
         main {
             if (playback.get().showsPauseAction) controller.togglePlayback()
-            // A new queue keeps the modes (#165), and the service can outlive this test.
-            repeat(PlaybackOrderMode.entries.size) {
-                if (playback.get().playbackOrderMode != PlaybackOrderMode.SEQUENTIAL) controller.cyclePlaybackOrderMode()
-            }
+            controller.cycleTo(PlaybackOrderMode.SEQUENTIAL) { playback.get().playbackOrderMode }
             controller.clearQueue()
+            // A test that ended with the queue empty left its modes kept for the next service.
+            PlaybackStateStore(app).clear(PlaybackOrderSettings(false, PlaybackRepeatMode.OFF))
             controller.release()
             // Later tests expect a service that has never played.
             app.stopService(Intent(app, PlaybackService::class.java))

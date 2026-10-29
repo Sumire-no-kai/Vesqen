@@ -14,7 +14,9 @@ import io.github.sumirenokai.vesqen.diagnostics.DiagnosticExportResult
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecordingTermination
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackController
+import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import io.github.sumirenokai.vesqen.playback.cycleTo
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -129,7 +131,7 @@ class SpeakerPlaybackDeviceTest {
                 // This window's manual results are recorded separately from the assertions above.
                 val finished = File(artifacts, "finish-manual")
                 check(!finished.exists() || finished.delete())
-                main { controller.cyclePlaybackOrderMode(); controller.cyclePlaybackOrderMode() }
+                main { controller.cycleTo(PlaybackOrderMode.REPEAT_ALL) { playback.get().playbackOrderMode } }
                 File(artifacts, "phase.txt").writeText("MANUAL")
                 withTimeout(manualSeconds * 1_000) {
                     while (!finished.exists()) delay(1_000)
@@ -147,7 +149,7 @@ class SpeakerPlaybackDeviceTest {
         try {
             start(listOf(track))
             // Sequential -> shuffle -> repeat all, retaining a continuous session between laps.
-            main { controller.cyclePlaybackOrderMode(); controller.cyclePlaybackOrderMode() }
+            main { controller.cycleTo(PlaybackOrderMode.REPEAT_ALL) { playback.get().playbackOrderMode } }
             currentSnapshot(track.sampleRateHz!!)
             delay(30_000) // Explicit warmup, excluded from each measurement interval.
             for (interval in listOf(null, TelemetryRefreshInterval.ONE_SECOND, TelemetryRefreshInterval.QUARTER_SECOND)) {
@@ -186,7 +188,7 @@ class SpeakerPlaybackDeviceTest {
     fun diagnosticRecordingSoak() = runBlocking {
         try {
             start(listOf(speakerFixture(app, 48_000, 24)))
-            main { controller.cyclePlaybackOrderMode(); controller.cyclePlaybackOrderMode() }
+            main { controller.cycleTo(PlaybackOrderMode.REPEAT_ALL) { playback.get().playbackOrderMode } }
             currentSnapshot(48_000)
             awaitNoObservers()
             recordForThirtyMinutes()
@@ -315,7 +317,7 @@ class SpeakerPlaybackDeviceTest {
     private suspend fun finish() {
         app.diagnosticRecorder.stop()
         app.diagnosticRecorder.clear()
-        if (::controller.isInitialized) main { controller.clearQueue(); controller.release() }
+        if (::controller.isInitialized) main { controller.cycleTo(PlaybackOrderMode.SEQUENTIAL) { playback.get().playbackOrderMode }; controller.clearQueue(); controller.release() }
         awaitNoObservers()
         File(artifacts, "phase.txt").writeText("FINISHED")
     }

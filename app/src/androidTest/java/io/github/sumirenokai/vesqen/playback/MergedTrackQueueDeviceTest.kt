@@ -131,7 +131,7 @@ class MergedTrackQueueDeviceTest {
         // Shuffled from the third track, which plays first, so the play order is not the list order.
         main { controller.playQueue(queued, 2) }
         awaitPlayback { it.trackId == queued[2].id && it.queueSize == 6 }
-        main { controller.cyclePlaybackOrderMode() }
+        main { controller.cycleTo(PlaybackOrderMode.SHUFFLE) { playback.get().playbackOrderMode } }
         awaitPlayback { it.shuffleEnabled && it.queue.firstOrNull()?.trackId == queued[2].id }
         val order = playback.get().queue.map(PlaybackQueueItem::trackId)
         val merged = queued.first { it.id == order[3] }
@@ -179,6 +179,7 @@ class MergedTrackQueueDeviceTest {
         } finally {
             main {
                 if (playback.get().showsPauseAction) controller.togglePlayback()
+                controller.cycleTo(PlaybackOrderMode.SEQUENTIAL) { playback.get().playbackOrderMode }
                 controller.clearQueue()
                 controller.release()
                 // Later tests expect a service that has never played.

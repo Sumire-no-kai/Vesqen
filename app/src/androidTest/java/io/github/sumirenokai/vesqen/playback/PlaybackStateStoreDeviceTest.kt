@@ -16,6 +16,7 @@ import java.io.File
 import java.util.UUID
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -495,6 +496,42 @@ class PlaybackStateStoreDeviceTest {
         store.holdBack(store.load()!!.restoreAgainst(tracks.filter { it.id != 2L })!!.heldBackTrackIds)
         store.save(playerState(listOf(1, 3, 4), index = 1, order = listOf(1, 2, 0)))
         assertEquals(listOf(2, 3, 4, 0, 1), PlaybackStateStore(isolatedContext).load()!!.playOrder)
+    }
+
+    @Test
+    fun aClearedQueueLeavesOnlyItsModes() {
+        val store = PlaybackStateStore(isolatedContext)
+        store.save(
+            PersistedPlaybackState(
+                queueTrackIds = listOf(1, 2),
+                currentTrackId = 2,
+                positionMs = 1_000,
+                shuffleEnabled = true,
+                repeatMode = PlaybackRepeatMode.ALL,
+                currentQueueIndex = 1,
+                playOrder = listOf(1, 0),
+            ),
+        )
+        assertNull(store.loadKeptPlayModes())
+        // The latest modes are the progress file's.
+        store.saveProgress(currentTrackId = 2, positionMs = 6_000, shuffleEnabled = true, repeatMode = PlaybackRepeatMode.ONE, currentQueueIndex = 1, queueEnded = false)
+        store.clear()
+
+        // #165 X2: the modes stay for the next queue. Releases before 1.1.0 read a saved queue from
+        // queue_track_ids only, so after a downgrade they find none, as after a clear before.
+        assertEquals(setOf("shuffle_enabled", "repeat_mode"), preferences.all.keys)
+        assertEquals(emptyMap<String, Any?>(), isolatedContext.getSharedPreferences("playback-progress", Context.MODE_PRIVATE).all)
+        val fresh = PlaybackStateStore(isolatedContext)
+        assertNull(fresh.load())
+        assertFalse(fresh.hasSavedQueue())
+        assertNull(fresh.loadCountedPlayback())
+        assertEquals(PlaybackOrderSettings(true, PlaybackRepeatMode.ONE), fresh.loadKeptPlayModes())
+
+        // A catalog rebuild's clear keeps them too; the keeper's clear gives the player's own.
+        fresh.clear(durable = true)
+        assertEquals(PlaybackOrderSettings(true, PlaybackRepeatMode.ONE), PlaybackStateStore(isolatedContext).loadKeptPlayModes())
+        fresh.clear(PlaybackOrderSettings(false, PlaybackRepeatMode.ALL))
+        assertEquals(PlaybackOrderSettings(false, PlaybackRepeatMode.ALL), PlaybackStateStore(isolatedContext).loadKeptPlayModes())
     }
 
     private fun main(action: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(action)

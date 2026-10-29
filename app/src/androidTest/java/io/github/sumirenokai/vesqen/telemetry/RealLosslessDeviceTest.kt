@@ -8,7 +8,9 @@ import io.github.sumirenokai.vesqen.diagnostics.DiagnosticExportResult
 import io.github.sumirenokai.vesqen.library.AndroidLibraryCatalog
 import io.github.sumirenokai.vesqen.playback.OutputDeclaration
 import io.github.sumirenokai.vesqen.playback.PlaybackController
+import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import io.github.sumirenokai.vesqen.playback.cycleTo
 import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.cancelAndJoin
@@ -125,13 +127,13 @@ class RealLosslessDeviceTest {
             if (seconds > 0) {
                 val finished = File(artifacts, "finish-manual")
                 check(!finished.exists() || finished.delete())
-                main { controller.cyclePlaybackOrderMode(); controller.cyclePlaybackOrderMode() }
+                main { controller.cycleTo(PlaybackOrderMode.REPEAT_ALL) { playback.get().playbackOrderMode } }
                 File(artifacts, "phase.txt").writeText("MANUAL")
                 withTimeout(seconds * 1_000) { while (!finished.exists()) delay(500) }
             }
         } finally {
             app.diagnosticRecorder.stop(); app.diagnosticRecorder.clear()
-            if (::controller.isInitialized) main { controller.clearQueue(); controller.release() }
+            if (::controller.isInitialized) main { controller.cycleTo(PlaybackOrderMode.SEQUENTIAL) { playback.get().playbackOrderMode }; controller.clearQueue(); controller.release() }
             catalog.close()
             awaitNoObservers()
         }

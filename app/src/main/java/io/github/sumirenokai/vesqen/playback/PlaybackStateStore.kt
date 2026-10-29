@@ -3,6 +3,7 @@ package io.github.sumirenokai.vesqen.playback
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import androidx.media3.common.Player
 import io.github.sumirenokai.vesqen.library.AudioTrack
 
 internal data class PersistedPlaybackState(
@@ -86,19 +87,13 @@ internal class PlaybackStateStore(context: Context) {
             ?.takeIf(List<Long>::isNotEmpty)
             ?: return null
         val cursor = currentCursorPreferences()
-        val repeatMode = runCatching {
-            PlaybackRepeatMode.valueOf(
-                cursor.getString(KEY_REPEAT_MODE, PlaybackRepeatMode.OFF.name)
-                    ?: PlaybackRepeatMode.OFF.name,
-            )
-        }.getOrDefault(PlaybackRepeatMode.OFF)
         val currentTrackId = cursor.getLong(KEY_CURRENT_TRACK_ID, NO_TRACK_ID).takeIf { it != NO_TRACK_ID }
         return PersistedPlaybackState(
             queueTrackIds = queueIds,
             currentTrackId = currentTrackId,
             positionMs = cursor.getLong(KEY_POSITION_MS, 0).coerceAtLeast(0),
             shuffleEnabled = cursor.getBoolean(KEY_SHUFFLE_ENABLED, false),
-            repeatMode = repeatMode,
+            repeatMode = cursor.repeatMode(),
             currentQueueIndex = cursor.getInt(KEY_CURRENT_QUEUE_INDEX, -1).takeIf { it >= 0 },
             queueEnded = if (cursor.contains(KEY_QUEUE_ENDED)) cursor.getBoolean(KEY_QUEUE_ENDED, false) else null,
             countedOccurrenceId = cursor.countedOccurrenceId(currentTrackId),
@@ -121,6 +116,10 @@ internal class PlaybackStateStore(context: Context) {
      */
     fun hasSavedQueue(): Boolean = !preferences.getString(KEY_QUEUE_IDS, null).isNullOrEmpty()
 
+    /** The modes [clear] kept, while no queue is saved; a saved queue's own modes come with [load]. */
+    fun loadKeptPlayModes(): PlaybackOrderSettings? =
+        if (hasSavedQueue()) null else savedPlayModes()
+
     /**
      * Keeps [trackIds], saved tracks a restore could not play (#165), in the saved queue for as long
      * as the player's queue is that restore's. A card that is not mounted yet or a lost folder grant
@@ -135,7 +134,7 @@ internal class PlaybackStateStore(context: Context) {
 
     fun save(state: PersistedPlaybackState) {
         if (state.queueTrackIds.isEmpty()) {
-            clear()
+            clear(PlaybackOrderSettings(state.shuffleEnabled, state.repeatMode))
             return
         }
         val heldBack = heldBackSavedQueue(state.queueTrackIds)
@@ -220,13 +219,35 @@ internal class PlaybackStateStore(context: Context) {
         }
     }
 
-    /** [durable]: on disk before this returns, for a queue whose catalog IDs are about to name other songs (#165). */
-    fun clear(durable: Boolean = false) {
+    /**
+     * Clears the saved queue but keeps [modes], the saved ones unless given: a new queue plays in
+     * them after the service ended too (#165 X2). With no queue saved, [load] here and in releases
+     * before 1.1.0 finds nothing to restore. [durable]: on disk before this returns, for a queue whose
+     * catalog IDs are about to name other songs (#165); the modes name none.
+     */
+    fun clear(modes: PlaybackOrderSettings? = savedPlayModes(), durable: Boolean = false) {
         savedQueueSignature = null
         savedQueueIndexes = null
-        preferences.edit(commit = durable) { clear() }
+        preferences.edit(commit = durable) {
+            // Applied before the puts, whatever their order (SharedPreferences.Editor.clear).
+            clear()
+            if (modes != null) {
+                putBoolean(KEY_SHUFFLE_ENABLED, modes.shuffleEnabled)
+                putString(KEY_REPEAT_MODE, modes.repeatMode.name)
+            }
+        }
         progressPreferences.edit(commit = durable) { clear() }
     }
+
+    private fun savedPlayModes(): PlaybackOrderSettings? {
+        val cursor = currentCursorPreferences()
+        if (!cursor.contains(KEY_SHUFFLE_ENABLED)) return null
+        return PlaybackOrderSettings(cursor.getBoolean(KEY_SHUFFLE_ENABLED, false), cursor.repeatMode())
+    }
+
+    private fun SharedPreferences.repeatMode(): PlaybackRepeatMode = runCatching {
+        PlaybackRepeatMode.valueOf(getString(KEY_REPEAT_MODE, PlaybackRepeatMode.OFF.name) ?: PlaybackRepeatMode.OFF.name)
+    }.getOrDefault(PlaybackRepeatMode.OFF)
 
     /**
      * Where each entry of [playerQueue] is in the saved queue, when [playerQueue] is the saved queue
@@ -349,6 +370,16 @@ internal class PlaybackStateStore(context: Context) {
         const val KEY_PLAY_ORDER_SIGNATURE = "play_order_signature"
         const val NO_TRACK_ID = Long.MIN_VALUE
     }
+}
+
+/**
+ * For the service's new player: a new queue keeps the modes of the one cleared before, also in a new
+ * service (#165 X2). A saved queue brings its own when it is restored.
+ */
+internal fun Player.applyKeptPlayModes(store: PlaybackStateStore) {
+    val modes = store.loadKeptPlayModes() ?: return
+    shuffleModeEnabled = modes.shuffleEnabled
+    repeatMode = modes.repeatMode.toMedia3RepeatMode()
 }
 
 internal fun PersistedPlaybackState.restoreAgainst(tracks: List<AudioTrack>): RestoredPlaybackQueue? {

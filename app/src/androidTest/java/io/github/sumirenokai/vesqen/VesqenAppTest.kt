@@ -163,6 +163,7 @@ import io.github.sumirenokai.vesqen.ui.chain.formatSeconds
 import io.github.sumirenokai.vesqen.ui.chain.formatTelemetryReading
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.components.QueueSheet
+import io.github.sumirenokai.vesqen.ui.components.QueueSheetHeader
 import io.github.sumirenokai.vesqen.ui.navigation.NavigationRailWidth
 import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
 import io.github.sumirenokai.vesqen.ui.screens.ChainSummaryMetricIds
@@ -4065,19 +4066,7 @@ class VesqenAppTest {
     // #165: Clear queue stays one tap (#136 R7); the notice after it puts the queue back.
     @Test
     fun clearing_the_queue_offers_undo_until_another_queue_starts() {
-        val queued = PlaybackSnapshot(
-            isControllerReady = true,
-            trackId = 1,
-            title = "Dawn Signal",
-            artist = "Mori",
-            durationMs = 245_000,
-            queueIndex = 0,
-            queueSize = 2,
-            queue = listOf(
-                PlaybackQueueItem(1, "Dawn Signal", "Mori", true, listIndex = 0),
-                PlaybackQueueItem(2, "Long Light", "Mori", false, listIndex = 1),
-            ),
-        )
+        val queued = twoTrackQueue()
         var playback by mutableStateOf(queued)
         var cleared = 0
         var undone = 0
@@ -4123,6 +4112,45 @@ class VesqenAppTest {
         composeRule.onAllNodesWithTag("vesqen.queue-cleared").assertCountEquals(0)
         assertEquals(2 to 1, cleared to undone)
     }
+
+    // #165 X3: a catalog rebuild drops the cleared queue, whose IDs name other songs now, so the notice
+    // goes with the Undo it offered.
+    @Test
+    fun a_catalog_rebuild_takes_the_undo_notice_away() {
+        var playback by mutableStateOf(twoTrackQueue())
+        var undone = 0
+        val rebuilt = FakeLibraryRebuildNotice(due = false)
+        render(
+            state = grantedState(tracks = sampleTracks, playback = playback),
+            stateProvider = { grantedState(tracks = sampleTracks, playback = playback) },
+            onClearQueue = { playback = PlaybackSnapshot(isControllerReady = true) },
+            onUndoClearQueue = { undone++ },
+            rebuildNotice = rebuilt,
+        )
+        composeRule.onNodeWithTag("vesqen.nav.now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.queue").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.clear_queue)).performClick()
+        composeRule.onNodeWithTag("vesqen.queue-cleared").assertIsDisplayed()
+
+        composeRule.runOnIdle { rebuilt.emit(true) }
+        composeRule.onNodeWithTag("vesqen.library.rebuilt-dialog").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("vesqen.queue-cleared").assertCountEquals(0)
+        composeRule.runOnIdle { assertEquals(0, undone) }
+    }
+
+    private fun twoTrackQueue() = PlaybackSnapshot(
+        isControllerReady = true,
+        trackId = 1,
+        title = "Dawn Signal",
+        artist = "Mori",
+        durationMs = 245_000,
+        queueIndex = 0,
+        queueSize = 2,
+        queue = listOf(
+            PlaybackQueueItem(1, "Dawn Signal", "Mori", true, listIndex = 0),
+            PlaybackQueueItem(2, "Long Light", "Mori", false, listIndex = 1),
+        ),
+    )
 
     // Now's long title scrolls. Marquee ignores the system animation scale, so with animations off the
     // title stays still and ends in an ellipsis (#165). The mini player keeps one truncated line either
@@ -4203,6 +4231,57 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.queue.sheet").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.queue.item.0").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.queue.item.1").assertIsDisplayed()
+    }
+
+    // #165 X4: at 320 dp and 200 % text the title kept about one letter a line beside Clear queue and
+    // Close. The sheet's window takes no width or text size from here, so the header is measured alone,
+    // at the sheet's content width: the window less its 24 dp margins.
+    @Test
+    fun the_queue_title_stays_whole_beside_or_above_clear_queue() {
+        var width by mutableStateOf(272.dp)
+        var fontScale by mutableStateOf(2f)
+        lateinit var shownDensity: Density
+        composeRule.setContent {
+            val density = LocalDensity.current
+            // A tablet's width on a phone: fitted as render() does.
+            val windowWidth = LocalWindowInfo.current.containerSize.width
+            shownDensity = Density(minOf(density.density, windowWidth / width.value), fontScale)
+            CompositionLocalProvider(LocalDensity provides shownDensity) {
+                VesqenTheme {
+                    Box(Modifier.width(width)) { QueueSheetHeader(clearEnabled = true, onClearQueue = {}, onClose = {}) }
+                }
+            }
+        }
+        fun bounds(tag: String) = composeRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+        // Whether Clear queue stays beside the title; null where it depends on the font.
+        listOf(
+            Triple(272.dp, 2f, false),
+            Triple(272.dp, 1f, true),
+            Triple(363.dp, 1f, true),
+            Triple(363.dp, 2f, null),
+            Triple(552.dp, 2f, true),
+        ).forEach { (sheetWidth, scale, beside) ->
+            width = sheetWidth
+            fontScale = scale
+            composeRule.waitForIdle()
+            val case = "$sheetWidth at $scale"
+            assertSingleCompleteLine(context.getString(R.string.queue))
+            assertSingleCompleteLine(context.getString(R.string.clear_queue))
+            assertFooterActionsDoNotOverlap("vesqen.queue.title", "vesqen.queue.clear", "vesqen.queue.close")
+            val minimumPx = with(shownDensity) { 48.dp.toPx() } - 0.5f
+            listOf("vesqen.queue.clear", "vesqen.queue.close").forEach { tag ->
+                assertTrue("$case: $tag is under 48 dp", bounds(tag).height >= minimumPx && bounds(tag).width >= minimumPx)
+            }
+            val title = bounds("vesqen.queue.title")
+            val clear = bounds("vesqen.queue.clear")
+            if (beside != null) assertEquals(case, beside, clear.top < title.bottom)
+            if (clear.top >= title.bottom) {
+                // On its own line, the label starts where the title does.
+                val label = composeRule.onNodeWithText(context.getString(R.string.clear_queue), useUnmergedTree = true)
+                    .fetchSemanticsNode().boundsInRoot
+                assertEquals(case, title.left, label.left, 1f)
+            }
+        }
     }
 
     @Test

@@ -13,7 +13,9 @@ import io.github.sumirenokai.vesqen.VesqenApplication
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticExportResult
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecordingTermination
 import io.github.sumirenokai.vesqen.playback.PlaybackController
+import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import io.github.sumirenokai.vesqen.playback.cycleTo
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.atomic.AtomicReference
@@ -42,7 +44,7 @@ class SpeakerChainLifecycleDeviceTest {
             val track = speakerFixture(app, 48_000, 24)
             main { controller.playQueue(listOf(track), 0) }
             compose.waitUntil(15_000) { playback.get().trackId == track.id && playback.get().isPlaying }
-            main { controller.cyclePlaybackOrderMode(); controller.cyclePlaybackOrderMode() }
+            main { controller.cycleTo(PlaybackOrderMode.REPEAT_ALL) { playback.get().playbackOrderMode } }
             compose.onNodeWithTag("vesqen.nav.settings").performClick()
             var initialNavigationVisible = false
             compose.waitUntil(5_000) { resumedActivityMatches { activity ->
@@ -123,7 +125,7 @@ class SpeakerChainLifecycleDeviceTest {
         } finally {
             app.diagnosticRecorder.stop()
             app.diagnosticRecorder.clear()
-            if (::controller.isInitialized) main { controller.clearQueue(); controller.release() }
+            if (::controller.isInitialized) main { controller.cycleTo(PlaybackOrderMode.SEQUENTIAL) { playback.get().playbackOrderMode }; controller.clearQueue(); controller.release() }
             compose.waitUntil(5_000) { telemetry.debugSamplingState().activeObservationCount == 0 }
             assertNull(telemetry.debugSamplingState().activeIntervalMs)
         }

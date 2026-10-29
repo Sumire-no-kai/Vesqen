@@ -223,6 +223,7 @@ Header, mark, one plain sentence about the app, a facts card (version, developer
 ### Sheets and dialogs
 
 - Queue and track details are bottom sheets that wrap their content. Queue rows play on tap and mark the current track with a Moss dot.
+- The queue's title shares its line with Clear queue and Close while it fits whole. Otherwise Clear queue moves to the line below, its label under the title, as the count has its own line (#35, #165).
 - Clear queue takes one tap. A snackbar where the mini-player was then offers Undo, which puts back the queue, its current track, position and shuffled order, paused. Owner decision, 2026-10-29 (#165).
 - Dialogs carry one primary action. The strict-output failure dialog appears only after a user action, never on a cold start.
 
