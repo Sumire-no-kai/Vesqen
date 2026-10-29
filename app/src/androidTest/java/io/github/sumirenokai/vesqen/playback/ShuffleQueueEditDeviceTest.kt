@@ -4,6 +4,8 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.library.AudioTrack
@@ -20,7 +22,8 @@ import org.junit.Test
 
 /**
  * #158 through the real service and session: with shuffle on, Play next plays next, Add to queue
- * plays last, a move changes only the play order, and the queue lists that order.
+ * plays last, a move changes only the play order, and the queue lists that order. #170 F8–F10: an
+ * insert is one queue change that the controller shows at once, in the play order.
  */
 class ShuffleQueueEditDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -115,8 +118,160 @@ class ShuffleQueueEditDeviceTest {
     }
 
     @Test
+    fun aLibraryRefreshRightAfterPlayNextSeesTheNewQueue() = runBlocking {
+        val queued = (1L..4L).map(::silentTrack)
+        val next = silentTrack(5)
+        try {
+            main { controller = PlaybackController(app) { playback.set(it) } }
+            awaitPlayback { it.isControllerReady }
+            main { controller.playQueue(queued, 0) }
+            awaitPlayback { it.trackId == queued[0].id && it.queueSize == 4 && it.positionMs >= 500 }
+            val position = playback.get().positionMs
+
+            // #170 F8: the refresh comes before the session's queue does. It retitles the track that
+            // followed the current one, which Play next's track now precedes.
+            main {
+                controller.playNext(next)
+                controller.syncLibrary(listOf(queued[0], queued[1].copy(title = "Retitled"), queued[2], queued[3]))
+            }
+            val expected = listOf(queued[0].id, next.id, queued[1].id, queued[2].id, queued[3].id)
+            // Long enough for the session's own timeline to reach the controller.
+            awaitPlayback { snapshot -> snapshot.queue.map(PlaybackQueueItem::trackId) == expected && snapshot.positionMs >= position + 1_000 }
+
+            assertEquals(listOf("Track 1", "Track 5", "Retitled", "Track 3", "Track 4"), playback.get().queue.map(PlaybackQueueItem::title))
+        } finally {
+            releasePlayback()
+        }
+    }
+
+    @Test
+    fun aShuffledEditIsListedInThePlayOrderBeforeTheSessionsQueueArrives() = runBlocking {
+        val queued = (1L..6L).map(::silentTrack)
+        val (next, last) = listOf(silentTrack(7), silentTrack(8))
+        try {
+            main { controller = PlaybackController(app) { playback.set(it) } }
+            awaitPlayback { it.isControllerReady }
+            // Shuffled from the third track, which plays first, so the play order is not the list order.
+            main { controller.playQueue(queued, 2) }
+            awaitPlayback { it.trackId == queued[2].id && it.queueSize == 6 }
+            main { controller.cyclePlaybackOrderMode() }
+            awaitPlayback { it.shuffleEnabled && it.queue.firstOrNull()?.trackId == queued[2].id }
+            var order = playback.get().queue.map(PlaybackQueueItem::trackId)
+
+            // #170 F10: Media3 shows each of these edits at once in list order; the queue lists the play
+            // order the edit leads to, which the session's queue then confirms.
+            val removed = order[3]
+            order = order - removed
+            assertEquals(order, shownAfter { controller.removeQueueItem(listIndexOf(removed)) })
+            assertSettledQueue(order)
+
+            val retitled = order[1]
+            val library = queued.map { if (it.id == retitled) it.copy(title = "Retitled") else it }
+            assertEquals(order, shownAfter { controller.syncLibrary(library) })
+            assertSettledQueue(order)
+            assertEquals("Retitled", playback.get().queue[1].title)
+
+            order = order.take(1) + next.id + order.drop(1)
+            assertEquals(order, shownAfter { controller.playNext(next) })
+            order = order + last.id
+            assertEquals(order, shownAfter { controller.addToQueue(last) })
+            assertSettledQueue(order)
+        } finally {
+            releasePlayback()
+        }
+    }
+
+    @Test
+    fun turningShuffleOnListsTheCurrentTrackFirstAtOnce() = runBlocking {
+        val queued = (1L..4L).map(::silentTrack)
+        try {
+            main { controller = PlaybackController(app) { playback.set(it) } }
+            awaitPlayback { it.isControllerReady }
+            // The queue's shuffled order starts at its start track, the first one.
+            main { controller.playQueue(queued, 0) }
+            awaitPlayback { it.trackId == queued[0].id }
+            main { controller.skipToNext() }
+            awaitPlayback { it.trackId == queued[1].id }
+
+            // #170 F10: before the service's order arrives, the queue already starts at the current track.
+            var shown = PlaybackSnapshot()
+            main {
+                controller.cyclePlaybackOrderMode()
+                shown = playback.get()
+            }
+            assertTrue(shown.shuffleEnabled)
+            assertEquals(queued[1].id, shown.queue.first().trackId)
+            assertEquals(0, shown.queueIndex)
+            assertSettledQueue(shown.queue.map(PlaybackQueueItem::trackId))
+        } finally {
+            releasePlayback()
+        }
+    }
+
+    @Test
+    fun aShuffledInsertChangesTheTimelineOnce() {
+        val reasons = mutableListOf<List<Int>>()
+        var before = emptyList<String>()
+        var afterNext = emptyList<String>()
+        var afterLast = emptyList<String>()
+        main {
+            val player = ExoPlayer.Builder(app).build().apply { setShuffleOrder(PlayOrder(IntArray(0))) }
+            try {
+                player.setMediaItems((1..6).map { entry("$it", "o$it") }, 2, 0)
+                player.shuffleModeEnabled = true
+                val changes = mutableListOf<Int>()
+                player.addListener(object : Player.Listener {
+                    override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                        changes += reason
+                    }
+                })
+                before = player.entriesInPlayOrder()
+                // #170 F9: each insert used to change the timeline twice, and so rebuild the session's queue twice.
+                player.insertInPlayOrder(entry("7", "next"), PlayOrderPlacement.NEXT)
+                reasons += changes.toList().also { changes.clear() }
+                afterNext = player.entriesInPlayOrder()
+                player.insertInPlayOrder(entry("8", "last"), PlayOrderPlacement.LAST)
+                reasons += changes.toList()
+                afterLast = player.entriesInPlayOrder()
+            } finally {
+                player.release()
+            }
+        }
+        assertEquals(List(2) { listOf(Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) }, reasons)
+        assertEquals("o3", before.first())
+        assertEquals(listOf("o3", "next") + before.drop(1), afterNext)
+        assertEquals(afterNext + "last", afterLast)
+    }
+
+    @Test
+    fun playNextFollowsTheServicesOwnCurrentTrack() {
+        var entries = emptyList<String>()
+        var request = MediaItem.RequestMetadata.EMPTY
+        main {
+            val player = ExoPlayer.Builder(app).build().apply { setShuffleOrder(PlayOrder(IntArray(0))) }
+            try {
+                player.setMediaItems((1..4).map { entry("$it", "o$it") }, 2, 0)
+                val session = PlayOrderSessionPlayer(player)
+                // The controller asked while the first track was current; the service has moved on to
+                // the third one. An insert without a placement keeps its list index.
+                session.addMediaItems(1, listOf(entry("5", "next").withPlayOrderPlacement(PlayOrderPlacement.NEXT)))
+                session.addMediaItems(0, listOf(entry("6", "plain")))
+                entries = List(player.mediaItemCount) { player.getMediaItemAt(it).queueEntryId() }
+                request = player.getMediaItemAt(4).requestMetadata
+            } finally {
+                player.release()
+            }
+        }
+        assertEquals(listOf("plain", "o1", "o2", "o3", "next", "o4"), entries)
+        assertEquals(MediaItem.RequestMetadata.EMPTY, request)
+    }
+
+    @Test
     fun requestsWithoutTheirKeysAreRefused() {
-        assertNull(PlayOrderSessionContract.readInsert(Bundle().apply { putBundle("item", MediaItem.Builder().setMediaId("1").build().toBundle()) }))
+        // The session reads an insert's placement from the item the controller sent.
+        val sent = MediaItem.fromBundle(entry("1", "a").withPlayOrderPlacement(PlayOrderPlacement.LAST).toBundle())
+        assertEquals(PlayOrderPlacement.LAST, sent.playOrderPlacement())
+        assertNull(entry("1", "a").playOrderPlacement())
         val move = PlayOrderSessionContract.moveArgs(PlayOrderSessionContract.Move(0, "a", 1, "b", after = true))
         assertEquals(PlayOrderSessionContract.Move(0, "a", 1, "b", after = true), PlayOrderSessionContract.readMove(move))
         assertNull(PlayOrderSessionContract.readMove(Bundle(move).apply { remove("after") }))
@@ -156,6 +311,27 @@ class ShuffleQueueEditDeviceTest {
         assertEquals(false, stale)
         assertEquals(before, after)
         assertEquals(true, current)
+    }
+
+    private fun ExoPlayer.entriesInPlayOrder(): List<String> = shuffleOrder.playOrder().map { getMediaItemAt(it).queueEntryId() }
+
+    /** The queue the controller lists right after [edit], before the session's own queue can arrive. */
+    private fun shownAfter(edit: () -> Unit): List<Long> {
+        var shown = emptyList<Long>()
+        main {
+            edit()
+            shown = playback.get().queue.map(PlaybackQueueItem::trackId)
+        }
+        return shown
+    }
+
+    private fun listIndexOf(trackId: Long): Int = playback.get().queue.first { it.trackId == trackId }.listIndex
+
+    /** The queue still lists [order] once the session's own queue has had time to arrive. */
+    private suspend fun assertSettledQueue(order: List<Long>) {
+        val position = playback.get().positionMs
+        awaitPlayback { it.positionMs >= position + 500 }
+        assertEquals(order, playback.get().queue.map(PlaybackQueueItem::trackId))
     }
 
     private fun entry(trackId: String, occurrence: String) = MediaItem.Builder()

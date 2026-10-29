@@ -2,6 +2,7 @@ package io.github.sumirenokai.vesqen.playback
 
 import android.os.Bundle
 import androidx.media3.common.C
+import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -10,27 +11,17 @@ import androidx.media3.exoplayer.source.ShuffleOrder
 import kotlin.random.Random
 
 /**
- * #158: queue edits that must land at a place in the play order. With shuffle on, Media3 inserts a
- * new item at a random place in that order and a list move leaves the order as it was, so "Play
- * next" rarely played next. Only the service's ExoPlayer can set a shuffle order, so the app's
- * controller asks for these edits with custom session commands.
+ * #158: moves that must land at a place in the play order. With shuffle on, a list move leaves
+ * Media3's play order as it was. Only the service's ExoPlayer can set a shuffle order, so the app's
+ * controller asks for moves with a custom session command.
  */
-@androidx.annotation.OptIn(UnstableApi::class)
 internal object PlayOrderSessionContract {
-    const val INSERT_ACTION = "io.github.sumirenokai.vesqen.queue.INSERT"
     const val MOVE_ACTION = "io.github.sumirenokai.vesqen.queue.MOVE"
     private const val KEY_ITEM = "item"
-    private const val KEY_AFTER_CURRENT = "after_current"
     private const val KEY_ITEM_ID = "item_id"
     private const val KEY_ANCHOR = "anchor"
     private const val KEY_ANCHOR_ID = "anchor_id"
     private const val KEY_AFTER = "after"
-
-    /**
-     * Plays [item] right after the current item, or after every other item. The service picks the
-     * list position from its own current item, which may have moved on while the request travelled.
-     */
-    data class Insert(val item: MediaItem, val afterCurrent: Boolean)
 
     /**
      * The item at list index [item] takes the place of the item at list index [anchor], its
@@ -39,18 +30,6 @@ internal object PlayOrderSessionContract {
      * since; a shuffled move keeps the list, so the direction makes a repeated request harmless.
      */
     data class Move(val item: Int, val itemId: String, val anchor: Int, val anchorId: String, val after: Boolean)
-
-    fun insertArgs(insert: Insert): Bundle = Bundle().apply {
-        // The service runs in the app's process, so the item keeps its local URI.
-        putBundle(KEY_ITEM, insert.item.toBundleIncludeLocalConfiguration())
-        putBoolean(KEY_AFTER_CURRENT, insert.afterCurrent)
-    }
-
-    fun readInsert(args: Bundle): Insert? {
-        if (!args.containsKey(KEY_AFTER_CURRENT)) return null
-        val item = args.getBundle(KEY_ITEM)?.let(MediaItem::fromBundle) ?: return null
-        return Insert(item, args.getBoolean(KEY_AFTER_CURRENT))
-    }
 
     fun moveArgs(move: Move): Bundle = Bundle().apply {
         putInt(KEY_ITEM, move.item)
@@ -72,23 +51,57 @@ internal object PlayOrderSessionContract {
     }
 }
 
+/** Where Play next and Add to queue put their item: right after the current item, or last (#158). */
+internal enum class PlayOrderPlacement { NEXT, LAST }
+
+private const val PLAY_ORDER_PLACEMENT_EXTRA = "io.github.sumirenokai.vesqen.playback.play_order_placement"
+
+/** The item as the app's controller inserts it: its request names its placement. */
+internal fun MediaItem.withPlayOrderPlacement(placement: PlayOrderPlacement): MediaItem = buildUpon()
+    .setRequestMetadata(
+        MediaItem.RequestMetadata.Builder()
+            .setExtras(Bundle().apply { putString(PLAY_ORDER_PLACEMENT_EXTRA, placement.name) })
+            .build(),
+    )
+    .build()
+
+internal fun MediaItem.playOrderPlacement(): PlayOrderPlacement? =
+    requestMetadata.extras?.getString(PLAY_ORDER_PLACEMENT_EXTRA)
+        ?.let { name -> PlayOrderPlacement.entries.firstOrNull { it.name == name } }
+
 /** One queue entry: the same track queued twice has two entries (PLAYBACK_OCCURRENCE_EXTRA). */
 internal fun MediaItem.queueEntryId(): String =
     mediaMetadata.extras?.getString(PLAYBACK_OCCURRENCE_EXTRA) ?: mediaId
 
 /**
- * Inserts the item after the current one, or last, and while shuffled plays it there too. Without
- * shuffle the list order is the play order already.
+ * The session's player (#170 F8). Play next and Add to queue arrive as ordinary inserts, which the
+ * app's controller shows at once, so a library refresh right after one works on the new queue. The
+ * service places the item from its own current item, which may have moved on while the request
+ * travelled.
  */
 @androidx.annotation.OptIn(UnstableApi::class)
-internal fun ExoPlayer.insertInPlayOrder(insert: PlayOrderSessionContract.Insert) {
-    val current = currentMediaItemIndex.takeIf { insert.afterCurrent && mediaItemCount > 0 }
-    val listIndex = current?.plus(1) ?: mediaItemCount
-    val before = shuffleOrder.playOrder()
-    addMediaItem(listIndex, insert.item)
-    if (shuffleModeEnabled) {
-        setShuffleOrder(ShuffleOrder.DefaultShuffleOrder(before.withInsertedAt(listIndex, current), Random.nextLong()))
+internal class PlayOrderSessionPlayer(val exoPlayer: ExoPlayer) : ForwardingPlayer(exoPlayer) {
+    override fun addMediaItems(index: Int, mediaItems: List<MediaItem>) {
+        val item = mediaItems.singleOrNull()
+        val placement = item?.playOrderPlacement() ?: return super.addMediaItems(index, mediaItems)
+        exoPlayer.insertInPlayOrder(item.buildUpon().setRequestMetadata(MediaItem.RequestMetadata.EMPTY).build(), placement)
     }
+}
+
+/**
+ * Inserts the item after the current one, or last. Without shuffle the list order is the play
+ * order; with it, [PlayOrder] plays an inserted item right after its list predecessor, the current
+ * item for Play next, and is told to play Add to queue's item last. Either is one list change, so
+ * the session rebuilds its queue once (#170 F9).
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+internal fun ExoPlayer.insertInPlayOrder(item: MediaItem, placement: PlayOrderPlacement) {
+    val next = placement == PlayOrderPlacement.NEXT && mediaItemCount > 0
+    if (!next && shuffleModeEnabled && mediaItemCount > 0) {
+        // The same order, so the timeline does not change; only the insert below reads the flag.
+        setShuffleOrder(PlayOrder(shuffleOrder.playOrder(), nextInsertPlaysLast = true))
+    }
+    addMediaItem(if (next) currentMediaItemIndex + 1 else mediaItemCount, item)
 }
 
 /**
@@ -107,8 +120,7 @@ internal fun ExoPlayer.moveInPlayOrder(move: PlayOrderSessionContract.Move): Boo
         moveMediaItem(move.item, move.anchor)
         return true
     }
-    val order = shuffleOrder.playOrder()
-    setShuffleOrder(ShuffleOrder.DefaultShuffleOrder(order.withMoved(move.item, move.anchor, move.after), Random.nextLong()))
+    setShuffleOrder(PlayOrder(shuffleOrder.playOrder().withMoved(move.item, move.anchor, move.after)))
     return true
 }
 
@@ -122,7 +134,54 @@ internal fun ExoPlayer.playCurrentItemFirst() {
     if (!shuffleModeEnabled || current !in 0 until mediaItemCount) return
     val order = shuffleOrder.playOrder()
     if (order.firstOrNull() == current) return
-    setShuffleOrder(ShuffleOrder.DefaultShuffleOrder(intArrayOf(current) + order.filter { it != current }, Random.nextLong()))
+    setShuffleOrder(PlayOrder(intArrayOf(current) + order.filter { it != current }))
+}
+
+/**
+ * The service player's shuffle order (#170 F9). Media3's default order puts every inserted item at a
+ * random place, so each insert while shuffled needed a second order to correct it. Here the order is
+ * random only where a queue starts, and an edit leaves every other item where it plays:
+ * - a new queue plays its start item first, the others in random order;
+ * - inserted items play right after their list predecessor, or first without one. Play next inserts
+ *   after the current item, and an item a library refresh re-creates (Media3 inserts it right after
+ *   the one it replaces) keeps its place. With [nextInsertPlaysLast], the next insert plays last;
+ * - removed items leave the others in their order.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+internal class PlayOrder(
+    private val order: IntArray,
+    private val nextInsertPlaysLast: Boolean = false,
+    private val random: Random = Random,
+) : ShuffleOrder {
+    private val positions = IntArray(order.size).also { positions ->
+        order.forEachIndexed { position, index -> positions[index] = position }
+    }
+
+    override fun getLength(): Int = order.size
+
+    override fun getNextIndex(index: Int): Int = order.getOrElse(positions[index] + 1) { C.INDEX_UNSET }
+
+    override fun getPreviousIndex(index: Int): Int = order.getOrElse(positions[index] - 1) { C.INDEX_UNSET }
+
+    override fun getLastIndex(): Int = order.lastOrNull() ?: C.INDEX_UNSET
+
+    override fun getFirstIndex(): Int = order.firstOrNull() ?: C.INDEX_UNSET
+
+    override fun cloneAndSet(insertionCount: Int, startIndex: Int): ShuffleOrder {
+        val start = listOf(startIndex).filter { it in 0 until insertionCount }
+        return PlayOrder((start + (0 until insertionCount).filter { it != startIndex }.shuffled(random)).toIntArray(), random = random)
+    }
+
+    override fun cloneAndInsert(insertionIndex: Int, insertionCount: Int): ShuffleOrder =
+        PlayOrder(order.withInserted(insertionIndex, insertionCount, last = nextInsertPlaysLast), random = random)
+
+    override fun cloneAndRemove(indexFrom: Int, indexToExclusive: Int): ShuffleOrder {
+        val removed = indexToExclusive - indexFrom
+        val kept = order.filter { it !in indexFrom until indexToExclusive }
+        return PlayOrder(kept.map { if (it >= indexToExclusive) it - removed else it }.toIntArray(), random = random)
+    }
+
+    override fun cloneAndClear(): ShuffleOrder = PlayOrder(IntArray(0), random = random)
 }
 
 /** List indices in the order they play. */
@@ -151,14 +210,18 @@ internal fun Player.playOrder(): List<Int> {
 }
 
 /**
- * The play order after an item is inserted into the list at [listIndex]: later list indices move up
- * by one, and the new item plays right after [anchor] (a list index from before the insert), or last.
+ * The play order after [count] items are inserted into the list at [listIndex]: later list indices
+ * move up, and the new items play in list order right after their list predecessor, first without
+ * one, or [last].
  */
-internal fun IntArray.withInsertedAt(listIndex: Int, anchor: Int?): IntArray {
-    val order = map { if (it >= listIndex) it + 1 else it }.toMutableList()
-    val shiftedAnchor = anchor?.let { if (it >= listIndex) it + 1 else it }
-    val position = shiftedAnchor?.let { order.indexOf(it) }?.takeIf { it >= 0 }?.plus(1) ?: order.size
-    order.add(position, listIndex)
+internal fun IntArray.withInserted(listIndex: Int, count: Int, last: Boolean): IntArray {
+    val order = map { if (it >= listIndex) it + count else it }.toMutableList()
+    val position = when {
+        last -> order.size
+        listIndex == 0 -> 0
+        else -> order.indexOf(listIndex - 1) + 1
+    }
+    order.addAll(position, (listIndex until listIndex + count).toList())
     return order.toIntArray()
 }
 
