@@ -20,9 +20,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -141,6 +139,7 @@ import io.github.sumirenokai.vesqen.ui.components.BluetoothCodecPermissionButton
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.components.PlaybackControls
 import io.github.sumirenokai.vesqen.ui.components.QueueSheet
+import io.github.sumirenokai.vesqen.ui.components.ScrollingTitle
 import io.github.sumirenokai.vesqen.ui.components.TrackDetailsSheet
 import io.github.sumirenokai.vesqen.ui.components.outputDeclarationLabel
 import io.github.sumirenokai.vesqen.ui.components.rememberAlbumBackground
@@ -754,7 +753,6 @@ private fun NowCover(
 }
 
 @Composable
-@OptIn(ExperimentalFoundationApi::class)
 private fun NowTrackIdentity(
     presentation: NowTrackPresentation,
     isControllerReady: Boolean,
@@ -779,16 +777,13 @@ private fun NowTrackIdentity(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs),
         ) {
-            Text(
+            ScrollingTitle(
                 text = identity.title.ifBlank { stringResource(R.string.unknown_title) },
                 style = if (compact) MaterialTheme.typography.headlineSmall.serif() else MaterialTheme.typography.displayLarge,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Clip,
+                motionPolicy = motionPolicy,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .basicMarquee()
                     .testTag("vesqen.now.title"),
             )
             val byline = listOf(identity.artist.ifBlank { stringResource(R.string.unknown_artist) }, identity.album)

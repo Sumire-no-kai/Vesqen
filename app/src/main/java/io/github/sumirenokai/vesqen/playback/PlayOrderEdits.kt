@@ -92,7 +92,7 @@ internal fun List<MediaItem>.namedPlayOrder(): IntArray? {
 private fun MediaItem.withRequestExtras(extras: Bundle): MediaItem =
     buildUpon().setRequestMetadata(MediaItem.RequestMetadata.Builder().setExtras(extras).build()).build()
 
-private fun MediaItem.withoutRequestMetadata(): MediaItem =
+internal fun MediaItem.withoutRequestMetadata(): MediaItem =
     buildUpon().setRequestMetadata(MediaItem.RequestMetadata.EMPTY).build()
 
 /** One queue entry: the same track queued twice has two entries (PLAYBACK_OCCURRENCE_EXTRA). */

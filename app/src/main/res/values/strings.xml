@@ -362,6 +362,8 @@
     <string name="add_to_queue">Add to queue</string>
     <string name="manage_queue">Manage queue</string>
     <string name="clear_queue">Clear queue</string>
+    <string name="queue_cleared">Queue cleared</string>
+    <string name="queue_cleared_undo">Undo</string>
     <string name="remove_from_queue">Remove from queue</string>
     <string name="move_up">Move up</string>
     <string name="move_down">Move down</string>

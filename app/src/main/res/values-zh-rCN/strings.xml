@@ -355,6 +355,8 @@
     <string name="add_to_queue">添加到队列</string>
     <string name="manage_queue">管理队列</string>
     <string name="clear_queue">清空队列</string>
+    <string name="queue_cleared">队列已清空</string>
+    <string name="queue_cleared_undo">撤销</string>
     <string name="remove_from_queue">从队列移除</string>
     <string name="move_up">上移</string>
     <string name="move_down">下移</string>

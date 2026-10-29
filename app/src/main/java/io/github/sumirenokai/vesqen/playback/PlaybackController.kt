@@ -47,6 +47,7 @@ class PlaybackController(
     private var currentProblem: PlaybackProblem? = null
     private var queueCache = PlaybackQueueCache()
     private var expectedPlayOrder: ExpectedPlayOrder? = null
+    private var clearedQueue: ClearedQueue? = null
     private var reconnectAttempt = 0
     private var connectionGeneration = 0L
     private var released = false
@@ -206,18 +207,38 @@ class PlaybackController(
         startIndex: Int,
         positionMs: Long = C.TIME_UNSET,
         playWhenReady: Boolean = true,
-        shuffleEnabled: Boolean = false,
-        repeatMode: PlaybackRepeatMode = PlaybackRepeatMode.OFF,
+        // A new queue keeps the listener's shuffle and repeat modes; shuffled, it plays its start
+        // track first and the others in random order (PlayOrder.cloneAndSet).
+        shuffleEnabled: Boolean = activeController.shuffleModeEnabled,
+        repeatMode: PlaybackRepeatMode = activeController.repeatMode.toPlaybackRepeatMode(),
         startOccurrenceId: String? = null,
         playOrder: List<Int>? = null,
     ) {
         tracksById.clear()
         tracks.forEach { track -> tracksById[track.id.toString()] = track }
+        setQueue(
+            activeController, playbackMediaItems(tracks, startIndex, startOccurrenceId), startIndex, positionMs,
+            playWhenReady, shuffleEnabled, repeatMode, playOrder,
+        )
+    }
+
+    /** Sets [entries] as the queue, which plays in [playOrder] while shuffled. */
+    private fun setQueue(
+        activeController: MediaController,
+        entries: List<MediaItem>,
+        startIndex: Int,
+        positionMs: Long,
+        playWhenReady: Boolean,
+        shuffleEnabled: Boolean,
+        repeatMode: PlaybackRepeatMode,
+        playOrder: List<Int>?,
+    ) {
+        clearedQueue = null
         // The modes before the queue, as the service's own restore sets them: shuffle turned on after
         // the queue would put the current item first in a restored queue's saved order (#170).
         activeController.shuffleModeEnabled = shuffleEnabled
         activeController.repeatMode = repeatMode.toMedia3RepeatMode()
-        val items = playbackMediaItems(tracks, startIndex, startOccurrenceId).withPlayOrder(playOrder)
+        val items = entries.withPlayOrder(playOrder)
         activeController.setMediaItems(items, startIndex, positionMs)
         // Listed in that order until the session's queue arrives (#170 F10).
         expectPlayOrder(activeController, playOrder?.map { items[it].queueEntryId() })
@@ -245,6 +266,7 @@ class PlaybackController(
      * item and, while shuffled, in the play order too (#158, PlayOrderSessionPlayer).
      */
     private fun insert(player: MediaController, track: AudioTrack, placement: PlayOrderPlacement) {
+        clearedQueue = null
         tracksById[track.id.toString()] = track
         availableTracksById[track.id.toString()] = track
         val item = track.toPlaybackMediaItem()
@@ -307,8 +329,10 @@ class PlaybackController(
         }
     }
 
+    /** Empties the queue. Until another queue starts, [undoClearQueue] can put it back (#165). */
     fun clearQueue() {
         controller?.let { player ->
+            clearedQueue = player.takeIf { it.mediaItemCount > 0 }?.let(::clearedQueueOf)
             player.stop()
             player.clearMediaItems()
             tracksById.clear()
@@ -323,6 +347,26 @@ class PlaybackController(
                 ),
             )
         }
+    }
+
+    /**
+     * Puts back the queue [clearQueue] emptied: the same entries, current track, position and shuffled
+     * order, paused. Does nothing once another queue has started or the queue has been put back.
+     */
+    fun undoClearQueue() {
+        val player = controller ?: return
+        val cleared = clearedQueue ?: return
+        if (player.mediaItemCount > 0) return
+        tracksById.putAll(cleared.tracks)
+        setQueue(
+            player, cleared.entries, cleared.currentIndex, cleared.positionMs, playWhenReady = false,
+            cleared.shuffleEnabled, cleared.repeatMode, cleared.playOrder,
+        )
+    }
+
+    /** The catalog's IDs changed (#165): a cleared queue names other songs now and cannot come back. */
+    fun discardClearedQueue() {
+        clearedQueue = null
     }
 
     fun retryPlayback() {
@@ -567,6 +611,31 @@ class PlaybackController(
     }
 
     private class ExpectedPlayOrder(val timeline: Timeline, val entryIds: List<String>)
+
+    /** A cleared queue as the player held it: its own entries keep their occurrences (#165). */
+    private class ClearedQueue(
+        val entries: List<MediaItem>,
+        val tracks: Map<String, AudioTrack>,
+        val currentIndex: Int,
+        val positionMs: Long,
+        val shuffleEnabled: Boolean,
+        val repeatMode: PlaybackRepeatMode,
+        val playOrder: List<Int>?,
+    )
+
+    private fun clearedQueueOf(player: Player): ClearedQueue {
+        // An insert's placement request is spent once the queue holds the item.
+        val entries = List(player.mediaItemCount) { player.getMediaItemAt(it).withoutRequestMetadata() }
+        return ClearedQueue(
+            entries = entries,
+            tracks = entries.mapNotNull { entry -> tracksById[entry.mediaId]?.let { entry.mediaId to it } }.toMap(),
+            currentIndex = player.currentMediaItemIndex,
+            positionMs = player.currentPosition.coerceAtLeast(0),
+            shuffleEnabled = player.shuffleModeEnabled,
+            repeatMode = player.repeatMode.toPlaybackRepeatMode(),
+            playOrder = if (player.shuffleModeEnabled) playOrderOf(player, entries) else null,
+        )
+    }
 
     private fun Int.toPlaybackRepeatMode(): PlaybackRepeatMode = when (this) {
         Player.REPEAT_MODE_ALL -> PlaybackRepeatMode.ALL

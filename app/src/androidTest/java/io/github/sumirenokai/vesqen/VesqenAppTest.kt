@@ -4062,6 +4062,116 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
     }
 
+    // #165: Clear queue stays one tap (#136 R7); the notice after it puts the queue back.
+    @Test
+    fun clearing_the_queue_offers_undo_until_another_queue_starts() {
+        val queued = PlaybackSnapshot(
+            isControllerReady = true,
+            trackId = 1,
+            title = "Dawn Signal",
+            artist = "Mori",
+            durationMs = 245_000,
+            queueIndex = 0,
+            queueSize = 2,
+            queue = listOf(
+                PlaybackQueueItem(1, "Dawn Signal", "Mori", true, listIndex = 0),
+                PlaybackQueueItem(2, "Long Light", "Mori", false, listIndex = 1),
+            ),
+        )
+        var playback by mutableStateOf(queued)
+        var cleared = 0
+        var undone = 0
+        render(
+            state = grantedState(tracks = sampleTracks, playback = queued),
+            stateProvider = { grantedState(tracks = sampleTracks, playback = playback) },
+            onClearQueue = {
+                cleared++
+                playback = PlaybackSnapshot(isControllerReady = true)
+            },
+            onUndoClearQueue = {
+                undone++
+                playback = queued
+            },
+            containerWidth = 320.dp,
+            fontScale = 2f,
+        )
+
+        fun clearFromNow() {
+            composeRule.onNodeWithTag("vesqen.nav.now").performClick()
+            composeRule.onNodeWithTag("vesqen.now.queue").performClick()
+            composeRule.onNodeWithText(context.getString(R.string.clear_queue)).performClick()
+        }
+        clearFromNow()
+        assertEquals(1, cleared)
+        composeRule.onNodeWithTag("vesqen.queue-cleared").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.queue_cleared)).assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.queue-cleared.undo")
+            .assertTextEquals(context.getString(R.string.queue_cleared_undo))
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        assertEquals(1, undone)
+        composeRule.onAllNodesWithTag("vesqen.queue-cleared").assertCountEquals(0)
+        // Now shows the queue's track again.
+        composeRule.onNodeWithTag("vesqen.now.title").assertIsDisplayed()
+
+        // A queue started while the notice shows takes the cleared one's place, so the notice goes.
+        composeRule.onNodeWithTag("vesqen.now.queue").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.clear_queue)).performClick()
+        composeRule.onNodeWithTag("vesqen.queue-cleared").assertIsDisplayed()
+        playback = queued
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithTag("vesqen.queue-cleared").assertCountEquals(0)
+        assertEquals(2 to 1, cleared to undone)
+    }
+
+    // A long title scrolls slowly in the mini player as in Now (#143 Q13). Marquee ignores the system
+    // animation scale, so with animations off both titles stay still and end in an ellipsis (#165).
+    // Marquee does not advance under this rule's test clock, so these check that each title has it.
+    @Test
+    fun long_titles_scroll_in_the_mini_player_and_now() {
+        render(state = longTitleState(), containerWidth = 320.dp, fontScale = 2f, motionPolicy = VesqenMotionPolicy(reduceMotion = false))
+
+        assertTitleScrolls("vesqen.mini-player.title", scrolls = true)
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        assertTitleScrolls("vesqen.now.title", scrolls = true)
+    }
+
+    @Test
+    fun long_titles_stay_still_with_animations_off() {
+        render(state = longTitleState(), containerWidth = 320.dp, fontScale = 2f, motionPolicy = VesqenMotionPolicy(reduceMotion = true))
+
+        assertTitleScrolls("vesqen.mini-player.title", scrolls = false)
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        assertTitleScrolls("vesqen.now.title", scrolls = false)
+    }
+
+    private fun longTitleState() = grantedState(
+        tracks = sampleTracks,
+        playback = PlaybackSnapshot(
+            isControllerReady = true,
+            trackId = 1,
+            title = "A deliberately long local track title",
+            artist = "Mori",
+            durationMs = 245_000,
+            hasNext = true,
+        ),
+    )
+
+    /** A title that does not fit either scrolls (a marquee, cut without an ellipsis) or ends in an ellipsis. */
+    private fun assertTitleScrolls(tag: String, scrolls: Boolean) {
+        val node = composeRule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
+        val marquee = node.layoutInfo.getModifierInfo().any { "Marquee" in it.modifier::class.java.simpleName }
+        assertEquals("$tag has a marquee", scrolls, marquee)
+        assertEquals("$tag ends in an ellipsis", !scrolls, titleLayout(tag).isLineEllipsized(0))
+    }
+
+    private fun titleLayout(tag: String): TextLayoutResult {
+        val layouts = mutableListOf<TextLayoutResult>()
+        composeRule.onNodeWithTag(tag, useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        return layouts.single()
+    }
+
     @Test
     fun now_queue_action_opens_an_editable_queue_sheet() {
         render(
@@ -4464,6 +4574,8 @@ class VesqenAppTest {
         onRemoveLibraryFolder: (String) -> Unit = {},
         onResumeLibraryScan: () -> Unit = {},
         onDeletePlaylist: (Long) -> Unit = {},
+        onClearQueue: () -> Unit = {},
+        onUndoClearQueue: () -> Unit = {},
         containerWidth: Dp? = null,
         containerHeight: Dp = 720.dp,
         fontScale: Float? = null,
@@ -4504,6 +4616,8 @@ class VesqenAppTest {
                         onPlayQueue = onPlayQueue,
                         onCreatePlaylist = onCreatePlaylist,
                         onDeletePlaylist = onDeletePlaylist,
+                        onClearQueue = onClearQueue,
+                        onUndoClearQueue = onUndoClearQueue,
                         onPrevious = onPrevious,
                         onPlayPause = onPlayPause,
                         onRefreshPlaybackPosition = onRefreshPlaybackPosition,

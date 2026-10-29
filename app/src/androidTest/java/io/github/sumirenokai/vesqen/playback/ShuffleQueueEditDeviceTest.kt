@@ -18,6 +18,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -369,9 +370,125 @@ class ShuffleQueueEditDeviceTest {
         assertNull(PlayOrderSessionContract.readMove(Bundle(move).apply { remove("after") }))
     }
 
+    @Test
+    fun aNewQueueKeepsTheShuffleAndRepeatModes() = runBlocking {
+        val first = (1L..3L).map(::silentTrack)
+        val second = (4L..9L).map(::silentTrack)
+        val third = (10L..12L).map(::silentTrack)
+        try {
+            main { controller = PlaybackController(app) { playback.set(it) } }
+            awaitPlayback { it.isControllerReady }
+            main { controller.playQueue(first, 0) }
+            awaitPlayback { it.trackId == first[0].id }
+            main { controller.cyclePlaybackOrderMode() }
+            awaitPlayback { it.playbackOrderMode == PlaybackOrderMode.SHUFFLE }
+
+            // #165: a new queue from the Library turned both modes off. Shuffled, it plays the chosen
+            // track first and the others in random order.
+            main { controller.playQueue(second, 3) }
+            awaitPlayback { it.trackId == second[3].id && it.queueSize == second.size && it.positionMs >= 500 }
+            assertSettledQueue(playback.get().queue.map(PlaybackQueueItem::trackId))
+            assertEquals(PlaybackOrderMode.SHUFFLE, playback.get().playbackOrderMode)
+            assertEquals(second[3].id, playback.get().queue.first().trackId)
+            assertEquals(second.map(AudioTrack::id).toSet(), playback.get().queue.map(PlaybackQueueItem::trackId).toSet())
+
+            main { controller.cyclePlaybackOrderMode() }
+            awaitPlayback { it.playbackOrderMode == PlaybackOrderMode.REPEAT_ALL }
+            main { controller.playQueue(third, 1) }
+            awaitPlayback { it.trackId == third[1].id && it.queueSize == third.size && it.positionMs >= 500 }
+            assertEquals(PlaybackOrderMode.REPEAT_ALL, playback.get().playbackOrderMode)
+            assertEquals(third.map(AudioTrack::id), playback.get().queue.map(PlaybackQueueItem::trackId))
+        } finally {
+            releasePlayback()
+        }
+    }
+
+    @Test
+    fun undoPutsBackAClearedShuffledQueuePaused() = runBlocking {
+        val queued = (1L..6L).map(::silentTrack)
+        try {
+            main { controller = PlaybackController(app) { playback.set(it) } }
+            awaitPlayback { it.isControllerReady }
+            main { controller.playQueue(queued, 0) }
+            awaitPlayback { it.trackId == queued[0].id && it.queueSize == 6 }
+            main { controller.cyclePlaybackOrderMode() }
+            awaitPlayback { it.shuffleEnabled && it.queue.firstOrNull()?.trackId == queued[0].id }
+            val current = playback.get().queue[1].trackId
+            main { controller.skipToNext() }
+            awaitPlayback { it.trackId == current && it.positionMs >= 1_000 }
+            val order = playback.get().queue.map(PlaybackQueueItem::trackId)
+
+            // #165: Clear queue while it plays, then Undo.
+            var position = 0L
+            main {
+                controller.refreshPosition()
+                position = playback.get().positionMs
+                controller.clearQueue()
+            }
+            assertEquals(0, playback.get().queueSize)
+            assertEquals(order, shownAfter { controller.undoClearQueue() })
+
+            // The same order, track and place, paused, once the session's queue has arrived too.
+            delay(1_000)
+            main { controller.refreshPosition() }
+            val restored = playback.get()
+            assertEquals(order, restored.queue.map(PlaybackQueueItem::trackId))
+            assertEquals(current, restored.trackId)
+            assertEquals(PlaybackOrderMode.SHUFFLE, restored.playbackOrderMode)
+            assertFalse(restored.isPlaying || restored.showsPauseAction)
+            assertTrue("${restored.positionMs} is not near $position", restored.positionMs in position - 50..position + 300)
+
+            // A second Undo has nothing left to put back, and Next plays what the queue lists.
+            assertEquals(order, shownAfter { controller.undoClearQueue() })
+            main { controller.togglePlayback() }
+            val upcoming = order.drop(playback.get().queueIndex + 1)
+            val played = upcoming.map { expectedId ->
+                main { controller.skipToNext() }
+                awaitPlayback { it.trackId == expectedId || !it.hasNext }
+                playback.get().trackId
+            }
+            assertEquals(upcoming, played)
+        } finally {
+            releasePlayback()
+        }
+    }
+
+    @Test
+    fun undoLeavesAQueueStartedAfterTheClear() = runBlocking {
+        val cleared = (1L..3L).map(::silentTrack)
+        val next = (4L..5L).map(::silentTrack)
+        try {
+            main { controller = PlaybackController(app) { playback.set(it) } }
+            awaitPlayback { it.isControllerReady }
+            main { controller.playQueue(cleared, 0) }
+            awaitPlayback { it.trackId == cleared[0].id }
+            main {
+                controller.clearQueue()
+                controller.playQueue(next, 0)
+                controller.undoClearQueue()
+            }
+            awaitPlayback { it.trackId == next[0].id && it.positionMs >= 500 }
+            assertEquals(next.map(AudioTrack::id), playback.get().queue.map(PlaybackQueueItem::trackId))
+
+            // Play next into an emptied queue starts one too.
+            main {
+                controller.clearQueue()
+                controller.addToQueue(cleared[1])
+                controller.undoClearQueue()
+            }
+            assertEquals(listOf(cleared[1].id), playback.get().queue.map(PlaybackQueueItem::trackId))
+        } finally {
+            releasePlayback()
+        }
+    }
+
     private fun releasePlayback() {
         main {
             if (playback.get().showsPauseAction) controller.togglePlayback()
+            // A new queue keeps the modes (#165), and the service can outlive this test.
+            repeat(PlaybackOrderMode.entries.size) {
+                if (playback.get().playbackOrderMode != PlaybackOrderMode.SEQUENTIAL) controller.cyclePlaybackOrderMode()
+            }
             controller.clearQueue()
             controller.release()
             // Later tests expect a service that has never played.

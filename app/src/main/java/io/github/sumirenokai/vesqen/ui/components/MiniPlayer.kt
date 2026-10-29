@@ -6,6 +6,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.sp
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
+import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.indication
@@ -66,6 +67,7 @@ fun MiniPlayer(
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
+    motionPolicy: VesqenMotionPolicy,
     modifier: Modifier = Modifier,
 ) {
     val title = snapshot.title.ifBlank { stringResource(R.string.unknown_title) }
@@ -136,13 +138,13 @@ fun MiniPlayer(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(1.dp),
                         ) {
-                            Text(
+                            ScrollingTitle(
                                 text = title,
                                 style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, lineHeight = 21.sp),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                                motionPolicy = motionPolicy,
                                 // On the title itself, so TalkBack reads "title, artist" once instead of the title twice.
-                                modifier = if (titleOnly) Modifier.semantics { contentDescription = "$title, $artist" } else Modifier,
+                                modifier = (if (titleOnly) Modifier.semantics { contentDescription = "$title, $artist" } else Modifier)
+                                    .testTag("vesqen.mini-player.title"),
                             )
                             if (!titleOnly) Text(
                                 text = artist,
