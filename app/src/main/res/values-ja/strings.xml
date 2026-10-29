@@ -131,6 +131,15 @@
     <string name="settings_usage_off">オフ</string>
     <string name="settings_usage_paused">一時停止中</string>
     <string name="settings_device_report">デバイスレポートを書き出す</string>
+    <string name="settings_library">ライブラリ</string>
+    <string name="settings_artist_split">アーティストの分割</string>
+    <string name="settings_artist_split_body">「アーティスト」ページで、複数のアーティストをまとめて記載したタグを分けて表示します。音楽ファイルのタグは変更しません。</string>
+    <string name="settings_artist_separators">区切り文字</string>
+    <string name="settings_artist_separators_body">スペースで区切って入力します。英字を含む区切り文字（feat. など）は、前後にスペースがある場合にのみ分割します。</string>
+    <string name="settings_artist_kept_names">分割しない名前</string>
+    <string name="settings_artist_kept_names_body">1 行に 1 つずつ入力します。一覧の名前は分割しません（例：AC/DC）。</string>
+    <string name="settings_artist_list_empty">なし</string>
+    <string name="settings_artist_split_restore">初期設定に戻す</string>
     <string name="usage_title">利用統計</string>
     <string name="usage_body">Vesqen は、どの機種で使われているかを知るために、ID を付けずに 1 日 1 回まで利用統計を送信します。送る内容は次の項目だけです。</string>
     <string name="usage_field_app">アプリのバージョンと配布元</string>

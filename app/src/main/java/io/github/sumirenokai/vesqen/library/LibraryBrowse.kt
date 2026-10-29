@@ -64,11 +64,13 @@ fun sortLibraryTracks(
     }
 }
 
+/** [artists] splits shared artist tags (#168); the Library keeps one per setting so each tag is split once. */
 fun buildLibraryCollections(
     mode: LibraryBrowseMode,
     tracks: List<AudioTrack>,
     playlists: List<LibraryPlaylist>,
     names: Comparator<String> = LibraryNameOrder(),
+    artists: ArtistNames = ArtistNames(ArtistSplitSettings()),
 ): List<LibraryCollection> {
     // Collections follow the Songs index (#167); the tracks inside one keep the plain collation
     // order, so "01 Intro.flac" stays before "Bonus.flac" in a folder.
@@ -83,13 +85,23 @@ fun buildLibraryCollections(
             trackOrder = albumTrackOrder(within),
             names = names,
         )
-        LibraryBrowseMode.ARTISTS -> tracks.groupedCollections(
-            key = { track -> collectionKey("artist", track.artist.ifBlank { track.albumArtist }) },
-            title = { track -> track.artist.ifBlank { track.albumArtist } },
-            subtitle = { group -> group.filter { it.album.isNotBlank() }.map(albums::of).distinct().size.toString() },
-            trackOrder = compareBy<AudioTrack, String>(within) { it.album }.thenBy(albums::of).then(albumTrackOrder(within)),
-            names = names,
-        )
+        // A song with several artists is in each of their collections, and counts there (#168).
+        // Albums keep their own grouping, so an artist's album count uses the same albums.
+        LibraryBrowseMode.ARTISTS -> {
+            val trackOrder = compareBy<AudioTrack, String>(within) { it.album }.thenBy(albums::of).then(albumTrackOrder(within))
+            tracks.flatMap { track -> artists.of(track).map { artist -> artist to track } }
+                .groupBy { (artist, _) -> artist.key }
+                .map { (artistKey, credits) ->
+                    val group = credits.map { (_, track) -> track }
+                    LibraryCollection(
+                        key = collectionKey("artist", artistKey),
+                        title = mostUsedSpelling(credits.map { (artist, _) -> artist.name }),
+                        subtitle = group.filter { it.album.isNotBlank() }.map(albums::of).distinct().size.toString(),
+                        tracks = group.sortedWith(trackOrder),
+                    )
+                }
+                .sortedWith(compareBy(names) { it.title })
+        }
         // The folder's own name leads; the path above it follows in the subtitle, so a narrow row or
         // large text never cuts off the part that tells folders apart (#35).
         LibraryBrowseMode.FOLDERS -> tracks.groupedCollections(
@@ -177,6 +189,14 @@ internal fun folderPathParts(path: String): Pair<String, String> {
     val trimmed = path.trimEnd('/')
     val slash = trimmed.lastIndexOf('/')
     return if (slash < 0) "" to trimmed else trimmed.substring(0, slash) to trimmed.substring(slash + 1)
+}
+
+/** "Adam Gubman" on three songs and "adam gubman" on one show as "Adam Gubman"; a tie takes the first in code order. */
+private fun mostUsedSpelling(spellings: List<String>): String {
+    if (spellings.all { it == spellings.first() }) return spellings.first()
+    return spellings.groupingBy { it }.eachCount().entries
+        .minWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+        .key
 }
 
 private fun List<AudioTrack>.firstNotBlank(vararg selectors: (AudioTrack) -> String): String =

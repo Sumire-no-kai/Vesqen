@@ -54,6 +54,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.library.ArtistSplitSettings
 import io.github.sumirenokai.vesqen.playback.NO_BIT_PERFECT_MIXER_CODE
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
@@ -79,7 +80,8 @@ import io.github.sumirenokai.vesqen.verification.OutputVerificationRegistryState
 
 /**
  * B · Paper & Sound settings (#35): serif group titles over paper-raised cards with hairline rows,
- * without slogans, per-group subtitles or icon tiles. The group order follows PRD F14.
+ * without slogans, per-group subtitles or icon tiles. The group order follows PRD F14; Library (#168)
+ * follows Audio proof.
  */
 @Composable
 fun SettingsScreen(
@@ -104,6 +106,8 @@ fun SettingsScreen(
     onExplainStrictUsbUnavailable: () -> Unit = {},
     premiumAccess: PremiumAccess? = null,
     onOpenPremium: () -> Unit = {},
+    artistSplit: ArtistSplitSettings = ArtistSplitSettings(),
+    onArtistSplitChange: (ArtistSplitSettings) -> Unit = {},
 ) {
     val unsupportedPlatform = outputStatus.officialMixerApiSupport?.takeUnless { it.mixerApiAvailable }
     val strictSelected = outputStatus.mode == UsbOutputMode.STRICT_BIT_PERFECT
@@ -173,6 +177,7 @@ fun SettingsScreen(
                     )
                 }
             }
+            item { SettingsLibraryGroup(artistSplit, onArtistSplitChange) }
             item { SettingsPrivacyGroup(usageStatistics, onOpenUsageStatistics, deviceReportAvailable, onOpenDeviceReport) }
             if (appUpdater != null) item { SettingsUpdatesGroup(appUpdater) }
             item {
@@ -486,6 +491,7 @@ internal fun SettingsRow(
     value: String? = null,
     onClick: (() -> Unit)? = null,
     showChevron: Boolean = onClick != null,
+    descriptionMaxLines: Int = Int.MAX_VALUE,
 ) {
     Row(
         modifier = modifier
@@ -500,7 +506,7 @@ internal fun SettingsRow(
         // #35: above 130 % text a value beside the title squeezed the title into one letter per
         // line ("Ver/sio/n"), so the value moves under it.
         val valueBelow = value != null && LocalDensity.current.fontScale > 1.3f
-        SettingsRowText(title, description, Modifier.weight(1f), value.takeIf { valueBelow })
+        SettingsRowText(title, description, Modifier.weight(1f), value.takeIf { valueBelow }, descriptionMaxLines)
         if (value != null && !valueBelow) {
             Text(
                 text = value,
@@ -523,7 +529,13 @@ internal fun SettingsRow(
 }
 
 @Composable
-private fun SettingsRowText(title: String, description: String?, modifier: Modifier = Modifier, value: String? = null) {
+private fun SettingsRowText(
+    title: String,
+    description: String?,
+    modifier: Modifier = Modifier,
+    value: String? = null,
+    descriptionMaxLines: Int = Int.MAX_VALUE,
+) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(text = title, style = MaterialTheme.typography.bodyLarge)
         if (description != null) {
@@ -531,6 +543,8 @@ private fun SettingsRowText(title: String, description: String?, modifier: Modif
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = descriptionMaxLines,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         if (value != null) {
