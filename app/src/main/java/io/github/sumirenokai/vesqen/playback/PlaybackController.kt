@@ -199,6 +199,41 @@ class PlaybackController(
         if (activeController != null) synchronizeLibrary(activeController, currentLibrary)
     }
 
+    /**
+     * The Library merged the track [fromTrackId] into [toTrackId], which now names the same file
+     * (#139). Queue entries take the merged track in their place and keep playing, and the saved queue
+     * follows for when no player holds it. Call after [syncLibrary] received the merged track.
+     */
+    fun replaceQueueTrack(fromTrackId: Long, toTrackId: Long) {
+        stateStore.replaceTrackId(fromTrackId, toTrackId)
+        val track = availableTracksById[toTrackId.toString()] ?: return
+        val player = controller ?: return
+        val fromMediaId = fromTrackId.toString()
+        var replaced = false
+        suppressListenerPublishing = true
+        try {
+            for (index in 0 until player.mediaItemCount) {
+                val item = player.getMediaItemAt(index)
+                if (item.mediaId != fromMediaId) continue
+                // The same file under another ID: Media3 updates the entry without reopening it.
+                player.replaceMediaItem(
+                    index,
+                    track.toPlaybackMediaItem(
+                        occurrenceId = item.mediaMetadata.extras?.getString(PLAYBACK_OCCURRENCE_EXTRA)
+                            ?: java.util.UUID.randomUUID().toString(),
+                    ),
+                )
+                replaced = true
+            }
+        } finally {
+            suppressListenerPublishing = false
+        }
+        if (replaced) {
+            tracksById[track.id.toString()] = track
+            publish(player, rebuildQueue = true)
+        }
+    }
+
     private fun startQueue(
         activeController: MediaController,
         tracks: List<AudioTrack>,

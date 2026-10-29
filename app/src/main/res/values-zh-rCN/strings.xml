@@ -925,4 +925,23 @@
     <string name="premium_activation_revoked">这个激活码已作废。如果是在 Vesqen 官网买的，请发邮件到 vesqen@sumirenokai.com 换一个新的。</string>
     <string name="premium_open">查看高级功能</string>
     <string name="player_trial_ended_body">%1$s\n\n严格 USB 输出不会自动换成系统输出。可以一次性买断高级功能，或者改用系统输出后重新播放。</string>
+    <plurals name="unmatched_records_prompt">
+        <item quantity="other">有 %1$d 首歌的收藏和播放记录未能对应</item>
+    </plurals>
+    <string name="unmatched_records_review">处理</string>
+    <string name="unmatched_records_later">稍后</string>
+    <string name="unmatched_records_title">未能对应的记录</string>
+    <string name="unmatched_records_body">以下每条记录都对应到多首文件名和大小相同的歌曲，Vesqen 无法确定其归属。请为每条记录选择对应的歌曲，或将其丢弃。音乐文件不会被改动。</string>
+    <string name="unmatched_record_favorite">已收藏</string>
+    <plurals name="unmatched_record_play_count">
+        <item quantity="other">播放 %1$d 次</item>
+    </plurals>
+    <plurals name="unmatched_record_playlist_count">
+        <item quantity="other">在 %1$d 个播放列表中</item>
+    </plurals>
+    <string name="unmatched_record_choose">归属于</string>
+    <string name="unmatched_record_assign">选择这首歌曲</string>
+    <string name="unmatched_record_discard">丢弃记录</string>
+    <string name="unmatched_record_discard_confirm_title">丢弃“%1$s”的记录？</string>
+    <string name="unmatched_record_discard_confirm_body">这首歌的收藏、播放次数和在播放列表中的位置将被删除，且无法恢复。音乐文件不受影响。</string>
 </resources>

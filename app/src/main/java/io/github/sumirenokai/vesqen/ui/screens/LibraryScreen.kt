@@ -139,6 +139,7 @@ import io.github.sumirenokai.vesqen.library.LibraryScanState
 import io.github.sumirenokai.vesqen.library.LibrarySortOrder
 import io.github.sumirenokai.vesqen.library.LibrarySource
 import io.github.sumirenokai.vesqen.library.LibrarySourceKind
+import io.github.sumirenokai.vesqen.library.UnmatchedLibraryRecord
 import io.github.sumirenokai.vesqen.library.buildLibraryCollections
 import io.github.sumirenokai.vesqen.library.sortLibraryTracks
 import io.github.sumirenokai.vesqen.library.sortLibraryCollections
@@ -227,6 +228,9 @@ fun LibraryScreen(
     onRemoveLibraryFolder: (String) -> Unit = {},
     onPauseLibraryScan: () -> Unit = {},
     onResumeLibraryScan: () -> Unit = {},
+    onAssignUnmatchedRecord: (Long, Long) -> Unit = { _, _ -> },
+    onDiscardUnmatchedRecord: (Long) -> Unit = {},
+    onDismissUnmatchedRecords: () -> Unit = {},
     motionPolicy: VesqenMotionPolicy? = null,
     onPageBackgroundChange: (Color) -> Unit = {},
 ) {
@@ -419,10 +423,12 @@ fun LibraryScreen(
                 onOpenAppSettings = onOpenAppSettings,
             )
         }
+        var showUnmatchedRecords by rememberSaveable { mutableStateOf(false) }
         if (
             state.sources.any { it.kind == LibrarySourceKind.FOLDER } ||
             state.scanProgress != null ||
-            state.sources.any { it.scanState == LibraryScanState.FAILED }
+            state.sources.any { it.scanState == LibraryScanState.FAILED } ||
+            state.promptsUnmatchedRecords
         ) {
             LibrarySourcesCard(
                 state = state,
@@ -430,6 +436,19 @@ fun LibraryScreen(
                 onRemoveLibraryFolder = onRemoveLibraryFolder,
                 onPauseLibraryScan = onPauseLibraryScan,
                 onResumeLibraryScan = onResumeLibraryScan,
+                onReviewUnmatchedRecords = { showUnmatchedRecords = true },
+                onDismissUnmatchedRecords = onDismissUnmatchedRecords,
+            )
+        }
+        // Kept outside the card: the sheet lists every record, and it stays open while the user works
+        // through them, even once the card has nothing else to show.
+        if (showUnmatchedRecords && state.unmatchedRecords.isNotEmpty()) {
+            UnmatchedRecordsSheet(
+                records = state.unmatchedRecords,
+                playlists = state.playlists,
+                onDismiss = { showUnmatchedRecords = false },
+                onAssign = onAssignUnmatchedRecord,
+                onDiscard = onDiscardUnmatchedRecord,
             )
         }
         if (!state.notificationsAllowed && playback.hasActiveTrack) {
@@ -1618,6 +1637,8 @@ private fun LibrarySourcesCard(
     onRemoveLibraryFolder: (String) -> Unit,
     onPauseLibraryScan: () -> Unit,
     onResumeLibraryScan: () -> Unit,
+    onReviewUnmatchedRecords: () -> Unit,
+    onDismissUnmatchedRecords: () -> Unit,
 ) {
     var showSourceManager by rememberSaveable { mutableStateOf(false) }
     val folders = state.sources.filter { it.kind == LibrarySourceKind.FOLDER }
@@ -1727,6 +1748,32 @@ private fun LibrarySourcesCard(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
+            if (state.promptsUnmatchedRecords) {
+                Spacer(Modifier.height(VesqenSpacing.xs))
+                Text(
+                    text = pluralStringResource(
+                        R.plurals.unmatched_records_prompt,
+                        state.unmatchedRecords.size,
+                        state.unmatchedRecords.size,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(modifier = Modifier.align(Alignment.End)) {
+                    TextButton(
+                        onClick = onDismissUnmatchedRecords,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.library.unmatched.later"),
+                    ) {
+                        Text(stringResource(R.string.unmatched_records_later))
+                    }
+                    TextButton(
+                        onClick = onReviewUnmatchedRecords,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.library.unmatched.review"),
+                    ) {
+                        Text(stringResource(R.string.unmatched_records_review))
+                    }
+                }
+            }
         }
     }
     if (showSourceManager) {
@@ -1823,6 +1870,139 @@ private fun LibrarySourcesSheet(
         }
     }
 }
+
+/** #139: each record with the songs it could belong to; the user picks one or discards the record. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun UnmatchedRecordsSheet(
+    records: List<UnmatchedLibraryRecord>,
+    playlists: List<LibraryPlaylist>,
+    onDismiss: () -> Unit,
+    onAssign: (Long, Long) -> Unit,
+    onDiscard: (Long) -> Unit,
+) {
+    var pendingDiscard by remember { mutableStateOf<AudioTrack?>(null) }
+    pendingDiscard?.let { record ->
+        ConfirmDestructiveDialog(
+            title = stringResource(
+                R.string.unmatched_record_discard_confirm_title,
+                record.title.ifBlank { stringResource(R.string.unknown_title) },
+            ),
+            body = stringResource(R.string.unmatched_record_discard_confirm_body),
+            confirmLabel = stringResource(R.string.unmatched_record_discard),
+            onConfirm = {
+                pendingDiscard = null
+                onDiscard(record.id)
+            },
+            onDismiss = { pendingDiscard = null },
+            tag = "vesqen.library.unmatched.discard-confirm",
+        )
+    }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag("vesqen.library.unmatched-records"),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.sm),
+        ) {
+            Text(
+                text = stringResource(R.string.unmatched_records_title),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Spacer(Modifier.height(VesqenSpacing.xs))
+            Text(
+                text = stringResource(R.string.unmatched_records_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(VesqenSpacing.sm))
+            LazyColumn(modifier = Modifier.heightIn(max = 480.dp)) {
+                items(items = records, key = { it.record.id }) { item ->
+                    UnmatchedRecordItem(
+                        item = item,
+                        playlistCount = playlists.count { item.record.id in it.trackIds },
+                        onAssign = { trackId -> onAssign(item.record.id, trackId) },
+                        onDiscard = { pendingDiscard = item.record },
+                    )
+                    HorizontalDivider()
+                }
+            }
+            Spacer(Modifier.height(VesqenSpacing.sm))
+        }
+    }
+}
+
+@Composable
+private fun UnmatchedRecordItem(
+    item: UnmatchedLibraryRecord,
+    playlistCount: Int,
+    onAssign: (Long) -> Unit,
+    onDiscard: () -> Unit,
+) {
+    val record = item.record
+    val userData = buildList {
+        if (record.isFavorite) add(stringResource(R.string.unmatched_record_favorite))
+        if (record.playCount > 0) {
+            add(pluralStringResource(R.plurals.unmatched_record_play_count, record.playCount, record.playCount))
+        }
+        if (playlistCount > 0) {
+            add(pluralStringResource(R.plurals.unmatched_record_playlist_count, playlistCount, playlistCount))
+        }
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = VesqenSpacing.sm)
+            .testTag("vesqen.library.unmatched.${record.id}"),
+    ) {
+        Text(record.title.ifBlank { stringResource(R.string.unknown_title) }, style = MaterialTheme.typography.titleSmall)
+        Text(
+            text = unmatchedTrackDetails(record),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (userData.isNotEmpty()) {
+            Text(userData.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+        }
+        Spacer(Modifier.height(VesqenSpacing.xs))
+        Text(
+            text = stringResource(R.string.unmatched_record_choose),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        val assignLabel = stringResource(R.string.unmatched_record_assign)
+        item.candidates.forEach { candidate ->
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clickable(onClickLabel = assignLabel) { onAssign(candidate.id) }
+                    .padding(vertical = VesqenSpacing.xs)
+                    .testTag("vesqen.library.unmatched.${record.id}.${candidate.id}"),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(candidate.title.ifBlank { stringResource(R.string.unknown_title) }, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = unmatchedTrackDetails(candidate),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        TextButton(
+            onClick = onDiscard,
+            modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.library.unmatched.${record.id}.discard"),
+        ) {
+            Text(stringResource(R.string.unmatched_record_discard))
+        }
+    }
+}
+
+/** Artist, album and duration: the files share a name and size, so these tell the songs apart. */
+private fun unmatchedTrackDetails(track: AudioTrack): String =
+    listOf(track.displaySubtitle(), formatDuration(track.durationMs)).filter(String::isNotBlank).joinToString(" · ")
 
 @Composable
 private fun sourceStatusText(source: LibrarySource): String = when {

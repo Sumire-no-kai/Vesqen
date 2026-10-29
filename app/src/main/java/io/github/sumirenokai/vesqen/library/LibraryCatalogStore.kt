@@ -931,28 +931,36 @@ internal class LibraryCatalogStore internal constructor(
         val missing = identities("$TRACK_SEEN_EPOCH != ?")
         if (missing.none(FolderTrackIdentity::holdsUserState)) return
         val listed = identities("$TRACK_SEEN_EPOCH = ?")
-        val copied = scannedTrackColumns.filter { it != TRACK_REMOTE_ID }.joinToString(", ")
         for ((oldTrackId, listedTrackId) in planFolderReattachments(missing, listed, session.epoch)) {
-            val remoteId = database.query(
-                TRACKS_TABLE, arrayOf(TRACK_REMOTE_ID), "$TRACK_ID = ?", arrayOf(listedTrackId.toString()),
-                null, null, null,
-            ).use { cursor -> check(cursor.moveToFirst()) { "A listed row disappeared during its scan" }; cursor.getString(0) }
-            // Copy, delete, then take the remote ID: UNIQUE(source, remote ID) forbids two rows with it.
-            database.execSQL(
-                "UPDATE $TRACKS_TABLE SET ($copied) = (SELECT $copied FROM $TRACKS_TABLE WHERE $TRACK_ID = ?) " +
-                    "WHERE $TRACK_ID = ?",
-                arrayOf(listedTrackId, oldTrackId),
-            )
-            // A listed row can hold data when it played before this scan completed.
-            foldUserState(database, into = readTrackState(database, oldTrackId), from = readTrackState(database, listedTrackId))
-            check(database.delete(TRACKS_TABLE, "$TRACK_ID = ?", arrayOf(listedTrackId.toString())) == 1)
-            database.update(
-                TRACKS_TABLE,
-                ContentValues().apply { put(TRACK_REMOTE_ID, remoteId) },
-                "$TRACK_ID = ?",
-                arrayOf(oldTrackId.toString()),
-            )
+            takeOverListedRow(database, oldTrackId, listedTrackId)
         }
+    }
+
+    /**
+     * [oldTrackId] keeps its catalog ID, so its favorite, plays and playlist places stay, and takes
+     * over [listedTrackId]'s file: the listed row's scanned columns and any data it gathered, since a
+     * listed row can play before it is paired. The listed row goes.
+     */
+    private fun takeOverListedRow(database: SQLiteDatabase, oldTrackId: Long, listedTrackId: Long) {
+        val remoteId = database.query(
+            TRACKS_TABLE, arrayOf(TRACK_REMOTE_ID), "$TRACK_ID = ?", arrayOf(listedTrackId.toString()),
+            null, null, null,
+        ).use { cursor -> check(cursor.moveToFirst()) { "A listed row disappeared" }; cursor.getString(0) }
+        val copied = scannedTrackColumns.filter { it != TRACK_REMOTE_ID }.joinToString(", ")
+        // Copy, delete, then take the remote ID: UNIQUE(source, remote ID) forbids two rows with it.
+        database.execSQL(
+            "UPDATE $TRACKS_TABLE SET ($copied) = (SELECT $copied FROM $TRACKS_TABLE WHERE $TRACK_ID = ?) " +
+                "WHERE $TRACK_ID = ?",
+            arrayOf(listedTrackId, oldTrackId),
+        )
+        foldUserState(database, into = readTrackState(database, oldTrackId), from = readTrackState(database, listedTrackId))
+        check(database.delete(TRACKS_TABLE, "$TRACK_ID = ?", arrayOf(listedTrackId.toString())) == 1)
+        database.update(
+            TRACKS_TABLE,
+            ContentValues().apply { put(TRACK_REMOTE_ID, remoteId) },
+            "$TRACK_ID = ?",
+            arrayOf(oldTrackId.toString()),
+        )
     }
 
     /** Folder rows whose file a completed scan did not find; they keep user data but cannot play. */
@@ -967,6 +975,93 @@ internal class LibraryCatalogStore internal constructor(
     ).use { cursor ->
         buildSet {
             while (cursor.moveToNext()) add(cursor.getLong(0))
+        }
+    }
+
+    /**
+     * Hidden rows that wait for the user to say which listed song they belong to, each with the
+     * listed rows it could be (#139); see [planUnmatchedRecords].
+     */
+    fun readUnmatchedRecords(): Map<Long, List<Long>> = readUnmatchedRecords(readableDatabase)
+
+    /**
+     * Gives the record [recordTrackId] the listed row [chosenTrackId] the user picked for it: the
+     * record keeps its catalog ID and takes over the chosen row ([takeOverListedRow]). False, with
+     * nothing changed, when the record no longer waits for a choice or [chosenTrackId] is not one of
+     * its songs, as after a scan reattached it.
+     */
+    fun assignUnmatchedRecord(recordTrackId: Long, chosenTrackId: Long): Boolean = writableDatabase.transaction {
+        val waits = chosenTrackId in readUnmatchedRecords(this)[recordTrackId].orEmpty()
+        if (waits) takeOverListedRow(this, recordTrackId, chosenTrackId)
+        waits
+    }
+
+    /** Deletes the record [recordTrackId] with its favorite, plays and playlist places while it waits for a choice. */
+    fun discardUnmatchedRecord(recordTrackId: Long): Boolean = writableDatabase.transaction {
+        recordTrackId in readUnmatchedRecords(this) &&
+            delete(TRACKS_TABLE, "$TRACK_ID = ?", arrayOf(recordTrackId.toString())) == 1
+    }
+
+    private fun readUnmatchedRecords(database: SQLiteDatabase): Map<Long, List<Long>> {
+        val hiddenRows = "($TRACK_REMOTE_ID GLOB '$DISPLACED_MEDIASTORE_PREFIX*' OR $TRACK_REMOTE_ID GLOB '$HIDDEN_FOLDER_PREFIX*')"
+        val hidden = readRecordIdentities(database, hiddenRows, emptyList())
+        if (hidden.isEmpty()) return emptyMap()
+        // Only rows that share a hidden row's file name can share its key.
+        val listed = hidden.map(RecordTrackIdentity::fileName).distinct().chunked(SQL_ARGUMENT_CHUNK).flatMap { names ->
+            readRecordIdentities(
+                database,
+                "NOT $hiddenRows AND $TRACK_FILE_NAME IN (${names.joinToString(",") { "?" }})",
+                names,
+            )
+        }
+        val completedScanEpochs = database.query(
+            SOURCES_TABLE,
+            arrayOf(SOURCE_ID, SOURCE_SCAN_EPOCH),
+            "$SOURCE_SCAN_STATE = ?",
+            arrayOf(LibraryScanState.IDLE.name),
+            null,
+            null,
+            null,
+        ).use { cursor ->
+            buildMap {
+                while (cursor.moveToNext()) put(cursor.getString(0), cursor.getLong(1))
+            }
+        }
+        return planUnmatchedRecords(hidden, listed, completedScanEpochs)
+    }
+
+    private fun readRecordIdentities(
+        database: SQLiteDatabase,
+        selection: String,
+        arguments: List<String>,
+    ): List<RecordTrackIdentity> = database.query(
+        TRACKS_TABLE,
+        arrayOf(
+            TRACK_ID, TRACK_SOURCE_ID, TRACK_CONTENT_URI, TRACK_FOLDER_NAME, TRACK_FILE_NAME, TRACK_SIZE_BYTES,
+            TRACK_DATE_MODIFIED_SECONDS, TRACK_SEEN_EPOCH, "CASE WHEN $HOLDS_USER_STATE THEN 1 ELSE 0 END",
+        ),
+        selection,
+        arguments.toTypedArray(),
+        null,
+        null,
+        null,
+    ).use { cursor ->
+        buildList {
+            while (cursor.moveToNext()) {
+                add(
+                    RecordTrackIdentity(
+                        trackId = cursor.getLong(0),
+                        sourceId = cursor.getString(1),
+                        contentUri = cursor.getString(2),
+                        folderName = cursor.getString(3),
+                        fileName = cursor.getString(4),
+                        sizeBytes = cursor.getLong(5),
+                        modifiedSeconds = cursor.getLong(6),
+                        seenEpoch = cursor.getLong(7),
+                        holdsUserState = cursor.getInt(8) != 0,
+                    ),
+                )
+            }
         }
     }
 
@@ -1402,6 +1497,9 @@ internal class LibraryCatalogStore internal constructor(
         private const val DISPLACED_MEDIASTORE_PREFIX = "mediastore-displaced:"
         private const val HIDDEN_FOLDER_PREFIX = "folder-hidden:"
 
+        /** Below SQLite's oldest limit of 999 arguments per statement. */
+        private const val SQL_ARGUMENT_CHUNK = 500
+
         private const val PLAYLISTS_TABLE = "library_playlists"
         private const val PLAYLIST_ID = "playlist_id"
         private const val PLAYLIST_NAME = "name"
@@ -1532,6 +1630,68 @@ internal fun planFolderReattachments(
         }
     }
     return pairs
+}
+
+/** What [planUnmatchedRecords] needs to know of a row. */
+internal data class RecordTrackIdentity(
+    val trackId: Long,
+    val sourceId: String,
+    val contentUri: String,
+    val folderName: String,
+    val fileName: String,
+    val sizeBytes: Long,
+    val modifiedSeconds: Long,
+    /** The scan epoch that last listed the row. */
+    val seenEpoch: Long,
+    val holdsUserState: Boolean,
+)
+
+/**
+ * The scans a hidden row must have missed before it waits for a choice. A cleared MediaStore lists
+ * its files again over a while, and the first scan after it hides rows it reattaches by the next.
+ */
+internal const val MISSED_SCANS_BEFORE_CHOICE = 2L
+
+/**
+ * Pairs each hidden row the user should place (#139) with the listed rows it could be. Scans hide a
+ * row that holds user data but whose file they cannot tell apart: a key shared by more than one row
+ * pairs nothing, so the data never moves to the wrong file (#136 R9, #164). The user decides here.
+ *
+ * A hidden row qualifies when it holds user data, the last scan of its source completed, it missed
+ * [MISSED_SCANS_BEFORE_CHOICE] scans, and listed rows of its source share its file key while more
+ * than one row on one side has that key. A key that one hidden and one listed row share was left
+ * unpaired for another reason, and a row with no listed match may still be waiting for its file:
+ * both stay with the scans. The key is the one each source's scan pairs files by: volume, folder,
+ * file name and size on the device, and file name, size and modified time in an added folder.
+ *
+ * [completedScanEpochs] holds the scan epoch of each source whose last scan completed.
+ */
+internal fun planUnmatchedRecords(
+    hidden: List<RecordTrackIdentity>,
+    listed: List<RecordTrackIdentity>,
+    completedScanEpochs: Map<String, Long>,
+): Map<Long, List<Long>> {
+    val listedByKey = listed.groupBy(RecordTrackIdentity::fileKey)
+    val hiddenCountByKey = hidden.groupingBy(RecordTrackIdentity::fileKey).eachCount()
+    return hidden.asSequence()
+        .filter { row ->
+            val scanEpoch = completedScanEpochs[row.sourceId]
+            row.holdsUserState && row.fileName.isNotEmpty() &&
+                scanEpoch != null && scanEpoch - row.seenEpoch >= MISSED_SCANS_BEFORE_CHOICE
+        }
+        .mapNotNull { row ->
+            val key = row.fileKey()
+            val candidates = listedByKey[key].orEmpty()
+            val ambiguous = candidates.size > 1 || candidates.size == 1 && hiddenCountByKey.getValue(key) > 1
+            if (ambiguous) row.trackId to candidates.map(RecordTrackIdentity::trackId) else null
+        }
+        .toMap()
+}
+
+private fun RecordTrackIdentity.fileKey(): List<Any?> = if (sourceId == LibrarySourceId.DEVICE) {
+    listOf(sourceId, mediaStoreVolumeName(contentUri), folderName, fileName, sizeBytes)
+} else {
+    listOf(sourceId, fileName, sizeBytes, modifiedSeconds)
 }
 
 internal data class SourceScanSession(

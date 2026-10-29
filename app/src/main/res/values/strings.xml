@@ -954,4 +954,26 @@
     <string name="premium_activation_revoked">This activation code was revoked. If you bought it on the Vesqen website, email vesqen@sumirenokai.com for a new one.</string>
     <string name="premium_open">View Pro features</string>
     <string name="player_trial_ended_body">%1$s\n\nStrict USB output doesn’t switch to system output on its own. You can unlock Pro features with a one-time purchase, or switch to System output and play again.</string>
+    <plurals name="unmatched_records_prompt">
+        <item quantity="one">The favorites and play history of %1$d song could not be matched</item>
+        <item quantity="other">The favorites and play history of %1$d songs could not be matched</item>
+    </plurals>
+    <string name="unmatched_records_review">Review</string>
+    <string name="unmatched_records_later">Later</string>
+    <string name="unmatched_records_title">Unmatched records</string>
+    <string name="unmatched_records_body">Each record below matches more than one song with the same file name and size, so Vesqen cannot tell which song it belongs to. Choose the song for each record, or discard the record. Your music files are not changed.</string>
+    <string name="unmatched_record_favorite">Favorite</string>
+    <plurals name="unmatched_record_play_count">
+        <item quantity="one">Played %1$d time</item>
+        <item quantity="other">Played %1$d times</item>
+    </plurals>
+    <plurals name="unmatched_record_playlist_count">
+        <item quantity="one">In %1$d playlist</item>
+        <item quantity="other">In %1$d playlists</item>
+    </plurals>
+    <string name="unmatched_record_choose">Belongs to</string>
+    <string name="unmatched_record_assign">Choose this song</string>
+    <string name="unmatched_record_discard">Discard record</string>
+    <string name="unmatched_record_discard_confirm_title">Discard the record of “%1$s”?</string>
+    <string name="unmatched_record_discard_confirm_body">Its favorite, play count and places in playlists will be deleted and cannot be restored. Your music files are not affected.</string>
 </resources>

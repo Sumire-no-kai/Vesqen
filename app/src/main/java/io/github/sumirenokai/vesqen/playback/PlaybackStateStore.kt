@@ -169,6 +169,36 @@ internal class PlaybackStateStore(context: Context) {
         }
     }
 
+    /**
+     * Puts [toTrackId] wherever the saved queue and cursor hold [fromTrackId]: the Library merged the
+     * two rows, which now name one file (#139). A progress file that applies to the queue's file
+     * follows it, so the saved position is kept.
+     */
+    fun replaceTrackId(fromTrackId: Long, toTrackId: Long) {
+        val queue = preferences.getString(KEY_QUEUE_IDS, null)?.toTrackIds() ?: return
+        if (fromTrackId !in queue) return
+        fun List<Long>.replaced() = joinToString(",") { if (it == fromTrackId) toTrackId.toString() else it.toString() }
+        val progressApplies = currentCursorPreferences() === progressPreferences
+        preferences.edit {
+            putString(KEY_QUEUE_IDS, queue.replaced())
+            preferences.getString(KEY_HELD_BACK_TRACK_IDS, null)?.let { putString(KEY_HELD_BACK_TRACK_IDS, it.toTrackIds().replaced()) }
+            replaceCursorTrackId(preferences, fromTrackId, toTrackId)
+        }
+        savedQueueSignature = queueFileSignature()
+        if (progressApplies) {
+            progressPreferences.edit {
+                replaceCursorTrackId(progressPreferences, fromTrackId, toTrackId)
+                putInt(KEY_QUEUE_FILE_SIGNATURE, queueFileSignature())
+            }
+        }
+    }
+
+    private fun SharedPreferences.Editor.replaceCursorTrackId(cursor: SharedPreferences, fromTrackId: Long, toTrackId: Long) {
+        for (key in listOf(KEY_CURRENT_TRACK_ID, KEY_COUNTED_TRACK_ID)) {
+            if (cursor.getLong(key, NO_TRACK_ID) == fromTrackId) putLong(key, toTrackId)
+        }
+    }
+
     /** [durable]: on disk before this returns, for a queue whose catalog IDs are about to name other songs (#165). */
     fun clear(durable: Boolean = false) {
         savedQueueSignature = null
