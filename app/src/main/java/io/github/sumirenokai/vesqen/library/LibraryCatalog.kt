@@ -261,7 +261,8 @@ internal class AndroidLibraryCatalog(
                 store.upsertMediaStoreTrack(scan, metadataReader.enrich(candidate))
             }
         }
-        if (iteration.completed) {
+        // After a rebuild the scan's rows belong to the old catalog; finishIteration ends it (#165 U5).
+        if (iteration.completed && !scanGate.catalogRebuilt()) {
             val finalScope = mediaStore.currentScanScope()
             if (!mediaStoreScanCanCommit(iteration, scanScope, finalScope)) {
                 store.markSourceInterrupted(source.id)
