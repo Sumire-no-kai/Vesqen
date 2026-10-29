@@ -193,7 +193,7 @@ Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hai
 - Inner curves share a centre with the capsule ends, 32 dp in from each end: the 44 dp cover is round (the one place a cover is not a 4 dp square), the open-Now press state is a pill inset 4 dp, and the next button sits on the right-hand centre. Previous, play/pause and next draw 40 dp circles inside 48 dp targets. Owner decision, 2026-10-17.
 - At most 560 dp wide; on wider windows it stays centred instead of stretching edge to edge.
 - Above 150 % text only the title shows; the artist is still read out by TalkBack.
-- A title that does not fit scrolls slowly, as the title in Now does (#143 Q13). Owner decision, 2026-10-29.
+- The title is one line and a title that does not fit ends in an ellipsis; it does not scroll. The full title is in Now, as in common Android players (Huawei Music, NetEase Cloud Music). Owner decision, 2026-10-29 (#143 Q13).
 - On a capsule narrower than 340 dp at 150 % text or more, Previous is left out so the title keeps room; Previous stays in Now. Owner decision, 2026-10-22 (#35).
 
 ### Now
@@ -244,7 +244,7 @@ Header, mark, one plain sentence about the app, a facts card (version, developer
 - Opening Now: 240 ms shared-axis rise from the mini-player; closing: 180 ms inverse, with the shell revealed in the last 108 ms.
 - Secondary pages (Chain from Settings, About): 240 ms horizontal path; Back reverses it.
 - State changes 180 ms, playback-order mode 160 ms, presses 120 ms. Album tint transitions 800 ms.
-- Reduced motion replaces all movement with an 80 ms crossfade and drops the play/pause cover scale. Long titles in Now and the mini-player stay still and end in an ellipsis.
+- Reduced motion replaces all movement with an 80 ms crossfade and drops the play/pause cover scale. A long title in Now stays still and ends in an ellipsis.
 
 ## Copy
 

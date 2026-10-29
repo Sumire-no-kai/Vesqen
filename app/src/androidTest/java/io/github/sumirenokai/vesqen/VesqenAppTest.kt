@@ -4124,33 +4124,39 @@ class VesqenAppTest {
         assertEquals(2 to 1, cleared to undone)
     }
 
-    // A long title scrolls slowly in the mini player as in Now (#143 Q13). Marquee ignores the system
-    // animation scale, so with animations off both titles stay still and end in an ellipsis (#165).
-    // Marquee does not advance under this rule's test clock, so these check that each title has it.
+    // Now's long title scrolls. Marquee ignores the system animation scale, so with animations off the
+    // title stays still and ends in an ellipsis (#165). The mini player keeps one truncated line either
+    // way; the full title is in Now (owner decision, 2026-10-29, #143 Q13). Marquee does not advance
+    // under this rule's test clock, so these check which titles have it.
     @Test
-    fun long_titles_scroll_in_the_mini_player_and_now() {
+    fun a_long_now_title_scrolls_with_animations_on() {
         render(state = longTitleState(), containerWidth = 320.dp, fontScale = 2f, motionPolicy = VesqenMotionPolicy(reduceMotion = false))
 
-        assertTitleScrolls("vesqen.mini-player.title", scrolls = true)
+        assertTitleScrolls(miniPlayerTitle(), "mini player", scrolls = false)
         composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
-        assertTitleScrolls("vesqen.now.title", scrolls = true)
+        assertTitleScrolls(composeRule.onNodeWithTag("vesqen.now.title", useUnmergedTree = true), "Now", scrolls = true)
     }
 
     @Test
-    fun long_titles_stay_still_with_animations_off() {
+    fun a_long_now_title_stays_still_with_animations_off() {
         render(state = longTitleState(), containerWidth = 320.dp, fontScale = 2f, motionPolicy = VesqenMotionPolicy(reduceMotion = true))
 
-        assertTitleScrolls("vesqen.mini-player.title", scrolls = false)
+        assertTitleScrolls(miniPlayerTitle(), "mini player", scrolls = false)
         composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
-        assertTitleScrolls("vesqen.now.title", scrolls = false)
+        assertTitleScrolls(composeRule.onNodeWithTag("vesqen.now.title", useUnmergedTree = true), "Now", scrolls = false)
     }
+
+    private fun miniPlayerTitle() = composeRule.onNode(
+        hasText(LongTitle) and hasAnyAncestor(hasTestTag("vesqen.mini-player")),
+        useUnmergedTree = true,
+    )
 
     private fun longTitleState() = grantedState(
         tracks = sampleTracks,
         playback = PlaybackSnapshot(
             isControllerReady = true,
             trackId = 1,
-            title = "A deliberately long local track title",
+            title = LongTitle,
             artist = "Mori",
             durationMs = 245_000,
             hasNext = true,
@@ -4158,17 +4164,15 @@ class VesqenAppTest {
     )
 
     /** A title that does not fit either scrolls (a marquee, cut without an ellipsis) or ends in an ellipsis. */
-    private fun assertTitleScrolls(tag: String, scrolls: Boolean) {
-        val node = composeRule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
-        val marquee = node.layoutInfo.getModifierInfo().any { "Marquee" in it.modifier::class.java.simpleName }
-        assertEquals("$tag has a marquee", scrolls, marquee)
-        assertEquals("$tag ends in an ellipsis", !scrolls, titleLayout(tag).isLineEllipsized(0))
+    private fun assertTitleScrolls(title: SemanticsNodeInteraction, name: String, scrolls: Boolean) {
+        val marquee = title.fetchSemanticsNode().layoutInfo.getModifierInfo().any { "Marquee" in it.modifier::class.java.simpleName }
+        assertEquals("$name title has a marquee", scrolls, marquee)
+        assertEquals("$name title ends in an ellipsis", !scrolls, titleLayout(title).isLineEllipsized(0))
     }
 
-    private fun titleLayout(tag: String): TextLayoutResult {
+    private fun titleLayout(title: SemanticsNodeInteraction): TextLayoutResult {
         val layouts = mutableListOf<TextLayoutResult>()
-        composeRule.onNodeWithTag(tag, useUnmergedTree = true)
-            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        title.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         return layouts.single()
     }
 
@@ -4827,6 +4831,7 @@ class VesqenAppTest {
     }
 
     private companion object {
+        const val LongTitle = "A deliberately long local track title"
         val sampleTracks = listOf(
             AudioTrack(
                 id = 1,

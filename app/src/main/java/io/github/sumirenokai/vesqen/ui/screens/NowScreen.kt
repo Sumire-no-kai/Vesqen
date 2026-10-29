@@ -21,6 +21,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -139,7 +140,6 @@ import io.github.sumirenokai.vesqen.ui.components.BluetoothCodecPermissionButton
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.components.PlaybackControls
 import io.github.sumirenokai.vesqen.ui.components.QueueSheet
-import io.github.sumirenokai.vesqen.ui.components.ScrollingTitle
 import io.github.sumirenokai.vesqen.ui.components.TrackDetailsSheet
 import io.github.sumirenokai.vesqen.ui.components.outputDeclarationLabel
 import io.github.sumirenokai.vesqen.ui.components.rememberAlbumBackground
@@ -777,13 +777,18 @@ private fun NowTrackIdentity(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xxs),
         ) {
-            ScrollingTitle(
+            Text(
                 text = identity.title.ifBlank { stringResource(R.string.unknown_title) },
                 style = if (compact) MaterialTheme.typography.headlineSmall.serif() else MaterialTheme.typography.displayLarge,
-                motionPolicy = motionPolicy,
+                maxLines = 1,
+                softWrap = false,
+                // Marquee ignores the system animation scale, so with animations off the title stays
+                // still and ends in an ellipsis (#165).
+                overflow = if (motionPolicy.reduceMotion) TextOverflow.Ellipsis else TextOverflow.Clip,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .then(if (motionPolicy.reduceMotion) Modifier else Modifier.basicMarquee())
                     .testTag("vesqen.now.title"),
             )
             val byline = listOf(identity.artist.ifBlank { stringResource(R.string.unknown_artist) }, identity.album)

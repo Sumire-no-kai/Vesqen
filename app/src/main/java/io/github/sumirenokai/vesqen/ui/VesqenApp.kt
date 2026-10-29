@@ -1512,7 +1512,6 @@ private fun VesqenDestinationFrame(
                     onPrevious = onPrevious,
                     onPlayPause = onPlayPause,
                     onNext = onNext,
-                    motionPolicy = motionPolicy,
                 )
             }
         }
