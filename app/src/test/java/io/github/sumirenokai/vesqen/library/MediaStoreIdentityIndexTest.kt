@@ -76,8 +76,8 @@ class MediaStoreIdentityIndexTest {
     }
 
     @Test
-    fun `a rename together with a tag edit keeps the row`() {
-        val index = MediaStoreIdentityIndex(listOf(row(1, mediaId = 1, songA)))
+    fun `a rename together with a tag edit keeps the row while MediaStore keeps its database`() {
+        val index = MediaStoreIdentityIndex(listOf(row(1, mediaId = 1, songA)), volumesWithStableIds = PRIMARY)
 
         assertEquals(
             MediaStoreTrackPlan(targetTrackId = 1),
@@ -182,13 +182,62 @@ class MediaStoreIdentityIndexTest {
 
         assertEquals(
             MediaStoreTrackPlan(targetTrackId = 1),
-            MediaStoreIdentityIndex(listOf(row(1, mediaId = 1, songA)))
+            MediaStoreIdentityIndex(listOf(row(1, mediaId = 1, songA)), volumesWithStableIds = PRIMARY)
                 .plan(candidate(mediaId = 1, renamedAndEdited.copy(durationMs = songA.durationMs + 999))),
         )
         assertEquals(
             MediaStoreTrackPlan(targetTrackId = null, displacedTrackId = 1),
-            MediaStoreIdentityIndex(listOf(row(1, mediaId = 1, songA)))
+            MediaStoreIdentityIndex(listOf(row(1, mediaId = 1, songA)), volumesWithStableIds = PRIMARY)
                 .plan(candidate(mediaId = 1, renamedAndEdited.copy(durationMs = songA.durationMs - 1_000))),
+        )
+    }
+
+    @Test
+    fun `where _IDs may be renumbered the same _ID needs the path or two of path, size and duration`() {
+        fun plan(file: TestFile, folderName: String = "Music/Album") =
+            MediaStoreIdentityIndex(listOf(row(1, mediaId = 1, songA)))
+                .plan(candidate(mediaId = 1, file, folderName = folderName))
+
+        assertEquals(MediaStoreTrackPlan(targetTrackId = 1), plan(songA.copy(sizeBytes = 12_345, durationMs = 260_000)))
+        assertEquals(MediaStoreTrackPlan(targetTrackId = 1), plan(songA.copy(fileName = "renamed.flac")))
+        assertEquals(MediaStoreTrackPlan(targetTrackId = 1), plan(songA, folderName = "Music/Moved"))
+        // Only the duration is left after a rename together with a tag edit, as with another song.
+        assertEquals(
+            MediaStoreTrackPlan(targetTrackId = null, displacedTrackId = 1),
+            plan(songA.copy(fileName = "renamed.flac", sizeBytes = 12_345, durationMs = 200_400)),
+        )
+    }
+
+    @Test
+    fun `an _ID is trusted only on a volume whose database is unchanged`() {
+        val x = TestFile(fileName = "x.flac", sizeBytes = 10_000, durationMs = 200_000)
+        val y = TestFile(fileName = "y.flac", sizeBytes = 20_000, durationMs = 200_400)
+        val index = MediaStoreIdentityIndex(
+            rows = listOf(row(1, mediaId = 1, x), row(2, mediaId = 1, x, volumeName = "1234-5678")),
+            volumesWithStableIds = PRIMARY,
+        )
+
+        assertEquals(MediaStoreTrackPlan(targetTrackId = 1), index.plan(candidate(mediaId = 1, y)))
+        assertEquals(
+            MediaStoreTrackPlan(targetTrackId = null, displacedTrackId = 2),
+            index.plan(candidate(mediaId = 1, y, volumeName = "1234-5678")),
+        )
+    }
+
+    @Test
+    fun `an _ID listed at the end keeps an unseen row only for its own file where _IDs may be renumbered`() {
+        // A rebuilding MediaStore lists new files during the scan; b's old _ID now names one of them.
+        val rows = listOf(row(1, mediaId = 1, songA), row(2, mediaId = 2, songB))
+        val atEnd = listOf(listed(mediaId = 1, songA), listed(mediaId = 2, songC))
+
+        assertEquals(
+            setOf(mediaStoreRemoteId("external_primary", 1)),
+            MediaStoreIdentityIndex(rows).idsStillNamingTheirRows(atEnd),
+        )
+        // In the same database an _ID names one entry, whose file may have been edited.
+        assertEquals(
+            atEnd.mapTo(HashSet(), ListedMediaStoreFile::remoteId),
+            MediaStoreIdentityIndex(rows, volumesWithStableIds = PRIMARY).idsStillNamingTheirRows(atEnd),
         )
     }
 
@@ -235,6 +284,27 @@ class MediaStoreIdentityIndexTest {
             MediaStoreTrackPlan(targetTrackId = 1),
             index.plan(candidate(mediaId = 3, x)),
         )
+    }
+
+    @Test
+    fun `after a rebuild a new song does not take a row whose file is not listed yet`() {
+        // MediaStore lists only part of the files so far. A new song got x's old _ID; x itself is
+        // listed later in the scan, or by the next one (#159).
+        val x = TestFile(fileName = "x.flac", sizeBytes = 10_000, durationMs = 200_000)
+        val nearDuration = TestFile(fileName = "y.flac", sizeBytes = 20_000, durationMs = 200_400)
+        val sameSize = TestFile(fileName = "y.flac", sizeBytes = 10_000, durationMs = 300_000)
+        for (y in listOf(nearDuration, sameSize)) {
+            val index = MediaStoreIdentityIndex(
+                rows = listOf(row(1, mediaId = 1, x)),
+                listedFiles = listOf(listed(mediaId = 1, y, folderName = "Music/New")),
+            )
+
+            assertEquals(
+                MediaStoreTrackPlan(targetTrackId = null, displacedTrackId = 1),
+                index.plan(candidate(mediaId = 1, y, folderName = "Music/New")),
+            )
+            assertEquals(MediaStoreTrackPlan(targetTrackId = 1), index.plan(candidate(mediaId = 7, x)))
+        }
     }
 
     @Test
@@ -337,6 +407,10 @@ class MediaStoreIdentityIndexTest {
                 candidate(mediaId = 1, firstOfA.copy(sizeBytes = 12_345), folderName = "CD1", volumeName = "external"),
             ),
         )
+    }
+
+    private companion object {
+        val PRIMARY = setOf("external_primary")
     }
 
     private data class TestFile(

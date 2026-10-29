@@ -140,6 +140,38 @@ class MediaStoreAudioRepositoryTest {
     }
 
     @Test
+    fun `_IDs stay stable only on volumes whose database the last completed scan read`() {
+        val primary = MediaStoreVolumeVersion("external_primary", "primary-v1", 100)
+        val sdCard = MediaStoreVolumeVersion("1234-5678", "card-v1", 42)
+        val completed = libraryScanGeneration(listOf(primary, sdCard))
+        fun scope(vararg volumes: MediaStoreVolumeVersion) = MediaStoreScanScope(
+            volumeNames = volumes.map(MediaStoreVolumeVersion::volumeName),
+            generation = libraryScanGeneration(volumes.toList()),
+            databaseVersions = volumes.associate { it.volumeName to it.databaseVersion },
+        )
+
+        // New files move only the generation.
+        assertEquals(
+            setOf("external_primary", "1234-5678"),
+            mediaStoreVolumesWithStableIds(completed, scope(primary.copy(generation = 101), sdCard)),
+        )
+        // The card's MediaStore was rebuilt, and another card was not part of the last scan.
+        assertEquals(
+            setOf("external_primary"),
+            mediaStoreVolumesWithStableIds(
+                completed,
+                scope(primary, sdCard.copy(databaseVersion = "card-v2"), MediaStoreVolumeVersion("9999-0000", "other-v1", 1)),
+            ),
+        )
+        // No scan has completed, or the device reports no versions (before Android 11).
+        assertEquals(emptySet<String>(), mediaStoreVolumesWithStableIds(null, scope(primary)))
+        assertEquals(
+            emptySet<String>(),
+            mediaStoreVolumesWithStableIds(null, MediaStoreScanScope(volumeNames = listOf("external"), generation = null)),
+        )
+    }
+
+    @Test
     fun `legacy folder fallback keeps only the immediate parent label`() {
         assertEquals(
             "Album",

@@ -245,7 +245,11 @@ internal class AndroidLibraryCatalog(
         ) {
             store.migrateLegacyMediaStoreIdentities(mediaStore.legacyIdentityMappings(scanScope))
         }
-        val scan = store.beginMediaStoreScan(mediaStore.listFiles(scanScope), mediaStore.pathIdentifiesFile)
+        val scan = store.beginMediaStoreScan(
+            listedFiles = mediaStore.listFiles(scanScope),
+            pathIdentifiesFile = mediaStore.pathIdentifiesFile,
+            volumesWithStableIds = mediaStoreVolumesWithStableIds(source.generation, scanScope),
+        )
         onProgress(
             LibraryScanProgress(
                 sourceId = source.id,
@@ -270,7 +274,7 @@ internal class AndroidLibraryCatalog(
             }
             // Before Android 11 there is no generation to show that nothing changed.
             if (finalScope.generation == null || finalScope.generation != scanScope.generation) {
-                store.keepTracksStillListed(scan, mediaStore.listFiles(scanScope).mapTo(HashSet()) { it.remoteId })
+                store.keepTracksStillListed(scan, mediaStore.listFiles(scanScope))
             }
         }
         finishIteration(

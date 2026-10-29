@@ -126,6 +126,18 @@ internal fun libraryScanGeneration(volumes: List<MediaStoreVolumeVersion>): Stri
     }.toTypedArray(),
 )
 
+/** Each volume's database version in a [libraryScanGeneration], or null when [generation] is not one. */
+internal fun libraryScanDatabaseVersions(generation: String): Map<String, String>? {
+    val fields = libraryFingerprintFields(generation) ?: return null
+    // The first field is the metadata revision, which does not change MediaStore's `_ID`s.
+    return fields.drop(1).associate { volume ->
+        val (volumeName, databaseVersion) = libraryFingerprintFields(volume)
+            ?.takeIf { it.size == 3 }
+            ?: return null
+        volumeName to databaseVersion
+    }
+}
+
 /** Kept explicit rather than hashed: a collision must never make two audio documents one track. */
 internal fun libraryFingerprint(vararg fields: Any?): String = buildString {
     fields.forEach { field ->
@@ -134,4 +146,19 @@ internal fun libraryFingerprint(vararg fields: Any?): String = buildString {
         append(':')
         append(value)
     }
+}
+
+/** Splits a [libraryFingerprint] into its fields, or returns null when [encoded] is not one. */
+private fun libraryFingerprintFields(encoded: String): List<String>? {
+    val fields = mutableListOf<String>()
+    var start = 0
+    while (start < encoded.length) {
+        val colon = encoded.indexOf(':', start)
+        if (colon < 0) return null
+        val length = encoded.substring(start, colon).toIntOrNull() ?: return null
+        if (length < 0 || length > encoded.length - colon - 1) return null
+        fields += encoded.substring(colon + 1, colon + 1 + length)
+        start = colon + 1 + length
+    }
+    return fields
 }

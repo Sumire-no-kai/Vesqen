@@ -3,6 +3,7 @@ package io.github.sumirenokai.vesqen.library
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -60,5 +61,21 @@ class LibraryCatalogModelsTest {
         assertNotEquals(baseline, libraryScanGeneration(listOf(primary, sdCard.copy(generation = 43))))
         assertNotEquals(baseline, libraryScanGeneration(listOf(primary, sdCard.copy(volumeName = "other-card"))))
         assertEquals(baseline, libraryScanGeneration(listOf(sdCard, primary)))
+    }
+
+    @Test
+    fun `a generation gives back each volume's database version`() {
+        // MediaStore's versions look like "1234:uuid"; the colon must not split them.
+        val primary = MediaStoreVolumeVersion("external_primary", "1301:2f9c-41aa", 100)
+        val sdCard = MediaStoreVolumeVersion("1234-5678", "1301:77b0-0c12", 42)
+
+        assertEquals(
+            mapOf("external_primary" to "1301:2f9c-41aa", "1234-5678" to "1301:77b0-0c12"),
+            libraryScanDatabaseVersions(libraryScanGeneration(listOf(primary, sdCard))),
+        )
+        assertEquals(emptyMap<String, String>(), libraryScanDatabaseVersions(libraryScanGeneration(emptyList())))
+        assertNull(libraryScanDatabaseVersions("legacy-generation"))
+        assertNull(libraryScanDatabaseVersions("1:69:x"))
+        assertNull(libraryScanDatabaseVersions(libraryFingerprint(LIBRARY_METADATA_REVISION, "volume")))
     }
 }
