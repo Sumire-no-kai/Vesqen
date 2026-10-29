@@ -207,11 +207,12 @@ class PlaybackController(
         playWhenReady: Boolean = true,
         shuffleEnabled: Boolean = false,
         repeatMode: PlaybackRepeatMode = PlaybackRepeatMode.OFF,
+        startOccurrenceId: String? = null,
     ) {
         tracksById.clear()
         tracks.forEach { track -> tracksById[track.id.toString()] = track }
         activeController.setMediaItems(
-            tracks.map { it.toPlaybackMediaItem() },
+            playbackMediaItems(tracks, startIndex, startOccurrenceId),
             startIndex,
             positionMs,
         )
@@ -633,6 +634,7 @@ class PlaybackController(
             publish(player)
             return
         }
+        stateStore.holdBack(restored.heldBackTrackIds)
         startQueue(
             activeController = player,
             tracks = restored.tracks,
@@ -641,6 +643,7 @@ class PlaybackController(
             playWhenReady = false,
             shuffleEnabled = restored.shuffleEnabled,
             repeatMode = restored.repeatMode,
+            startOccurrenceId = restored.startOccurrenceId,
         )
     }
 }
@@ -721,6 +724,22 @@ internal fun AudioTrack.toPlaybackMediaItem(
         .setUri(contentUri)
         .setMediaMetadata(metadata.build())
         .build()
+}
+
+/**
+ * The media items of a queue. The start entry keeps [startOccurrenceId] when a restore resumes a
+ * listen already counted (#165); every other entry is a new occurrence.
+ */
+internal fun playbackMediaItems(
+    tracks: List<AudioTrack>,
+    startIndex: Int,
+    startOccurrenceId: String? = null,
+): List<MediaItem> = tracks.mapIndexed { index, track ->
+    if (index == startIndex && startOccurrenceId != null) {
+        track.toPlaybackMediaItem(occurrenceId = startOccurrenceId)
+    } else {
+        track.toPlaybackMediaItem()
+    }
 }
 
 internal fun PlaybackRepeatMode.toMedia3RepeatMode(): Int = when (this) {

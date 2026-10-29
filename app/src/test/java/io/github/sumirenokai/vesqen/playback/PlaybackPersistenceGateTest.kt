@@ -39,6 +39,20 @@ class PlaybackPersistenceGateTest {
     }
 
     @Test
+    fun `counting a listen is saved within the same position bucket`() {
+        // Playback starts in the bucket of the queue save; a restore must know the listen counted (#165).
+        gate.decide(observation(positionMs = 100))
+        assertEquals(
+            PlaybackPersistenceDecision.SAVE_PROGRESS,
+            gate.decide(observation(positionMs = 200).copy(countedOccurrenceId = "a")),
+        )
+        assertEquals(
+            PlaybackPersistenceDecision.SKIP,
+            gate.decide(observation(positionMs = 300).copy(countedOccurrenceId = "a")),
+        )
+    }
+
+    @Test
     fun `an initially empty player does not erase a restorable queue`() {
         assertEquals(
             PlaybackPersistenceDecision.SKIP,

@@ -37,6 +37,9 @@ internal class PlaybackStateKeeper(
     fun start() {
         if (started) return
         started = true
+        // A listen counted before the service or the process ended is resumed, not counted again,
+        // when the restored queue starts at that entry (#165).
+        stateStore.loadCountedPlayback()?.let(playbackStartGate::resumeCounted)
         player.addListener(this)
         refreshQueueProjection()
         persist(force = false)
@@ -113,6 +116,7 @@ internal class PlaybackStateKeeper(
 
     private fun persist(force: Boolean) {
         val positionMs = player.currentPosition.coerceAtLeast(0)
+        val countedOccurrenceId = playbackStartGate.countedOccurrence(player.currentMediaItem?.mediaId?.toLongOrNull())
         queueEnded = queueEndedAfter(queueEnded, player.playbackState, movedAway = false)
         when (
             persistenceGate.decide(
@@ -125,6 +129,7 @@ internal class PlaybackStateKeeper(
                     shuffleEnabled = player.shuffleModeEnabled,
                     repeatMode = player.repeatMode.toPlaybackRepeatMode(),
                     queueEnded = queueEnded,
+                    countedOccurrenceId = countedOccurrenceId,
                 ),
                 force = force,
             )
@@ -140,6 +145,7 @@ internal class PlaybackStateKeeper(
                     shuffleEnabled = player.shuffleModeEnabled,
                     repeatMode = player.repeatMode.toPlaybackRepeatMode(),
                     queueEnded = queueEnded,
+                    countedOccurrenceId = countedOccurrenceId,
                 ),
             )
             PlaybackPersistenceDecision.SAVE_PROGRESS -> stateStore.saveProgress(
@@ -149,6 +155,7 @@ internal class PlaybackStateKeeper(
                 shuffleEnabled = player.shuffleModeEnabled,
                 repeatMode = player.repeatMode.toPlaybackRepeatMode(),
                 queueEnded = queueEnded,
+                countedOccurrenceId = countedOccurrenceId,
             )
         }
     }
@@ -211,6 +218,19 @@ internal class PlaybackStartGate {
         return trackId
     }
 
+    /** The occurrence whose listen was counted, while [currentTrackId] is still that listen's track. */
+    fun countedOccurrence(currentTrackId: Long?): String? =
+        currentOccurrenceId?.takeIf { lastCountedTrackId != null && lastCountedTrackId == currentTrackId }
+
+    /**
+     * Starts from a listen counted by an earlier gate. The restore that sets this occurrence again
+     * is then a metadata-only transition, as after a catalog refresh; any other item resets the gate.
+     */
+    fun resumeCounted(counted: CountedPlayback) {
+        lastCountedTrackId = counted.trackId
+        currentOccurrenceId = counted.occurrenceId
+    }
+
     fun reset() {
         lastCountedTrackId = null
         currentOccurrenceId = null
@@ -226,6 +246,7 @@ internal data class PlaybackPersistenceObservation(
     val repeatMode: PlaybackRepeatMode,
     val currentQueueIndex: Int = 0,
     val queueEnded: Boolean = false,
+    val countedOccurrenceId: String? = null,
 )
 
 internal enum class PlaybackPersistenceDecision {
@@ -267,6 +288,7 @@ internal class PlaybackPersistenceGate(
             shuffleEnabled = observation.shuffleEnabled,
             repeatMode = observation.repeatMode,
             queueEnded = observation.queueEnded,
+            countedOccurrenceId = observation.countedOccurrenceId,
         )
         if (!force && hasPersistedQueue && signature == lastSignature) {
             return PlaybackPersistenceDecision.SKIP
@@ -292,4 +314,5 @@ private data class PlaybackPersistenceSignature(
     val shuffleEnabled: Boolean,
     val repeatMode: PlaybackRepeatMode,
     val queueEnded: Boolean,
+    val countedOccurrenceId: String?,
 )
