@@ -211,7 +211,9 @@ class PlaybackService : MediaSessionService() {
                     playbackStateStore.holdBack(restored.heldBackTrackIds)
                     result.set(
                         MediaSession.MediaItemsWithStartPosition(
-                            playbackMediaItems(restored.tracks, restored.startIndex, restored.startOccurrenceId),
+                            // A shuffled queue plays in its saved order (PlayOrderSessionPlayer).
+                            playbackMediaItems(restored.tracks, restored.startIndex, restored.startOccurrenceId)
+                                .withPlayOrder(restored.playOrder),
                             restored.startIndex,
                             restored.positionMs,
                         ),
@@ -219,7 +221,7 @@ class PlaybackService : MediaSessionService() {
                 }
             }
             // Runs after Media3 applied the result and the Play request to the player. A shuffled
-            // queue already plays its start track first (PlayOrder.cloneAndSet).
+            // queue without a saved order plays its start track first (PlayOrder.cloneAndSet).
             if (isForPlayback) {
                 mainHandler.post {
                     if (player.currentMediaItem == null) endMediaButtonStartWithoutPlayback()

@@ -9,8 +9,10 @@ internal const val PLAYBACK_OCCURRENCE_EXTRA = "io.github.sumirenokai.vesqen.pla
 /**
  * Service-owned playback recovery state.
  *
- * Queue projection is rebuilt only for timeline changes. Position checkpoints reuse that immutable
- * projection, so a large queue does not turn the five-second recovery tick into an O(N) walk.
+ * Queue projection is rebuilt only for timeline and shuffle mode changes. Position checkpoints reuse
+ * that immutable projection, so a large queue does not turn the five-second recovery tick into an O(N)
+ * walk. While shuffled, the play order is part of the saved queue (#170): shuffle on or a shuffled
+ * move saves the queue too.
  */
 internal class PlaybackStateKeeper(
     private val player: Player,
@@ -22,6 +24,7 @@ internal class PlaybackStateKeeper(
     private val persistenceGate = PlaybackPersistenceGate(checkpointIntervalMs)
     private val playbackStartGate = PlaybackStartGate()
     private var queueTrackIds: List<Long> = emptyList()
+    private var queuePlayOrder: List<Int>? = null
     private var queueRevision = 0L
     private var started = false
     private var queueEnded = false
@@ -64,7 +67,7 @@ internal class PlaybackStateKeeper(
 
     override fun onEvents(player: Player, events: Player.Events) {
         val timelineChanged = events.contains(Player.EVENT_TIMELINE_CHANGED)
-        if (timelineChanged) refreshQueueProjection()
+        if (timelineChanged || events.contains(Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED)) refreshQueueProjection()
 
         val playingChanged = events.contains(Player.EVENT_IS_PLAYING_CHANGED)
         val mediaItemTransition = events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)
@@ -108,8 +111,11 @@ internal class PlaybackStateKeeper(
                 player.getMediaItemAt(index).mediaId.toLongOrNull()?.let(::add)
             }
         }
-        if (updated != queueTrackIds) {
+        // Saved indices are list indices only while every item has a track ID, as the app's items do.
+        val playOrder = if (player.shuffleModeEnabled && updated.size == player.mediaItemCount) player.playOrder() else null
+        if (updated != queueTrackIds || playOrder != queuePlayOrder) {
             queueTrackIds = updated
+            queuePlayOrder = playOrder
             queueRevision++
         }
     }
@@ -146,6 +152,7 @@ internal class PlaybackStateKeeper(
                     repeatMode = player.repeatMode.toPlaybackRepeatMode(),
                     queueEnded = queueEnded,
                     countedOccurrenceId = countedOccurrenceId,
+                    playOrder = queuePlayOrder,
                 ),
             )
             PlaybackPersistenceDecision.SAVE_PROGRESS -> stateStore.saveProgress(

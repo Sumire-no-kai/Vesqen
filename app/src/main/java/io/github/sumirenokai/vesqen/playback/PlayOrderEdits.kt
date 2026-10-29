@@ -57,17 +57,43 @@ internal enum class PlayOrderPlacement { NEXT, LAST }
 private const val PLAY_ORDER_PLACEMENT_EXTRA = "io.github.sumirenokai.vesqen.playback.play_order_placement"
 
 /** The item as the app's controller inserts it: its request names its placement. */
-internal fun MediaItem.withPlayOrderPlacement(placement: PlayOrderPlacement): MediaItem = buildUpon()
-    .setRequestMetadata(
-        MediaItem.RequestMetadata.Builder()
-            .setExtras(Bundle().apply { putString(PLAY_ORDER_PLACEMENT_EXTRA, placement.name) })
-            .build(),
-    )
-    .build()
+internal fun MediaItem.withPlayOrderPlacement(placement: PlayOrderPlacement): MediaItem =
+    withRequestExtras(Bundle().apply { putString(PLAY_ORDER_PLACEMENT_EXTRA, placement.name) })
 
 internal fun MediaItem.playOrderPlacement(): PlayOrderPlacement? =
     requestMetadata.extras?.getString(PLAY_ORDER_PLACEMENT_EXTRA)
         ?.let { name -> PlayOrderPlacement.entries.firstOrNull { it.name == name } }
+
+private const val PLAY_ORDER_POSITION_EXTRA = "io.github.sumirenokai.vesqen.playback.play_order_position"
+
+/**
+ * A restored shuffled queue's items (#170): each request names the item's place in [order], the saved
+ * play order (list indices in the order they play). Null leaves the items as they are.
+ */
+internal fun List<MediaItem>.withPlayOrder(order: List<Int>?): List<MediaItem> {
+    if (order == null) return this
+    require(order.size == size)
+    val positions = IntArray(size).also { positions -> order.forEachIndexed { position, index -> positions[index] = position } }
+    return mapIndexed { index, item -> item.withRequestExtras(Bundle().apply { putInt(PLAY_ORDER_POSITION_EXTRA, positions[index]) }) }
+}
+
+/** The play order the items name ([withPlayOrder]), or null unless each of them names a different place. */
+internal fun List<MediaItem>.namedPlayOrder(): IntArray? {
+    if (isEmpty()) return null
+    val order = IntArray(size) { C.INDEX_UNSET }
+    forEachIndexed { index, item ->
+        val position = item.requestMetadata.extras?.getInt(PLAY_ORDER_POSITION_EXTRA, C.INDEX_UNSET) ?: return null
+        if (position !in indices || order[position] != C.INDEX_UNSET) return null
+        order[position] = index
+    }
+    return order
+}
+
+private fun MediaItem.withRequestExtras(extras: Bundle): MediaItem =
+    buildUpon().setRequestMetadata(MediaItem.RequestMetadata.Builder().setExtras(extras).build()).build()
+
+private fun MediaItem.withoutRequestMetadata(): MediaItem =
+    buildUpon().setRequestMetadata(MediaItem.RequestMetadata.EMPTY).build()
 
 /** One queue entry: the same track queued twice has two entries (PLAYBACK_OCCURRENCE_EXTRA). */
 internal fun MediaItem.queueEntryId(): String =
@@ -77,15 +103,32 @@ internal fun MediaItem.queueEntryId(): String =
  * The session's player (#170 F8). Play next and Add to queue arrive as ordinary inserts, which the
  * app's controller shows at once, so a library refresh right after one works on the new queue. The
  * service places the item from its own current item, which may have moved on while the request
- * travelled.
+ * travelled. A restored shuffled queue, from the app's controller or a media button resumption,
+ * arrives with its saved play order in the items ([withPlayOrder]).
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 internal class PlayOrderSessionPlayer(val exoPlayer: ExoPlayer) : ForwardingPlayer(exoPlayer) {
     override fun addMediaItems(index: Int, mediaItems: List<MediaItem>) {
         val item = mediaItems.singleOrNull()
         val placement = item?.playOrderPlacement() ?: return super.addMediaItems(index, mediaItems)
-        exoPlayer.insertInPlayOrder(item.buildUpon().setRequestMetadata(MediaItem.RequestMetadata.EMPTY).build(), placement)
+        exoPlayer.insertInPlayOrder(item.withoutRequestMetadata(), placement)
     }
+
+    override fun setMediaItems(mediaItems: List<MediaItem>, startIndex: Int, startPositionMs: Long) {
+        val order = mediaItems.namedPlayOrder() ?: return super.setMediaItems(mediaItems, startIndex, startPositionMs)
+        exoPlayer.setMediaItemsInPlayOrder(mediaItems.map { it.withoutRequestMetadata() }, order, startIndex, startPositionMs)
+    }
+}
+
+/**
+ * Sets a queue that plays in [order], a restored queue's saved play order (#170). The current order,
+ * with the same traversal so the timeline does not change, hands it to the queue set below, which is
+ * then the only timeline change.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+internal fun ExoPlayer.setMediaItemsInPlayOrder(items: List<MediaItem>, order: IntArray, startIndex: Int, startPositionMs: Long) {
+    setShuffleOrder(PlayOrder(shuffleOrder.playOrder(), nextSetOrder = order))
+    setMediaItems(items, startIndex, startPositionMs)
 }
 
 /**
@@ -141,7 +184,8 @@ internal fun ExoPlayer.playCurrentItemFirst() {
  * The service player's shuffle order (#170 F9). Media3's default order puts every inserted item at a
  * random place, so each insert while shuffled needed a second order to correct it. Here the order is
  * random only where a queue starts, and an edit leaves every other item where it plays:
- * - a new queue plays its start item first, the others in random order;
+ * - a new queue plays its start item first, the others in random order; one set after an order with
+ *   [nextSetOrder] (a restored queue's saved order, #170) plays in that order instead;
  * - inserted items play right after their list predecessor, or first without one. Play next inserts
  *   after the current item, and an item a library refresh re-creates (Media3 inserts it right after
  *   the one it replaces) keeps its place. With [nextInsertPlaysLast], the next insert plays last;
@@ -151,6 +195,7 @@ internal fun ExoPlayer.playCurrentItemFirst() {
 internal class PlayOrder(
     private val order: IntArray,
     private val nextInsertPlaysLast: Boolean = false,
+    private val nextSetOrder: IntArray? = null,
     private val random: Random = Random,
 ) : ShuffleOrder {
     private val positions = IntArray(order.size).also { positions ->
@@ -168,6 +213,7 @@ internal class PlayOrder(
     override fun getFirstIndex(): Int = order.firstOrNull() ?: C.INDEX_UNSET
 
     override fun cloneAndSet(insertionCount: Int, startIndex: Int): ShuffleOrder {
+        nextSetOrder?.takeIf { it.size == insertionCount }?.let { return PlayOrder(it, random = random) }
         val start = listOf(startIndex).filter { it in 0 until insertionCount }
         return PlayOrder((start + (0 until insertionCount).filter { it != startIndex }.shuffled(random)).toIntArray(), random = random)
     }

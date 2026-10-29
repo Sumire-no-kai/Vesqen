@@ -209,16 +209,18 @@ class PlaybackController(
         shuffleEnabled: Boolean = false,
         repeatMode: PlaybackRepeatMode = PlaybackRepeatMode.OFF,
         startOccurrenceId: String? = null,
+        playOrder: List<Int>? = null,
     ) {
         tracksById.clear()
         tracks.forEach { track -> tracksById[track.id.toString()] = track }
-        activeController.setMediaItems(
-            playbackMediaItems(tracks, startIndex, startOccurrenceId),
-            startIndex,
-            positionMs,
-        )
+        // The modes before the queue, as the service's own restore sets them: shuffle turned on after
+        // the queue would put the current item first in a restored queue's saved order (#170).
         activeController.shuffleModeEnabled = shuffleEnabled
         activeController.repeatMode = repeatMode.toMedia3RepeatMode()
+        val items = playbackMediaItems(tracks, startIndex, startOccurrenceId).withPlayOrder(playOrder)
+        activeController.setMediaItems(items, startIndex, positionMs)
+        // Listed in that order until the session's queue arrives (#170 F10).
+        expectPlayOrder(activeController, playOrder?.map { items[it].queueEntryId() })
         // Restoring a paused queue is metadata recovery, not a request to create an audio output.
         if (playWhenReady) {
             activeController.prepare()
@@ -683,6 +685,7 @@ class PlaybackController(
             shuffleEnabled = restored.shuffleEnabled,
             repeatMode = restored.repeatMode,
             startOccurrenceId = restored.startOccurrenceId,
+            playOrder = restored.playOrder,
         )
     }
 }
