@@ -331,7 +331,7 @@ fun NowScreen(
     // The track the remove confirmation was opened for; playback may move on while it is open.
     var removeLyricsTrackId by rememberSaveable { mutableStateOf<Long?>(null) }
     // Read only while the lyrics or the track details show them (owner decision 12).
-    val trackLyrics = rememberTrackLyrics(currentTrack?.takeIf { lyrics.shown || showDetails }, lyrics.imported, loadLyrics)
+    val trackLyrics = rememberTrackLyrics(currentTrack?.takeIf { lyrics.shown || showDetails }, lyrics, loadLyrics)
     val hasImportedLyrics = currentTrack != null && currentTrack.id in lyrics.imported.trackIds
     val trackPresentation = NowTrackPresentation(
         trackId = snapshot.trackId,

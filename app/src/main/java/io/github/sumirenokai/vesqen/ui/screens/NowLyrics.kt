@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -67,6 +68,8 @@ data class NowLyricsState(
     /** Lyrics instead of the cover; kept across tracks and restarts (owner decision 3). */
     val shown: Boolean = false,
     val imported: ImportedLyrics = ImportedLyrics(),
+    /** Grows when same-name files may have changed: the shown lyrics are read again. */
+    val sourcesRevision: Long = 0,
 )
 
 /**
@@ -77,18 +80,19 @@ data class NowLyricsState(
 @Composable
 internal fun rememberTrackLyrics(
     track: AudioTrack?,
-    imported: ImportedLyrics,
+    lyrics: NowLyricsState,
     loadLyrics: suspend (AudioTrack) -> TrackLyrics,
 ): TrackLyrics? {
+    val imported = lyrics.imported
     val key = track?.lyricsKey(imported.revision)
     val latestTrack by rememberUpdatedState(track)
-    val loaded by produceState<Pair<LyricsTrackKey, TrackLyrics>?>(initialValue = null, key) {
+    val loaded by produceState<Pair<LyricsTrackKey, TrackLyrics>?>(initialValue = null, key, lyrics.sourcesRevision) {
         val target = latestTrack ?: return@produceState
         value = target.lyricsKey(imported.revision) to loadLyrics(target)
     }
     // While a new import loads, the same track keeps its previous lyrics instead of going blank.
-    val (loadedKey, lyrics) = loaded ?: return null
-    return lyrics.takeIf { key != null && loadedKey.trackId == key.trackId && loadedKey.contentUri == key.contentUri }
+    val (loadedKey, trackLyrics) = loaded ?: return null
+    return trackLyrics.takeIf { key != null && loadedKey.trackId == key.trackId && loadedKey.contentUri == key.contentUri }
 }
 
 /**
@@ -164,10 +168,13 @@ private fun SyncedLyrics(
             position.takeUnless { following || it == followedPosition }
         }.collect { moved -> if (moved != null) listenerScrolls++ }
     }
+    // A drag held still moves nothing but keeps the scroll for itself; following waits for its end.
+    val listenerScrolling by remember { derivedStateOf { listState.isScrollInProgress && !following } }
     var followPaused by remember { mutableStateOf(false) }
-    LaunchedEffect(listenerScrolls) {
-        if (listenerScrolls == 0) return@LaunchedEffect
+    LaunchedEffect(listenerScrolls, listenerScrolling) {
+        if (listenerScrolls == 0 && !listenerScrolling) return@LaunchedEffect
         followPaused = true
+        if (listenerScrolling) return@LaunchedEffect
         delay(FOLLOW_PAUSE_MILLIS)
         // Following resumes at the current line, not at the next line change.
         followPaused = false

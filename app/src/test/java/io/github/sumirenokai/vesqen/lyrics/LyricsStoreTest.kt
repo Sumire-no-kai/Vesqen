@@ -114,22 +114,24 @@ class LyricsStoreTest {
     }
 
     @Test
-    fun aMergeOnAFullDiskMovesTheFileAfterTheCommitInsteadOfLosingIt() {
+    fun aMergeOnAFullDiskRenamesTheFileInsideTheTransaction() {
         val full = LyricsStore(directory, duplicate = { _, _ -> throw IOException("No space left on device") })
         full.import(10, SAMPLE.byteInput(), 0)
 
         full.prepareMerge(from = 10, into = 20)
-        assertNull(full.read(20))
-        full.mergeCommitted(from = 10, into = 20)
-
+        // Already with the survivor before the commit, so a death or a clean-up after it loses nothing.
         assertNull(full.read(10))
+        assertArrayEquals(SAMPLE.toByteArray(Charsets.UTF_8), full.read(20))
+        full.sweep(CatalogTrackIds(trackIds = setOf(20L), largestAssignedId = 20), full.generation())
+        full.mergeCommitted(from = 10, into = 20)
         assertArrayEquals(SAMPLE.toByteArray(Charsets.UTF_8), full.read(20))
         assertEquals(setOf(20L), full.importedLyrics.value.trackIds)
 
-        // Rolled back, nothing moves: the rows are as they were.
+        // A rollback renames it back.
         full.prepareMerge(from = 20, into = 30)
         full.mergeRolledBack(from = 20, into = 30)
         assertEquals(setOf(20L), full.importedLyrics.value.trackIds)
+        assertArrayEquals(SAMPLE.toByteArray(Charsets.UTF_8), full.read(20))
     }
 
     @Test

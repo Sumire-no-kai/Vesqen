@@ -40,7 +40,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -53,6 +52,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -305,6 +306,15 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    // #169: a .lrc put beside the music while Vesqen was in the background is found on return.
+    DisposableEffect(lifecycleOwner, application) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) application.lyricsResolver.forgetFolderListings()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val lyricsSourcesRevision by application.lyricsResolver.sourcesRevision.collectAsStateWithLifecycle()
 
     val state = viewModel.uiState
 
@@ -407,7 +417,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
         rebuildNotice = application.libraryRebuildNotice,
         artistSplit = artistSplit,
         onArtistSplitChange = artistSplitPreferences::save,
-        lyrics = NowLyricsState(shown = lyricsShown, imported = importedLyrics),
+        lyrics = NowLyricsState(shown = lyricsShown, imported = importedLyrics, sourcesRevision = lyricsSourcesRevision),
         loadLyrics = application.lyricsResolver::load,
         onToggleLyrics = { nowLyricsPreferences.setShown(!lyricsShown) },
         onImportLyrics = { track ->
@@ -509,17 +519,6 @@ fun VesqenAppContent(
     // #169: the import's result, shown like the cleared-queue notice (owner decision 4).
     val lyricsNoticeHostState = remember { SnackbarHostState() }
     val lyricsHooks = LyricsHooks(lyrics, loadLyrics, onToggleLyrics, onImportLyrics, onRemoveLyrics, lyricsNoticeHostState)
-    val lyricsNoticeScope = rememberCoroutineScope()
-    val lyricsNotice = state.lyricsImportNotice
-    val lyricsNoticeMessage = lyricsNotice?.let { stringResource(lyricsImportMessage(it.result)) }
-    LaunchedEffect(lyricsNotice?.id) {
-        if (lyricsNotice == null || lyricsNoticeMessage == null) return@LaunchedEffect
-        lyricsNoticeScope.launch {
-            lyricsNoticeHostState.currentSnackbarData?.dismiss()
-            lyricsNoticeHostState.showSnackbar(lyricsNoticeMessage)
-        }
-        onLyricsImportNoticeShown(lyricsNotice.id)
-    }
     // #165: after Clear queue, a notice offers Undo for a while.
     val queueClearedHostState = remember { SnackbarHostState() }
     val queueClearedScope = rememberCoroutineScope()
@@ -576,6 +575,38 @@ fun VesqenAppContent(
     )
     val navigationState = currentNavigation()
     val destination = navigationState.destination
+    // #169: on Now the transport, the liner notes and, at large text, the top bar fill the edges, so
+    // a notice there would cover a control. A failed import is a dialog instead; a successful one
+    // needs none, since the lyrics or their source show on Now. Elsewhere it is a snackbar.
+    val lyricsNoticeScope = rememberCoroutineScope()
+    val lyricsNotice = state.lyricsImportNotice
+    val lyricsNoticeMessage = lyricsNotice?.let { stringResource(lyricsImportMessage(it.result)) }
+    var lyricsImportFailure by rememberSaveable { mutableStateOf<LyricsImportResult?>(null) }
+    LaunchedEffect(lyricsNotice?.id) {
+        if (lyricsNotice == null || lyricsNoticeMessage == null) return@LaunchedEffect
+        val onNow = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
+        when {
+            onNow && lyricsNotice.result != LyricsImportResult.IMPORTED -> lyricsImportFailure = lyricsNotice.result
+            onNow -> Unit
+            else -> lyricsNoticeScope.launch {
+                lyricsNoticeHostState.currentSnackbarData?.dismiss()
+                lyricsNoticeHostState.showSnackbar(lyricsNoticeMessage)
+            }
+        }
+        onLyricsImportNoticeShown(lyricsNotice.id)
+    }
+    lyricsImportFailure?.let { failure ->
+        AlertDialog(
+            onDismissRequest = { lyricsImportFailure = null },
+            text = { Text(stringResource(lyricsImportMessage(failure))) },
+            confirmButton = {
+                TextButton(onClick = { lyricsImportFailure = null }) {
+                    Text(stringResource(R.string.lyrics_import_result_ok))
+                }
+            },
+            modifier = Modifier.testTag("vesqen.lyrics-import-failure"),
+        )
+    }
     val hasFocusedPlayer = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
     val refreshFocusedPlayerPosition = shouldRefreshPlaybackPosition(destination, state.playback)
     val currentRefreshPlaybackPosition by rememberUpdatedState(onRefreshPlaybackPosition)
@@ -1629,22 +1660,13 @@ private fun VesqenDestinationFrame(
                 .navigationBarsPadding()
                 .padding(start = VesqenSpacing.md, end = VesqenSpacing.md, bottom = miniPlayerBottomPadding),
         ) { data -> QueueClearedSnackbar(data) }
-        // Now fills its bottom edge with the transport and the liner notes, so there the notice sits
-        // under the top bar, where it covers no control; elsewhere it takes the mini-player's place.
-        val lyricsNoticeOnNow = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
+        // Where the mini-player is; Now shows no lyrics snackbar (see VesqenAppContent).
         SnackbarHost(
             hostState = lyricsHooks.noticeHostState,
-            modifier = if (lyricsNoticeOnNow) {
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(start = VesqenSpacing.md, end = VesqenSpacing.md, top = NowTopBarClearance)
-            } else {
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(start = VesqenSpacing.md, end = VesqenSpacing.md, bottom = miniPlayerBottomPadding)
-            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(start = VesqenSpacing.md, end = VesqenSpacing.md, bottom = miniPlayerBottomPadding),
         ) { data ->
             Snackbar(modifier = Modifier.widthIn(max = 420.dp).testTag("vesqen.lyrics-notice")) {
                 Text(data.visuals.message)
@@ -1652,9 +1674,6 @@ private fun VesqenDestinationFrame(
         }
     }
 }
-
-/** Below Now's 48 dp top bar, with a little air (#169 lyrics notice). */
-private val NowTopBarClearance = 56.dp
 
 /** The lyrics state and actions Now and the Library share (#169). */
 private class LyricsHooks(

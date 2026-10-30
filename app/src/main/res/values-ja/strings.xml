@@ -976,6 +976,7 @@
     <string name="lyrics_import_no_lyrics">このファイルには歌詞が含まれていません</string>
     <string name="lyrics_import_too_large">このファイルは大きすぎるため、歌詞としてインポートできません</string>
     <string name="lyrics_import_failed">歌詞をインポートできませんでした。もう一度お試しください。</string>
+    <string name="lyrics_import_result_ok">OK</string>
     <string name="detail_lyrics">歌詞</string>
     <string name="lyrics_source_imported">インポート済み</string>
     <string name="lyrics_source_same_name_file">同名の .lrc ファイル</string>

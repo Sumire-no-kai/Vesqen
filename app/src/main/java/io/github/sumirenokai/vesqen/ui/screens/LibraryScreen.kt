@@ -699,7 +699,7 @@ fun LibraryScreen(
     }
 
     // Read only while the details are open, which names the source (owner decisions 6 and 12).
-    val detailsLyrics = rememberTrackLyrics(detailsTrack, lyrics.imported, loadLyrics)
+    val detailsLyrics = rememberTrackLyrics(detailsTrack, lyrics, loadLyrics)
     detailsTrack?.let { track ->
         val playlistId = selectedCollection?.playlistId
         val playlistTrackIndex = selectedCollection?.tracks?.indexOfFirst { it.id == track.id } ?: -1

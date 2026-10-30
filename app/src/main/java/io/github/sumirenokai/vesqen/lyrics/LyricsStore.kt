@@ -144,33 +144,52 @@ internal class LyricsStore(
                     publish()
                     MergePreparation.DUPLICATED
                 } catch (_: IOException) {
-                    // A full disk: the file is renamed after the commit instead, which needs no space.
-                    MergePreparation.MOVE_AT_COMMIT
+                    moveForMerge(from, into)
                 }
             }
         }
     }
 
+    /**
+     * A full disk: the file is renamed to the survivor now, inside the transaction, since a rename
+     * needs no space. After the commit it is already where it belongs, so neither a process death
+     * before the clean-up nor a clean-up that reads the catalog then can delete it; a rollback
+     * renames it back. Only a crash before the commit leaves it with the survivor early.
+     */
+    private fun moveForMerge(from: Long, into: Long): MergePreparation = try {
+        Files.move(fileFor(from).toPath(), fileFor(into).toPath(), StandardCopyOption.ATOMIC_MOVE)
+        trackIds().remove(from)
+        trackIds().add(into)
+        publish()
+        MergePreparation.MOVED
+    } catch (_: IOException) {
+        // The only copy stays where it is; the commit must not delete it.
+        MergePreparation.KEPT
+    }
+
     override fun mergeCommitted(from: Long, into: Long) {
         synchronized(lock) {
-            if (preparedMerges.remove(from to into) == MergePreparation.MOVE_AT_COMMIT && into !in trackIds()) {
-                try {
-                    Files.move(fileFor(from).toPath(), fileFor(into).toPath(), StandardCopyOption.ATOMIC_MOVE)
-                    trackIds().remove(from)
-                    trackIds().add(into)
-                    publish()
-                } catch (_: IOException) {
-                    // Never delete the only copy; the next clean-up decides.
-                }
-                return
+            when (preparedMerges.remove(from to into)) {
+                MergePreparation.MOVED, MergePreparation.KEPT -> Unit
+                MergePreparation.NOTHING, MergePreparation.DUPLICATED, null -> remove(from)
             }
-            remove(from)
         }
     }
 
     override fun mergeRolledBack(from: Long, into: Long) {
         synchronized(lock) {
-            if (preparedMerges.remove(from to into) == MergePreparation.DUPLICATED) remove(into)
+            when (preparedMerges.remove(from to into)) {
+                MergePreparation.DUPLICATED -> remove(into)
+                MergePreparation.MOVED -> try {
+                    Files.move(fileFor(into).toPath(), fileFor(from).toPath(), StandardCopyOption.ATOMIC_MOVE)
+                    trackIds().remove(into)
+                    trackIds().add(from)
+                    publish()
+                } catch (_: IOException) {
+                    // It stays with the survivor rather than being lost.
+                }
+                MergePreparation.NOTHING, MergePreparation.KEPT, null -> Unit
+            }
         }
     }
 
@@ -218,7 +237,7 @@ internal class LyricsStore(
         }
     }
 
-    private enum class MergePreparation { NOTHING, DUPLICATED, MOVE_AT_COMMIT }
+    private enum class MergePreparation { NOTHING, DUPLICATED, MOVED, KEPT }
 }
 
 private const val LYRICS_SUFFIX = ".lrc"

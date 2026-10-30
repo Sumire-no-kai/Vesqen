@@ -1006,6 +1006,7 @@
     <string name="lyrics_import_no_lyrics">This file contains no lyrics</string>
     <string name="lyrics_import_too_large">This file is too large to be imported as lyrics</string>
     <string name="lyrics_import_failed">The lyrics could not be imported. Try again.</string>
+    <string name="lyrics_import_result_ok">OK</string>
     <string name="detail_lyrics">Lyrics</string>
     <string name="lyrics_source_imported">Imported</string>
     <string name="lyrics_source_same_name_file">Same-name .lrc file</string>

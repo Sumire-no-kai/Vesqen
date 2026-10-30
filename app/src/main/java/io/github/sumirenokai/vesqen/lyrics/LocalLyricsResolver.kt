@@ -12,6 +12,9 @@ import java.io.IOException
 import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 
 /** What Now shows for a track (#169). */
@@ -63,6 +66,10 @@ internal class LocalLyricsResolver(
     private val results = LruCache<LyricsTrackKey, TrackLyrics>(RESULT_CACHE_SIZE)
     private val folderLyricsFiles = LruCache<String, List<LyricsFileCandidate>>(FOLDER_CACHE_SIZE)
     private val dispatcher = Dispatchers.IO.limitedParallelism(1)
+    private val forgottenListings = MutableStateFlow(0L)
+
+    /** Grows when same-name files may have changed, so a shown pane reads its lyrics again. */
+    val sourcesRevision: StateFlow<Long> = forgottenListings.asStateFlow()
 
     suspend fun load(track: AudioTrack): TrackLyrics = withContext(dispatcher) {
         val key = track.lyricsKey(store.importedLyrics.value.revision)
@@ -72,6 +79,17 @@ internal class LocalLyricsResolver(
     fun clearCache() {
         results.evictAll()
         folderLyricsFiles.evictAll()
+    }
+
+    /**
+     * When the app returns to the foreground: a `.lrc` may have been put beside the music meanwhile,
+     * and Android sends no signal for it. Folder listings and "no lyrics" results go; lyrics that
+     * were found stay cached until the next completed refresh.
+     */
+    fun forgetFolderListings() {
+        folderLyricsFiles.evictAll()
+        results.snapshot().forEach { (key, lyrics) -> if (lyrics is TrackLyrics.None) results.remove(key) }
+        forgottenListings.value++
     }
 
     private fun resolve(track: AudioTrack): TrackLyrics {
