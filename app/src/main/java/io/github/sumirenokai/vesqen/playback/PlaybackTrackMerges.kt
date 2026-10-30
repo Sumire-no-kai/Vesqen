@@ -6,6 +6,8 @@ import android.os.Looper
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import io.github.sumirenokai.vesqen.library.TrackMergeFollower
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Carries the catalog's committed merges to playback: the #139 choice, the #164 folder reattachment
@@ -32,6 +34,12 @@ internal class PlaybackTrackMerges(context: Context) : TrackMergeFollower {
     /** Every merge committed in this catalog during this process, on the main thread. */
     private val merged = HashMap<Long, Long>()
 
+    /** Raised by [forgetMerges] on the rebuilding thread itself; a merge of an older catalog is dropped (#191 R3-A1). */
+    private val catalogGeneration = AtomicInteger()
+
+    /** The catalog generation of each merge from [prepareMerge] to its commit or rollback, by the merged row. */
+    private val preparedGenerations = ConcurrentHashMap<Long, Int>()
+
     /** On the main thread, from the service's creation until [detach]. */
     fun attach(applyMerges: (merges: Map<Long, Long>) -> Unit) {
         service = applyMerges
@@ -49,28 +57,41 @@ internal class PlaybackTrackMerges(context: Context) : TrackMergeFollower {
         return current
     }
 
-    /** Before the catalog is rebuilt: its IDs name other songs, or none, afterwards. From any thread. */
+    /**
+     * Before the catalog is rebuilt: its IDs name other songs, or none, afterwards. From any thread.
+     * The generation rises at once, so a merge whose step is posted after this one's is dropped too.
+     */
     fun forgetMerges() {
+        catalogGeneration.incrementAndGet()
         mainHandler.post { merged.clear() }
     }
 
-    override fun prepareMerge(from: Long, into: Long) = Unit
+    override fun prepareMerge(from: Long, into: Long) {
+        // Inside the merging transaction, so before any rebuild of this catalog can start.
+        preparedGenerations[from] = catalogGeneration.get()
+    }
 
     override fun mergeCommitted(from: Long, into: Long) = mergesCommitted(listOf(from to into))
 
     override fun mergesCommitted(merges: List<Pair<Long, Long>>) {
         if (merges.isEmpty()) return
-        val committed = merges.toList()
+        // A merge reported without its preparation belongs to the catalog of now.
+        val committed = merges.map { (from, into) -> Triple(from, into, preparedGenerations.remove(from) ?: catalogGeneration.get()) }
         mainHandler.post {
-            committed.forEach { (from, into) -> merged[from] = into }
+            // A rebuild since the transaction gave these IDs to other songs, and cleared the queues they named.
+            val current = committed.filter { (_, _, generation) -> generation == catalogGeneration.get() }
+            if (current.isEmpty()) return@post
+            current.forEach { (from, into, _) -> merged[from] = into }
             // A chain within the transaction ends at its last row.
-            val batch = committed.associate { (from, _) -> from to mergedTrackId(from) }
+            val batch = current.associate { (from, _, _) -> from to mergedTrackId(from) }
             val running = service
             if (running != null) running(batch) else PlaybackStateStore(appContext).replaceTrackIds(batch)
         }
     }
 
-    override fun mergeRolledBack(from: Long, into: Long) = Unit
+    override fun mergeRolledBack(from: Long, into: Long) {
+        preparedGenerations.remove(from)
+    }
 }
 
 /**

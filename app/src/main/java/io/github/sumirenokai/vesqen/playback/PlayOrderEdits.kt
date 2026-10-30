@@ -124,6 +124,11 @@ internal class PlayOrderSessionPlayer(
         val order = items.namedPlayOrder() ?: return super.setMediaItems(items, startIndex, startPositionMs)
         exoPlayer.setMediaItemsInPlayOrder(items.map { it.withoutRequestMetadata() }, order, startIndex, startPositionMs)
     }
+
+    // A library sync carries the Library's current IDs; mapping them too leaves no way in unmapped.
+    override fun replaceMediaItems(fromIndex: Int, toIndex: Int, mediaItems: List<MediaItem>) {
+        super.replaceMediaItems(fromIndex, toIndex, mediaItems.map { it.withMergedTrackId(mergedTrackId) })
+    }
 }
 
 /**
