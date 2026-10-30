@@ -42,6 +42,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.performTouchInput
@@ -3890,32 +3891,81 @@ class VesqenAppTest {
         composeRule.onAllNodesWithTag("vesqen.lyrics-import-failure").assertCountEquals(0)
     }
 
+    // #169 Y24: a notice from the Library would cover Now's transport or liner notes.
+    @Test
+    fun a_lyrics_notice_from_the_library_goes_when_now_opens() {
+        var uiState by mutableStateOf(grantedState(tracks = sampleTracks, playback = pausedLyricsPlayback()))
+        render(state = uiState, stateProvider = { uiState })
+
+        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(1, LyricsImportResult.NO_LYRICS))
+        composeRule.onNodeWithTag("vesqen.lyrics-notice").assertIsDisplayed()
+        // A stopped clock keeps the notice well inside its 4 s, so only opening Now can remove it.
+        // The notice sits over the mini-player, so Now opens through its click action, as with TalkBack.
+        composeRule.mainClock.autoAdvance = false
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.mainClock.advanceTimeBy(1_000)
+        composeRule.mainClock.autoAdvance = true
+
+        composeRule.onNodeWithTag("vesqen.now.player-page").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("vesqen.lyrics-notice").assertCountEquals(0)
+        assertFocusedNowControlsAreFullyVisible()
+    }
+
+    // #169 Y25: from the cover, a successful import shows the lyrics and is announced once, by a node
+    // that leaves again; lines that change later announce nothing.
+    @Test
+    fun a_successful_lyrics_import_on_now_shows_the_lyrics_and_is_announced_once() {
+        var uiState by mutableStateOf(grantedState(tracks = sampleTracks, playback = pausedLyricsPlayback()))
+        var lyrics by mutableStateOf(NowLyricsState(shown = false))
+        render(
+            state = uiState,
+            stateProvider = { uiState },
+            containerWidth = 412.dp,
+            containerHeight = 915.dp,
+            lyricsProvider = { lyrics },
+            onToggleLyrics = { lyrics = lyrics.copy(shown = !lyrics.shown) },
+            loadLyrics = {
+                TrackLyrics.Found(LyricsSource.Imported, Lyrics.Synced((0 until 30).map { LyricLine(it * 10_000L, "Line $it") }))
+            },
+        )
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onAllNodesWithTag("vesqen.now.lyrics").assertCountEquals(0)
+        val liveRegions = SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion)
+        composeRule.onAllNodes(liveRegions, useUnmergedTree = true).assertCountEquals(0)
+
+        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(1, LyricsImportResult.IMPORTED))
+        composeRule.onNodeWithTag("vesqen.now.lyrics").assertIsDisplayed()
+        composeRule.onAllNodes(liveRegions, useUnmergedTree = true).assertCountEquals(1)
+        composeRule.onNodeWithTag("vesqen.lyrics-imported-announcement", useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            .assert(hasContentDescription(context.getString(R.string.lyrics_imported)))
+        composeRule.onAllNodesWithTag("vesqen.lyrics-notice").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("vesqen.lyrics-import-failure").assertCountEquals(0)
+        assertFocusedNowControlsAreFullyVisible()
+
+        uiState = uiState.copy(playback = uiState.playback.copy(positionMs = 50_000))
+        composeRule.mainClock.advanceTimeBy(5_000)
+        composeRule.onAllNodesWithTag("vesqen.lyrics-imported-announcement", useUnmergedTree = true).assertCountEquals(0)
+        composeRule.onAllNodes(liveRegions, useUnmergedTree = true).assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.now.lyrics").assertIsDisplayed()
+    }
+
     /**
-     * #169 Y17: Now's edges hold controls at large text and in landscape, so a failed import is a
-     * dialog there and a successful one shows nothing, never a notice over a control.
+     * #169 Y17, Y25: Now's edges hold controls at large text and in landscape, so a failed import is
+     * a dialog there and a successful one turns the lyrics on with one announcement, never a notice
+     * over a control.
      */
     private fun assertLyricsImportResultsOnNow(width: Dp, height: Dp, fontScale: Float, openNotes: Boolean) {
-        var uiState by mutableStateOf(
-            grantedState(
-                tracks = sampleTracks,
-                playback = PlaybackSnapshot(
-                    isControllerReady = true,
-                    trackId = 1,
-                    title = "Dawn Signal",
-                    artist = "Mori",
-                    durationMs = 245_000,
-                    positionMs = 30_000,
-                    hasPrevious = true,
-                    hasNext = true,
-                ),
-            ),
-        )
+        var uiState by mutableStateOf(grantedState(tracks = sampleTracks, playback = pausedLyricsPlayback()))
+        var lyrics by mutableStateOf(NowLyricsState(shown = false))
         render(
             state = uiState,
             stateProvider = { uiState },
             containerWidth = width,
             containerHeight = height,
             fontScale = fontScale,
+            lyricsProvider = { lyrics },
+            onToggleLyrics = { lyrics = lyrics.copy(shown = !lyrics.shown) },
         )
         composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
         if (openNotes) openLinerNotes()
@@ -3926,13 +3976,27 @@ class VesqenAppTest {
         composeRule.onAllNodesWithTag("vesqen.lyrics-notice").assertCountEquals(0)
         composeRule.onNodeWithText(context.getString(R.string.lyrics_import_result_ok)).performClick()
         composeRule.onAllNodesWithTag("vesqen.lyrics-import-failure").assertCountEquals(0)
+        assertFalse(lyrics.shown)
 
         uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(2, LyricsImportResult.IMPORTED))
         composeRule.waitForIdle()
+        assertTrue(lyrics.shown)
+        composeRule.onAllNodesWithTag("vesqen.lyrics-imported-announcement", useUnmergedTree = true).assertCountEquals(1)
         composeRule.onAllNodesWithTag("vesqen.lyrics-notice").assertCountEquals(0)
         composeRule.onAllNodesWithTag("vesqen.lyrics-import-failure").assertCountEquals(0)
         assertFocusedNowControlsAreFullyVisible()
     }
+
+    private fun pausedLyricsPlayback() = PlaybackSnapshot(
+        isControllerReady = true,
+        trackId = 1,
+        title = "Dawn Signal",
+        artist = "Mori",
+        durationMs = 245_000,
+        positionMs = 30_000,
+        hasPrevious = true,
+        hasNext = true,
+    )
 
     /** #169: lyrics in the cover's place with the liner notes open and closed again. */
     private fun assertLyricsWithOpenLinerNotes(
@@ -4833,6 +4897,8 @@ class VesqenAppTest {
         supportUrl: String? = null,
         rebuildNotice: LibraryRebuildNotice? = null,
         lyrics: NowLyricsState = NowLyricsState(),
+        lyricsProvider: (() -> NowLyricsState)? = null,
+        onToggleLyrics: () -> Unit = {},
         loadLyrics: suspend (AudioTrack) -> TrackLyrics = { TrackLyrics.None(folderHint = false) },
     ) {
         composeRule.setContent {
@@ -4864,8 +4930,9 @@ class VesqenAppTest {
                         onRemoveLibraryFolder = onRemoveLibraryFolder,
                         onResumeLibraryScan = onResumeLibraryScan,
                         motionPolicy = motionPolicy,
-                        lyrics = lyrics,
+                        lyrics = lyricsProvider?.invoke() ?: lyrics,
                         loadLyrics = loadLyrics,
+                        onToggleLyrics = onToggleLyrics,
                         versionName = versionName,
                         versionCode = versionCode,
                         playbackTelemetry = playbackTelemetry,
