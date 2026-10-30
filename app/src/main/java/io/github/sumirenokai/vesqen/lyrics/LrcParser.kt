@@ -25,9 +25,10 @@ internal data class LyricLine(
  *
  * Only the leading run of `[mm:ss]`, `[mm:ss.f]` or `[mm:ss:f]` tags times a line; the fraction is
  * decimal, so `.5`, `.50` and `.500` are the same time. If any line carries a valid time, lines
- * without one are dropped; otherwise the whole text is plain. `[key:value]` lines with letter-only
- * keys are information tags and are hidden; the last valid `[offset:]` moves every line earlier by
- * its milliseconds. Word times of enhanced LRC are removed, keeping line times only.
+ * without one are dropped; otherwise the whole text is plain. The standard LRC ID tags such as
+ * `[ar:]` and `[ti:]` are hidden; other bracketed lines, such as "[Hook: Rihanna]" in lyrics without
+ * times, are text. The last valid `[offset:]` moves every line earlier by its milliseconds. Word
+ * times of enhanced LRC are removed, keeping line times only.
  */
 internal fun parseLyrics(text: String): Lyrics? {
     val timed = ArrayList<TimedText>()
@@ -165,6 +166,9 @@ internal const val MAX_LYRIC_LINE_CHARS = 500
 // parse on a phone but not in JVM tests.
 private val TIME_TAG = Regex("""\[([0-9]{1,3}):([0-9]{1,2})(?:[.:]([0-9]{1,3}))?]""")
 private val WORD_TIME_TAG = Regex("""<[0-9]{1,3}:[0-9]{1,2}(?:[.:][0-9]{1,3})?>|\[[0-9]{1,3}:[0-9]{1,2}(?:[.:][0-9]{1,3})?]""")
-private val INFORMATION_TAG = Regex("""\[([A-Za-z]+):(.*)]""")
+private val INFORMATION_TAG = Regex(
+    """\[(ar|ti|al|au|by|length|offset|re|ve|tool|la|id|#):(.*)]""",
+    RegexOption.IGNORE_CASE,
+)
 private val OFFSET_VALUE = Regex("""[+-]?[0-9]{1,9}""")
 private val REPEATED_SPACES = Regex(""" {2,}""")

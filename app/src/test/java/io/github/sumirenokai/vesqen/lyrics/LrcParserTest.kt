@@ -180,6 +180,13 @@ class LrcParserTest {
     }
 
     @Test
+    fun onlyStandardIdTagsAreHiddenSoSectionHeadingsStay() {
+        val lyrics = parseLyrics("[Ar:Sample]\n[#:a comment]\n[Intro: Pharrell]\nFirst line\n[Hook: Rihanna]\nSecond line\n[tool:Editor]")
+
+        assertEquals(Lyrics.Plain(listOf("[Intro: Pharrell]", "First line", "[Hook: Rihanna]", "Second line")), lyrics)
+    }
+
+    @Test
     fun nothingToShowGivesNull() {
         assertNull(parseLyrics(""))
         assertNull(parseLyrics(" \n\u3000\n"))
