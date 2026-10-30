@@ -279,14 +279,14 @@ private fun extractPictureFromOggCommentPacket(packet: ByteArray): ByteArray? {
     return null
 }
 
-private fun ByteArray.hasAsciiPrefix(value: String): Boolean = hasAsciiAt(value, 0)
+internal fun ByteArray.hasAsciiPrefix(value: String): Boolean = hasAsciiAt(value, 0)
 
-private fun ByteArray.hasAsciiAt(value: String, offset: Int): Boolean {
+internal fun ByteArray.hasAsciiAt(value: String, offset: Int): Boolean {
     if (offset < 0 || offset + value.length > size) return false
     return value.indices.all { index -> this[offset + index] == value[index].code.toByte() }
 }
 
-private fun readUnsignedInt(bytes: ByteArray, offset: Int, littleEndian: Boolean): Long {
+internal fun readUnsignedInt(bytes: ByteArray, offset: Int, littleEndian: Boolean): Long {
     if (offset < 0 || offset + 4 > bytes.size) return Long.MAX_VALUE
     var result = 0L
     repeat(4) { index ->
@@ -296,7 +296,7 @@ private fun readUnsignedInt(bytes: ByteArray, offset: Int, littleEndian: Boolean
     return result
 }
 
-private fun readUnsignedLong(bytes: ByteArray): Long? {
+internal fun readUnsignedLong(bytes: ByteArray): Long? {
     if (bytes.size != 8 || (bytes[0].toInt() and 0x80) != 0) return null
     var result = 0L
     bytes.forEach { byte -> result = (result shl 8) or (byte.toLong() and 0xff) }
@@ -309,7 +309,7 @@ private fun Int.advanceWithin(amount: Int, limit: Int): Int? {
     return result.takeIf { it <= limit.toLong() }?.toInt()
 }
 
-private fun InputStream.readArtworkExact(size: Int): ByteArray? {
+internal fun InputStream.readArtworkExact(size: Int): ByteArray? {
     if (size < 0) return null
     val bytes = ByteArray(size)
     var offset = 0
@@ -327,7 +327,7 @@ private fun InputStream.readArtworkExact(size: Int): ByteArray? {
     return bytes
 }
 
-private fun InputStream.skipArtworkExactly(size: Long): Boolean {
+internal fun InputStream.skipArtworkExactly(size: Long): Boolean {
     if (size < 0) return false
     var remaining = size
     while (remaining > 0) {
@@ -343,9 +343,9 @@ private fun InputStream.skipArtworkExactly(size: Long): Boolean {
     return true
 }
 
-private class Mp4AtomBudget(var remaining: Int = MAX_MP4_ATOMS)
+internal class Mp4AtomBudget(var remaining: Int = MAX_MP4_ATOMS)
 
-private class BoundedArtworkInputStream(
+internal class BoundedArtworkInputStream(
     private val delegate: InputStream,
     initialRemaining: Long,
 ) : InputStream() {
@@ -373,7 +373,7 @@ private class BoundedArtworkInputStream(
 }
 
 /** Removes the zero byte inserted after 0xff by ID3v2 tag-level unsynchronisation. */
-private class UnsynchronisationInputStream(
+internal class UnsynchronisationInputStream(
     private val delegate: InputStream,
 ) : InputStream() {
     private var previousWasFf = false
@@ -410,7 +410,7 @@ private class UnsynchronisationInputStream(
     }
 }
 
-private fun decodeBigEndian24(bytes: ByteArray, offset: Int): Int? {
+internal fun decodeBigEndian24(bytes: ByteArray, offset: Int): Int? {
     if (offset < 0 || offset + 3 > bytes.size) return null
     return ((bytes[offset].toInt() and 0xff) shl 16) or
         ((bytes[offset + 1].toInt() and 0xff) shl 8) or
@@ -435,27 +435,27 @@ private fun findId3V22PictureOffset(frame: ByteArray): Int? {
     return cursor.takeIf { it < frame.size }
 }
 
-private const val ARTWORK_BUFFER_BYTES = 64 * 1024
-private const val FORMAT_PROBE_BYTES = 12
-private const val ID3_HEADER_BYTES = 10
-private const val ID3_FRAME_HEADER_BYTES = 10
-private const val ID3_V22_FRAME_HEADER_BYTES = 6
-private const val ID3_UNSYNCHRONISATION_FLAG = 0x80
-private const val ID3_EXTENDED_HEADER_FLAG = 0x40
-private const val ID3_V24_FRAME_UNSYNCHRONISATION_FLAG = 0x02
+internal const val ARTWORK_BUFFER_BYTES = 64 * 1024
+internal const val FORMAT_PROBE_BYTES = 12
+internal const val ID3_HEADER_BYTES = 10
+internal const val ID3_FRAME_HEADER_BYTES = 10
+internal const val ID3_V22_FRAME_HEADER_BYTES = 6
+internal const val ID3_UNSYNCHRONISATION_FLAG = 0x80
+internal const val ID3_EXTENDED_HEADER_FLAG = 0x40
+internal const val ID3_V24_FRAME_UNSYNCHRONISATION_FLAG = 0x02
 private const val ID3_APIC_OVERHEAD_BYTES = 4_096L
-private const val MAX_ID3_TAG_BYTES = 16 * 1024 * 1024
-private const val MAX_CONTAINER_CHUNKS = 10_000
-private const val MP4_ATOM_HEADER_BYTES = 8
-private const val MP4_FULL_BOX_BYTES = 4L
-private const val MP4_DATA_PREAMBLE_BYTES = 8L
-private const val MAX_MP4_DEPTH = 8
+internal const val MAX_ID3_TAG_BYTES = 16 * 1024 * 1024
+internal const val MAX_CONTAINER_CHUNKS = 10_000
+internal const val MP4_ATOM_HEADER_BYTES = 8
+internal const val MP4_FULL_BOX_BYTES = 4L
+internal const val MP4_DATA_PREAMBLE_BYTES = 8L
+internal const val MAX_MP4_DEPTH = 8
 private const val MAX_MP4_ATOMS = 20_000
 private val MP4_CONTAINER_ATOMS = setOf("moov", "udta", "meta", "ilst", "covr")
-private const val MAX_OGG_PAGES = 256
-private const val MAX_OGG_PACKETS = 8
-private const val MAX_OGG_METADATA_BYTES = 32L * 1024L * 1024L
+internal const val MAX_OGG_PAGES = 256
+internal const val MAX_OGG_PACKETS = 8
+internal const val MAX_OGG_METADATA_BYTES = 32L * 1024L * 1024L
 private const val MAX_OGG_PACKET_BYTES = 16L * 1024L * 1024L
-private const val MAX_OGG_COMMENTS = 100_000L
-private const val MAX_COMMENT_KEY_BYTES = 64
+internal const val MAX_OGG_COMMENTS = 100_000L
+internal const val MAX_COMMENT_KEY_BYTES = 64
 private const val MAX_BASE64_ART_BYTES = (MAX_EMBEDDED_ART_BYTES * 4 / 3) + 32

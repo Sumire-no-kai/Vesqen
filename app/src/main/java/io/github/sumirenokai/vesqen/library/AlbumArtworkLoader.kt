@@ -299,7 +299,7 @@ class AlbumArtworkLoader(context: Context) {
 }
 
 internal const val MAX_EMBEDDED_ART_BYTES = 8 * 1024 * 1024
-private const val MAX_FLAC_METADATA_BYTES = 32 * 1024 * 1024
+internal const val MAX_FLAC_METADATA_BYTES = 32 * 1024 * 1024
 private const val MAX_FLAC_PICTURE_OVERHEAD_BYTES = 128 * 1024
 private const val MAX_FLAC_MIME_BYTES = 1_024
 private const val MAX_FLAC_DESCRIPTION_BYTES = 64 * 1024
