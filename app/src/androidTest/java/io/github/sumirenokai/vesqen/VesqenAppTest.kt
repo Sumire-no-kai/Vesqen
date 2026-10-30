@@ -176,6 +176,11 @@ import io.github.sumirenokai.vesqen.verification.OutputVerificationMatch
 import io.github.sumirenokai.vesqen.verification.OutputVerificationRecord
 import io.github.sumirenokai.vesqen.verification.OutputVerificationResult
 import io.github.sumirenokai.vesqen.verification.VerificationPcmFormat
+import io.github.sumirenokai.vesqen.lyrics.LyricLine
+import io.github.sumirenokai.vesqen.lyrics.Lyrics
+import io.github.sumirenokai.vesqen.lyrics.LyricsSource
+import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
+import io.github.sumirenokai.vesqen.ui.screens.NowLyricsState
 import kotlin.math.abs
 import kotlin.math.min
 import java.util.concurrent.atomic.AtomicInteger
@@ -3845,6 +3850,56 @@ class VesqenAppTest {
     }
 
     @Test
+    fun shown_lyrics_with_open_liner_notes_keep_now_controls_visible_at_320dp_and_large_text() =
+        assertLyricsWithOpenLinerNotes(320.dp, 533.dp, fontScale = 2f)
+
+    @Test
+    fun shown_lyrics_with_open_liner_notes_keep_now_controls_visible_at_360dp() =
+        assertLyricsWithOpenLinerNotes(360.dp, 720.dp, fontScale = 1f)
+
+    @Test
+    fun shown_lyrics_with_open_liner_notes_keep_now_controls_visible_in_landscape() =
+        assertLyricsWithOpenLinerNotes(640.dp, 320.dp, fontScale = 1f)
+
+    /** #169: lyrics in the cover's place with the liner notes open and closed again. */
+    private fun assertLyricsWithOpenLinerNotes(width: Dp, height: Dp, fontScale: Float) {
+        render(
+            state = grantedState(
+                tracks = sampleTracks,
+                playback = PlaybackSnapshot(
+                    isControllerReady = true,
+                    trackId = 1,
+                    title = "Dawn Signal",
+                    artist = "Mori",
+                    durationMs = 245_000,
+                    positionMs = 30_000,
+                    hasPrevious = true,
+                    hasNext = true,
+                ),
+            ),
+            containerWidth = width,
+            containerHeight = height,
+            fontScale = fontScale,
+            lyrics = NowLyricsState(shown = true),
+            loadLyrics = {
+                TrackLyrics.Found(LyricsSource.Imported, Lyrics.Synced((0 until 30).map { LyricLine(it * 10_000L, "Line $it") }))
+            },
+        )
+
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        composeRule.onNodeWithTag("vesqen.now.lyrics").assertIsDisplayed()
+        openLinerNotes()
+        composeRule.onNodeWithTag("vesqen.now.player-page").assert(
+            SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
+        )
+        assertFocusedNowControlsAreFullyVisible()
+        composeRule.onNodeWithTag("vesqen.now.notes-toggle").performClick()
+        assertLinerNotesState(R.string.now_notes_collapsed)
+        composeRule.onNodeWithTag("vesqen.now.lyrics").assertIsDisplayed()
+        assertFocusedNowControlsAreFullyVisible()
+    }
+
+    @Test
     fun focused_player_takes_the_window_from_the_bottom_bar() = assertFocusedPlayerTakesTheWindow(360.dp, 720.dp)
 
     @Test
@@ -4694,6 +4749,8 @@ class VesqenAppTest {
         supportPrompt: SupportPrompt? = null,
         supportUrl: String? = null,
         rebuildNotice: LibraryRebuildNotice? = null,
+        lyrics: NowLyricsState = NowLyricsState(),
+        loadLyrics: suspend (AudioTrack) -> TrackLyrics = { TrackLyrics.None(folderHint = false) },
     ) {
         composeRule.setContent {
             VesqenTheme(darkTheme = darkTheme) {
@@ -4724,6 +4781,8 @@ class VesqenAppTest {
                         onRemoveLibraryFolder = onRemoveLibraryFolder,
                         onResumeLibraryScan = onResumeLibraryScan,
                         motionPolicy = motionPolicy,
+                        lyrics = lyrics,
+                        loadLyrics = loadLyrics,
                         versionName = versionName,
                         versionCode = versionCode,
                         playbackTelemetry = playbackTelemetry,
