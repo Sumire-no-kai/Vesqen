@@ -13,18 +13,24 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
+import io.github.sumirenokai.vesqen.library.LibrarySource
+import io.github.sumirenokai.vesqen.library.LibrarySourceKind
 import io.github.sumirenokai.vesqen.library.UnmatchedLibraryRecord
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.LibraryUiState
 import io.github.sumirenokai.vesqen.ui.MusicAccess
+import io.github.sumirenokai.vesqen.ui.VesqenAppContent
+import io.github.sumirenokai.vesqen.ui.VesqenUiState
 import io.github.sumirenokai.vesqen.ui.screens.LibraryScreen
 import io.github.sumirenokai.vesqen.ui.screens.UnmatchedRecordsList
+import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -120,6 +126,34 @@ class UnmatchedRecordsUiTest {
         compose.runOnIdle { records.value = state().unmatchedRecords }
         compose.onNodeWithTag("vesqen.library.unmatched.review").assertIsDisplayed()
         compose.onNodeWithTag("vesqen.library.unmatched-records").assertDoesNotExist()
+    }
+
+    @Test
+    fun songsKeepRoomUnderTheNoticesOnASmallScreenWithDoubleText() {
+        // #191 C2: at 320 x 533 dp and 2.0x text the sources card with a folder and this line took
+        // the whole Library header, and the song list under it had no height.
+        val folder = LibrarySource("folder:music", LibrarySourceKind.FOLDER, "Music")
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 2f)) {
+                VesqenTheme {
+                    Box(Modifier.size(width = 320.dp, height = 533.dp)) {
+                        VesqenAppContent(
+                            state = VesqenUiState(library = state().copy(sources = listOf(folder))),
+                            onRequestMusicAccess = {}, onOpenAppSettings = {}, onOpenNotificationSettings = {},
+                            onRescan = {}, onTrackSelected = {}, onPrevious = {}, onPlayPause = {}, onNext = {},
+                            onSeek = {}, onCyclePlaybackOrder = {},
+                            motionPolicy = VesqenMotionPolicy(reduceMotion = true), supportUrl = null,
+                        )
+                    }
+                }
+            }
+        }
+
+        val row = compose.onNodeWithTag("vesqen.library.track.11").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val visible = with(compose.density) { row.height.toDp() }
+        assertTrue("The first song shows $visible of its row", visible >= 48.dp)
+        // The card scrolls inside its share of the header, so the line's buttons stay reachable.
+        compose.onNodeWithTag("vesqen.library.unmatched.review").performScrollTo().assertIsDisplayed()
     }
 
     @Test

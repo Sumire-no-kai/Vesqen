@@ -939,12 +939,12 @@
     <string name="premium_open">Pro 機能を見る</string>
     <string name="player_trial_ended_body">%1$s\n\n厳格 USB 出力からシステム出力へ自動で切り替わることはありません。Pro 機能を買い切りで購入するか、「システム出力」に切り替えてもう一度再生してください。</string>
     <plurals name="unmatched_records_prompt">
-        <item quantity="other">%1$d 曲のお気に入りと再生履歴を対応付けられませんでした</item>
+        <item quantity="other">%1$d 曲のお気に入り、再生履歴、またはプレイリスト内の位置を対応付けられませんでした</item>
     </plurals>
     <string name="unmatched_records_review">確認</string>
     <string name="unmatched_records_later">後で</string>
     <string name="unmatched_records_title">対応付けられなかった記録</string>
-    <string name="unmatched_records_body">以下の各記録には、ファイル名とサイズが同じ曲が複数該当するため、Vesqen はどの曲の記録か判断できません。記録ごとに対応する曲を選ぶか、記録を破棄してください。音楽ファイルは変更されません。</string>
+    <string name="unmatched_records_body">ファイル名とサイズが同じ曲または記録が複数あるため、Vesqen は以下の各記録がどの曲の記録か判断できません。記録ごとに対応する曲を選ぶか、記録を破棄してください。音楽ファイルは変更されません。</string>
     <string name="unmatched_record_favorite">お気に入り</string>
     <plurals name="unmatched_record_play_count">
         <item quantity="other">%1$d 回再生</item>

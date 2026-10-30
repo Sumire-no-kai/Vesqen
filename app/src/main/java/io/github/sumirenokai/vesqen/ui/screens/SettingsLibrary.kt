@@ -39,11 +39,15 @@ import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 /**
  * #168: how the Artists page reads a tag that names several artists. The two lists open as dialogs
  * with one text field each, so the group needs no page of its own; while splitting is off they are
- * hidden, since they change nothing.
+ * hidden, since they change nothing. [onEditList] opens a list's [ArtistSplitListDialog], which
+ * Settings keeps outside its lazy list (#191 C4).
  */
 @Composable
-internal fun SettingsLibraryGroup(artistSplit: ArtistSplitSettings, onArtistSplitChange: (ArtistSplitSettings) -> Unit) {
-    var editingName by rememberSaveable { mutableStateOf<String?>(null) }
+internal fun SettingsLibraryGroup(
+    artistSplit: ArtistSplitSettings,
+    onArtistSplitChange: (ArtistSplitSettings) -> Unit,
+    onEditList: (ArtistSplitList) -> Unit,
+) {
     val motionMillis = rememberVesqenMotionPolicy().stateChangeMillis
     val none = stringResource(R.string.settings_artist_list_empty)
     SettingsGroup(
@@ -67,7 +71,7 @@ internal fun SettingsLibraryGroup(artistSplit: ArtistSplitSettings, onArtistSpli
                 SettingsRow(
                     title = stringResource(R.string.settings_artist_separators),
                     description = artistSplit.separators.joinToString(" ").ifEmpty { none },
-                    onClick = { editingName = ArtistSplitList.SEPARATORS.name },
+                    onClick = { onEditList(ArtistSplitList.SEPARATORS) },
                     modifier = Modifier.testTag("vesqen.settings.artist-separators"),
                 )
                 PaperDivider()
@@ -75,42 +79,54 @@ internal fun SettingsLibraryGroup(artistSplit: ArtistSplitSettings, onArtistSpli
                     title = stringResource(R.string.settings_artist_kept_names),
                     description = artistSplit.keptNames.joinToString(" · ").ifEmpty { none },
                     descriptionMaxLines = 2,
-                    onClick = { editingName = ArtistSplitList.KEPT_NAMES.name },
+                    onClick = { onEditList(ArtistSplitList.KEPT_NAMES) },
                     modifier = Modifier.testTag("vesqen.settings.artist-kept-names"),
                 )
             }
         }
     }
-    when (editingName?.let(ArtistSplitList::valueOf)) {
-        ArtistSplitList.SEPARATORS -> ArtistSplitListDialog(
+}
+
+internal enum class ArtistSplitList { SEPARATORS, KEPT_NAMES }
+
+/**
+ * Hosted by Settings outside its lazy list (#191 C4): inside a list item, a recreation that left the
+ * item off-screen hid an open dialog, which then reopened by itself when the user scrolled back.
+ */
+@Composable
+internal fun ArtistSplitListDialog(
+    list: ArtistSplitList,
+    artistSplit: ArtistSplitSettings,
+    onArtistSplitChange: (ArtistSplitSettings) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    when (list) {
+        ArtistSplitList.SEPARATORS -> ArtistSplitTextDialog(
             title = stringResource(R.string.settings_artist_separators),
             body = stringResource(R.string.settings_artist_separators_body),
             text = artistSplit.separators.joinToString(" "),
             defaults = DefaultArtistSeparators.joinToString(" "),
             singleLine = true,
             onSave = { onArtistSplitChange(artistSplit.copy(separators = parseArtistSeparators(it))) },
-            onDismiss = { editingName = null },
+            onDismiss = onDismiss,
             tag = "vesqen.settings.artist-separators.dialog",
         )
-        ArtistSplitList.KEPT_NAMES -> ArtistSplitListDialog(
+        ArtistSplitList.KEPT_NAMES -> ArtistSplitTextDialog(
             title = stringResource(R.string.settings_artist_kept_names),
             body = stringResource(R.string.settings_artist_kept_names_body),
             text = artistSplit.keptNames.joinToString("\n"),
             defaults = DefaultKeptArtistNames.joinToString("\n"),
             singleLine = false,
             onSave = { onArtistSplitChange(artistSplit.copy(keptNames = parseKeptArtistNames(it))) },
-            onDismiss = { editingName = null },
+            onDismiss = onDismiss,
             tag = "vesqen.settings.artist-kept-names.dialog",
         )
-        null -> Unit
     }
 }
 
-private enum class ArtistSplitList { SEPARATORS, KEPT_NAMES }
-
 /** Separators are typed apart by spaces on one line, names one per line; nothing changes until Save. */
 @Composable
-private fun ArtistSplitListDialog(
+private fun ArtistSplitTextDialog(
     title: String,
     body: String,
     text: String,

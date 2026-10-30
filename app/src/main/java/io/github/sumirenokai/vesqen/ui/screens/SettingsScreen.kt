@@ -41,6 +41,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -112,6 +115,7 @@ fun SettingsScreen(
     val unsupportedPlatform = outputStatus.officialMixerApiSupport?.takeUnless { it.mixerApiAvailable }
     val strictSelected = outputStatus.mode == UsbOutputMode.STRICT_BIT_PERFECT
     val motionMillis = rememberVesqenMotionPolicy().stateChangeMillis
+    var editingArtistListName by rememberSaveable { mutableStateOf<String?>(null) }
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             modifier = Modifier
@@ -177,7 +181,7 @@ fun SettingsScreen(
                     )
                 }
             }
-            item { SettingsLibraryGroup(artistSplit, onArtistSplitChange) }
+            item { SettingsLibraryGroup(artistSplit, onArtistSplitChange, onEditList = { editingArtistListName = it.name }) }
             item { SettingsPrivacyGroup(usageStatistics, onOpenUsageStatistics, deviceReportAvailable, onOpenDeviceReport) }
             if (appUpdater != null) item { SettingsUpdatesGroup(appUpdater) }
             item {
@@ -234,6 +238,14 @@ fun SettingsScreen(
                 )
             }
         }
+    }
+    editingArtistListName?.let { name ->
+        ArtistSplitListDialog(
+            list = ArtistSplitList.valueOf(name),
+            artistSplit = artistSplit,
+            onArtistSplitChange = onArtistSplitChange,
+            onDismiss = { editingArtistListName = null },
+        )
     }
 }
 
