@@ -966,13 +966,13 @@
     <string name="premium_open">View Pro features</string>
     <string name="player_trial_ended_body">%1$s\n\nStrict USB output does not switch to system output on its own. You can unlock Pro features with a one-time purchase, or switch to System output and play again.</string>
     <plurals name="unmatched_records_prompt">
-        <item quantity="one">The favorites and play history of %1$d song could not be matched</item>
-        <item quantity="other">The favorites and play history of %1$d songs could not be matched</item>
+        <item quantity="one">The favorites, play history or places in playlists of %1$d song could not be matched</item>
+        <item quantity="other">The favorites, play history or places in playlists of %1$d songs could not be matched</item>
     </plurals>
     <string name="unmatched_records_review">Review</string>
     <string name="unmatched_records_later">Later</string>
     <string name="unmatched_records_title">Unmatched records</string>
-    <string name="unmatched_records_body">Vesqen cannot determine which song each record below belongs to, because each one matches more than one song with the same file name and size. Choose the song for each record, or discard the record. Your music files are not changed.</string>
+    <string name="unmatched_records_body">Vesqen cannot determine which song each record below belongs to, because more than one song or record has the same file name and size. Choose the song for each record, or discard the record. Your music files are not changed.</string>
     <string name="unmatched_record_favorite">Favorite</string>
     <plurals name="unmatched_record_play_count">
         <item quantity="one">Played %1$d time</item>

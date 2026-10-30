@@ -30,6 +30,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.selection.selectable
@@ -119,6 +120,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -268,22 +270,6 @@ fun LibraryScreen(
     var orderSaving by remember { mutableStateOf(false) }
     var orderSaveFailed by remember { mutableStateOf(false) }
     val orderScope = rememberCoroutineScope()
-    BackHandler(enabled = orderTarget != null || selectedCollectionKey != null || showSearch || favoritesOnly) {
-        if (!orderSaving) {
-            when {
-                orderTarget != null -> orderTarget = null
-                selectedCollectionKey != null -> selectedCollectionKey = null
-                showSearch -> {
-                    query = ""
-                    searchOpen = false
-                }
-                else -> {
-                    favoritesOnly = false
-                    query = ""
-                }
-            }
-        }
-    }
     val context = LocalContext.current.applicationContext
     val preferences = remember(context) { context.getSharedPreferences("library-browse", 0) }
     var alphabetEnabled by remember { mutableStateOf(preferences.getBoolean("alphabet-index", true)) }
@@ -346,6 +332,32 @@ fun LibraryScreen(
     }
     val selectedCollection = remember(collections, selectedCollectionKey) {
         collections.firstOrNull { it.key == selectedCollectionKey }
+    }
+    // A new split setting gives most artists a new key (#191 C3). An open artist page it removed
+    // closes for good, so its old key neither takes the next Back nor reopens it with a later setting.
+    var keyedArtistNames by remember { mutableStateOf(artistNames) }
+    if (keyedArtistNames !== artistNames) {
+        SideEffect {
+            if (selectedCollection == null) selectedCollectionKey = null
+            keyedArtistNames = artistNames
+        }
+    }
+    // Back closes what is shown: a key whose collection is gone shows nothing, so it must not take Back.
+    BackHandler(enabled = orderTarget != null || selectedCollection != null || showSearch || favoritesOnly) {
+        if (!orderSaving) {
+            when {
+                orderTarget != null -> orderTarget = null
+                selectedCollection != null -> selectedCollectionKey = null
+                showSearch -> {
+                    query = ""
+                    searchOpen = false
+                }
+                else -> {
+                    favoritesOnly = false
+                    query = ""
+                }
+            }
+        }
     }
     val albumShelf = remember(collections, browseMode, query) {
         if (browseMode == LibraryBrowseMode.ALBUMS && query.isBlank() && collections.size > 1) {
@@ -430,35 +442,51 @@ fun LibraryScreen(
                 sourceActionsEnabled = !state.isLoading && orderTarget == null,
             )
         }
-        // An empty library without device access makes the request its main button, so the
-        // notice would only compete with it there.
-        if (state.musicAccess != MusicAccess.GRANTED && !(state.tracks.isEmpty() && !state.isLoading && !state.loadingFailed)) {
-            DeviceMusicAccessNotice(
-                denied = state.musicAccess == MusicAccess.DENIED,
-                onRequestMusicAccess = onRequestMusicAccess,
-                onOpenAppSettings = onOpenAppSettings,
-            )
-        }
         var showUnmatchedRecords by rememberSaveable { mutableStateOf(false) }
         // Once every record is handled the sheet goes; a later record waits for the line again (#191 D10).
         LaunchedEffect(state.unmatchedRecords.isEmpty()) {
             if (state.unmatchedRecords.isEmpty()) showUnmatchedRecords = false
         }
-        if (
-            state.sources.any { it.kind == LibrarySourceKind.FOLDER } ||
-            state.scanProgress != null ||
-            state.sources.any { it.scanState == LibraryScanState.FAILED } ||
-            state.promptsUnmatchedRecords
+        // #191 C2: the notices take at most half the height under the title and scroll inside it.
+        // At 320 x 533 dp and 2.0x text the sources card with the unmatched-records line otherwise
+        // left the songs no height; at normal sizes they never reach the limit.
+        Column(
+            modifier = Modifier
+                .atMostShareOfRemainingHeight(HeaderNoticesShare)
+                .verticalScroll(rememberScrollState())
+                .testTag("vesqen.library.notices"),
         ) {
-            LibrarySourcesCard(
-                state = state,
-                onAddLibraryFolder = onAddLibraryFolder,
-                onRemoveLibraryFolder = onRemoveLibraryFolder,
-                onPauseLibraryScan = onPauseLibraryScan,
-                onResumeLibraryScan = onResumeLibraryScan,
-                onReviewUnmatchedRecords = { showUnmatchedRecords = true },
-                onDismissUnmatchedRecords = onDismissUnmatchedRecords,
-            )
+            // An empty library without device access makes the request its main button, so the
+            // notice would only compete with it there.
+            if (state.musicAccess != MusicAccess.GRANTED && !(state.tracks.isEmpty() && !state.isLoading && !state.loadingFailed)) {
+                DeviceMusicAccessNotice(
+                    denied = state.musicAccess == MusicAccess.DENIED,
+                    onRequestMusicAccess = onRequestMusicAccess,
+                    onOpenAppSettings = onOpenAppSettings,
+                )
+            }
+            if (
+                state.sources.any { it.kind == LibrarySourceKind.FOLDER } ||
+                state.scanProgress != null ||
+                state.sources.any { it.scanState == LibraryScanState.FAILED } ||
+                state.promptsUnmatchedRecords
+            ) {
+                LibrarySourcesCard(
+                    state = state,
+                    onAddLibraryFolder = onAddLibraryFolder,
+                    onRemoveLibraryFolder = onRemoveLibraryFolder,
+                    onPauseLibraryScan = onPauseLibraryScan,
+                    onResumeLibraryScan = onResumeLibraryScan,
+                    onReviewUnmatchedRecords = { showUnmatchedRecords = true },
+                    onDismissUnmatchedRecords = onDismissUnmatchedRecords,
+                )
+            }
+            if (!state.notificationsAllowed && playback.hasActiveTrack) {
+                NotificationNotice(onOpenNotificationSettings = onOpenNotificationSettings)
+            }
+            if (state.catalogMutationFailed) {
+                LibraryMutationFailureNotice()
+            }
         }
         // Kept outside the card: the sheet lists every record, and it stays open while the user works
         // through them, even once the card has nothing else to show.
@@ -470,12 +498,6 @@ fun LibraryScreen(
                 onAssign = onAssignUnmatchedRecord,
                 onDiscard = onDiscardUnmatchedRecord,
             )
-        }
-        if (!state.notificationsAllowed && playback.hasActiveTrack) {
-            NotificationNotice(onOpenNotificationSettings = onOpenNotificationSettings)
-        }
-        if (state.catalogMutationFailed) {
-            LibraryMutationFailureNotice()
         }
         if (state.tracks.isNotEmpty() && orderTarget == null) {
             if (showSearch) {
@@ -1676,6 +1698,19 @@ private fun LibraryMutationFailureNotice() {
         }
     }
 }
+
+/** In a Column, the height left to this child is what the children above it did not take. */
+private fun Modifier.atMostShareOfRemainingHeight(share: Float): Modifier = layout { measurable, constraints ->
+    val maxHeight = if (constraints.hasBoundedHeight) {
+        (constraints.maxHeight * share).toInt().coerceAtLeast(constraints.minHeight)
+    } else {
+        constraints.maxHeight
+    }
+    val placeable = measurable.measure(constraints.copy(maxHeight = maxHeight))
+    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+}
+
+private const val HeaderNoticesShare = 0.5f
 
 @Composable
 private fun LibrarySourcesCard(

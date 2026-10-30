@@ -3,6 +3,7 @@ package io.github.sumirenokai.vesqen
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -19,8 +20,10 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -41,11 +44,14 @@ import io.github.sumirenokai.vesqen.ui.LibraryUiState
 import io.github.sumirenokai.vesqen.ui.MusicAccess
 import io.github.sumirenokai.vesqen.ui.VesqenAppContent
 import io.github.sumirenokai.vesqen.ui.VesqenUiState
+import io.github.sumirenokai.vesqen.ui.screens.ArtistSplitList
+import io.github.sumirenokai.vesqen.ui.screens.ArtistSplitListDialog
 import io.github.sumirenokai.vesqen.ui.screens.LibraryScreen
 import io.github.sumirenokai.vesqen.ui.screens.SettingsLibraryGroup
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -151,13 +157,16 @@ class ArtistSplitUiTest {
 
     @Test
     fun settingsRowsFitANarrowScreenAtTwiceTheTextSize() {
+        val split = ArtistSplitSettings(keptNames = List(12) { "Long Artist Name $it" })
+        var editing by mutableStateOf<ArtistSplitList?>(null)
         compose.setContent {
             VesqenTheme {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 2f)) {
                     Box(Modifier.width(320.dp).verticalScroll(rememberScrollState()).testTag("narrow")) {
-                        Column { SettingsLibraryGroup(ArtistSplitSettings(keptNames = List(12) { "Long Artist Name $it" }), {}) }
+                        Column { SettingsLibraryGroup(split, {}, onEditList = { editing = it }) }
                     }
+                    editing?.let { ArtistSplitListDialog(it, split, {}, onDismiss = { editing = null }) }
                 }
             }
         }
@@ -182,6 +191,91 @@ class ArtistSplitUiTest {
             assertTrue("$button is at least 48 dp tall", bounds.height >= minimum - 1f)
         }
         compose.onNodeWithTag("vesqen.settings.artist-kept-names.dialog.input").assertIsDisplayed()
+    }
+
+    @Test
+    fun anArtistPageThatASettingRemovedClosesAndLeavesBackToTheApp() {
+        var split by mutableStateOf(ArtistSplitSettings())
+        compose.setContent {
+            VesqenTheme {
+                LibraryScreen(
+                    state = LibraryUiState(musicAccess = MusicAccess.GRANTED, tracks = tracks),
+                    playback = PlaybackSnapshot(),
+                    onRequestMusicAccess = {},
+                    onOpenAppSettings = {},
+                    onOpenNotificationSettings = {},
+                    onRescan = {},
+                    onTrackSelected = {},
+                    motionPolicy = VesqenMotionPolicy(reduceMotion = true),
+                    artistSplit = split,
+                )
+            }
+        }
+        compose.onNodeWithTag("vesqen.library.mode.artists").performClick()
+
+        // A change that keeps the open artist's key keeps the page open.
+        compose.onNodeWithText("Nari").performClick()
+        compose.runOnIdle { split = split.copy(keptNames = split.keptNames + "Earth, Wind & Fire") }
+        compose.onNodeWithTag("vesqen.library.track.3").assertIsDisplayed()
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+
+        // #191 C3: switched off, "adam gubman" becomes the whole tag "Adam Gubman", a new key.
+        compose.onNodeWithText("Adam Gubman").performClick()
+        compose.onNodeWithTag("vesqen.library.track.1").assertIsDisplayed()
+        compose.runOnIdle { split = split.copy(enabled = false) }
+        compose.onAllNodesWithTag("vesqen.library.track.1").assertCountEquals(0)
+        compose.onNodeWithText("Adam Gubman feat. Nari").assertIsDisplayed()
+        // Nothing the Library shows is closed by Back now, so Back leaves it.
+        compose.runOnIdle { assertFalse(compose.activity.onBackPressedDispatcher.hasEnabledCallbacks()) }
+        // Switched on again, the old page does not open by itself.
+        compose.runOnIdle { split = split.copy(enabled = true) }
+        compose.onNodeWithText("Nari").assertIsDisplayed()
+        compose.onAllNodesWithTag("vesqen.library.track.1").assertCountEquals(0)
+    }
+
+    @Test
+    fun anOpenListDialogStaysWhenItsGroupLeavesTheSettingsList() {
+        var split by mutableStateOf(ArtistSplitSettings())
+        var height by mutableStateOf(900.dp)
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent {
+            VesqenTheme {
+                Box(Modifier.width(360.dp).height(height)) {
+                    VesqenAppContent(
+                        state = VesqenUiState(library = LibraryUiState(musicAccess = MusicAccess.GRANTED, tracks = tracks)),
+                        onRequestMusicAccess = {},
+                        onOpenAppSettings = {},
+                        onOpenNotificationSettings = {},
+                        onRescan = {},
+                        onTrackSelected = {},
+                        onPrevious = {},
+                        onPlayPause = {},
+                        onNext = {},
+                        onSeek = {},
+                        onCyclePlaybackOrder = {},
+                        motionPolicy = VesqenMotionPolicy(reduceMotion = true),
+                        supportUrl = null,
+                        artistSplit = split,
+                        onArtistSplitChange = { split = it },
+                    )
+                }
+            }
+        }
+        compose.onNodeWithTag("vesqen.nav.settings").performClick()
+        compose.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.artist-kept-names"))
+        compose.onNodeWithTag("vesqen.settings.artist-kept-names").performClick()
+        compose.onNodeWithTag("vesqen.settings.artist-kept-names.dialog.input").performTextReplacement("AC/DC\nEarth, Wind & Fire")
+
+        // #191 C4: a rotation recreates Settings in a shorter window, with the Library group below the
+        // list's view. Inside that group's lazy item the dialog went with it (focus no longer pinned
+        // the item) and came back when the user scrolled there; it now stays, with what was typed.
+        compose.runOnIdle { height = 300.dp }
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onAllNodesWithTag("vesqen.settings.section.library").assertCountEquals(0)
+        compose.onNodeWithTag("vesqen.settings.artist-kept-names.dialog.input").assertTextContains("Earth, Wind & Fire", substring = true)
+        compose.onNodeWithTag("vesqen.settings.artist-kept-names.dialog.save").performClick()
+        compose.runOnIdle { assertEquals(listOf("AC/DC", "Earth, Wind & Fire"), split.keptNames) }
+        compose.onAllNodesWithTag("vesqen.settings.artist-kept-names.dialog").assertCountEquals(0)
     }
 
     private val collectionRow = SemanticsMatcher("a Library collection row") {
