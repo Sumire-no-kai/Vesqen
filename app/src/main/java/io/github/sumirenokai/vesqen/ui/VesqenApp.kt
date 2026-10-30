@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -1628,12 +1629,22 @@ private fun VesqenDestinationFrame(
                 .navigationBarsPadding()
                 .padding(start = VesqenSpacing.md, end = VesqenSpacing.md, bottom = miniPlayerBottomPadding),
         ) { data -> QueueClearedSnackbar(data) }
+        // Now fills its bottom edge with the transport and the liner notes, so there the notice sits
+        // under the top bar, where it covers no control; elsewhere it takes the mini-player's place.
+        val lyricsNoticeOnNow = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
         SnackbarHost(
             hostState = lyricsHooks.noticeHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(start = VesqenSpacing.md, end = VesqenSpacing.md, bottom = miniPlayerBottomPadding),
+            modifier = if (lyricsNoticeOnNow) {
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(start = VesqenSpacing.md, end = VesqenSpacing.md, top = NowTopBarClearance)
+            } else {
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(start = VesqenSpacing.md, end = VesqenSpacing.md, bottom = miniPlayerBottomPadding)
+            },
         ) { data ->
             Snackbar(modifier = Modifier.widthIn(max = 420.dp).testTag("vesqen.lyrics-notice")) {
                 Text(data.visuals.message)
@@ -1641,6 +1652,9 @@ private fun VesqenDestinationFrame(
         }
     }
 }
+
+/** Below Now's 48 dp top bar, with a little air (#169 lyrics notice). */
+private val NowTopBarClearance = 56.dp
 
 /** The lyrics state and actions Now and the Library share (#169). */
 private class LyricsHooks(

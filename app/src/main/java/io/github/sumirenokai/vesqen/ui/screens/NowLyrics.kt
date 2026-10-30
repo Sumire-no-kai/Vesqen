@@ -5,7 +5,6 @@ import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -30,7 +29,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -152,26 +150,36 @@ private fun SyncedLyrics(
     val currentIndex = rememberCurrentLyricLine(lyrics, positionMs, isPlaying)
     val listState = rememberLazyListState()
     val touchExploration = rememberTouchExplorationEnabled()
-    var followPausedUntil by remember { mutableLongStateOf(0L) }
+    val follow = remember { FollowedPosition() }
+    // Any move of the list that following did not make is the listener's: a drag, a fling, or a
+    // scroll by Switch Access, Voice Access or another accessibility service. Each one restarts
+    // the pause, so it runs from the end of the scrolling.
+    var listenerScrolls by remember { mutableIntStateOf(0) }
     LaunchedEffect(listState) {
-        // Programmatic scrolls emit no drag, so only the listener's own scrolling pauses following.
-        listState.interactionSource.interactions.collect { interaction ->
-            if (interaction is DragInteraction.Start) {
-                followPausedUntil = SystemClock.elapsedRealtime() + FOLLOW_PAUSE_MILLIS
-            }
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }.collect { position ->
+            if (!follow.scrolling && position != follow.position) listenerScrolls++
         }
+    }
+    var followPaused by remember { mutableStateOf(false) }
+    LaunchedEffect(listenerScrolls) {
+        if (listenerScrolls == 0) return@LaunchedEffect
+        followPaused = true
+        delay(FOLLOW_PAUSE_MILLIS)
+        // Following resumes at the current line, not at the next line change.
+        followPaused = false
     }
     var positioned by remember(lyrics) { mutableStateOf(false) }
     // TalkBack users move through the lines themselves; following would pull the focus away.
-    LaunchedEffect(lyrics, currentIndex, touchExploration) {
-        if (touchExploration) return@LaunchedEffect
-        while (true) {
-            val wait = followPausedUntil - SystemClock.elapsedRealtime()
-            if (wait <= 0) break
-            delay(wait)
+    LaunchedEffect(lyrics, currentIndex, touchExploration, followPaused) {
+        if (touchExploration || followPaused) return@LaunchedEffect
+        follow.scrolling = true
+        try {
+            // Item 0 is the leading spacer that lets the first line reach the middle.
+            listState.centerItem(currentIndex.coerceAtLeast(0) + 1, animate = positioned && !motionPolicy.reduceMotion)
+        } finally {
+            follow.scrolling = false
+            follow.position = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
         }
-        // Item 0 is the leading spacer that lets the first line reach the middle.
-        listState.centerItem(currentIndex.coerceAtLeast(0) + 1, animate = positioned && !motionPolicy.reduceMotion)
         positioned = true
     }
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -196,10 +204,18 @@ private fun SyncedLyrics(
     }
 }
 
+/** Where following last left the list, and whether it is scrolling it now. */
+private class FollowedPosition {
+    var scrolling = false
+    var position = 0 to 0
+}
+
 /**
  * The current line comes from the last reported position. While playing, the leaf wakes once per
  * line instead of polling, and only while the activity is started: a stopped activity sets no
- * timers (#51). Playback runs at normal speed, so time since the report is added as is.
+ * timers (#51). Playback runs at normal speed, so time since the report is added as is. After a
+ * stop the old report says nothing about the pause or seek that may have happened meanwhile, so
+ * the line waits for the fresh position the poll reports on return.
  */
 @Composable
 private fun rememberCurrentLyricLine(lyrics: Lyrics.Synced, positionMs: Long, isPlaying: Boolean): Int {
@@ -210,7 +226,10 @@ private fun rememberCurrentLyricLine(lyrics: Lyrics.Synced, positionMs: Long, is
         val anchorTime = SystemClock.elapsedRealtime()
         index = lyrics.lineIndexAt(anchorPosition)
         if (!isPlaying) return@LaunchedEffect
+        var started = false
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            if (started) return@repeatOnLifecycle
+            started = true
             while (true) {
                 val position = anchorPosition + (SystemClock.elapsedRealtime() - anchorTime)
                 index = lyrics.lineIndexAt(position)

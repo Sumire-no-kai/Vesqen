@@ -1000,7 +1000,7 @@
     <string name="lyrics_folder_hint">Same-name .lrc files are read only from music folders added in Vesqen.</string>
     <string name="lyrics_unreadable">These lyrics cannot be read</string>
     <string name="lyrics_unreadable_body">Vesqen cannot identify the text encoding of these lyrics. Save them as UTF-8 and import them.</string>
-    <string name="lyrics_play_from_line">Play from this line</string>
+    <string name="lyrics_play_from_line">Go to this line</string>
     <string name="lyrics_imported">Lyrics imported</string>
     <string name="lyrics_import_unreadable">This file cannot be read. Save it as UTF-8 and import it again.</string>
     <string name="lyrics_import_no_lyrics">This file contains no lyrics</string>

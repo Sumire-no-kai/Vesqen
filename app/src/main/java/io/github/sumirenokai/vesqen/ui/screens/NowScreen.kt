@@ -328,7 +328,8 @@ fun NowScreen(
     var showQueue by rememberSaveable { mutableStateOf(false) }
     var showOutputMode by rememberSaveable { mutableStateOf(false) }
     var notesOpen by rememberSaveable { mutableStateOf(false) }
-    var confirmRemoveLyrics by rememberSaveable { mutableStateOf(false) }
+    // The track the remove confirmation was opened for; playback may move on while it is open.
+    var removeLyricsTrackId by rememberSaveable { mutableStateOf<Long?>(null) }
     // Read only while the lyrics or the track details show them (owner decision 12).
     val trackLyrics = rememberTrackLyrics(currentTrack?.takeIf { lyrics.shown || showDetails }, lyrics.imported, loadLyrics)
     val hasImportedLyrics = currentTrack != null && currentTrack.id in lyrics.imported.trackIds
@@ -367,10 +368,10 @@ fun NowScreen(
         onCyclePlaybackOrder()
     }
     LaunchedEffect(currentTrack) {
-        if (currentTrack == null) {
-            showDetails = false
-            confirmRemoveLyrics = false
-        }
+        if (currentTrack == null) showDetails = false
+    }
+    LaunchedEffect(currentTrack?.id) {
+        if (removeLyricsTrackId != currentTrack?.id) removeLyricsTrackId = null
     }
     BackHandler(enabled = showDetails || notesOpen) {
         if (showDetails) showDetails = false else notesOpen = false
@@ -399,7 +400,7 @@ fun NowScreen(
         lyricsShown = lyrics.shown,
         onToggleLyrics = onToggleLyrics,
         onImportLyrics = currentTrack?.let { track -> { onImportLyrics(track) } },
-        onRemoveLyrics = if (hasImportedLyrics) ({ confirmRemoveLyrics = true }) else null,
+        onRemoveLyrics = currentTrack?.takeIf { hasImportedLyrics }?.let { track -> { removeLyricsTrackId = track.id } },
     )
 
     Surface(
@@ -471,20 +472,31 @@ fun NowScreen(
             // The track is already playing; "Play" would replace the queue with the whole library.
             onPlay = null,
             lyrics = trackLyrics,
-            onImportLyrics = actions.onImportLyrics,
-            onRemoveLyrics = actions.onRemoveLyrics,
+            // The sheet closes first, as in the Library, so the import's result is not hidden behind it.
+            onImportLyrics = actions.onImportLyrics?.let { importLyrics ->
+                {
+                    showDetails = false
+                    importLyrics()
+                }
+            },
+            onRemoveLyrics = actions.onRemoveLyrics?.let { removeLyrics ->
+                {
+                    showDetails = false
+                    removeLyrics()
+                }
+            },
         )
     }
-    if (confirmRemoveLyrics && currentTrack != null) {
+    removeLyricsTrackId?.let { trackId ->
         ConfirmDestructiveDialog(
             title = stringResource(R.string.lyrics_remove_confirm_title),
             body = stringResource(R.string.lyrics_remove_confirm_body),
             confirmLabel = stringResource(R.string.lyrics_remove_confirm_action),
             onConfirm = {
-                confirmRemoveLyrics = false
-                onRemoveLyrics(currentTrack.id)
+                removeLyricsTrackId = null
+                onRemoveLyrics(trackId)
             },
-            onDismiss = { confirmRemoveLyrics = false },
+            onDismiss = { removeLyricsTrackId = null },
             tag = "vesqen.now.remove-lyrics-confirm",
         )
     }

@@ -968,7 +968,7 @@
     <string name="lyrics_folder_hint">同名 .lrc 文件仅在 Vesqen 中添加的音乐文件夹里查找。</string>
     <string name="lyrics_unreadable">无法读取这份歌词</string>
     <string name="lyrics_unreadable_body">无法识别这份歌词的文字编码。请将歌词另存为 UTF-8 后导入。</string>
-    <string name="lyrics_play_from_line">从这一行开始播放</string>
+    <string name="lyrics_play_from_line">跳到这一行</string>
     <string name="lyrics_imported">歌词已导入</string>
     <string name="lyrics_import_unreadable">无法读取此文件。请另存为 UTF-8 后重新导入。</string>
     <string name="lyrics_import_no_lyrics">此文件中没有歌词</string>

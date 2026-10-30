@@ -17,12 +17,16 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
@@ -127,6 +131,56 @@ class NowLyricsUiTest {
     }
 
     @Test
+    fun scrollingPausesFollowingUntilFourSecondsAfterItStops() {
+        val long = Lyrics.Synced((0 until 40).map { LyricLine(it * 5_000L, "Line $it") })
+        setNow(lyrics = TrackLyrics.Found(LyricsSource.Embedded, long), positionMs = { 30 * 5_000L + 100 })
+        compose.onNodeWithTag("vesqen.now.lyrics.line.30").assertIsDisplayed()
+
+        compose.mainClock.autoAdvance = false
+        // A scroll through the semantics action, as Switch Access and Voice Access send it.
+        compose.onNodeWithTag("vesqen.now.lyrics.lines").performScrollToIndex(1)
+        compose.mainClock.advanceTimeBy(3_000)
+        compose.onNodeWithTag("vesqen.now.lyrics.line.30").assertIsNotDisplayed()
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        compose.onNodeWithTag("vesqen.now.lyrics.line.30").assertIsDisplayed()
+    }
+
+    @Test
+    fun theRemoveConfirmationClosesWhenTheTrackChanges() {
+        val next = track.copy(id = 8, contentUri = "content://media/external/audio/media/8", title = "Morning")
+        var current by mutableStateOf(track)
+        val removals = mutableListOf<Long>()
+        setNow(imported = setOf(track.id, next.id), currentTrack = { current }, onRemoveLyrics = { removals += it })
+
+        compose.onNodeWithTag("vesqen.now.more").performClick()
+        compose.onNodeWithTag("vesqen.now.remove-lyrics").performClick()
+        compose.onNodeWithText(context.getString(R.string.lyrics_remove_confirm_body)).assertIsDisplayed()
+        current = next
+        compose.waitForIdle()
+        compose.onAllNodesWithText(context.getString(R.string.lyrics_remove_confirm_body)).assertCountEquals(0)
+
+        compose.onNodeWithTag("vesqen.now.more").performClick()
+        compose.onNodeWithTag("vesqen.now.remove-lyrics").performClick()
+        compose.onNodeWithText(context.getString(R.string.lyrics_remove_confirm_action)).performClick()
+        assertEquals(listOf(next.id), removals)
+    }
+
+    @Test
+    fun importFromTrackInformationClosesTheSheetFirst() {
+        val imports = mutableListOf<Long>()
+        setNow(onImportLyrics = { imports += it.id })
+
+        compose.onNodeWithTag("vesqen.now.more").performClick()
+        compose.onNodeWithTag("vesqen.now.more.info").performClick()
+        compose.onNodeWithTag("vesqen.track-details.import-lyrics").performScrollTo().performClick()
+
+        assertEquals(listOf(track.id), imports)
+        compose.onAllNodesWithTag("vesqen.track-details").assertCountEquals(0)
+    }
+
+    @Test
     fun withoutLyricsTheStageOffersImportAndTheFolderHint() {
         val imports = mutableListOf<Long>()
         setNow(lyrics = TrackLyrics.None(folderHint = true), onImportLyrics = { imports += it.id })
@@ -205,6 +259,7 @@ class NowLyricsUiTest {
         lyricsShown: () -> Boolean = { true },
         lyrics: TrackLyrics = TrackLyrics.Found(LyricsSource.SameNameFile, synced),
         imported: Set<Long> = emptySet(),
+        currentTrack: () -> AudioTrack = { track },
         positionMs: () -> Long = { 0L },
         onToggleLyrics: () -> Unit = {},
         onSeek: (Long) -> Unit = {},
@@ -219,6 +274,7 @@ class NowLyricsUiTest {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
                 Box(Modifier.size(width, height)) {
+                    val track = currentTrack()
                     NowScreen(
                         snapshot = PlaybackSnapshot(
                             isControllerReady = true,

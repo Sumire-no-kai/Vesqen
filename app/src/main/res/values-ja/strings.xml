@@ -970,7 +970,7 @@
     <string name="lyrics_folder_hint">同名の .lrc ファイルは、Vesqen に追加した音楽フォルダ内でのみ検索します。</string>
     <string name="lyrics_unreadable">この歌詞を読み込めません</string>
     <string name="lyrics_unreadable_body">この歌詞の文字コードを判別できません。UTF-8 で保存し直してからインポートしてください。</string>
-    <string name="lyrics_play_from_line">この行から再生</string>
+    <string name="lyrics_play_from_line">この行へ移動</string>
     <string name="lyrics_imported">歌詞をインポートしました</string>
     <string name="lyrics_import_unreadable">このファイルを読み込めません。UTF-8 で保存し直してから、もう一度インポートしてください。</string>
     <string name="lyrics_import_no_lyrics">このファイルには歌詞が含まれていません</string>
