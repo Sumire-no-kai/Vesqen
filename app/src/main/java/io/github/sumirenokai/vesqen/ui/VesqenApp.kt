@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
@@ -59,6 +60,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -80,7 +82,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -518,7 +524,6 @@ fun VesqenAppContent(
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     // #169: the import's result, shown like the cleared-queue notice (owner decision 4).
     val lyricsNoticeHostState = remember { SnackbarHostState() }
-    val lyricsHooks = LyricsHooks(lyrics, loadLyrics, onToggleLyrics, onImportLyrics, onRemoveLyrics, lyricsNoticeHostState)
     // #165: after Clear queue, a notice offers Undo for a while.
     val queueClearedHostState = remember { SnackbarHostState() }
     val queueClearedScope = rememberCoroutineScope()
@@ -575,19 +580,23 @@ fun VesqenAppContent(
     )
     val navigationState = currentNavigation()
     val destination = navigationState.destination
+    val hasFocusedPlayer = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
     // #169: on Now the transport, the liner notes and, at large text, the top bar fill the edges, so
     // a notice there would cover a control. A failed import is a dialog instead; a successful one
-    // needs none, since the lyrics or their source show on Now. Elsewhere it is a snackbar.
+    // switches Now to the lyrics and is announced once to screen readers. Elsewhere it is a snackbar.
     val lyricsNoticeScope = rememberCoroutineScope()
     val lyricsNotice = state.lyricsImportNotice
     val lyricsNoticeMessage = lyricsNotice?.let { stringResource(lyricsImportMessage(it.result)) }
     var lyricsImportFailure by rememberSaveable { mutableStateOf<LyricsImportResult?>(null) }
+    var lyricsImportedAnnouncement by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(lyricsNotice?.id) {
         if (lyricsNotice == null || lyricsNoticeMessage == null) return@LaunchedEffect
-        val onNow = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
         when {
-            onNow && lyricsNotice.result != LyricsImportResult.IMPORTED -> lyricsImportFailure = lyricsNotice.result
-            onNow -> Unit
+            hasFocusedPlayer && lyricsNotice.result != LyricsImportResult.IMPORTED -> lyricsImportFailure = lyricsNotice.result
+            hasFocusedPlayer -> {
+                if (!lyrics.shown) onToggleLyrics()
+                lyricsImportedAnnouncement = lyricsNotice.id
+            }
             else -> lyricsNoticeScope.launch {
                 lyricsNoticeHostState.currentSnackbarData?.dismiss()
                 lyricsNoticeHostState.showSnackbar(lyricsNoticeMessage)
@@ -595,6 +604,24 @@ fun VesqenAppContent(
         }
         onLyricsImportNoticeShown(lyricsNotice.id)
     }
+    LaunchedEffect(lyricsImportedAnnouncement) {
+        if (lyricsImportedAnnouncement == null) return@LaunchedEffect
+        delay(LYRICS_IMPORTED_ANNOUNCEMENT_MILLIS)
+        lyricsImportedAnnouncement = null
+    }
+    // A notice from the Library would cover Now's transport or liner notes for its last seconds.
+    LaunchedEffect(hasFocusedPlayer) {
+        if (hasFocusedPlayer) lyricsNoticeHostState.currentSnackbarData?.dismiss()
+    }
+    val lyricsHooks = LyricsHooks(
+        lyrics,
+        loadLyrics,
+        onToggleLyrics,
+        onImportLyrics,
+        onRemoveLyrics,
+        lyricsNoticeHostState,
+        lyricsImportedAnnouncement,
+    )
     lyricsImportFailure?.let { failure ->
         AlertDialog(
             onDismissRequest = { lyricsImportFailure = null },
@@ -607,7 +634,6 @@ fun VesqenAppContent(
             modifier = Modifier.testTag("vesqen.lyrics-import-failure"),
         )
     }
-    val hasFocusedPlayer = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
     val refreshFocusedPlayerPosition = shouldRefreshPlaybackPosition(destination, state.playback)
     val currentRefreshPlaybackPosition by rememberUpdatedState(onRefreshPlaybackPosition)
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -1672,6 +1698,23 @@ private fun VesqenDestinationFrame(
                 Text(data.visuals.message)
             }
         }
+        // Spoken by a screen reader and drawn nowhere, so it covers no control on Now. Each import
+        // gets a node of its own, so a second one within the few seconds is announced too.
+        lyricsHooks.importedAnnouncement?.let { importId ->
+            val message = stringResource(R.string.lyrics_imported)
+            key(importId) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .size(1.dp)
+                        .semantics {
+                            contentDescription = message
+                            liveRegion = LiveRegionMode.Polite
+                        }
+                        .testTag("vesqen.lyrics-imported-announcement"),
+                )
+            }
+        }
     }
 }
 
@@ -1683,7 +1726,11 @@ private class LyricsHooks(
     val onImport: (AudioTrack) -> Unit,
     val onRemove: (Long) -> Unit,
     val noticeHostState: SnackbarHostState,
+    /** The notice ID of an import on Now that succeeded, for a few seconds and one polite announcement. */
+    val importedAnnouncement: Long?,
 )
+
+private const val LYRICS_IMPORTED_ANNOUNCEMENT_MILLIS = 4_000L
 
 private fun lyricsImportMessage(result: LyricsImportResult): Int = when (result) {
     LyricsImportResult.IMPORTED -> R.string.lyrics_imported
