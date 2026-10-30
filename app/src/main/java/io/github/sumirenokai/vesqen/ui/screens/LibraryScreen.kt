@@ -113,6 +113,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -335,11 +336,15 @@ fun LibraryScreen(
     }
     // A new split setting gives most artists a new key (#191 C3). An open artist page it removed
     // closes for good, so its old key neither takes the next Back nor reopens it with a later setting.
-    var keyedArtistNames by remember { mutableStateOf(artistNames) }
-    if (keyedArtistNames !== artistNames) {
+    // The setting changes in Settings while the Library is not composed, so the setting the key was
+    // read under is saved with it (R3-C1). The hash of its Boolean and string lists is the same in
+    // every process.
+    val artistSplitHash = artistSplit.hashCode()
+    var keyedArtistSplitHash by rememberSaveable { mutableIntStateOf(artistSplitHash) }
+    if (keyedArtistSplitHash != artistSplitHash) {
         SideEffect {
             if (selectedCollection == null) selectedCollectionKey = null
-            keyedArtistNames = artistNames
+            keyedArtistSplitHash = artistSplitHash
         }
     }
     // Back closes what is shown: a key whose collection is gone shows nothing, so it must not take Back.
@@ -447,9 +452,10 @@ fun LibraryScreen(
         LaunchedEffect(state.unmatchedRecords.isEmpty()) {
             if (state.unmatchedRecords.isEmpty()) showUnmatchedRecords = false
         }
-        // #191 C2: the notices take at most half the height under the title and scroll inside it.
-        // At 320 x 533 dp and 2.0x text the sources card with the unmatched-records line otherwise
-        // left the songs no height; at normal sizes they never reach the limit.
+        // #191 C2: the access notice and the sources card take at most half the height under the
+        // title and scroll inside it. At 320 x 533 dp and 2.0x text the card with the unmatched-records
+        // line otherwise left the songs no height. A scanning card can reach the limit at normal text
+        // on a small phone too, so the two short notices below stay outside, always in view (R3-C2).
         Column(
             modifier = Modifier
                 .atMostShareOfRemainingHeight(HeaderNoticesShare)
@@ -481,12 +487,12 @@ fun LibraryScreen(
                     onDismissUnmatchedRecords = onDismissUnmatchedRecords,
                 )
             }
-            if (!state.notificationsAllowed && playback.hasActiveTrack) {
-                NotificationNotice(onOpenNotificationSettings = onOpenNotificationSettings)
-            }
-            if (state.catalogMutationFailed) {
-                LibraryMutationFailureNotice()
-            }
+        }
+        if (!state.notificationsAllowed && playback.hasActiveTrack) {
+            NotificationNotice(onOpenNotificationSettings = onOpenNotificationSettings)
+        }
+        if (state.catalogMutationFailed) {
+            LibraryMutationFailureNotice()
         }
         // Kept outside the card: the sheet lists every record, and it stays open while the user works
         // through them, even once the card has nothing else to show.
