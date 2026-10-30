@@ -17,6 +17,11 @@ internal class UnmatchedRecordPrompt(context: Context) {
         preferences.edit { putString(KEY_DISMISSED_RECORD_IDS, recordIds.joinToString(",")) }
     }
 
+    /** On disk before a catalog rebuild returns: the new catalog gives the same IDs to other records (#191 D9). */
+    fun clear() {
+        preferences.edit(commit = true) { remove(KEY_DISMISSED_RECORD_IDS) }
+    }
+
     private companion object {
         const val PREFERENCES_NAME = "library-unmatched-records"
         const val KEY_DISMISSED_RECORD_IDS = "dismissed_record_ids"

@@ -440,6 +440,10 @@ fun LibraryScreen(
             )
         }
         var showUnmatchedRecords by rememberSaveable { mutableStateOf(false) }
+        // Once every record is handled the sheet goes; a later record waits for the line again (#191 D10).
+        LaunchedEffect(state.unmatchedRecords.isEmpty()) {
+            if (state.unmatchedRecords.isEmpty()) showUnmatchedRecords = false
+        }
         if (
             state.sources.any { it.kind == LibrarySourceKind.FOLDER } ||
             state.scanProgress != null ||
@@ -1945,34 +1949,48 @@ private fun UnmatchedRecordsSheet(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag("vesqen.library.unmatched-records"),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.sm),
-        ) {
+        UnmatchedRecordsList(records, playlists, onAssign, onDiscard = { pendingDiscard = it })
+    }
+}
+
+/**
+ * The sheet's title, explanation and records in one list: on a small screen with large text the
+ * title and explanation fill the sheet, and the records follow them as the user scrolls (#191 D4).
+ */
+@Composable
+internal fun UnmatchedRecordsList(
+    records: List<UnmatchedLibraryRecord>,
+    playlists: List<LibraryPlaylist>,
+    onAssign: (Long, Long) -> Unit,
+    onDiscard: (AudioTrack) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxWidth().testTag("vesqen.library.unmatched-records.list"),
+        contentPadding = PaddingValues(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.sm),
+    ) {
+        item(key = "title") {
             Text(
                 text = stringResource(R.string.unmatched_records_title),
                 style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = VesqenSpacing.xs),
             )
-            Spacer(Modifier.height(VesqenSpacing.xs))
+        }
+        item(key = "body") {
             Text(
                 text = stringResource(R.string.unmatched_records_body),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = VesqenSpacing.sm),
             )
-            Spacer(Modifier.height(VesqenSpacing.sm))
-            LazyColumn(modifier = Modifier.heightIn(max = 480.dp)) {
-                items(items = records, key = { it.record.id }) { item ->
-                    UnmatchedRecordItem(
-                        item = item,
-                        playlistCount = playlists.count { item.record.id in it.trackIds },
-                        onAssign = { trackId -> onAssign(item.record.id, trackId) },
-                        onDiscard = { pendingDiscard = item.record },
-                    )
-                    HorizontalDivider()
-                }
-            }
-            Spacer(Modifier.height(VesqenSpacing.sm))
+        }
+        items(items = records, key = { it.record.id }) { item ->
+            UnmatchedRecordItem(
+                item = item,
+                playlistCount = playlists.count { item.record.id in it.trackIds },
+                onAssign = { trackId -> onAssign(item.record.id, trackId) },
+                onDiscard = { onDiscard(item.record) },
+            )
+            HorizontalDivider()
         }
     }
 }

@@ -57,4 +57,17 @@ class ArtistSplitPreferencesTest {
         assertEquals(emptyList<String>(), restored.separators)
         assertEquals(emptyList<String>(), restored.keptNames)
     }
+
+    @Test
+    fun restoringTheDefaultsFollowsLaterDefaultsAgain() {
+        val store = ArtistSplitPreferences(context, name)
+        store.save(ArtistSplitSettings(separators = listOf("/"), keptNames = listOf("AC/DC")))
+        // #191 D14: "Restore defaults" stored the defaults, so a later version's defaults did not apply.
+        store.save(ArtistSplitSettings(separators = DefaultArtistSeparators, keptNames = DefaultKeptArtistNames))
+
+        val stored = context.getSharedPreferences(name, 0)
+        assertFalse(stored.contains("artist-separators"))
+        assertFalse(stored.contains("artist-kept-names"))
+        assertEquals(ArtistSplitSettings(), ArtistSplitPreferences(context, name).settings.value)
+    }
 }

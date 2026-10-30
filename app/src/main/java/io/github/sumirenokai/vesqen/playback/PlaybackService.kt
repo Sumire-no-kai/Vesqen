@@ -264,7 +264,7 @@ class PlaybackService : MediaSessionService() {
                 setWakeMode(C.WAKE_MODE_LOCAL)
                 pauseAtEndOfMediaItems = false
                 setShuffleOrder(PlayOrder(IntArray(0)))
-                applyKeptPlayModes(playbackStateStore)
+                applySavedPlayModes(playbackStateStore)
             }
         player.addListener((application as VesqenApplication).deviceReportRuntime.playbackListener(player))
         player.addListener(playbackListener)
@@ -284,6 +284,12 @@ class PlaybackService : MediaSessionService() {
             onPlaybackStarted = (application as VesqenApplication)
                 .playbackHistoryRecorder::recordPlayback,
         ).also(PlaybackStateKeeper::start)
+        // This service writes the playback state, so a catalog merge changes its saved queue and its
+        // entries in one step (#191 D7).
+        (application as VesqenApplication).playbackTrackMerges.attach { from, into ->
+            playbackStateStore.replaceTrackId(from, into)
+            player.replaceTrackEntries(from, into)
+        }
         serviceScope.launch {
             // The queue's catalog IDs name other songs, or none, in a rebuilt catalog (#165): playing,
             // counting or saving it would mix them up. The saved queue was cleared before the rebuild.
@@ -399,6 +405,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        (application as VesqenApplication).playbackTrackMerges.detach()
         serviceScope.cancel()
         (application as VesqenApplication).usbOutputStateRepository.removeListener(outputStateListener)
         usbOutputCoordinator?.close()

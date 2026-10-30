@@ -420,13 +420,13 @@ class ShuffleQueueEditDeviceTest {
             // left, or the process ended), its next player started in order. The service here cannot
             // be ended on cue, since System UI stays bound to it after playback, so the next player is
             // built as the service builds its own.
-            assertEquals(PlaybackOrderSettings(true, PlaybackRepeatMode.OFF), PlaybackStateStore(app).loadKeptPlayModes())
+            assertEquals(PlaybackOrderSettings(true, PlaybackRepeatMode.OFF), PlaybackStateStore(app).loadPlayModes())
             var shuffled = false
             var order = emptyList<Int>()
             main {
                 val player = ExoPlayer.Builder(app).build().apply {
                     setShuffleOrder(PlayOrder(IntArray(0)))
-                    applyKeptPlayModes(PlaybackStateStore(app))
+                    applySavedPlayModes(PlaybackStateStore(app))
                 }
                 try {
                     // A new queue from the Library, as the controller sends it, started at its third track.

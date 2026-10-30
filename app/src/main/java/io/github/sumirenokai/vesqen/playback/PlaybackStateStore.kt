@@ -116,9 +116,11 @@ internal class PlaybackStateStore(context: Context) {
      */
     fun hasSavedQueue(): Boolean = !preferences.getString(KEY_QUEUE_IDS, null).isNullOrEmpty()
 
-    /** The modes [clear] kept, while no queue is saved; a saved queue's own modes come with [load]. */
-    fun loadKeptPlayModes(): PlaybackOrderSettings? =
-        if (hasSavedQueue()) null else savedPlayModes()
+    /**
+     * The saved shuffle and repeat modes, with or without a saved queue: [clear] keeps them, and a
+     * saved queue that cannot be restored leaves them for the next one (#191 D15).
+     */
+    fun loadPlayModes(): PlaybackOrderSettings? = savedPlayModes()
 
     /**
      * Keeps [trackIds], saved tracks a restore could not play (#165), in the saved queue for as long
@@ -373,11 +375,11 @@ internal class PlaybackStateStore(context: Context) {
 }
 
 /**
- * For the service's new player: a new queue keeps the modes of the one cleared before, also in a new
- * service (#165 X2). A saved queue brings its own when it is restored.
+ * For the service's new player: a new queue keeps the saved modes, also in a new service (#165 X2),
+ * and also when the saved queue cannot be restored (#191 D15). A restored queue sets its own.
  */
-internal fun Player.applyKeptPlayModes(store: PlaybackStateStore) {
-    val modes = store.loadKeptPlayModes() ?: return
+internal fun Player.applySavedPlayModes(store: PlaybackStateStore) {
+    val modes = store.loadPlayModes() ?: return
     shuffleModeEnabled = modes.shuffleEnabled
     repeatMode = modes.repeatMode.toMedia3RepeatMode()
 }
@@ -393,10 +395,16 @@ internal fun PersistedPlaybackState.restoreAgainst(tracks: List<AudioTrack>): Re
         it in queueTrackIds.indices && queueTrackIds[it] == currentTrackId
     } ?: queueTrackIds.indexOfFirst { it == currentTrackId }
     val currentEntryIndex = restoredEntries.indexOfFirst { it.first == savedIndex }
+    val restoredIndexOf = restoredEntries.withIndex().associate { (restoredIndex, entry) -> entry.first to restoredIndex }
     // The saved play order without the tracks left out, in restored indices (#170).
     val restoredPlayOrder = playOrder?.takeIf { shuffleEnabled }?.let { order ->
-        val restoredIndexOf = restoredEntries.withIndex().associate { (restoredIndex, entry) -> entry.first to restoredIndex }
         order.mapNotNull(restoredIndexOf::get).takeIf { it.sorted() == restoredEntries.indices.toList() }
+    }
+    // The saved entry was held back: the next one after it that can play starts, from its beginning,
+    // in the saved play order while shuffled, instead of the head of the queue (#191 D16).
+    val afterHeldBack = if (currentEntryIndex >= 0 || savedIndex < 0) null else {
+        val savedOrder = playOrder?.takeIf { restoredPlayOrder != null } ?: queueTrackIds.indices.toList()
+        savedOrder.drop(savedOrder.indexOf(savedIndex) + 1).firstNotNullOfOrNull(restoredIndexOf::get)
     }
     // A queue saved after it played to the end, typically an album with repeat off, would restore
     // at the end and play nothing. It continues with the next track instead, or from the start of
@@ -411,7 +419,7 @@ internal fun PersistedPlaybackState.restoreAgainst(tracks: List<AudioTrack>): Re
     }
     val firstIndex = restoredPlayOrder?.firstOrNull() ?: 0
     val (startIndex, startPositionMs) = when {
-        currentEntryIndex < 0 -> firstIndex to 0L
+        currentEntryIndex < 0 -> (afterHeldBack ?: firstIndex) to 0L
         !finished -> currentEntryIndex to positionMs
         repeatMode == PlaybackRepeatMode.ONE -> currentEntryIndex to 0L
         nextIndex != null -> nextIndex to 0L

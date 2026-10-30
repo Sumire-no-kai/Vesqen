@@ -9,10 +9,12 @@ import io.github.sumirenokai.vesqen.diagnostics.AndroidDiagnosticRecordingStore
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
 import io.github.sumirenokai.vesqen.library.AndroidLibraryRebuildNotice
 import io.github.sumirenokai.vesqen.library.LibraryCatalogStore
+import io.github.sumirenokai.vesqen.library.TrackMergeFollowers
 import io.github.sumirenokai.vesqen.lyrics.LocalLyricsResolver
 import io.github.sumirenokai.vesqen.lyrics.LyricsStore
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryRecorder
 import io.github.sumirenokai.vesqen.playback.PlaybackStateStore
+import io.github.sumirenokai.vesqen.playback.PlaybackTrackMerges
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStateRepository
 import io.github.sumirenokai.vesqen.premium.ActivationCodes
@@ -26,6 +28,7 @@ import io.github.sumirenokai.vesqen.support.SupportPromptRuntime
 import io.github.sumirenokai.vesqen.support.supportDevelopmentUrl
 import io.github.sumirenokai.vesqen.telemetry.AndroidPlaybackTelemetry
 import io.github.sumirenokai.vesqen.telemetry.PlaybackTelemetry
+import io.github.sumirenokai.vesqen.ui.UnmatchedRecordPrompt
 import io.github.sumirenokai.vesqen.verification.AndroidOutputVerificationRepository
 import io.github.sumirenokai.vesqen.verification.OutputVerificationRepository
 import java.io.File
@@ -109,11 +112,16 @@ class VesqenApplication : Application() {
                 PlaybackStateStore(this).clear(durable = true)
                 // Imported lyrics are bound to the old IDs too (#169, owner decision 7).
                 lyricsStore.clearAll()
+                // So are the records "Later" was pressed for, and the new catalog gives their IDs out again (#191 D9).
+                UnmatchedRecordPrompt(this).clear()
                 libraryRebuildNotice.markDue()
             },
-            mergeFollower = lyricsStore,
+            mergeFollower = TrackMergeFollowers(lyricsStore, playbackTrackMerges),
         )
     }
+
+    /** #191 D1, D7, D8: the catalog's merges reach the queue through the playback service. */
+    internal val playbackTrackMerges by lazy { PlaybackTrackMerges(this) }
 
     /** #169: imported lyrics, kept with the other private data that is never backed up. */
     internal val lyricsStore by lazy { LyricsStore(File(noBackupFilesDir, "lyrics")) }
@@ -134,11 +142,21 @@ class VesqenApplication : Application() {
         )
     }
 
-    /** A library that cannot be read counts no plays, so the support question waits for a later open. */
-    private fun totalLibraryPlays(): Long = try {
-        libraryCatalogStore.totalPlayCount()
-    } catch (_: SQLiteException) {
-        0
+    /**
+     * A library that cannot be read counts no plays, so the support question waits for a later open.
+     * A rebuild started by another caller closes the shared database under this read, which then
+     * fails with IllegalStateException; that is the rebuild too (#191 D6). Any other is thrown.
+     */
+    private fun totalLibraryPlays(): Long {
+        val rebuildsBefore = libraryCatalogStore.rebuilds.value
+        return try {
+            libraryCatalogStore.totalPlayCount()
+        } catch (_: SQLiteException) {
+            0
+        } catch (failure: IllegalStateException) {
+            if (libraryCatalogStore.rebuilds.value == rebuildsBefore) throw failure
+            0
+        }
     }
 
     val outputVerificationRepository: OutputVerificationRepository by lazy {

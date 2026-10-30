@@ -67,6 +67,8 @@ data class LibraryPlaylist(
 data class LibraryRefreshResult(
     val snapshot: LibraryCatalogSnapshot,
     val hadFailure: Boolean,
+    /** The scan stopped at its next row for a folder removal or a record choice; it should run again (#191 D17). */
+    val yieldedToEdit: Boolean = false,
 )
 
 /** Persisted values returned after one atomic listening-history increment. */

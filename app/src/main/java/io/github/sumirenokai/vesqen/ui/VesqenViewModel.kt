@@ -162,9 +162,13 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                 playlists = emptyList(),
                 sources = emptyList(),
                 unmatchedRecords = emptyList(),
+                // The new catalog gives these record IDs out again (#191 D9).
+                dismissedUnmatchedRecordIds = emptySet(),
                 isLoading = true,
             )
         }
+        // A pause was for the old catalog's scan; the empty one must be scanned (#191 D18).
+        catalog.resume()
         refreshLibrary()
     }
 
@@ -273,6 +277,9 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
             } catch (failure: Exception) {
                 Result.failure(failure)
             }
+            // A scan that stopped at its next row for a folder removal or a record choice runs again once
+            // that edit has the catalog (#191 D17).
+            if (result.getOrNull()?.yieldedToEdit == true) libraryRefreshQueued = true
             if (
                 libraryRefreshEpoch != requestEpoch
             ) {
@@ -465,19 +472,20 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         mutateCatalog { catalog.setFavorite(trackId, favorite) }
     }
 
+    /** False when the order could not be saved; a rebuild is not that, and its notice says what went. */
     suspend fun saveTrackOrder(playlistId: Long?, trackIds: List<Long>): Boolean {
         val rebuildsBefore = catalogRebuilds.value
-        return try {
+        try {
             withContext(Dispatchers.IO) { catalog.saveTrackOrder(playlistId, trackIds) }
-            noteEditDuringScan()
-            loadCachedLibrary()
-            true
         } catch (failure: SQLiteException) {
-            false
+            return catalogRebuiltSince(rebuildsBefore)
         } catch (failure: IllegalStateException) {
             failure.rethrowUnlessCatalogRebuiltSince(rebuildsBefore)
-            false
+            return true
         }
+        noteEditDuringScan()
+        loadCachedLibraryAfterEdit()
+        return true
     }
 
     fun createPlaylist(name: String) {
@@ -505,15 +513,11 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * The record keeps its ID and takes over the chosen song's row (#139), so queue entries of that
-     * song move to the record. The controller waits for a library read that holds the record, which
-     * is this reload unless a newer read replaced it.
+     * The record keeps its ID and takes over the chosen song's row (#139). Queue entries of that song
+     * move to the record as the choice commits, through the playback service (PlaybackTrackMerges).
      */
     fun assignUnmatchedRecord(recordId: Long, trackId: Long) {
-        var assigned = false
-        mutateCatalog(afterReload = { if (assigned) playbackController().replaceQueueTrack(trackId, recordId) }) {
-            assigned = catalog.assignUnmatchedRecord(recordId, trackId)
-        }
+        mutateCatalog { catalog.assignUnmatchedRecord(recordId, trackId) }
     }
 
     fun discardUnmatchedRecord(recordId: Long) {
@@ -585,15 +589,18 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun refreshCachedLibrary() {
-        viewModelScope.launch {
-            try {
-                loadCachedLibrary()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                // Keep the last good projection; the user can still request a full refresh.
-                updateLibrary { it.copy(loadingFailed = true) }
-            }
+        viewModelScope.launch { loadCachedLibraryAfterEdit() }
+    }
+
+    /** A read whose failure is a failed read, also after an edit that committed (#191 D1). */
+    private suspend fun loadCachedLibraryAfterEdit() {
+        try {
+            loadCachedLibrary()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Keep the last good projection; the user can still request a full refresh.
+            updateLibrary { it.copy(loadingFailed = true) }
         }
     }
 
@@ -650,34 +657,37 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         if (activeLibraryScan?.isActive == true) catalogEditedDuringScan = true
     }
 
-    private fun mutateCatalog(afterReload: () -> Unit = {}, action: suspend () -> Unit) {
+    /** Only the edit's own failure is a failed edit; the read after it is reported as a read (#191 D1). */
+    private fun mutateCatalog(action: suspend () -> Unit) {
         viewModelScope.launch {
             updateLibrary { it.copy(catalogMutationFailed = false) }
             val rebuildsBefore = catalogRebuilds.value
             try {
                 withContext(Dispatchers.IO) { action() }
-                noteEditDuringScan()
-                loadCachedLibrary()
-                afterReload()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: SQLiteException) {
-                updateLibrary { it.copy(catalogMutationFailed = true) }
+            } catch (failure: SQLiteException) {
+                if (!catalogRebuiltSince(rebuildsBefore)) updateLibrary { it.copy(catalogMutationFailed = true) }
+                return@launch
             } catch (failure: IllegalStateException) {
                 failure.rethrowUnlessCatalogRebuiltSince(rebuildsBefore)
+                return@launch
             }
+            noteEditDuringScan()
+            loadCachedLibraryAfterEdit()
         }
     }
 
     /**
-     * #165 U4: when SQLite finds the catalog corrupt during a write, the handler closes the database
-     * under it. The write's transaction then ends on a closed database, or a statement runs on one,
-     * and fails with IllegalStateException instead of an SQLiteException. A failure while the catalog
-     * was rebuilt is that rebuild, which [onCatalogRebuilt] handles; any other is thrown as before.
+     * #165 U4, #191 D6: when SQLite finds the catalog corrupt, the handler closes the shared database
+     * under every caller. A write then fails with IllegalStateException, or, when another caller holds
+     * it, with an SQLiteException that reports the corruption. A failure while the catalog was rebuilt
+     * is that rebuild, whatever its type, and [onCatalogRebuilt] handles it.
      */
+    private fun catalogRebuiltSince(rebuildsBefore: Int): Boolean = catalogRebuilds.value != rebuildsBefore
+
+    /** Any other IllegalStateException is thrown as before. */
     private fun IllegalStateException.rethrowUnlessCatalogRebuiltSince(rebuildsBefore: Int) {
         // Coroutine cancellation is an IllegalStateException too.
-        if (this is CancellationException || catalogRebuilds.value == rebuildsBefore) throw this
+        if (this is CancellationException || !catalogRebuiltSince(rebuildsBefore)) throw this
     }
 }
 
