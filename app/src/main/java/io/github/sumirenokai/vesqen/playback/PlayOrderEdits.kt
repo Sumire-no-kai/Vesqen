@@ -104,19 +104,25 @@ internal fun MediaItem.queueEntryId(): String =
  * app's controller shows at once, so a library refresh right after one works on the new queue. The
  * service places the item from its own current item, which may have moved on while the request
  * travelled. A restored shuffled queue, from the app's controller or a media button resumption,
- * arrives with its saved play order in the items ([withPlayOrder]).
+ * arrives with its saved play order in the items ([withPlayOrder]). A queue the app held from before
+ * a catalog merge takes the merged IDs here ([mergedTrackId], #191 A3).
  */
 @androidx.annotation.OptIn(UnstableApi::class)
-internal class PlayOrderSessionPlayer(val exoPlayer: ExoPlayer) : ForwardingPlayer(exoPlayer) {
+internal class PlayOrderSessionPlayer(
+    val exoPlayer: ExoPlayer,
+    private val mergedTrackId: (Long) -> Long = { it },
+) : ForwardingPlayer(exoPlayer) {
     override fun addMediaItems(index: Int, mediaItems: List<MediaItem>) {
-        val item = mediaItems.singleOrNull()
-        val placement = item?.playOrderPlacement() ?: return super.addMediaItems(index, mediaItems)
+        val items = mediaItems.map { it.withMergedTrackId(mergedTrackId) }
+        val item = items.singleOrNull()
+        val placement = item?.playOrderPlacement() ?: return super.addMediaItems(index, items)
         exoPlayer.insertInPlayOrder(item.withoutRequestMetadata(), placement)
     }
 
     override fun setMediaItems(mediaItems: List<MediaItem>, startIndex: Int, startPositionMs: Long) {
-        val order = mediaItems.namedPlayOrder() ?: return super.setMediaItems(mediaItems, startIndex, startPositionMs)
-        exoPlayer.setMediaItemsInPlayOrder(mediaItems.map { it.withoutRequestMetadata() }, order, startIndex, startPositionMs)
+        val items = mediaItems.map { it.withMergedTrackId(mergedTrackId) }
+        val order = items.namedPlayOrder() ?: return super.setMediaItems(items, startIndex, startPositionMs)
+        exoPlayer.setMediaItemsInPlayOrder(items.map { it.withoutRequestMetadata() }, order, startIndex, startPositionMs)
     }
 }
 

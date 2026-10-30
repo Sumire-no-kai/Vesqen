@@ -269,6 +269,20 @@ class PlaybackControllerPolicyTest {
     }
 
     @Test
+    fun `a merge of the counted song moves its listen to the row it merged into`() {
+        // #191 A2: Media3 renames the entry in place, without a transition; the service tells the gate.
+        val gate = PlaybackStartGate()
+        gate.onMediaItemTransition(2, Player.MEDIA_ITEM_TRANSITION_REASON_SEEK, "a")
+        assertEquals(2L, gate.trackStarted(isPlaying = true, trackId = 2))
+
+        gate.tracksMerged(mapOf(9L to 10L))
+        assertEquals("a", gate.countedOccurrence(currentTrackId = 2))
+        gate.tracksMerged(mapOf(2L to 7L, 5L to 8L))
+        assertNull(gate.trackStarted(isPlaying = true, trackId = 7))
+        assertEquals("a", gate.countedOccurrence(currentTrackId = 7))
+    }
+
+    @Test
     fun `explicit same song queue replacement counts only after playback starts`() {
         val gate = PlaybackStartGate()
         gate.onMediaItemTransition(1, Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED, "a")

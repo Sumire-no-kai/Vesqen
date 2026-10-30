@@ -284,11 +284,12 @@ class PlaybackService : MediaSessionService() {
             onPlaybackStarted = (application as VesqenApplication)
                 .playbackHistoryRecorder::recordPlayback,
         ).also(PlaybackStateKeeper::start)
-        // This service writes the playback state, so a catalog merge changes its saved queue and its
-        // entries in one step (#191 D7).
-        (application as VesqenApplication).playbackTrackMerges.attach { from, into ->
-            playbackStateStore.replaceTrackId(from, into)
-            player.replaceTrackEntries(from, into)
+        // This service writes the playback state, so a transaction's catalog merges change its saved
+        // queue, its counted listen and its entries in one step (#191 D7, A2, A4).
+        (application as VesqenApplication).playbackTrackMerges.attach { merges ->
+            playbackStateStore.replaceTrackIds(merges)
+            playbackStateKeeper?.tracksMerged(merges)
+            player.replaceTrackEntries(merges)
         }
         serviceScope.launch {
             // The queue's catalog IDs name other songs, or none, in a rebuilt catalog (#165): playing,
@@ -302,7 +303,8 @@ class PlaybackService : MediaSessionService() {
         val sessionActivity = PendingIntent.getActivity(this, 0,
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        mediaSession = MediaSession.Builder(this, PlayOrderSessionPlayer(player))
+        val trackMerges = (application as VesqenApplication).playbackTrackMerges
+        mediaSession = MediaSession.Builder(this, PlayOrderSessionPlayer(player, trackMerges::mergedTrackId))
             .setBitmapLoader(artworkLoader)
             .setSessionActivity(sessionActivity)
             .setCallback(sessionCallback)
