@@ -22,11 +22,11 @@ import io.github.sumirenokai.vesqen.library.LibrarySourceKind
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
 import io.github.sumirenokai.vesqen.lyrics.LyricsImportResult
 import io.github.sumirenokai.vesqen.lyrics.LyricsStore
+import io.github.sumirenokai.vesqen.lyrics.readProviderLyrics
 import io.github.sumirenokai.vesqen.playback.PlaybackController
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryUpdate
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
-import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -359,14 +359,10 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         return readLyricsImport(target, source)
     }
 
-    private fun readLyricsImport(target: LyricsImportTarget, source: Uri): LyricsImportResult = try {
-        getApplication<Application>().contentResolver.openInputStream(source)?.use { input ->
-            lyricsStore.import(target.trackId, input, target.generation)
-        } ?: LyricsImportResult.FAILED
-    } catch (_: IOException) {
-        LyricsImportResult.FAILED
-    } catch (_: SecurityException) {
-        LyricsImportResult.FAILED
+    private fun readLyricsImport(target: LyricsImportTarget, source: Uri): LyricsImportResult {
+        val contentResolver = getApplication<Application>().contentResolver
+        val bytes = readProviderLyrics { contentResolver.openInputStream(source) } ?: return LyricsImportResult.FAILED
+        return lyricsStore.import(target.trackId, bytes, target.generation)
     }
 
     internal fun lyricsImportGeneration(): Long = lyricsStore.generation()

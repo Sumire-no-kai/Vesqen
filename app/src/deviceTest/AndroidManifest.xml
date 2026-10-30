@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- Device tests only: a documents provider whose answers the test sets (#191 D3, D13). It
+             has no roots, so the system file picker lists nothing from it. -->
+        <provider
+            android:name="io.github.sumirenokai.vesqen.testing.FakeDocumentsProvider"
+            android:authorities="${applicationId}.fake-documents"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+    </application>
+
+</manifest>
