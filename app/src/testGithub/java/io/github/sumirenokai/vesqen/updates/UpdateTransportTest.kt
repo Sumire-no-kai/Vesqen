@@ -2,6 +2,7 @@ package io.github.sumirenokai.vesqen.updates
 
 import java.io.ByteArrayInputStream
 import java.io.IOException
+import java.io.InputStream
 import java.net.UnknownHostException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -126,4 +127,44 @@ class UpdateTransportTest {
         } finally { directory.deleteRecursively() }
     }
 
+    /** A server that keeps each read under the read timeout with a byte now and then; a disconnect ends it as a closed socket does. */
+    private class TrickleResponse(url: URL, private val length: Long = -1) : HttpURLConnection(url) {
+        @Volatile var closed = false
+        override fun connect() = Unit
+        override fun disconnect() { closed = true }
+        override fun usingProxy() = false
+        override fun getResponseCode() = 200
+        override fun getHeaderField(name: String?): String? = null
+        override fun getHeaderFieldLong(name: String?, default: Long) = if (name == "Content-Length" && length > 0) length else default
+        override fun getInputStream() = object : InputStream() {
+            override fun read(): Int {
+                Thread.sleep(20)
+                if (closed) throw IOException("Socket closed")
+                return ' '.code
+            }
+
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                b[off] = read().toByte()
+                return 1
+            }
+        }
+    }
+
+    @Test fun aServerThatSendsAByteNowAndThenIsCutOffAtTheDeadline() = runBlocking {
+        val manifest = TrickleResponse(URL("https://example.org/"))
+        try {
+            HttpsUpdateTransport(allocatableBytes = { Long.MAX_VALUE }, responseDeadlineMs = 300) { manifest }.manifest("https://example.org/")
+            fail("A trickled version file held the updater")
+        } catch (_: IOException) { assertTrue(manifest.closed) }
+        // 300 ms for the headers, then 1 ms for the body at the minimum rate given here.
+        val download = TrickleResponse(URL("https://example.org/"), length = 1_000_000)
+        val file = Files.createTempFile("update-trickle", ".apk").toFile()
+        try {
+            HttpsUpdateTransport(allocatableBytes = { Long.MAX_VALUE }, responseDeadlineMs = 300, minimumBytesPerSecond = 1_000_000_000) { download }
+                .download("https://example.org/", file) { _, _ -> }
+            fail("A trickled download held the updater")
+        } catch (_: IOException) {
+            assertTrue(download.closed)
+        } finally { file.delete() }
+    }
 }

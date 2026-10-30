@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.usage
 
+import io.github.sumirenokai.vesqen.service.jsonNestedWithin
 import io.github.sumirenokai.vesqen.service.servicePaused
 import io.github.sumirenokai.vesqen.updates.UpdateChannel
 import io.github.sumirenokai.vesqen.updates.defaultUpdateChannel
@@ -47,8 +48,10 @@ internal class HttpsUsageTransport(
                     output.write(buffer, 0, count)
                 }
             }
+            val text = output.toString(Charsets.UTF_8.name())
+            if (!jsonNestedWithin(text)) throw IOException("Invalid usage response")
             return try {
-                val response = JSONObject(output.toString(Charsets.UTF_8.name()))
+                val response = JSONObject(text)
                 val channel = when (defaultUpdateChannel(ping.facts.appVersion)) {
                     UpdateChannel.BETA -> "beta"
                     UpdateChannel.STABLE -> "stable"

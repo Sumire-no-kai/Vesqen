@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.updates
 
+import io.github.sumirenokai.vesqen.service.jsonNestedWithin
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -11,6 +12,7 @@ internal object UpdateManifest {
     fun parse(text: String, channel: UpdateChannel): UpdateRelease? {
         try {
             require(text.toByteArray(Charsets.UTF_8).size <= MAX_BYTES)
+            require(jsonNestedWithin(text))
             val root = JSONObject(text)
             require(root.strictLong("schemaVersion") == 1L)
             require(root.strictString("channel") == channel.name.lowercase())

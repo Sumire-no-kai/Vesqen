@@ -71,6 +71,21 @@ class ActivationCodeVerifierTest {
         assertEquals(ActivationResult.REVOKED, book.lastResult.value)
     }
 
+    @Test fun `a link never replaces a working code, but fills an empty or revoked one`() {
+        val store = MemoryStore()
+        val book = ActivationCodeBook(store, verifier()) {}
+        assertEquals(ActivationResult.ACTIVATED, book.activateFromLink(first))
+        assertNull(book.activateFromLink(second))
+        assertEquals(first, store.kept)
+        // Typing a code in still replaces it.
+        assertEquals(ActivationResult.ACTIVATED, book.activate(second))
+        assertEquals(second, store.kept)
+        // Once the kept code is revoked, a link can bring a working one.
+        val revokedBook = ActivationCodeBook(store, verifier(setOf(7 to 2L))) {}
+        assertEquals(ActivationResult.ACTIVATED, revokedBook.activateFromLink(first))
+        assertEquals(first, store.kept)
+    }
+
     private class MemoryStore : KeptCodeStore {
         var kept: String? = null
         override fun read() = kept
