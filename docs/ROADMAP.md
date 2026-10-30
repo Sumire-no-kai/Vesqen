@@ -11,7 +11,9 @@ The normative scope, acceptance criteria, and product boundaries live in [PRD.md
   - [Development tasks and dependencies](M4_IMPLEMENTATION_PLAN.md): the signed-registry software candidate, test vectors, declaration matching, and beta preparation exist; missing hardware and deferred endurance tests remain explicit gates.
   - [Device acceptance record](M4_DEVICE_ACCEPTANCE.md): separates local software, Honor legacy coverage, iQOO/API 35, real DAC, external digital evidence, performance, and long-run status.
   - [Limited-Beta release checklist](M4_BETA_RELEASE.md): public claim boundaries, blockers, signing, upgrade/data-retention, privacy, and release evidence.
-- **M5+ — Conditional extensions:** advanced formats, DAC lab, incremental playback-kernel work, legacy USB experiments, and optional on-device audio intelligence.
+- **M5, M6, M8 — Conditional extensions:** advanced formats, DAC lab, incremental playback-kernel work, and optional on-device audio intelligence.
+- **M7 — Vesqen's own USB output (required for 2.0):** strict USB output on phones without the official bit-perfect mixer path, selected by the same strategy resolver.
+  - [Implementation plan](M7_IMPLEMENTATION_PLAN.md): verified platform facts, owner decisions, and phased work. No code has been written yet.
 
 A build, passing test, implemented API call, or matching DAC display does not by itself complete an audio-verification milestone. Completion requires the corresponding PRD acceptance evidence.
 
