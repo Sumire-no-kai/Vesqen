@@ -46,7 +46,7 @@ class SameNameLyricsDeviceTest {
                 when {
                     name.startsWith("sidecar-") ->
                         assertEquals(name, LyricsSource.SameNameFile, (lyrics as? TrackLyrics.Found)?.source)
-                    name.startsWith("unreadable-") -> assertEquals(name, TrackLyrics.Unreadable, lyrics)
+                    name.startsWith("unreadable-") -> assertEquals(name, TrackLyrics.Unreadable(UnreadableReason.Encoding), lyrics)
                     name.startsWith("none-") -> assertEquals(name, TrackLyrics.None(folderHint = false), lyrics)
                 }
             }
@@ -60,6 +60,6 @@ class SameNameLyricsDeviceTest {
     private fun TrackLyrics.describe(): String = when (this) {
         is TrackLyrics.Found -> "${source.name} ${lyrics::class.simpleName}"
         is TrackLyrics.None -> "None folderHint=$folderHint"
-        TrackLyrics.Unreadable -> "Unreadable"
+        is TrackLyrics.Unreadable -> "Unreadable ${reason.name}"
     }
 }

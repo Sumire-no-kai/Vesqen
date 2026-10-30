@@ -41,6 +41,7 @@ import io.github.sumirenokai.vesqen.lyrics.LyricLine
 import io.github.sumirenokai.vesqen.lyrics.Lyrics
 import io.github.sumirenokai.vesqen.lyrics.LyricsSource
 import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
+import io.github.sumirenokai.vesqen.lyrics.UnreadableReason
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.screens.NowLyricsState
 import io.github.sumirenokai.vesqen.ui.screens.NowScreen
@@ -236,11 +237,28 @@ class NowLyricsUiTest {
 
     @Test
     fun unreadableLyricsSayWhatToDo() {
-        setNow(lyrics = TrackLyrics.Unreadable)
+        setNow(lyrics = TrackLyrics.Unreadable(UnreadableReason.Encoding))
 
         compose.onNodeWithText(context.getString(R.string.lyrics_unreadable)).assertIsDisplayed()
         compose.onNodeWithText(context.getString(R.string.lyrics_unreadable_body)).assertIsDisplayed()
         compose.onNodeWithTag("vesqen.now.lyrics.import").assertIsDisplayed()
+    }
+
+    // #191 C6: a file too large, or one that could not be read just now, is not blamed on its encoding.
+    @Test
+    fun unreadableLyricsSayWhy() {
+        var reason by mutableStateOf(UnreadableReason.TooLarge)
+        var revision by mutableStateOf(0L)
+        setNow(loader = { TrackLyrics.Unreadable(reason) }, sourcesRevision = { revision })
+
+        compose.onNodeWithText(context.getString(R.string.lyrics_too_large_body)).assertIsDisplayed()
+        compose.onAllNodesWithText(context.getString(R.string.lyrics_unreadable_body)).assertCountEquals(0)
+
+        reason = UnreadableReason.ReadFailed
+        revision = 1
+        compose.waitForIdle()
+        compose.onNodeWithText(context.getString(R.string.lyrics_read_failed_body)).assertIsDisplayed()
+        compose.onAllNodesWithText(context.getString(R.string.lyrics_unreadable_body)).assertCountEquals(0)
     }
 
     @Test

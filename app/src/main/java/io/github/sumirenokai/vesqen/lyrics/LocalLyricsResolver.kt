@@ -27,7 +27,7 @@ sealed interface TrackLyrics {
      */
     data class None(val folderHint: Boolean) : TrackLyrics
 
-    data object Unreadable : TrackLyrics
+    data class Unreadable(val reason: UnreadableReason) : TrackLyrics
 }
 
 /**
@@ -74,8 +74,8 @@ internal class LocalLyricsResolver(
     suspend fun load(track: AudioTrack): TrackLyrics = withContext(dispatcher) {
         val key = track.lyricsKey(store.importedLyrics.value.revision)
         results[key] ?: resolve(track).let { resolved ->
-            // A folder the provider could not list completely is asked again on the next load (#191 D13).
-            if (resolved.folderListed) results.put(key, resolved.lyrics)
+            // A source that failed for now is read again on the next load (#191 D13, B2).
+            if (resolved.complete) results.put(key, resolved.lyrics)
             resolved.lyrics
         }
     }
@@ -99,13 +99,16 @@ internal class LocalLyricsResolver(
     private fun resolve(track: AudioTrack): ResolvedLyrics {
         val uri = track.contentUri.toUri()
         val inAddedFolder = DocumentsContract.isTreeUri(uri)
-        var folderListed = true
+        // A source that should be there but failed for now leaves the result uncached. Kept, the
+        // result of a lower-priority source would hide that source until the next completed refresh.
+        var complete = true
         val picked = pickLyrics { source ->
             when (source) {
-                LyricsSource.Imported -> readImported(track.id)
+                LyricsSource.Imported ->
+                    readImported(track.id) ?: SourceLyrics.Unreadable(UnreadableReason.ReadFailed).also { complete = false }
                 LyricsSource.SameNameFile -> when {
                     !inAddedFolder -> SourceLyrics.Absent
-                    else -> readSameNameFile(uri, track.fileName) ?: SourceLyrics.Absent.also { folderListed = false }
+                    else -> readSameNameFile(uri, track.fileName) ?: SourceLyrics.Absent.also { complete = false }
                 }
                 LyricsSource.Embedded -> readEmbedded(uri, track.fileSizeBytes)
             }
@@ -113,26 +116,38 @@ internal class LocalLyricsResolver(
         val lyrics = when (picked) {
             is PickedLyrics.Found -> TrackLyrics.Found(picked.source, picked.lyrics)
             PickedLyrics.Absent -> TrackLyrics.None(folderHint = !inAddedFolder)
-            PickedLyrics.Unreadable -> TrackLyrics.Unreadable
+            is PickedLyrics.Unreadable -> TrackLyrics.Unreadable(picked.reason)
         }
-        return ResolvedLyrics(lyrics, folderListed)
+        return ResolvedLyrics(lyrics, complete)
     }
 
-    private fun readImported(trackId: Long): SourceLyrics = try {
+    /** Null when the stored file could not be read now. */
+    private fun readImported(trackId: Long): SourceLyrics? = try {
         store.read(trackId)?.let(::readLyricsFile) ?: SourceLyrics.Absent
     } catch (_: IOException) {
-        SourceLyrics.Unreadable
+        null
     }
 
     /**
      * Each provider call below treats any failure of the provider as "no same-name file", so a
      * misbehaving documents provider falls through to the embedded tags (owner decision 8) instead
      * of failing Now. With targetSdk 26+ DocumentsContract rethrows what the provider threw, and a
-     * provider that died answers with a NullPointerException. Null when the folder could not be
-     * listed completely now, so the result is not kept.
+     * provider that died answers with a NullPointerException. Null when the provider failed for now:
+     * the path lookup failed, the folder was not listed completely, or the listed file did not open.
      */
     private fun readSameNameFile(trackUri: Uri, fileName: String): SourceLyrics? {
-        val parentId = parentDocumentId(trackUri) ?: return SourceLyrics.Absent
+        // Document IDs are opaque, so the provider is asked for the folder holding the track.
+        val path = try {
+            DocumentsContract.findDocumentPath(contentResolver, trackUri)?.path
+        } catch (_: FileNotFoundException) {
+            null
+        } catch (_: UnsupportedOperationException) {
+            // The provider cannot find paths at all, so it never has a same-name file for Vesqen.
+            null
+        } catch (_: RuntimeException) {
+            return null
+        }
+        val parentId = path?.getOrNull(path.size - 2) ?: return SourceLyrics.Absent
         // One listing serves every track of the folder.
         val folderUri = DocumentsContract.buildChildDocumentsUriUsingTree(trackUri, parentId)
         val folderKey = folderUri.toString()
@@ -140,17 +155,8 @@ internal class LocalLyricsResolver(
             .also { folderLyricsFiles.put(folderKey, it) }
         val documentId = sameNameLyricsDocumentId(fileName, candidates) ?: return SourceLyrics.Absent
         val documentUri = DocumentsContract.buildDocumentUriUsingTree(trackUri, documentId)
-        val bytes = readProviderLyrics { contentResolver.openInputStream(documentUri) } ?: return SourceLyrics.Absent
-        return if (bytes.size > MAX_LYRICS_TEXT_BYTES) SourceLyrics.Unreadable else readLyricsFile(bytes)
-    }
-
-    /** The folder holding a track inside an added tree. Document IDs are opaque, so the provider is asked. */
-    private fun parentDocumentId(trackUri: Uri): String? = try {
-        DocumentsContract.findDocumentPath(contentResolver, trackUri)?.path?.let { path -> path.getOrNull(path.size - 2) }
-    } catch (_: FileNotFoundException) {
-        null
-    } catch (_: RuntimeException) {
-        null
+        val bytes = readProviderLyrics { contentResolver.openInputStream(documentUri) } ?: return null
+        return if (bytes.size > MAX_LYRICS_TEXT_BYTES) SourceLyrics.Unreadable(UnreadableReason.TooLarge) else readLyricsFile(bytes)
     }
 
     /**
@@ -210,7 +216,8 @@ internal class LocalLyricsResolver(
     }
 }
 
-private class ResolvedLyrics(val lyrics: TrackLyrics, val folderListed: Boolean)
+/** [complete]: every source that should be there was read, so the result may be kept. */
+private class ResolvedLyrics(val lyrics: TrackLyrics, val complete: Boolean)
 
 internal class LyricsFileCandidate(val documentId: String, val displayName: String)
 

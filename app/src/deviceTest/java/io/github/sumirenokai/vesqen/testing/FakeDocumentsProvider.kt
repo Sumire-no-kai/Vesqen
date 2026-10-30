@@ -42,15 +42,17 @@ class FakeDocumentsProvider : DocumentsProvider() {
     }
 
     override fun openDocument(documentId: String, mode: String, signal: CancellationSignal?): ParcelFileDescriptor {
-        openFailure?.let { throw it }
+        openFailures[documentId]?.let { throw it }
         val bytes = files[documentId] ?: throw FileNotFoundException(documentId)
         val copy = File.createTempFile("fake-document", null, requireNotNull(context).cacheDir)
         copy.writeBytes(bytes)
         return ParcelFileDescriptor.open(copy, ParcelFileDescriptor.MODE_READ_ONLY).also { copy.delete() }
     }
 
-    override fun findDocumentPath(parentDocumentId: String?, childDocumentId: String): DocumentsContract.Path =
-        DocumentsContract.Path(null, listOf(childDocumentId.substringBeforeLast('/'), childDocumentId))
+    override fun findDocumentPath(parentDocumentId: String?, childDocumentId: String): DocumentsContract.Path {
+        pathFailure?.let { throw it }
+        return DocumentsContract.Path(null, listOf(childDocumentId.substringBeforeLast('/'), childDocumentId))
+    }
 
     override fun isChildDocument(parentDocumentId: String, documentId: String): Boolean =
         documentId.startsWith("$parentDocumentId/")
@@ -73,8 +75,11 @@ class FakeDocumentsProvider : DocumentsProvider() {
 
         @Volatile var listing = Listing.COMPLETE
 
-        /** Thrown by every open, as a provider's own failure reaches the app. */
-        @Volatile var openFailure: RuntimeException? = null
+        /** Thrown when the document is opened, as a provider's own failure reaches the app. */
+        val openFailures: MutableMap<String, RuntimeException> = java.util.concurrent.ConcurrentHashMap()
+
+        /** Thrown by the path lookup; UnsupportedOperationException is a provider that has none. */
+        @Volatile var pathFailure: RuntimeException? = null
 
         @Volatile var childQueries = 0
 
@@ -83,7 +88,8 @@ class FakeDocumentsProvider : DocumentsProvider() {
         fun reset() {
             files.clear()
             listing = Listing.COMPLETE
-            openFailure = null
+            openFailures.clear()
+            pathFailure = null
             childQueries = 0
         }
 

@@ -92,13 +92,13 @@ class LyricsImportViewModelDeviceTest {
                 IllegalArgumentException("provider"),
                 NullPointerException("provider died"),
             ).forEach { failure ->
-                FakeDocumentsProvider.openFailure = failure
+                FakeDocumentsProvider.openFailures["music/song.lrc"] = failure
                 assertEquals(failure.toString(), LyricsImportResult.FAILED, importAndAwait(viewModel, target, document).result)
             }
             assertFalse(track.id in app.lyricsStore.importedLyrics.value.trackIds)
 
             // The same provider answering again imports as usual.
-            FakeDocumentsProvider.openFailure = null
+            FakeDocumentsProvider.openFailures.clear()
             assertEquals(LyricsImportResult.IMPORTED, importAndAwait(viewModel, target, document).result)
         } finally {
             FakeDocumentsProvider.reset()

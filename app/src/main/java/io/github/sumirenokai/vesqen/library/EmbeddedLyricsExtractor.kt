@@ -2,6 +2,7 @@ package io.github.sumirenokai.vesqen.library
 
 import io.github.sumirenokai.vesqen.lyrics.Lyrics
 import io.github.sumirenokai.vesqen.lyrics.MAX_LYRICS_TEXT_BYTES
+import io.github.sumirenokai.vesqen.lyrics.UnreadableReason
 import io.github.sumirenokai.vesqen.lyrics.SourceLyrics
 import io.github.sumirenokai.vesqen.lyrics.decodeLatinLabelledLyricsText
 import io.github.sumirenokai.vesqen.lyrics.decodeLyricsText
@@ -74,7 +75,7 @@ private class EmbeddedLyricsCandidates {
     }
 
     fun result(): SourceLyrics = (synced ?: plain)?.let(SourceLyrics::Readable)
-        ?: if (unreadable) SourceLyrics.Unreadable else SourceLyrics.Absent
+        ?: if (unreadable) SourceLyrics.Unreadable(UnreadableReason.Encoding) else SourceLyrics.Absent
 }
 
 /**

@@ -7,12 +7,24 @@ enum class LyricsSource {
     Embedded,
 }
 
+/** Why lyrics that exist cannot be shown, so Now can say why (#191 C6). */
+enum class UnreadableReason {
+    /** No encoding fits the text without guessing. */
+    Encoding,
+
+    /** The file is larger than [MAX_LYRICS_TEXT_BYTES]. */
+    TooLarge,
+
+    /** The file could not be read just now; it is read again next time. */
+    ReadFailed,
+}
+
 /** What one source holds for a track. */
 internal sealed interface SourceLyrics {
     data object Absent : SourceLyrics
 
-    /** The source exists, but its text cannot be decoded without guessing. */
-    data object Unreadable : SourceLyrics
+    /** The source exists, but its lyrics cannot be shown. */
+    data class Unreadable(val reason: UnreadableReason) : SourceLyrics
 
     data class Readable(val lyrics: Lyrics) : SourceLyrics
 }
@@ -23,8 +35,8 @@ internal sealed interface PickedLyrics {
 
     data object Absent : PickedLyrics
 
-    /** At least one source exists and none of them can be read. */
-    data object Unreadable : PickedLyrics
+    /** At least one source exists and none of them can be read; [reason] is the first one's. */
+    data class Unreadable(val reason: UnreadableReason) : PickedLyrics
 }
 
 /**
@@ -33,19 +45,19 @@ internal sealed interface PickedLyrics {
  * can be read. Inline so a caller can read sources with suspending calls.
  */
 internal inline fun pickLyrics(read: (LyricsSource) -> SourceLyrics): PickedLyrics {
-    var anyUnreadable = false
+    var unreadable: UnreadableReason? = null
     for (source in LyricsSource.entries) {
         when (val result = read(source)) {
             is SourceLyrics.Readable -> return PickedLyrics.Found(source, result.lyrics)
-            SourceLyrics.Unreadable -> anyUnreadable = true
+            is SourceLyrics.Unreadable -> if (unreadable == null) unreadable = result.reason
             SourceLyrics.Absent -> Unit
         }
     }
-    return if (anyUnreadable) PickedLyrics.Unreadable else PickedLyrics.Absent
+    return unreadable?.let(PickedLyrics::Unreadable) ?: PickedLyrics.Absent
 }
 
 /** Decodes and parses the bytes of a lyrics file; a file with nothing to show counts as absent. */
 internal fun readLyricsFile(bytes: ByteArray): SourceLyrics {
-    val text = decodeLyricsText(bytes) ?: return SourceLyrics.Unreadable
+    val text = decodeLyricsText(bytes) ?: return SourceLyrics.Unreadable(UnreadableReason.Encoding)
     return parseLyrics(text)?.let(SourceLyrics::Readable) ?: SourceLyrics.Absent
 }

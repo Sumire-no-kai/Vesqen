@@ -7,6 +7,7 @@ class LyricsSourcesTest {
     private val imported = SourceLyrics.Readable(Lyrics.Plain(listOf("imported")))
     private val sameName = SourceLyrics.Readable(Lyrics.Plain(listOf("same-name file")))
     private val embedded = SourceLyrics.Readable(Lyrics.Plain(listOf("embedded")))
+    private val encoding = SourceLyrics.Unreadable(UnreadableReason.Encoding)
 
     @Test
     fun importedLyricsComeFirstAndLaterSourcesAreNotRead() {
@@ -41,19 +42,32 @@ class LyricsSourcesTest {
     fun anUnreadableSourceFallsThroughAndIsShownOnlyWhenNothingIsReadable() {
         assertEquals(
             PickedLyrics.Found(LyricsSource.Embedded, embedded.lyrics),
-            pickLyrics(sources(SourceLyrics.Absent, SourceLyrics.Unreadable, embedded)::getValue),
+            pickLyrics(sources(SourceLyrics.Absent, encoding, embedded)::getValue),
         )
         assertEquals(
             PickedLyrics.Found(LyricsSource.SameNameFile, sameName.lyrics),
-            pickLyrics(sources(SourceLyrics.Unreadable, sameName, SourceLyrics.Unreadable)::getValue),
+            pickLyrics(sources(encoding, sameName, encoding)::getValue),
         )
         assertEquals(
-            PickedLyrics.Unreadable,
-            pickLyrics(sources(SourceLyrics.Absent, SourceLyrics.Unreadable, SourceLyrics.Absent)::getValue),
+            PickedLyrics.Unreadable(UnreadableReason.Encoding),
+            pickLyrics(sources(SourceLyrics.Absent, encoding, SourceLyrics.Absent)::getValue),
         )
         assertEquals(
-            PickedLyrics.Unreadable,
-            pickLyrics(sources(SourceLyrics.Absent, SourceLyrics.Absent, SourceLyrics.Unreadable)::getValue),
+            PickedLyrics.Unreadable(UnreadableReason.Encoding),
+            pickLyrics(sources(SourceLyrics.Absent, SourceLyrics.Absent, encoding)::getValue),
+        )
+    }
+
+    // #191 C6: Now says why, from the first source that cannot be read.
+    @Test
+    fun theFirstUnreadableSourceGivesTheReason() {
+        assertEquals(
+            PickedLyrics.Unreadable(UnreadableReason.TooLarge),
+            pickLyrics(sources(SourceLyrics.Absent, SourceLyrics.Unreadable(UnreadableReason.TooLarge), encoding)::getValue),
+        )
+        assertEquals(
+            PickedLyrics.Unreadable(UnreadableReason.ReadFailed),
+            pickLyrics(sources(SourceLyrics.Unreadable(UnreadableReason.ReadFailed), SourceLyrics.Absent, encoding)::getValue),
         )
     }
 
@@ -65,7 +79,7 @@ class LyricsSourcesTest {
         )
         assertEquals(SourceLyrics.Absent, readLyricsFile("[ti:only a title]".toByteArray()))
         assertEquals(SourceLyrics.Absent, readLyricsFile(ByteArray(0)))
-        assertEquals(SourceLyrics.Unreadable, readLyricsFile("你好".toByteArray(charset("GBK"))))
+        assertEquals(encoding, readLyricsFile("你好".toByteArray(charset("GBK"))))
     }
 
     private fun sources(

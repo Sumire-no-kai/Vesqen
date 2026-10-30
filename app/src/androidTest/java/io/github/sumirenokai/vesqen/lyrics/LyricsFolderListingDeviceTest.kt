@@ -14,7 +14,9 @@ import org.junit.Test
 /**
  * #191 D13: a folder whose provider is still loading its listing, or reports an error, has not been
  * listed. "No lyrics" from such a listing is not kept, so the next load asks the folder again; a
- * complete listing is kept as before. The folder comes from the deviceTest build's fake provider.
+ * complete listing is kept as before. B2: the same holds when the listed same-name file fails to
+ * open or the folder's path lookup fails for now, which would otherwise keep the embedded lyrics in
+ * its place. The folder comes from the deviceTest build's fake provider.
  */
 class LyricsFolderListingDeviceTest {
     private val app = isolatedPlaybackTestApplication()
@@ -57,6 +59,40 @@ class LyricsFolderListingDeviceTest {
         assertEquals(1, FakeDocumentsProvider.childQueries)
     }
 
+    @Test
+    fun aSameNameFileThatFailsToOpenIsReadAgainInsteadOfTheEmbeddedLyrics() = runBlocking {
+        FakeDocumentsProvider.files["music/song.flac"] = withEmbeddedLyrics("[00:01.00]Embedded in the song")
+        FakeDocumentsProvider.files["music/song.lrc"] = "[00:01.00]Beside the song".toByteArray()
+        FakeDocumentsProvider.openFailures["music/song.lrc"] = IllegalStateException("The provider restarted")
+
+        assertEquals(LyricsSource.Embedded, (resolver.load(track) as TrackLyrics.Found).source)
+        FakeDocumentsProvider.openFailures.clear()
+        assertEquals(LyricsSource.SameNameFile, (resolver.load(track) as TrackLyrics.Found).source)
+    }
+
+    @Test
+    fun aPathLookupThatFailsForNowIsTriedAgain() = runBlocking {
+        FakeDocumentsProvider.files["music/song.flac"] = withEmbeddedLyrics("[00:01.00]Embedded in the song")
+        FakeDocumentsProvider.files["music/song.lrc"] = "[00:01.00]Beside the song".toByteArray()
+        FakeDocumentsProvider.pathFailure = NullPointerException("The provider died")
+
+        assertEquals(LyricsSource.Embedded, (resolver.load(track) as TrackLyrics.Found).source)
+        FakeDocumentsProvider.pathFailure = null
+        assertEquals(LyricsSource.SameNameFile, (resolver.load(track) as TrackLyrics.Found).source)
+    }
+
+    // A provider without a path lookup never has a same-name file for Vesqen, so that result is kept.
+    @Test
+    fun aProviderWithoutPathLookupIsKept() = runBlocking {
+        FakeDocumentsProvider.files["music/song.flac"] = withEmbeddedLyrics("[00:01.00]Embedded in the song")
+        FakeDocumentsProvider.files["music/song.lrc"] = "[00:01.00]Beside the song".toByteArray()
+        FakeDocumentsProvider.pathFailure = UnsupportedOperationException("findDocumentPath not supported")
+
+        assertEquals(LyricsSource.Embedded, (resolver.load(track) as TrackLyrics.Found).source)
+        FakeDocumentsProvider.pathFailure = null
+        assertEquals(LyricsSource.Embedded, (resolver.load(track) as TrackLyrics.Found).source)
+    }
+
     private fun assertListedAgainAfter(incomplete: Listing) = runBlocking {
         FakeDocumentsProvider.files["music/song.flac"] = ByteArray(0)
         FakeDocumentsProvider.files["music/song.lrc"] = "[00:01.00]Beside the song".toByteArray()
@@ -67,5 +103,13 @@ class LyricsFolderListingDeviceTest {
         val found = resolver.load(track) as TrackLyrics.Found
         assertEquals(LyricsSource.SameNameFile, found.source)
         assertEquals(2, FakeDocumentsProvider.childQueries)
+    }
+
+    /** An ID3v2.3 tag with one Latin-1 USLT frame, before some silent audio bytes. */
+    private fun withEmbeddedLyrics(text: String): ByteArray {
+        val body = byteArrayOf(0) + "eng".toByteArray() + byteArrayOf(0) + text.toByteArray(Charsets.ISO_8859_1)
+        val frame = "USLT".toByteArray() + byteArrayOf(0, 0, 0, body.size.toByte(), 0, 0) + body
+        check(frame.size < 0x80) { "The tag size below is one syncsafe byte" }
+        return "ID3".toByteArray() + byteArrayOf(3, 0, 0, 0, 0, 0, frame.size.toByte()) + frame + ByteArray(1_024)
     }
 }
