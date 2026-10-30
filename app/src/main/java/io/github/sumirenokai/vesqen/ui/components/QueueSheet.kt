@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,6 +33,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -39,6 +43,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.playback.PlaybackQueueItem
@@ -66,26 +71,14 @@ fun QueueSheet(
                 .padding(horizontal = VesqenSpacing.lg)
                 .padding(bottom = VesqenSpacing.md),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(R.string.queue),
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.weight(1f).semantics { heading() },
-                )
-                TextButton(
-                    onClick = {
-                        onClearQueue()
-                        onDismiss()
-                    },
-                    enabled = snapshot.isControllerReady && snapshot.queue.isNotEmpty(),
-                    modifier = Modifier.heightIn(min = 48.dp),
-                ) {
-                    Text(stringResource(R.string.clear_queue))
-                }
-                IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close))
-                }
-            }
+            QueueSheetHeader(
+                clearEnabled = snapshot.isControllerReady && snapshot.queue.isNotEmpty(),
+                onClearQueue = {
+                    onClearQueue()
+                    onDismiss()
+                },
+                onClose = onDismiss,
+            )
             // On its own line, so the buttons beside the title never squeeze the count into two (#35).
             Text(
                 text = pluralStringResource(R.plurals.library_song_total, snapshot.queue.size, snapshot.queue.size),
@@ -120,6 +113,54 @@ fun QueueSheet(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * The title, Clear queue and Close: one line while the title fits whole beside both buttons.
+ * Otherwise Clear queue takes the line below, its label under the title, so large text or a narrow
+ * window never breaks the title mid-word (#165 X4), as the count got its own line (#35).
+ */
+@Composable
+internal fun QueueSheetHeader(clearEnabled: Boolean, onClearQueue: () -> Unit, onClose: () -> Unit) {
+    val clearLabelInset = ButtonDefaults.TextButtonContentPadding.calculateStartPadding(LocalLayoutDirection.current)
+    val content: @Composable () -> Unit = {
+        Text(
+            text = stringResource(R.string.queue),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.semantics { heading() }.testTag("vesqen.queue.title"),
+        )
+        TextButton(
+            onClick = onClearQueue,
+            enabled = clearEnabled,
+            modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.queue.clear"),
+        ) {
+            Text(stringResource(R.string.clear_queue))
+        }
+        IconButton(onClick = onClose, modifier = Modifier.size(48.dp).testTag("vesqen.queue.close")) {
+            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close))
+        }
+    }
+    Layout(content) { measurables, constraints ->
+        val (title, clear, close) = measurables
+        val width = constraints.maxWidth
+        val oneLine = title.maxIntrinsicWidth(constraints.maxHeight) + clear.maxIntrinsicWidth(constraints.maxHeight) +
+            close.maxIntrinsicWidth(constraints.maxHeight) <= width
+        val closePlaceable = close.measure(Constraints(maxWidth = width))
+        val clearPlaceable = clear.measure(Constraints(maxWidth = width))
+        val besideTitle = closePlaceable.width + if (oneLine) clearPlaceable.width else 0
+        val titlePlaceable = title.measure(Constraints(maxWidth = (width - besideTitle).coerceAtLeast(0)))
+        val firstLine = maxOf(titlePlaceable.height, closePlaceable.height, if (oneLine) clearPlaceable.height else 0)
+        layout(width, firstLine + if (oneLine) 0 else clearPlaceable.height) {
+            fun centered(height: Int) = (firstLine - height) / 2
+            titlePlaceable.placeRelative(0, centered(titlePlaceable.height))
+            closePlaceable.placeRelative(width - closePlaceable.width, centered(closePlaceable.height))
+            if (oneLine) {
+                clearPlaceable.placeRelative(width - closePlaceable.width - clearPlaceable.width, centered(clearPlaceable.height))
+            } else {
+                clearPlaceable.placeRelative(-clearLabelInset.roundToPx(), firstLine)
             }
         }
     }

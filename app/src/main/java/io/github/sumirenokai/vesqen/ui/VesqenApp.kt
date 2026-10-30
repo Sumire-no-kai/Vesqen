@@ -45,6 +45,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -68,6 +72,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -78,6 +83,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.sumirenokai.vesqen.BuildConfig
+import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.VesqenApplication
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticExportFailure
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticExportResult
@@ -105,6 +111,7 @@ import io.github.sumirenokai.vesqen.ui.chain.InMemoryChainDashboardPreferencesRe
 import io.github.sumirenokai.vesqen.ui.chain.DiagnosticExportFeedback
 import io.github.sumirenokai.vesqen.ui.components.MiniPlayer
 import io.github.sumirenokai.vesqen.ui.components.MiniPlayerHeight
+import io.github.sumirenokai.vesqen.ui.components.QueueClearedSnackbar
 import io.github.sumirenokai.vesqen.ui.navigation.CompactNavigationBarContentHeight
 import io.github.sumirenokai.vesqen.ui.navigation.NavigationRailWidth
 import io.github.sumirenokai.vesqen.ui.navigation.VesqenDestination
@@ -343,6 +350,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
         onRemoveQueueItem = viewModel::removeQueueItem,
         onMoveQueueItem = viewModel::moveQueueItem,
         onClearQueue = viewModel::clearQueue,
+        onUndoClearQueue = viewModel::undoClearQueue,
         onRetryPlayback = viewModel::retryPlayback,
         onPrevious = viewModel::skipToPrevious,
         onPlayPause = viewModel::togglePlayback,
@@ -409,6 +417,7 @@ fun VesqenAppContent(
     onRemoveQueueItem: (Int) -> Unit = {},
     onMoveQueueItem: (Int, Int) -> Unit = { _, _ -> },
     onClearQueue: () -> Unit = {},
+    onUndoClearQueue: () -> Unit = {},
     onRetryPlayback: () -> Unit = {},
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
@@ -453,6 +462,23 @@ fun VesqenAppContent(
     onArtistSplitChange: (ArtistSplitSettings) -> Unit = {},
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
+    // #165: after Clear queue, a notice offers Undo for a while.
+    val queueClearedHostState = remember { SnackbarHostState() }
+    val queueClearedScope = rememberCoroutineScope()
+    val queueClearedMessage = stringResource(R.string.queue_cleared)
+    val queueClearedUndo = stringResource(R.string.queue_cleared_undo)
+    val clearQueue: () -> Unit = {
+        onClearQueue()
+        queueClearedScope.launch {
+            queueClearedHostState.currentSnackbarData?.dismiss()
+            val result = queueClearedHostState.showSnackbar(queueClearedMessage, queueClearedUndo, duration = SnackbarDuration.Long)
+            if (result == SnackbarResult.ActionPerformed) onUndoClearQueue()
+        }
+    }
+    // A queue started in the meantime takes the cleared one's place.
+    LaunchedEffect(state.playback.hasActiveTrack) {
+        if (state.playback.hasActiveTrack) queueClearedHostState.currentSnackbarData?.dismiss()
+    }
     var showStrictUsbUnavailable by rememberSaveable { mutableStateOf(false) }
     val officialMixerApiSupport = state.playback.usbOutputStatus.officialMixerApiSupport
     LaunchedEffect(officialMixerApiSupport?.mixerApiAvailable) {
@@ -604,6 +630,8 @@ fun VesqenAppContent(
             showRebuildNotice = true
             askedThisOpen = true
             rebuildNotice?.markShown()
+            // The rebuild drops the cleared queue, whose IDs name other songs now: Undo has nothing to put back.
+            queueClearedHostState.currentSnackbarData?.dismiss()
         }
     }
 
@@ -762,7 +790,8 @@ fun VesqenAppContent(
                 onPlayQueueIndex = onPlayQueueIndex,
                 onRemoveQueueItem = onRemoveQueueItem,
                 onMoveQueueItem = onMoveQueueItem,
-                onClearQueue = onClearQueue,
+                onClearQueue = clearQueue,
+                queueClearedHostState = queueClearedHostState,
                 onRetryPlayback = onRetryPlayback,
                 onPrevious = onPrevious,
                 onPlayPause = onPlayPause,
@@ -840,7 +869,8 @@ fun VesqenAppContent(
             onPlayQueueIndex = onPlayQueueIndex,
             onRemoveQueueItem = onRemoveQueueItem,
             onMoveQueueItem = onMoveQueueItem,
-            onClearQueue = onClearQueue,
+            onClearQueue = clearQueue,
+            queueClearedHostState = queueClearedHostState,
             onRetryPlayback = onRetryPlayback,
             onPrevious = onPrevious,
             onPlayPause = onPlayPause,
@@ -1115,6 +1145,7 @@ private fun VesqenDestinationFrame(
     onRemoveQueueItem: (Int) -> Unit,
     onMoveQueueItem: (Int, Int) -> Unit,
     onClearQueue: () -> Unit,
+    queueClearedHostState: SnackbarHostState,
     onRetryPlayback: () -> Unit,
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
@@ -1520,6 +1551,14 @@ private fun VesqenDestinationFrame(
                 )
             }
         }
+        // Where the mini player was: the queue it played is the one Undo puts back.
+        SnackbarHost(
+            hostState = queueClearedHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(start = VesqenSpacing.md, end = VesqenSpacing.md, bottom = miniPlayerBottomPadding),
+        ) { data -> QueueClearedSnackbar(data) }
     }
 }
 

@@ -20,7 +20,6 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -754,7 +753,6 @@ private fun NowCover(
 }
 
 @Composable
-@OptIn(ExperimentalFoundationApi::class)
 private fun NowTrackIdentity(
     presentation: NowTrackPresentation,
     isControllerReady: Boolean,
@@ -784,11 +782,13 @@ private fun NowTrackIdentity(
                 style = if (compact) MaterialTheme.typography.headlineSmall.serif() else MaterialTheme.typography.displayLarge,
                 maxLines = 1,
                 softWrap = false,
-                overflow = TextOverflow.Clip,
+                // Marquee ignores the system animation scale, so with animations off the title stays
+                // still and ends in an ellipsis (#165).
+                overflow = if (motionPolicy.reduceMotion) TextOverflow.Ellipsis else TextOverflow.Clip,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .basicMarquee()
+                    .then(if (motionPolicy.reduceMotion) Modifier else Modifier.basicMarquee())
                     .testTag("vesqen.now.title"),
             )
             val byline = listOf(identity.artist.ifBlank { stringResource(R.string.unknown_artist) }, identity.album)
