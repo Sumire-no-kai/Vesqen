@@ -201,7 +201,7 @@
     <string name="crash_prompt_review">Review and send</string>
     <string name="crash_prompt_decline">No thanks</string>
     <string name="library_rebuilt_title">Library data was rebuilt</string>
-    <string name="library_rebuilt_body">Vesqen\'s library data was damaged and has been rebuilt from the music on this device. Favorites, play counts, play history and playlists could not be retained, and the queue has been cleared. Music folders added earlier must be added again. Music files on this device are not affected.</string>
+    <string name="library_rebuilt_body">Vesqen\'s library data was damaged and has been rebuilt from the music on this device. Favorites, play counts, play history, playlists and imported lyrics could not be retained, and the queue has been cleared. Music folders added earlier must be added again. Music files on this device are not affected.</string>
     <string name="library_rebuilt_ok">OK</string>
     <string name="licenses_title">Open source licenses</string>
     <string name="licenses_intro">Vesqen uses the following open-source software.</string>
@@ -256,7 +256,7 @@
     <string name="about_developer">Developer</string>
     <string name="about_developer_value">Sumire Studio</string>
     <string name="about_data_title">Your data</string>
-    <string name="about_data_body">Your library, favorites, playlists, play history and settings are kept only on this phone, and no account is needed. Vesqen does not back them up or move them to a new phone. On a new phone you add your music again and rebuild your favorites and playlists.</string>
+    <string name="about_data_body">Your library, favorites, playlists, play history and settings are kept only on this phone, and no account is needed. Lyrics you import are copied into Vesqen and kept on this phone in the same way. Vesqen does not back them up or move them to a new phone. On a new phone you add your music again and rebuild your favorites and playlists.</string>
     <string name="privacy_policy_title">Privacy policy</string>
     <string name="privacy_policy_open_web">Open the web version</string>
     <string name="privacy_policy_no_browser">No app on this device can open web pages.</string>
@@ -358,7 +358,7 @@
     <string name="cancel">Cancel</string>
     <string name="delete_playlist">Delete playlist</string>
     <string name="remove_folder_confirm_title">Remove this folder?</string>
-    <string name="remove_folder_confirm_body">Vesqen forgets the songs in “%1$s”, along with their favorites, play counts and places in playlists. The files stay on your phone. Adding the folder again doesn’t bring these back.</string>
+    <string name="remove_folder_confirm_body">Vesqen will remove the songs in “%1$s” from its library, along with their favorites, play counts, places in playlists and imported lyrics. The files remain on your phone. Adding the folder again does not restore them.</string>
     <string name="delete_playlist_confirm_title">Delete “%1$s”?</string>
     <string name="delete_playlist_confirm_body">The songs stay in your library.</string>
     <string name="edit_playlist">Edit playlist</string>
@@ -986,5 +986,30 @@
     <string name="unmatched_record_assign">Choose this song</string>
     <string name="unmatched_record_discard">Discard record</string>
     <string name="unmatched_record_discard_confirm_title">Discard the record of “%1$s”?</string>
-    <string name="unmatched_record_discard_confirm_body">Its favorite, play count and places in playlists will be deleted and cannot be restored. Your music files are not affected.</string>
+    <string name="unmatched_record_discard_confirm_body">Its favorite, play count, places in playlists and imported lyrics will be deleted and cannot be restored. Your music files are not affected.</string>
+    <!-- #169 local lyrics -->
+    <string name="lyrics">Lyrics</string>
+    <string name="now_more_options">More options</string>
+    <string name="lyrics_show">Show lyrics</string>
+    <string name="lyrics_import">Import lyrics</string>
+    <string name="lyrics_remove">Remove lyrics</string>
+    <string name="lyrics_remove_confirm_title">Remove the imported lyrics?</string>
+    <string name="lyrics_remove_confirm_body">Vesqen will delete its copy of these lyrics. The file you imported them from is not affected.</string>
+    <string name="lyrics_remove_confirm_action">Remove</string>
+    <string name="lyrics_none">No lyrics</string>
+    <string name="lyrics_folder_hint">Same-name .lrc files are read only from music folders added in Vesqen.</string>
+    <string name="lyrics_unreadable">These lyrics cannot be read</string>
+    <string name="lyrics_unreadable_body">Vesqen cannot identify the text encoding of these lyrics. Save them as UTF-8 and import them.</string>
+    <string name="lyrics_play_from_line">Play from this line</string>
+    <string name="lyrics_imported">Lyrics imported</string>
+    <string name="lyrics_import_unreadable">This file cannot be read. Save it as UTF-8 and import it again.</string>
+    <string name="lyrics_import_no_lyrics">This file contains no lyrics</string>
+    <string name="lyrics_import_too_large">This file is too large to be imported as lyrics</string>
+    <string name="lyrics_import_failed">The lyrics could not be imported. Try again.</string>
+    <string name="detail_lyrics">Lyrics</string>
+    <string name="lyrics_source_imported">Imported</string>
+    <string name="lyrics_source_same_name_file">Same-name .lrc file</string>
+    <string name="lyrics_source_embedded">Embedded in the music file</string>
+    <string name="lyrics_source_none">None</string>
+    <string name="lyrics_source_unreadable">Cannot be read</string>
 </resources>

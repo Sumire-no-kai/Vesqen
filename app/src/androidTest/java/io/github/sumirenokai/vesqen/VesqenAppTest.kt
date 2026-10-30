@@ -69,6 +69,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.test.espresso.Espresso
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.Lifecycle
 import io.github.sumirenokai.vesqen.library.AudioTrack
@@ -1868,7 +1869,13 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.progress").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.playback-order").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.notes-toggle").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.lyrics-toggle").assertIsDisplayed()
+        // #169: the orientation toggle moved into the "more" menu (owner decision 1).
+        composeRule.onNodeWithTag("vesqen.now.more").performClick()
         composeRule.onNodeWithTag("vesqen.now.orientation-toggle").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.more.info").assertIsDisplayed()
+        Espresso.pressBack()
+        composeRule.onAllNodesWithTag("vesqen.now.orientation-toggle").assertCountEquals(0)
         openLinerNotes()
         composeRule.onNodeWithTag("vesqen.now.info").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.open-chain").performScrollTo()
@@ -3931,7 +3938,8 @@ class VesqenAppTest {
 
         composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
         composeRule.onNodeWithTag("vesqen.now.artwork-stage").assertIsDisplayed()
-        composeRule.onAllNodesWithTag("vesqen.album-artwork.fallback").assertCountEquals(1)
+        // The cover is a button that shows the lyrics (#169), so its contents merge into it.
+        composeRule.onAllNodesWithTag("vesqen.album-artwork.fallback", useUnmergedTree = true).assertCountEquals(1)
         composeRule.onNodeWithTag("vesqen.now.player-page").assert(
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
         )
@@ -4470,6 +4478,8 @@ class VesqenAppTest {
         val touchTargetTags = setOf(
             "vesqen.now.output-mode",
             "vesqen.now.back",
+            "vesqen.now.lyrics-toggle",
+            "vesqen.now.more",
             "vesqen.now.progress",
             "vesqen.now.previous",
             "vesqen.now.play-pause",

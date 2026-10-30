@@ -1,6 +1,8 @@
 package io.github.sumirenokai.vesqen.library
 
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.sumirenokai.vesqen.lyrics.LyricsStore
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -91,6 +93,44 @@ class LibraryUnmatchedRecordsTest {
         assertFalse(store.discardUnmatchedRecord(a.id))
     }
 
+    /**
+     * #169: imported lyrics follow the choice. The record keeps its own; the chosen song's move over
+     * only when the record has none, copied before the merge commits. The clean-up's ID read
+     * includes hidden records, so their lyrics wait with them.
+     */
+    @Test
+    fun importedLyricsFollowTheChoice() {
+        val directory = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "lyrics-${System.nanoTime()}")
+        val lyrics = LyricsStore(directory)
+        try {
+            withStore("library-unmatched-lyrics", lyrics) { store ->
+                store.scan(aira.at(1), tide.at(2))
+                val a = store.track("Aira")
+                val b = store.track("Tide")
+                store.setFavorite(a.id, true)
+                store.setFavorite(b.id, true)
+                lyrics.import(b.id, "[00:01.00]Tide's own".byteInputStream(), lyrics.generation())
+                store.scan(aira.at(3), tide.at(4))
+                store.scan(aira.at(3), tide.at(4))
+                val listed = store.readTracks(listOf(LibrarySourceId.DEVICE)).filterNot { it.id in setOf(a.id, b.id) }
+                val newAira = listed.single { it.title == "Aira" }
+                val newTide = listed.single { it.title == "Tide" }
+                lyrics.import(newAira.id, "[00:01.00]Aira, imported on the new row".byteInputStream(), lyrics.generation())
+                lyrics.import(newTide.id, "[00:01.00]Tide, imported on the new row".byteInputStream(), lyrics.generation())
+                assertTrue(store.readTrackIdsForSweep().trackIds.containsAll(listOf(a.id, b.id, newAira.id, newTide.id)))
+
+                assertTrue(store.assignUnmatchedRecord(a.id, newAira.id))
+                assertTrue(store.assignUnmatchedRecord(b.id, newTide.id))
+
+                assertEquals("[00:01.00]Aira, imported on the new row", lyrics.read(a.id)?.decodeToString())
+                assertEquals("[00:01.00]Tide's own", lyrics.read(b.id)?.decodeToString())
+                assertEquals(setOf(a.id, b.id), lyrics.importedLyrics.value.trackIds)
+            }
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
     private data class Android9File(val title: String, val album: String) {
         fun at(mediaId: Long): LibraryTrackCandidate {
             val contentUri = "content://media/external/audio/media/$mediaId"
@@ -123,11 +163,15 @@ class LibraryUnmatchedRecordsTest {
         return readTracks(listOf(LibrarySourceId.DEVICE)).single { it.title == title && it.id !in hidden }
     }
 
-    private fun withStore(name: String, block: (LibraryCatalogStore) -> Unit) {
+    private fun withStore(
+        name: String,
+        mergeFollower: TrackMergeFollower = TrackMergeFollower.None,
+        block: (LibraryCatalogStore) -> Unit,
+    ) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val databaseName = "$name-${System.nanoTime()}.db"
         try {
-            LibraryCatalogStore(context, databaseName).use { store ->
+            LibraryCatalogStore(context, databaseName, mergeFollower = mergeFollower).use { store ->
                 store.ensureDeviceSource()
                 block(store)
             }

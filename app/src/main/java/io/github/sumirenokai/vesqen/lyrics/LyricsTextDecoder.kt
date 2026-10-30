@@ -66,7 +66,7 @@ private fun readLegacyCjk(bytes: ByteArray): LegacyCjkReading {
     val readings = LegacyCjkEncoding.entries.mapNotNull { encoding ->
         val charset = encoding.charset ?: return@mapNotNull null
         val text = decodeStrictly(bytes, charset) ?: return@mapNotNull null
-        LegacyReading(encoding, text, encoding.countCharacters(bytes))
+        LegacyReading(encoding, text, encoding.countCharacters(bytes)).takeIf { encoding.plausible(it.count) }
     }
     val best = readings.maxByOrNull { it.count.share } ?: return LegacyCjkReading.None
     if (best.count.counted < MIN_LEGACY_CHARACTERS || best.count.share < MIN_LEGACY_SHARE) {
@@ -87,7 +87,12 @@ private class LegacyReading(val encoding: LegacyCjkEncoding, val text: String, v
  * encoding's most frequent block. Punctuation rows count as neither, since these encodings put
  * their punctuation in byte ranges the others read as common characters.
  */
-private class CharacterCount(val counted: Int, val frequent: Int) {
+private class CharacterCount(
+    val counted: Int,
+    val frequent: Int,
+    /** Characters only this encoding's script has, such as kana; see [LegacyCjkEncoding.plausible]. */
+    val marked: Int,
+) {
     val share: Double get() = if (counted == 0) 0.0 else frequent.toDouble() / counted
 }
 
@@ -148,7 +153,11 @@ private enum class LegacyCjkEncoding(val shown: Boolean, private vararg val name
             }
     },
 
-    /** Kana rows A4–A5 and JIS level-1 kanji B0A1–CFD3. */
+    /**
+     * Kana rows A4–A5 and JIS level-1 kanji B0A1–CFD3. GB2312 puts its level-1 hanzi in the same
+     * rows as these kanji, so Chinese text alone would read as fairly common Japanese; Japanese
+     * always has kana, Chinese text practically never.
+     */
     EucJp(shown = false, "EUC-JP") {
         override fun countCharacters(bytes: ByteArray): CharacterCount =
             countMultiBytes(bytes, isSingleByte = { false }) { lead, trail ->
@@ -156,21 +165,28 @@ private enum class LegacyCjkEncoding(val shown: Boolean, private vararg val name
                 when {
                     lead == 0x8F -> Weight.CountedThreeBytes
                     lead in 0xA1..0xA3 -> Weight.Neutral
-                    lead == 0xA4 || lead == 0xA5 || code in 0xB0A1..0xCFD3 -> Weight.Frequent
+                    lead == 0xA4 || lead == 0xA5 -> Weight.FrequentMarked
+                    code in 0xB0A1..0xCFD3 -> Weight.Frequent
                     else -> Weight.Counted
                 }
             }
+
+        override fun plausible(count: CharacterCount): Boolean = count.marked * MIN_KANA_SHARE_DIVISOR >= count.counted
     };
 
     val charset: Charset? by lazy { names.firstNotNullOfOrNull(::supportedCharsetOrNull) }
 
     abstract fun countCharacters(bytes: ByteArray): CharacterCount
+
+    /** Whether this reading takes part at all. */
+    open fun plausible(count: CharacterCount): Boolean = true
 }
 
 private enum class Weight(val width: Int) {
     Neutral(2),
     Counted(2),
     Frequent(2),
+    FrequentMarked(2),
     CountedThreeBytes(3),
     CountedFourBytes(4),
 }
@@ -186,6 +202,7 @@ private inline fun countMultiBytes(
 ): CharacterCount {
     var counted = 0
     var frequent = 0
+    var marked = 0
     var index = 0
     while (index < bytes.size) {
         val lead = bytes[index].toInt() and 0xff
@@ -200,10 +217,11 @@ private inline fun countMultiBytes(
         }
         val weight = weigh(lead, bytes[index + 1].toInt() and 0xff)
         if (weight != Weight.Neutral) counted++
-        if (weight == Weight.Frequent) frequent++
+        if (weight == Weight.Frequent || weight == Weight.FrequentMarked) frequent++
+        if (weight == Weight.FrequentMarked) marked++
         index += weight.width
     }
-    return CharacterCount(counted, frequent)
+    return CharacterCount(counted, frequent, marked)
 }
 
 private fun decodeStrictly(bytes: ByteArray, charset: Charset, offset: Int = 0): String? = try {
@@ -245,6 +263,9 @@ private const val MIN_LEGACY_CHARACTERS = 6
 private const val MIN_LEGACY_SHARE = 0.8
 private const val MIN_LEGACY_MARGIN = 0.2
 private const val MAX_STRAY_CONTROLS = 2
+
+/** EUC-JP competes only when at least a tenth of its characters are kana. */
+private const val MIN_KANA_SHARE_DIVISOR = 10
 private val UTF8_BOM = bytesOf(0xEF, 0xBB, 0xBF)
 private val UTF16_LE_BOM = bytesOf(0xFF, 0xFE)
 private val UTF16_BE_BOM = bytesOf(0xFE, 0xFF)

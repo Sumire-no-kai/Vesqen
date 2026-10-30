@@ -4,7 +4,7 @@ package io.github.sumirenokai.vesqen.lyrics
  * Lyrics ready for Now (#169). Synced lines are ordered by time; plain text has no times, so it is
  * neither highlighted nor followed.
  */
-internal sealed interface Lyrics {
+sealed interface Lyrics {
     data class Synced(val lines: List<LyricLine>) : Lyrics
 
     data class Plain(val lines: List<String>) : Lyrics
@@ -14,7 +14,7 @@ internal sealed interface Lyrics {
  * One timed line. The first text at a time is the original; every other distinct text at the same
  * time follows in file order as a translation. An empty [text] marks a pause between lines.
  */
-internal data class LyricLine(
+data class LyricLine(
     val timeMs: Long,
     val text: String,
     val translations: List<String> = emptyList(),

@@ -12,6 +12,10 @@ import androidx.compose.ui.platform.findViewTreeCompositionContext
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.lyrics.LyricLine
+import io.github.sumirenokai.vesqen.lyrics.Lyrics
+import io.github.sumirenokai.vesqen.lyrics.LyricsSource
+import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
@@ -84,6 +88,70 @@ class NowBackgroundRecompositionTest {
             // The update itself takes a few frames (about 0.1 s on the Honor). The loop kept work
             // pending about 90% of the time and never went quiet for long.
             assertTrue("Now keeps recomposing while stopped", awaitQuiet(recomposer, timeoutMs = 3_000))
+        }
+    }
+
+    /**
+     * #169: shown lyrics wake once per line while playing. A stopped activity must set no line
+     * timers, or each new line would leave work pending on the paused frame clock.
+     */
+    @Test
+    fun shownLyricsSetNoTimersWhileStopped() {
+        val track = AudioTrack(
+            id = 7,
+            contentUri = "content://media/external/audio/media/7",
+            title = "Track",
+            artist = "Artist",
+            album = "Album",
+            durationMs = 600_000,
+        )
+        // A line every second: quiet for longer than the 500 ms window between lines in front.
+        val lyrics = Lyrics.Synced((0 until 600).map { second -> LyricLine(second * 1_000L, "Line $second") })
+        ActivityScenario.launch(ComponentActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.setContent {
+                    VesqenTheme(darkTheme = false) {
+                        NowScreen(
+                            snapshot = PlaybackSnapshot(
+                                isControllerReady = true,
+                                isPlaying = true,
+                                trackId = track.id,
+                                title = track.title,
+                                artist = track.artist,
+                                album = track.album,
+                                durationMs = track.durationMs,
+                                queueSize = 1,
+                            ),
+                            currentTrack = track,
+                            artworkTrack = track,
+                            onBackToLibrary = {},
+                            onOpenChain = {},
+                            onCyclePlaybackOrder = {},
+                            onPrevious = {},
+                            onPlayPause = {},
+                            onNext = {},
+                            onSeek = {},
+                            onPlayQueueIndex = {},
+                            onRemoveQueueItem = {},
+                            onMoveQueueItem = { _, _ -> },
+                            onClearQueue = {},
+                            onRetryPlayback = {},
+                            onToggleOrientation = {},
+                            showOrientationToggle = false,
+                            isLandscape = false,
+                            motionPolicy = VesqenMotionPolicy(reduceMotion = true),
+                            lyrics = NowLyricsState(shown = true),
+                            loadLyrics = { TrackLyrics.Found(LyricsSource.Embedded, lyrics) },
+                        )
+                    }
+                }
+            }
+            val recomposer = windowRecomposer(scenario)
+            assertTrue("Now did not settle in the foreground", awaitQuiet(recomposer, timeoutMs = 5_000))
+            scenario.moveToState(Lifecycle.State.CREATED)
+            // Three lines would have started by now; none may have been scheduled.
+            SystemClock.sleep(3_000)
+            assertTrue("Lyrics keep scheduling work while stopped", awaitQuiet(recomposer, timeoutMs = 3_000))
         }
     }
 

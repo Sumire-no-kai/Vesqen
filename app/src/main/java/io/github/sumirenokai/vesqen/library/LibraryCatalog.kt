@@ -55,6 +55,9 @@ interface LibraryCatalog : Closeable {
     /** Deletes an unmatched record with its favorite, plays and playlist places (#139). */
     suspend fun discardUnmatchedRecord(recordId: Long)
 
+    /** Every row's ID, hidden ones included, for the lyrics clean-up (#169). */
+    suspend fun readTrackIdsForSweep(): CatalogTrackIds
+
     suspend fun refresh(
         includeDeviceLibrary: Boolean,
         onProgress: suspend (LibraryScanProgress) -> Unit,
@@ -179,6 +182,8 @@ internal class AndroidLibraryCatalog(
     override suspend fun assignUnmatchedRecord(recordId: Long, trackId: Long): Boolean = processScanLock.withLock {
         serialized { store.assignUnmatchedRecord(recordId, trackId) }
     }
+
+    override suspend fun readTrackIdsForSweep(): CatalogTrackIds = serialized { store.readTrackIdsForSweep() }
 
     override suspend fun discardUnmatchedRecord(recordId: Long): Unit = processScanLock.withLock {
         serialized { store.discardUnmatchedRecord(recordId) }
