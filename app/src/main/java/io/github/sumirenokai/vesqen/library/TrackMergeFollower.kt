@@ -30,6 +30,15 @@ internal interface TrackMergeFollower {
     }
 }
 
+/** Several followers of the same merges, each told in turn: imported lyrics and the playback queue. */
+internal class TrackMergeFollowers(private vararg val followers: TrackMergeFollower) : TrackMergeFollower {
+    override fun prepareMerge(from: Long, into: Long) = followers.forEach { it.prepareMerge(from, into) }
+
+    override fun mergeCommitted(from: Long, into: Long) = followers.forEach { it.mergeCommitted(from, into) }
+
+    override fun mergeRolledBack(from: Long, into: Long) = followers.forEach { it.mergeRolledBack(from, into) }
+}
+
 /** Every catalog row's ID, hidden and displaced rows included, read for the lyrics clean-up (#169). */
 class CatalogTrackIds(
     val trackIds: Set<Long>,

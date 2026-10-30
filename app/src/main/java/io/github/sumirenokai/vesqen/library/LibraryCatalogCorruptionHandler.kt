@@ -33,6 +33,10 @@ internal class LibraryCatalogCorruptionHandler(
         // Each statement that fails on the same open database reports it again.
         if (!handled.add(dbObj)) return
         beforeRebuild()
+        // Counted before the close: a caller whose statement then fails on the closed database already
+        // sees this rebuild and treats the failure as it (#191 D6). Opening waits for this lock, so no
+        // one reads the new catalog before the files below are set aside.
+        rebuildCount.update { it + 1 }
         try {
             // Later statements on this database fail; the helper opens a new one for the next caller.
             if (dbObj.isOpen) dbObj.close()
@@ -41,7 +45,6 @@ internal class LibraryCatalogCorruptionHandler(
             // left open keeps reading the copy, and the next open starts the empty catalog.
             val path = dbObj.path
             if (path != IN_MEMORY_PATH && path.isNotBlank()) keepCorruptCopy(File(path))
-            rebuildCount.update { it + 1 }
         }
     }
 

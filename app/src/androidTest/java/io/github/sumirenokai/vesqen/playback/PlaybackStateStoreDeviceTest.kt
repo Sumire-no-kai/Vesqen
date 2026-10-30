@@ -512,7 +512,7 @@ class PlaybackStateStoreDeviceTest {
                 playOrder = listOf(1, 0),
             ),
         )
-        assertNull(store.loadKeptPlayModes())
+        assertEquals(PlaybackOrderSettings(true, PlaybackRepeatMode.ALL), store.loadPlayModes())
         // The latest modes are the progress file's.
         store.saveProgress(currentTrackId = 2, positionMs = 6_000, shuffleEnabled = true, repeatMode = PlaybackRepeatMode.ONE, currentQueueIndex = 1, queueEnded = false)
         store.clear()
@@ -525,13 +525,45 @@ class PlaybackStateStoreDeviceTest {
         assertNull(fresh.load())
         assertFalse(fresh.hasSavedQueue())
         assertNull(fresh.loadCountedPlayback())
-        assertEquals(PlaybackOrderSettings(true, PlaybackRepeatMode.ONE), fresh.loadKeptPlayModes())
+        assertEquals(PlaybackOrderSettings(true, PlaybackRepeatMode.ONE), fresh.loadPlayModes())
 
         // A catalog rebuild's clear keeps them too; the keeper's clear gives the player's own.
         fresh.clear(durable = true)
-        assertEquals(PlaybackOrderSettings(true, PlaybackRepeatMode.ONE), PlaybackStateStore(isolatedContext).loadKeptPlayModes())
+        assertEquals(PlaybackOrderSettings(true, PlaybackRepeatMode.ONE), PlaybackStateStore(isolatedContext).loadPlayModes())
         fresh.clear(PlaybackOrderSettings(false, PlaybackRepeatMode.ALL))
-        assertEquals(PlaybackOrderSettings(false, PlaybackRepeatMode.ALL), PlaybackStateStore(isolatedContext).loadKeptPlayModes())
+        assertEquals(PlaybackOrderSettings(false, PlaybackRepeatMode.ALL), PlaybackStateStore(isolatedContext).loadPlayModes())
+    }
+
+    @Test
+    fun aNewPlayerTakesTheSavedModesAlsoWhenTheSavedQueueCannotBeRestored() {
+        // #191 D15: the modes applied only without a saved queue. A saved queue whose files cannot
+        // play restores nothing, so the next queue started in order and saved over the modes.
+        val store = PlaybackStateStore(isolatedContext)
+        store.save(
+            PersistedPlaybackState(
+                queueTrackIds = listOf(1, 2),
+                currentTrackId = 1,
+                positionMs = 0,
+                shuffleEnabled = true,
+                repeatMode = PlaybackRepeatMode.ALL,
+                currentQueueIndex = 0,
+            ),
+        )
+        assertNull(store.load()!!.restoreAgainst(listOf(AudioTrack(9, "content://track/9", "Other", "", "", 60_000))))
+        var shuffled = false
+        var repeat = Player.REPEAT_MODE_OFF
+        main {
+            val player = ExoPlayer.Builder(context).build()
+            try {
+                player.applySavedPlayModes(PlaybackStateStore(isolatedContext))
+                shuffled = player.shuffleModeEnabled
+                repeat = player.repeatMode
+            } finally {
+                player.release()
+            }
+        }
+        assertTrue(shuffled)
+        assertEquals(Player.REPEAT_MODE_ALL, repeat)
     }
 
     private fun main(action: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(action)

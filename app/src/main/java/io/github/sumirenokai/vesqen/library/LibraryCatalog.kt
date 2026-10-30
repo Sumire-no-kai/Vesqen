@@ -11,6 +11,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Small ViewModel-facing seam for the durable local catalog. Provider-specific identities,
@@ -77,7 +78,7 @@ internal class AndroidLibraryCatalog(
     private val mediaStore = MediaStoreAudioRepository(appContext, contentResolver)
     private val treeScanner = TreeAudioScanner(contentResolver)
     private val metadataReader = LocalAudioMetadataReader(appContext)
-    private val scanGate = LibraryScanGate(store.rebuilds)
+    private val scanGate = LibraryScanGate(store.rebuilds) { scanYieldRequests.get() > 0 }
     private val operationGate = LibraryCatalogOperationGate()
 
     private val resumePausedSourcesRequested = AtomicBoolean()
@@ -93,7 +94,8 @@ internal class AndroidLibraryCatalog(
      * time must not be marked interrupted.
      */
     suspend fun playableTracks(includeDeviceLibrary: Boolean): List<AudioTrack> = serialized {
-        snapshotInternal(includeDeviceLibrary).tracks
+        // The records waiting for a choice are only listed in the Library (#191 D19).
+        snapshotInternal(includeDeviceLibrary, readUnmatchedRecords = false).tracks
     }
 
     override suspend fun addFolder(treeUri: Uri) {
@@ -126,7 +128,7 @@ internal class AndroidLibraryCatalog(
     }
 
     // A scan of the folder must not run into its removal, so removal waits for any scan.
-    override suspend fun removeFolder(sourceId: String): Unit = processScanLock.withLock {
+    override suspend fun removeFolder(sourceId: String): Unit = betweenScans {
         serialized {
             val treeUri = store.removeFolderSource(sourceId) ?: return@serialized Unit
             try {
@@ -182,7 +184,7 @@ internal class AndroidLibraryCatalog(
 
     // A scan holds the rows it read at its start and marks them seen as it goes, so a record that took
     // over another row during it would be hidden again at its completion: a choice waits for any scan.
-    override suspend fun assignUnmatchedRecord(recordId: Long, trackId: Long): Boolean = processScanLock.withLock {
+    override suspend fun assignUnmatchedRecord(recordId: Long, trackId: Long): Boolean = betweenScans {
         serialized { store.assignUnmatchedRecord(recordId, trackId) }
     }
 
@@ -190,8 +192,28 @@ internal class AndroidLibraryCatalog(
 
     override suspend fun trackContentUri(trackId: Long): String? = serialized { store.readTrackContentUri(trackId) }
 
-    override suspend fun discardUnmatchedRecord(recordId: Long): Unit = processScanLock.withLock {
+    override suspend fun discardUnmatchedRecord(recordId: Long): Unit = betweenScans {
         serialized { store.discardUnmatchedRecord(recordId) }
+    }
+
+    /**
+     * Runs [edit] under [processScanLock], which a scan holds to its end. While the edit waits, a running
+     * scan stops at its next row, and the Library starts it again afterwards (#191 D17): the edit waits
+     * for a row, not for a whole scan, and does not outlive the screen that asked for it by minutes.
+     */
+    private suspend fun <T> betweenScans(edit: suspend () -> T): T {
+        scanYieldRequests.incrementAndGet()
+        var waiting = true
+        try {
+            return processScanLock.withLock {
+                // The scan has stopped; one started after this request runs to its end.
+                scanYieldRequests.decrementAndGet()
+                waiting = false
+                edit()
+            }
+        } finally {
+            if (waiting) scanYieldRequests.decrementAndGet()
+        }
     }
 
     /**
@@ -220,6 +242,7 @@ internal class AndroidLibraryCatalog(
 
         var hadFailure = false
         var scanPaused = false
+        var yielded = false
         if (includeDeviceLibrary) {
             when (scanDeviceLibrary(onProgress)) {
                 SourceScanOutcome.FAILED,
@@ -229,6 +252,10 @@ internal class AndroidLibraryCatalog(
                 SourceScanOutcome.PAUSED,
                 SourceScanOutcome.REBUILT,
                 -> scanPaused = true
+                SourceScanOutcome.YIELDED -> {
+                    scanPaused = true
+                    yielded = true
+                }
                 else -> Unit
             }
         }
@@ -247,6 +274,10 @@ internal class AndroidLibraryCatalog(
                         SourceScanOutcome.PAUSED,
                         SourceScanOutcome.REBUILT,
                         -> scanPaused = true
+                        SourceScanOutcome.YIELDED -> {
+                            scanPaused = true
+                            yielded = true
+                        }
                         else -> Unit
                     }
                 }
@@ -255,6 +286,7 @@ internal class AndroidLibraryCatalog(
         return LibraryRefreshResult(
             snapshot = serialized { snapshotInternal(includeDeviceLibrary) },
             hadFailure = hadFailure,
+            yieldedToEdit = yielded,
         )
     }
 
@@ -368,6 +400,11 @@ internal class AndroidLibraryCatalog(
     ): SourceScanOutcome {
         // The session and the rows it saw belong to the catalog that was set aside (#165 U5).
         if (scanGate.catalogRebuilt()) return SourceScanOutcome.REBUILT
+        if (!iteration.completed && !scanGate.pausedByUser()) {
+            // Stopped for an edit that waits for the catalog: not the user's pause, and not a failure.
+            store.markSourceInterrupted(source.id)
+            return SourceScanOutcome.YIELDED
+        }
         if (!iteration.completed) {
             store.markSourcePaused(source.id)
             onProgress(
@@ -388,7 +425,7 @@ internal class AndroidLibraryCatalog(
         return SourceScanOutcome.COMPLETED
     }
 
-    private fun snapshotInternal(includeDeviceLibrary: Boolean): LibraryCatalogSnapshot {
+    private fun snapshotInternal(includeDeviceLibrary: Boolean, readUnmatchedRecords: Boolean = true): LibraryCatalogSnapshot {
         val readableTreeUris = persistedReadableTreeUris()
         val mountedMediaStoreVolumes = if (includeDeviceLibrary) {
             mediaStore.currentVolumeNames()
@@ -447,7 +484,7 @@ internal class AndroidLibraryCatalog(
                 }
             },
             playlists = store.readPlaylists(),
-            unmatchedRecords = if (displacedDeviceTrackIds.isEmpty() && hiddenFolderTrackIds.isEmpty()) {
+            unmatchedRecords = if (!readUnmatchedRecords || displacedDeviceTrackIds.isEmpty() && hiddenFolderTrackIds.isEmpty()) {
                 emptyList()
             } else {
                 unmatchedRecords(sourceTracks, visibleTracks)
@@ -500,6 +537,9 @@ internal class AndroidLibraryCatalog(
          * for one of the scan's statements or transactions, such as its completion's prune.
          */
         val processScanLock = Mutex()
+
+        /** Edits waiting for [processScanLock]; a scan stops at its next row while there is one (#191 D17). */
+        val scanYieldRequests = AtomicInteger()
     }
 }
 
@@ -545,6 +585,9 @@ private enum class SourceScanOutcome {
 
     /** The catalog was rebuilt after corruption during the scan, which stopped without writing more. */
     REBUILT,
+
+    /** Stopped at its next row for an edit that waits for [AndroidLibraryCatalog]'s scan lock (#191 D17). */
+    YIELDED,
 }
 
 /**
@@ -553,7 +596,11 @@ private enum class SourceScanOutcome {
  * go to the new, empty catalog by IDs from the old one, so an unchanged row updates nothing and the
  * scan would walk the whole library before failing, while the full scan of the new catalog waits.
  */
-private class LibraryScanGate(private val rebuilds: StateFlow<Int>) {
+private class LibraryScanGate(
+    private val rebuilds: StateFlow<Int>,
+    /** An edit waits for the scan lock (#191 D17). */
+    private val editWaiting: () -> Boolean,
+) {
     @Volatile
     private var paused = false
 
@@ -574,5 +621,7 @@ private class LibraryScanGate(private val rebuilds: StateFlow<Int>) {
         paused = false
     }
 
-    fun isPaused(): Boolean = paused || catalogRebuilt()
+    fun pausedByUser(): Boolean = paused
+
+    fun isPaused(): Boolean = paused || catalogRebuilt() || editWaiting()
 }

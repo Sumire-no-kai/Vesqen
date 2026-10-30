@@ -13,7 +13,8 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * The Artists page's split settings (#168), beside the other Library browse preferences. Lists are
  * stored one entry per line: Settings splits separators at spaces and names at line breaks, so no
- * entry holds one. A list that was never edited follows the defaults of the installed version.
+ * entry holds one. A list that was never edited, or was set back to the defaults, is not stored and
+ * follows the defaults of the installed version.
  */
 class ArtistSplitPreferences(context: Context, preferencesName: String = PREFERENCES_NAME) {
     private val preferences = context.applicationContext.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
@@ -24,10 +25,15 @@ class ArtistSplitPreferences(context: Context, preferencesName: String = PREFERE
         val current = state.value
         preferences.edit {
             if (settings.enabled != current.enabled) putBoolean(KEY_ENABLED, settings.enabled)
-            if (settings.separators != current.separators) putString(KEY_SEPARATORS, settings.separators.joinToString("\n"))
-            if (settings.keptNames != current.keptNames) putString(KEY_KEPT_NAMES, settings.keptNames.joinToString("\n"))
+            // A list equal to the defaults is not stored, so "Restore defaults" follows them again (#191 D14).
+            putList(KEY_SEPARATORS, settings.separators, DefaultArtistSeparators)
+            putList(KEY_KEPT_NAMES, settings.keptNames, DefaultKeptArtistNames)
         }
         state.value = settings
+    }
+
+    private fun SharedPreferences.Editor.putList(key: String, list: List<String>, defaults: List<String>) {
+        if (list == defaults) remove(key) else putString(key, list.joinToString("\n"))
     }
 
     private fun read() = ArtistSplitSettings(

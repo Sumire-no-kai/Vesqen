@@ -218,6 +218,47 @@ class PlaybackStateStoreTest {
     }
 
     @Test
+    fun `a held back current entry restores from the next entry that can play, at its start`() {
+        // #191 D16: the saved entry's file cannot play now; the queue used to restart at its head.
+        val listed = PersistedPlaybackState(
+            queueTrackIds = listOf(1, 2, 3, 4),
+            currentTrackId = 2,
+            currentQueueIndex = 1,
+            positionMs = 30_000,
+            shuffleEnabled = false,
+            repeatMode = PlaybackRepeatMode.OFF,
+        ).restoreAgainst(listOf(track(1), track(3), track(4)))!!
+        assertEquals(3L, listed.tracks[listed.startIndex].id)
+        assertEquals(0, listed.positionMs)
+
+        // Shuffled, the next entry is the next in the saved play order: track 3 plays first, so not it.
+        val shuffled = PersistedPlaybackState(
+            queueTrackIds = listOf(1, 2, 3, 4),
+            currentTrackId = 2,
+            currentQueueIndex = 1,
+            positionMs = 30_000,
+            shuffleEnabled = true,
+            repeatMode = PlaybackRepeatMode.OFF,
+            playOrder = listOf(2, 1, 3, 0),
+        ).restoreAgainst(listOf(track(1), track(3), track(4)))!!
+        assertEquals(4L, shuffled.tracks[shuffled.startIndex].id)
+        assertEquals(0, shuffled.positionMs)
+        assertEquals(listOf(3L, 4L, 1L), shuffled.playOrder!!.map { shuffled.tracks[it].id })
+
+        // Nothing after it can play: the queue starts at its head, as before.
+        val last = PersistedPlaybackState(
+            queueTrackIds = listOf(1, 2, 3),
+            currentTrackId = 3,
+            currentQueueIndex = 2,
+            positionMs = 30_000,
+            shuffleEnabled = false,
+            repeatMode = PlaybackRepeatMode.OFF,
+        ).restoreAgainst(listOf(track(1), track(2)))!!
+        assertEquals(0, last.startIndex)
+        assertEquals(0, last.positionMs)
+    }
+
+    @Test
     fun `restore refuses a queue whose sources no longer exist`() {
         assertNull(
             PersistedPlaybackState(

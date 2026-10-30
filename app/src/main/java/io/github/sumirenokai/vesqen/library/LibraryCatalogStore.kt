@@ -1080,14 +1080,6 @@ internal class LibraryCatalogStore internal constructor(
         val hiddenRows = "($TRACK_REMOTE_ID GLOB '$DISPLACED_MEDIASTORE_PREFIX*' OR $TRACK_REMOTE_ID GLOB '$HIDDEN_FOLDER_PREFIX*')"
         val hidden = readRecordIdentities(database, hiddenRows, emptyList())
         if (hidden.isEmpty()) return emptyMap()
-        // Only rows that share a hidden row's file name can share its key.
-        val listed = hidden.map(RecordTrackIdentity::fileName).distinct().chunked(SQL_ARGUMENT_CHUNK).flatMap { names ->
-            readRecordIdentities(
-                database,
-                "NOT $hiddenRows AND $TRACK_FILE_NAME IN (${names.joinToString(",") { "?" }})",
-                names,
-            )
-        }
         val completedScanEpochs = database.query(
             SOURCES_TABLE,
             arrayOf(SOURCE_ID, SOURCE_SCAN_EPOCH),
@@ -1100,6 +1092,17 @@ internal class LibraryCatalogStore internal constructor(
             buildMap {
                 while (cursor.moveToNext()) put(cursor.getString(0), cursor.getLong(1))
             }
+        }
+        // Only rows that can wait for a choice need their songs, and only rows that share such a
+        // row's file name can share its key; without one there is nothing to read (#191 D19).
+        val names = hidden.filter { it.canWaitForChoice(completedScanEpochs) }.map(RecordTrackIdentity::fileName).distinct()
+        if (names.isEmpty()) return emptyMap()
+        val listed = names.chunked(SQL_ARGUMENT_CHUNK).flatMap { chunk ->
+            readRecordIdentities(
+                database,
+                "NOT $hiddenRows AND $TRACK_FILE_NAME IN (${chunk.joinToString(",") { "?" }})",
+                chunk,
+            )
         }
         return planUnmatchedRecords(hidden, listed, completedScanEpochs)
     }
@@ -1748,11 +1751,7 @@ internal fun planUnmatchedRecords(
     val listedByKey = listed.groupBy(RecordTrackIdentity::fileKey)
     val hiddenCountByKey = hidden.groupingBy(RecordTrackIdentity::fileKey).eachCount()
     return hidden.asSequence()
-        .filter { row ->
-            val scanEpoch = completedScanEpochs[row.sourceId]
-            row.holdsUserState && row.fileName.isNotEmpty() &&
-                scanEpoch != null && scanEpoch - row.seenEpoch >= MISSED_SCANS_BEFORE_CHOICE
-        }
+        .filter { row -> row.canWaitForChoice(completedScanEpochs) }
         .mapNotNull { row ->
             val key = row.fileKey()
             val candidates = listedByKey[key].orEmpty()
@@ -1760,6 +1759,12 @@ internal fun planUnmatchedRecords(
             if (ambiguous) row.trackId to candidates.map(RecordTrackIdentity::trackId) else null
         }
         .toMap()
+}
+
+/** A hidden row with the user's data and a file name, missed by enough completed scans of its source. */
+internal fun RecordTrackIdentity.canWaitForChoice(completedScanEpochs: Map<String, Long>): Boolean {
+    val scanEpoch = completedScanEpochs[sourceId]
+    return holdsUserState && fileName.isNotEmpty() && scanEpoch != null && scanEpoch - seenEpoch >= MISSED_SCANS_BEFORE_CHOICE
 }
 
 private fun RecordTrackIdentity.fileKey(): List<Any?> = if (sourceId == LibrarySourceId.DEVICE) {
