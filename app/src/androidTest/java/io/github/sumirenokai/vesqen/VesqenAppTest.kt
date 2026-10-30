@@ -3859,7 +3859,13 @@ class VesqenAppTest {
 
     @Test
     fun shown_lyrics_with_open_liner_notes_keep_now_controls_visible_at_360dp() =
-        assertLyricsWithOpenLinerNotes(360.dp, 720.dp, fontScale = 1f, lyricsBesideOpenNotes = true)
+        assertLyricsWithOpenLinerNotes(360.dp, 720.dp, fontScale = 1f)
+
+    // At 360x720 the open notes leave the stage under its 96 dp minimum, so the cover and the lyrics
+    // both give way there; a common tall phone keeps them beside the notes.
+    @Test
+    fun shown_lyrics_stay_beside_open_liner_notes_on_a_tall_phone() =
+        assertLyricsWithOpenLinerNotes(412.dp, 915.dp, fontScale = 1f, lyricsBesideOpenNotes = true)
 
     @Test
     fun shown_lyrics_with_open_liner_notes_keep_now_controls_visible_in_landscape() =
