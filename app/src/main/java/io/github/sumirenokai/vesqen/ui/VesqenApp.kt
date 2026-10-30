@@ -161,6 +161,7 @@ import io.github.sumirenokai.vesqen.verification.OutputVerificationImportFailure
 import io.github.sumirenokai.vesqen.verification.OutputVerificationImportResult
 import io.github.sumirenokai.vesqen.verification.OutputVerificationRegistryState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -390,6 +391,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
         onMoveQueueItem = viewModel::moveQueueItem,
         onClearQueue = viewModel::clearQueue,
         onUndoClearQueue = viewModel::undoClearQueue,
+        onQueueClearedOfferEnded = viewModel::queueClearedOfferEnded,
         onRetryPlayback = viewModel::retryPlayback,
         onPrevious = viewModel::skipToPrevious,
         onPlayPause = viewModel::togglePlayback,
@@ -472,6 +474,7 @@ fun VesqenAppContent(
     onMoveQueueItem: (Int, Int) -> Unit = { _, _ -> },
     onClearQueue: () -> Unit = {},
     onUndoClearQueue: () -> Unit = {},
+    onQueueClearedOfferEnded: (Long) -> Unit = {},
     onRetryPlayback: () -> Unit = {},
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
@@ -522,24 +525,19 @@ fun VesqenAppContent(
     onLyricsImportNoticeShown: (Long) -> Unit = {},
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
-    // #169: the import's result, shown like the cleared-queue notice (owner decision 4).
-    val lyricsNoticeHostState = remember { SnackbarHostState() }
-    // #165: after Clear queue, a notice offers Undo for a while.
-    val queueClearedHostState = remember { SnackbarHostState() }
-    val queueClearedScope = rememberCoroutineScope()
+    // One host for the cleared-queue and lyrics notices, which sit at the same place: a notice waits
+    // for the one on screen, so a lyrics notice never covers Undo (#191 D11).
+    val noticeHostState = remember { SnackbarHostState() }
+    // #165: after Clear queue, a notice offers Undo for a while. The offer is the view model's, so an
+    // activity recreated meanwhile, such as a landscape Now that turns portrait once the queue is
+    // empty, offers it again for the full time (#191 D2). Leaving the composition is not its end.
     val queueClearedMessage = stringResource(R.string.queue_cleared)
     val queueClearedUndo = stringResource(R.string.queue_cleared_undo)
-    val clearQueue: () -> Unit = {
-        onClearQueue()
-        queueClearedScope.launch {
-            queueClearedHostState.currentSnackbarData?.dismiss()
-            val result = queueClearedHostState.showSnackbar(queueClearedMessage, queueClearedUndo, duration = SnackbarDuration.Long)
-            if (result == SnackbarResult.ActionPerformed) onUndoClearQueue()
-        }
-    }
-    // A queue started in the meantime takes the cleared one's place.
-    LaunchedEffect(state.playback.hasActiveTrack) {
-        if (state.playback.hasActiveTrack) queueClearedHostState.currentSnackbarData?.dismiss()
+    val queueClearedOffer = state.queueClearedOffer
+    LaunchedEffect(queueClearedOffer) {
+        if (queueClearedOffer == null) return@LaunchedEffect
+        val result = noticeHostState.showSnackbar(queueClearedMessage, queueClearedUndo, duration = SnackbarDuration.Long)
+        if (result == SnackbarResult.ActionPerformed) onUndoClearQueue() else onQueueClearedOfferEnded(queueClearedOffer)
     }
     var showStrictUsbUnavailable by rememberSaveable { mutableStateOf(false) }
     val officialMixerApiSupport = state.playback.usbOutputStatus.officialMixerApiSupport
@@ -580,27 +578,32 @@ fun VesqenAppContent(
     )
     val navigationState = currentNavigation()
     val destination = navigationState.destination
-    val hasFocusedPlayer = destination == VesqenDestination.NOW && state.playback.hasActiveTrack
+    val onNow = destination == VesqenDestination.NOW
+    val hasFocusedPlayer = onNow && state.playback.hasActiveTrack
     // #169: on Now the transport, the liner notes and, at large text, the top bar fill the edges, so
-    // a notice there would cover a control. A failed import is a dialog instead; a successful one
-    // switches Now to the lyrics and is announced once to screen readers. Elsewhere it is a snackbar.
+    // a notice there would cover a control. A successful import for the song on Now switches it to
+    // the lyrics and is announced once to screen readers; any other result there, or a success for
+    // another song, is a dialog (#191 D5). Elsewhere it is a snackbar.
     val lyricsNoticeScope = rememberCoroutineScope()
+    var lyricsNoticeSnackbar by remember { mutableStateOf<Job?>(null) }
     val lyricsNotice = state.lyricsImportNotice
     val lyricsNoticeMessage = lyricsNotice?.let { stringResource(lyricsImportMessage(it.result)) }
-    var lyricsImportFailure by rememberSaveable { mutableStateOf<LyricsImportResult?>(null) }
+    var lyricsImportResult by rememberSaveable { mutableStateOf<LyricsImportResult?>(null) }
     var lyricsImportedAnnouncement by remember { mutableStateOf<Long?>(null) }
-    LaunchedEffect(lyricsNotice?.id) {
+    LaunchedEffect(lyricsNotice?.id, onNow, state.playback.isControllerReady) {
         if (lyricsNotice == null || lyricsNoticeMessage == null) return@LaunchedEffect
+        // After process death Now comes back before the player does, so its song is not known yet.
+        if (onNow && !state.playback.isControllerReady) return@LaunchedEffect
         when {
-            hasFocusedPlayer && lyricsNotice.result != LyricsImportResult.IMPORTED -> lyricsImportFailure = lyricsNotice.result
-            hasFocusedPlayer -> {
+            !hasFocusedPlayer -> {
+                lyricsNoticeSnackbar?.cancel()
+                lyricsNoticeSnackbar = lyricsNoticeScope.launch { noticeHostState.showSnackbar(lyricsNoticeMessage) }
+            }
+            lyricsNotice.trackId == state.playback.trackId && lyricsNotice.result == LyricsImportResult.IMPORTED -> {
                 if (!lyrics.shown) onToggleLyrics()
                 lyricsImportedAnnouncement = lyricsNotice.id
             }
-            else -> lyricsNoticeScope.launch {
-                lyricsNoticeHostState.currentSnackbarData?.dismiss()
-                lyricsNoticeHostState.showSnackbar(lyricsNoticeMessage)
-            }
+            else -> lyricsImportResult = lyricsNotice.result
         }
         onLyricsImportNoticeShown(lyricsNotice.id)
     }
@@ -609,9 +612,9 @@ fun VesqenAppContent(
         delay(LYRICS_IMPORTED_ANNOUNCEMENT_MILLIS)
         lyricsImportedAnnouncement = null
     }
-    // A notice from the Library would cover Now's transport or liner notes for its last seconds.
+    // A notice from the Library, shown or waiting, would cover Now's transport or liner notes.
     LaunchedEffect(hasFocusedPlayer) {
-        if (hasFocusedPlayer) lyricsNoticeHostState.currentSnackbarData?.dismiss()
+        if (hasFocusedPlayer) lyricsNoticeSnackbar?.cancel()
     }
     val lyricsHooks = LyricsHooks(
         lyrics,
@@ -619,19 +622,18 @@ fun VesqenAppContent(
         onToggleLyrics,
         onImportLyrics,
         onRemoveLyrics,
-        lyricsNoticeHostState,
         lyricsImportedAnnouncement,
     )
-    lyricsImportFailure?.let { failure ->
+    lyricsImportResult?.let { result ->
         AlertDialog(
-            onDismissRequest = { lyricsImportFailure = null },
-            text = { Text(stringResource(lyricsImportMessage(failure))) },
+            onDismissRequest = { lyricsImportResult = null },
+            text = { Text(stringResource(lyricsImportMessage(result))) },
             confirmButton = {
-                TextButton(onClick = { lyricsImportFailure = null }) {
+                TextButton(onClick = { lyricsImportResult = null }) {
                     Text(stringResource(R.string.lyrics_import_result_ok))
                 }
             },
-            modifier = Modifier.testTag("vesqen.lyrics-import-failure"),
+            modifier = Modifier.testTag("vesqen.lyrics-import-result"),
         )
     }
     val refreshFocusedPlayerPosition = shouldRefreshPlaybackPosition(destination, state.playback)
@@ -745,8 +747,6 @@ fun VesqenAppContent(
             showRebuildNotice = true
             askedThisOpen = true
             rebuildNotice?.markShown()
-            // The rebuild drops the cleared queue, whose IDs name other songs now: Undo has nothing to put back.
-            queueClearedHostState.currentSnackbarData?.dismiss()
         }
     }
 
@@ -905,8 +905,8 @@ fun VesqenAppContent(
                 onPlayQueueIndex = onPlayQueueIndex,
                 onRemoveQueueItem = onRemoveQueueItem,
                 onMoveQueueItem = onMoveQueueItem,
-                onClearQueue = clearQueue,
-                queueClearedHostState = queueClearedHostState,
+                onClearQueue = onClearQueue,
+                noticeHostState = noticeHostState,
                 onRetryPlayback = onRetryPlayback,
                 onPrevious = onPrevious,
                 onPlayPause = onPlayPause,
@@ -985,8 +985,8 @@ fun VesqenAppContent(
             onPlayQueueIndex = onPlayQueueIndex,
             onRemoveQueueItem = onRemoveQueueItem,
             onMoveQueueItem = onMoveQueueItem,
-            onClearQueue = clearQueue,
-            queueClearedHostState = queueClearedHostState,
+            onClearQueue = onClearQueue,
+            noticeHostState = noticeHostState,
             onRetryPlayback = onRetryPlayback,
             onPrevious = onPrevious,
             onPlayPause = onPlayPause,
@@ -1262,7 +1262,7 @@ private fun VesqenDestinationFrame(
     onRemoveQueueItem: (Int) -> Unit,
     onMoveQueueItem: (Int, Int) -> Unit,
     onClearQueue: () -> Unit,
-    queueClearedHostState: SnackbarHostState,
+    noticeHostState: SnackbarHostState,
     onRetryPlayback: () -> Unit,
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
@@ -1678,24 +1678,22 @@ private fun VesqenDestinationFrame(
                 )
             }
         }
-        // Where the mini player was: the queue it played is the one Undo puts back.
+        // Where the mini player is, or was before Clear queue: the queue it played is the one Undo puts
+        // back. Now with a track shows no lyrics snackbar (see VesqenAppContent).
         SnackbarHost(
-            hostState = queueClearedHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(start = VesqenSpacing.md, end = VesqenSpacing.md, bottom = miniPlayerBottomPadding),
-        ) { data -> QueueClearedSnackbar(data) }
-        // Where the mini-player is; Now shows no lyrics snackbar (see VesqenAppContent).
-        SnackbarHost(
-            hostState = lyricsHooks.noticeHostState,
+            hostState = noticeHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
                 .padding(start = VesqenSpacing.md, end = VesqenSpacing.md, bottom = miniPlayerBottomPadding),
         ) { data ->
-            Snackbar(modifier = Modifier.widthIn(max = 420.dp).testTag("vesqen.lyrics-notice")) {
-                Text(data.visuals.message)
+            // Only the cleared-queue notice has an action, Undo.
+            if (data.visuals.actionLabel != null) {
+                QueueClearedSnackbar(data)
+            } else {
+                Snackbar(modifier = Modifier.widthIn(max = 420.dp).testTag("vesqen.lyrics-notice")) {
+                    Text(data.visuals.message)
+                }
             }
         }
         // Spoken by a screen reader and drawn nowhere, so it covers no control on Now. Each import
@@ -1725,7 +1723,6 @@ private class LyricsHooks(
     val onToggle: () -> Unit,
     val onImport: (AudioTrack) -> Unit,
     val onRemove: (Long) -> Unit,
-    val noticeHostState: SnackbarHostState,
     /** The notice ID of an import on Now that succeeded, for a few seconds and one polite announcement. */
     val importedAnnouncement: Long?,
 )

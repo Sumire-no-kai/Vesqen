@@ -3883,21 +3883,21 @@ class VesqenAppTest {
     @Test
     fun a_lyrics_import_result_in_the_library_is_a_snackbar() {
         var uiState by mutableStateOf(grantedState(tracks = sampleTracks))
-        render(state = uiState, stateProvider = { uiState })
+        render(state = uiState, stateProvider = { uiState }, onLyricsImportNoticeShown = { id -> if (uiState.lyricsImportNotice?.id == id) uiState = uiState.copy(lyricsImportNotice = null) },)
 
-        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(1, LyricsImportResult.NO_LYRICS))
+        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(1, 1, LyricsImportResult.NO_LYRICS))
         composeRule.onNodeWithTag("vesqen.lyrics-notice").assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.lyrics_import_no_lyrics)).assertIsDisplayed()
-        composeRule.onAllNodesWithTag("vesqen.lyrics-import-failure").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("vesqen.lyrics-import-result").assertCountEquals(0)
     }
 
     // #169 Y24: a notice from the Library would cover Now's transport or liner notes.
     @Test
     fun a_lyrics_notice_from_the_library_goes_when_now_opens() {
         var uiState by mutableStateOf(grantedState(tracks = sampleTracks, playback = pausedLyricsPlayback()))
-        render(state = uiState, stateProvider = { uiState })
+        render(state = uiState, stateProvider = { uiState }, onLyricsImportNoticeShown = { id -> if (uiState.lyricsImportNotice?.id == id) uiState = uiState.copy(lyricsImportNotice = null) },)
 
-        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(1, LyricsImportResult.NO_LYRICS))
+        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(1, 1, LyricsImportResult.NO_LYRICS))
         composeRule.onNodeWithTag("vesqen.lyrics-notice").assertIsDisplayed()
         // A stopped clock keeps the notice well inside its 4 s, so only opening Now can remove it.
         // The notice sits over the mini-player, so Now opens through its click action, as with TalkBack.
@@ -3908,7 +3908,103 @@ class VesqenAppTest {
 
         composeRule.onNodeWithTag("vesqen.now.player-page").assertIsDisplayed()
         composeRule.onAllNodesWithTag("vesqen.lyrics-notice").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("vesqen.lyrics-import-result").assertCountEquals(0)
         assertFocusedNowControlsAreFullyVisible()
+    }
+
+    // #191 D5: after process death Now comes back before the player does; the result waits until the
+    // player says which song is on Now, and then it is the imported one.
+    @Test
+    fun a_lyrics_import_on_now_waits_for_the_player_to_name_its_song() {
+        var uiState by mutableStateOf(grantedState(tracks = sampleTracks, playback = pausedLyricsPlayback()))
+        var lyrics by mutableStateOf(NowLyricsState(shown = false))
+        var noticesShown = 0
+        render(
+            state = uiState,
+            stateProvider = { uiState },
+            lyricsProvider = { lyrics },
+            onToggleLyrics = { lyrics = lyrics.copy(shown = !lyrics.shown) },
+            onLyricsImportNoticeShown = { id ->
+                noticesShown++
+                if (uiState.lyricsImportNotice?.id == id) uiState = uiState.copy(lyricsImportNotice = null)
+            },
+        )
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+
+        uiState = uiState.copy(
+            playback = PlaybackSnapshot(),
+            lyricsImportNotice = LyricsImportNotice(1, 1, LyricsImportResult.IMPORTED),
+        )
+        composeRule.waitForIdle()
+        assertEquals(0, noticesShown)
+        composeRule.onAllNodesWithTag("vesqen.lyrics-notice").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("vesqen.lyrics-import-result").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("vesqen.lyrics-imported-announcement", useUnmergedTree = true).assertCountEquals(0)
+
+        uiState = uiState.copy(playback = pausedLyricsPlayback())
+        composeRule.waitForIdle()
+        assertEquals(1, noticesShown)
+        assertTrue(lyrics.shown)
+        composeRule.onAllNodesWithTag("vesqen.lyrics-imported-announcement", useUnmergedTree = true).assertCountEquals(1)
+        composeRule.onAllNodesWithTag("vesqen.lyrics-notice").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("vesqen.lyrics-import-result").assertCountEquals(0)
+    }
+
+    // #191 D5: the song changed while the picker was open. Turning on the new song's lyrics would
+    // claim they were imported, so a dialog says what happened instead.
+    @Test
+    fun a_lyrics_import_for_a_song_no_longer_on_now_is_a_dialog() {
+        var uiState by mutableStateOf(grantedState(tracks = sampleTracks, playback = pausedLyricsPlayback()))
+        var lyrics by mutableStateOf(NowLyricsState(shown = false))
+        render(
+            state = uiState,
+            stateProvider = { uiState },
+            lyricsProvider = { lyrics },
+            onToggleLyrics = { lyrics = lyrics.copy(shown = !lyrics.shown) },
+            onLyricsImportNoticeShown = { id -> if (uiState.lyricsImportNotice?.id == id) uiState = uiState.copy(lyricsImportNotice = null) },
+        )
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        uiState = uiState.copy(playback = pausedLyricsPlayback().copy(trackId = 2, title = "Long Light"))
+
+        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(1, 1, LyricsImportResult.IMPORTED))
+        composeRule.onNodeWithTag("vesqen.lyrics-import-result").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.lyrics_imported)).assertIsDisplayed()
+        assertFalse(lyrics.shown)
+        composeRule.onAllNodesWithTag("vesqen.lyrics-imported-announcement", useUnmergedTree = true).assertCountEquals(0)
+        composeRule.onNodeWithText(context.getString(R.string.lyrics_import_result_ok)).performClick()
+        composeRule.onAllNodesWithTag("vesqen.lyrics-import-result").assertCountEquals(0)
+
+        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(2, 1, LyricsImportResult.UNREADABLE))
+        composeRule.onNodeWithText(context.getString(R.string.lyrics_import_unreadable)).assertIsDisplayed()
+        assertFalse(lyrics.shown)
+    }
+
+    // #191 D11: the cleared-queue and lyrics notices share one place, so a lyrics notice waits for
+    // Undo instead of covering it.
+    @Test
+    fun a_lyrics_notice_waits_for_the_undo_notice() {
+        var uiState by mutableStateOf(grantedState(tracks = sampleTracks).copy(queueClearedOffer = 1))
+        var undone = 0
+        render(
+            state = uiState,
+            stateProvider = { uiState },
+            onUndoClearQueue = {
+                undone++
+                uiState = uiState.copy(queueClearedOffer = null)
+            },
+            onLyricsImportNoticeShown = { id -> if (uiState.lyricsImportNotice?.id == id) uiState = uiState.copy(lyricsImportNotice = null) },
+        )
+        composeRule.onNodeWithTag("vesqen.queue-cleared").assertIsDisplayed()
+
+        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(1, 1, LyricsImportResult.IMPORTED))
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("vesqen.queue-cleared").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("vesqen.lyrics-notice").assertCountEquals(0)
+
+        composeRule.onNodeWithTag("vesqen.queue-cleared.undo").performClick()
+        assertEquals(1, undone)
+        composeRule.onNodeWithTag("vesqen.lyrics-notice").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.lyrics_imported)).assertIsDisplayed()
     }
 
     // #169 Y25: from the cover, a successful import shows the lyrics and is announced once, by a node
@@ -3927,20 +4023,21 @@ class VesqenAppTest {
             loadLyrics = {
                 TrackLyrics.Found(LyricsSource.Imported, Lyrics.Synced((0 until 30).map { LyricLine(it * 10_000L, "Line $it") }))
             },
+            onLyricsImportNoticeShown = { id -> if (uiState.lyricsImportNotice?.id == id) uiState = uiState.copy(lyricsImportNotice = null) },
         )
         composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
         composeRule.onAllNodesWithTag("vesqen.now.lyrics").assertCountEquals(0)
         val liveRegions = SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion)
         composeRule.onAllNodes(liveRegions, useUnmergedTree = true).assertCountEquals(0)
 
-        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(1, LyricsImportResult.IMPORTED))
+        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(1, 1, LyricsImportResult.IMPORTED))
         composeRule.onNodeWithTag("vesqen.now.lyrics").assertIsDisplayed()
         composeRule.onAllNodes(liveRegions, useUnmergedTree = true).assertCountEquals(1)
         composeRule.onNodeWithTag("vesqen.lyrics-imported-announcement", useUnmergedTree = true)
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
             .assert(hasContentDescription(context.getString(R.string.lyrics_imported)))
         composeRule.onAllNodesWithTag("vesqen.lyrics-notice").assertCountEquals(0)
-        composeRule.onAllNodesWithTag("vesqen.lyrics-import-failure").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("vesqen.lyrics-import-result").assertCountEquals(0)
         assertFocusedNowControlsAreFullyVisible()
 
         uiState = uiState.copy(playback = uiState.playback.copy(positionMs = 50_000))
@@ -3966,24 +4063,25 @@ class VesqenAppTest {
             fontScale = fontScale,
             lyricsProvider = { lyrics },
             onToggleLyrics = { lyrics = lyrics.copy(shown = !lyrics.shown) },
+            onLyricsImportNoticeShown = { id -> if (uiState.lyricsImportNotice?.id == id) uiState = uiState.copy(lyricsImportNotice = null) },
         )
         composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
         if (openNotes) openLinerNotes()
 
-        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(1, LyricsImportResult.UNREADABLE))
-        composeRule.onNodeWithTag("vesqen.lyrics-import-failure").assertIsDisplayed()
+        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(1, 1, LyricsImportResult.UNREADABLE))
+        composeRule.onNodeWithTag("vesqen.lyrics-import-result").assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.lyrics_import_unreadable)).assertIsDisplayed()
         composeRule.onAllNodesWithTag("vesqen.lyrics-notice").assertCountEquals(0)
         composeRule.onNodeWithText(context.getString(R.string.lyrics_import_result_ok)).performClick()
-        composeRule.onAllNodesWithTag("vesqen.lyrics-import-failure").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("vesqen.lyrics-import-result").assertCountEquals(0)
         assertFalse(lyrics.shown)
 
-        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(2, LyricsImportResult.IMPORTED))
+        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(2, 1, LyricsImportResult.IMPORTED))
         composeRule.waitForIdle()
         assertTrue(lyrics.shown)
         composeRule.onAllNodesWithTag("vesqen.lyrics-imported-announcement", useUnmergedTree = true).assertCountEquals(1)
         composeRule.onAllNodesWithTag("vesqen.lyrics-notice").assertCountEquals(0)
-        composeRule.onAllNodesWithTag("vesqen.lyrics-import-failure").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("vesqen.lyrics-import-result").assertCountEquals(0)
         assertFocusedNowControlsAreFullyVisible()
     }
 
@@ -4273,22 +4371,26 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
     }
 
-    // #165: Clear queue stays one tap (#136 R7); the notice after it puts the queue back.
+    // #165: Clear queue stays one tap (#136 R7); the notice after it puts the queue back. The offer is
+    // the view model's (#191 D2), played here as it sets and ends it.
     @Test
     fun clearing_the_queue_offers_undo_until_another_queue_starts() {
         val queued = twoTrackQueue()
         var playback by mutableStateOf(queued)
+        var offer by mutableStateOf<Long?>(null)
         var cleared = 0
         var undone = 0
         render(
             state = grantedState(tracks = sampleTracks, playback = queued),
-            stateProvider = { grantedState(tracks = sampleTracks, playback = playback) },
+            stateProvider = { grantedState(tracks = sampleTracks, playback = playback).copy(queueClearedOffer = offer) },
             onClearQueue = {
                 cleared++
                 playback = PlaybackSnapshot(isControllerReady = true)
+                offer = cleared.toLong()
             },
             onUndoClearQueue = {
                 undone++
+                offer = null
                 playback = queued
             },
             containerWidth = 320.dp,
@@ -4318,22 +4420,27 @@ class VesqenAppTest {
         composeRule.onNodeWithText(context.getString(R.string.clear_queue)).performClick()
         composeRule.onNodeWithTag("vesqen.queue-cleared").assertIsDisplayed()
         playback = queued
+        offer = null
         composeRule.waitForIdle()
         composeRule.onAllNodesWithTag("vesqen.queue-cleared").assertCountEquals(0)
         assertEquals(2 to 1, cleared to undone)
     }
 
     // #165 X3: a catalog rebuild drops the cleared queue, whose IDs name other songs now, so the notice
-    // goes with the Undo it offered.
+    // goes with the Undo it offered. The view model ends the offer on the rebuild (#191 D2).
     @Test
     fun a_catalog_rebuild_takes_the_undo_notice_away() {
         var playback by mutableStateOf(twoTrackQueue())
+        var offer by mutableStateOf<Long?>(null)
         var undone = 0
         val rebuilt = FakeLibraryRebuildNotice(due = false)
         render(
             state = grantedState(tracks = sampleTracks, playback = playback),
-            stateProvider = { grantedState(tracks = sampleTracks, playback = playback) },
-            onClearQueue = { playback = PlaybackSnapshot(isControllerReady = true) },
+            stateProvider = { grantedState(tracks = sampleTracks, playback = playback).copy(queueClearedOffer = offer) },
+            onClearQueue = {
+                playback = PlaybackSnapshot(isControllerReady = true)
+                offer = 1
+            },
             onUndoClearQueue = { undone++ },
             rebuildNotice = rebuilt,
         )
@@ -4342,7 +4449,10 @@ class VesqenAppTest {
         composeRule.onNodeWithText(context.getString(R.string.clear_queue)).performClick()
         composeRule.onNodeWithTag("vesqen.queue-cleared").assertIsDisplayed()
 
-        composeRule.runOnIdle { rebuilt.emit(true) }
+        composeRule.runOnIdle {
+            rebuilt.emit(true)
+            offer = null
+        }
         composeRule.onNodeWithTag("vesqen.library.rebuilt-dialog").assertIsDisplayed()
         composeRule.onAllNodesWithTag("vesqen.queue-cleared").assertCountEquals(0)
         composeRule.runOnIdle { assertEquals(0, undone) }
@@ -4871,6 +4981,7 @@ class VesqenAppTest {
         onDeletePlaylist: (Long) -> Unit = {},
         onClearQueue: () -> Unit = {},
         onUndoClearQueue: () -> Unit = {},
+        onQueueClearedOfferEnded: (Long) -> Unit = {},
         containerWidth: Dp? = null,
         containerHeight: Dp = 720.dp,
         fontScale: Float? = null,
@@ -4900,6 +5011,7 @@ class VesqenAppTest {
         lyricsProvider: (() -> NowLyricsState)? = null,
         onToggleLyrics: () -> Unit = {},
         loadLyrics: suspend (AudioTrack) -> TrackLyrics = { TrackLyrics.None(folderHint = false) },
+        onLyricsImportNoticeShown: (Long) -> Unit = {},
     ) {
         composeRule.setContent {
             VesqenTheme(darkTheme = darkTheme) {
@@ -4917,6 +5029,7 @@ class VesqenAppTest {
                         onDeletePlaylist = onDeletePlaylist,
                         onClearQueue = onClearQueue,
                         onUndoClearQueue = onUndoClearQueue,
+                        onQueueClearedOfferEnded = onQueueClearedOfferEnded,
                         onPrevious = onPrevious,
                         onPlayPause = onPlayPause,
                         onRefreshPlaybackPosition = onRefreshPlaybackPosition,
@@ -4933,6 +5046,7 @@ class VesqenAppTest {
                         lyrics = lyricsProvider?.invoke() ?: lyrics,
                         loadLyrics = loadLyrics,
                         onToggleLyrics = onToggleLyrics,
+                        onLyricsImportNoticeShown = onLyricsImportNoticeShown,
                         versionName = versionName,
                         versionCode = versionCode,
                         playbackTelemetry = playbackTelemetry,

@@ -44,7 +44,9 @@ class LyricsImportViewModelDeviceTest {
             val generation = store.generation()
             val target = LyricsImportTarget(track.id, contentUri, generation)
 
-            assertEquals(LyricsImportResult.IMPORTED, importAndAwait(viewModel, target, Uri.fromFile(lyricsFile)).result)
+            val imported = importAndAwait(viewModel, target, Uri.fromFile(lyricsFile))
+            assertEquals(LyricsImportResult.IMPORTED, imported.result)
+            assertEquals(track.id, imported.trackId)
             assertTrue(track.id in store.importedLyrics.value.trackIds)
             assertEquals("[00:01.00]Imported line", store.read(track.id)?.decodeToString())
 
