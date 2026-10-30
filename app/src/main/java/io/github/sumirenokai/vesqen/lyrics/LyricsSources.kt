@@ -1,7 +1,7 @@
 package io.github.sumirenokai.vesqen.lyrics
 
 /** Where a track's lyrics come from, in the order the sources are tried (#169). */
-internal enum class LyricsSource {
+enum class LyricsSource {
     Imported,
     SameNameFile,
     Embedded,

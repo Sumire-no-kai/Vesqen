@@ -198,7 +198,7 @@
     <string name="crash_prompt_review">確認して送信</string>
     <string name="crash_prompt_decline">送信しない</string>
     <string name="library_rebuilt_title">ライブラリのデータを再構築しました</string>
-    <string name="library_rebuilt_body">ライブラリのデータが破損していたため、端末内の音楽からライブラリを再構築しました。お気に入り、再生回数、再生履歴、プレイリストは引き継ぐことができませんでした。キューもクリアしました。追加済みの音楽フォルダは、再度追加してください。端末内の音楽ファイルに影響はありません。</string>
+    <string name="library_rebuilt_body">ライブラリのデータが破損していたため、端末内の音楽からライブラリを再構築しました。お気に入り、再生回数、再生履歴、プレイリスト、インポートした歌詞は引き継ぐことができませんでした。キューもクリアしました。追加済みの音楽フォルダは、再度追加してください。端末内の音楽ファイルに影響はありません。</string>
     <string name="library_rebuilt_ok">OK</string>
     <string name="licenses_title">オープンソースライセンス</string>
     <string name="licenses_intro">Vesqen は次のオープンソースソフトウェアを使用しています。</string>
@@ -252,7 +252,7 @@
     <string name="about_developer">開発者</string>
     <string name="about_developer_value">Sumire Studio</string>
     <string name="about_data_title">データについて</string>
-    <string name="about_data_body">ライブラリ、お気に入り、プレイリスト、再生履歴、設定はこのスマートフォンにだけ保存され、アカウントは必要ありません。Vesqen はこれらをバックアップせず、新しいスマートフォンにも移しません。新しいスマートフォンでは、音楽を追加し直し、お気に入りとプレイリストを作り直してください。</string>
+    <string name="about_data_body">ライブラリ、お気に入り、プレイリスト、再生履歴、設定はこのスマートフォンにだけ保存され、アカウントは必要ありません。インポートした歌詞も Vesqen 内にコピーされ、同じようにこのスマートフォンにだけ保存されます。Vesqen はこれらをバックアップせず、新しいスマートフォンにも移しません。新しいスマートフォンでは、音楽を追加し直し、お気に入りとプレイリストを作り直してください。</string>
     <string name="privacy_policy_title">プライバシーポリシー</string>
     <string name="privacy_policy_open_web">ウェブ版を開く</string>
     <string name="privacy_policy_no_browser">この端末には、ウェブページを開けるアプリがありません。</string>
@@ -353,7 +353,7 @@
     <string name="cancel">キャンセル</string>
     <string name="delete_playlist">プレイリストを削除</string>
     <string name="remove_folder_confirm_title">このフォルダの登録を解除しますか？</string>
-    <string name="remove_folder_confirm_body">「%1$s」の曲が Vesqen から外れ、お気に入り、再生回数、プレイリスト内の位置も消えます。スマートフォン上のファイルは削除されません。フォルダを登録し直しても、これらは戻りません。</string>
+    <string name="remove_folder_confirm_body">「%1$s」の曲を Vesqen のライブラリから削除し、お気に入り、再生回数、プレイリスト内の位置、インポートした歌詞も削除します。スマートフォン上のファイルは削除されません。フォルダを再度追加しても、これらは復元されません。</string>
     <string name="delete_playlist_confirm_title">「%1$s」を削除しますか？</string>
     <string name="delete_playlist_confirm_body">プレイリストの曲はライブラリに残ります。</string>
     <string name="edit_playlist">プレイリストを編集</string>
@@ -956,5 +956,31 @@
     <string name="unmatched_record_assign">この曲を選択</string>
     <string name="unmatched_record_discard">記録を破棄</string>
     <string name="unmatched_record_discard_confirm_title">「%1$s」の記録を破棄しますか？</string>
-    <string name="unmatched_record_discard_confirm_body">お気に入り、再生回数、プレイリスト内の位置が削除され、元に戻せません。音楽ファイルには影響しません。</string>
+    <string name="unmatched_record_discard_confirm_body">お気に入り、再生回数、プレイリスト内の位置、インポートした歌詞が削除され、元に戻せません。音楽ファイルには影響しません。</string>
+    <!-- #169 local lyrics -->
+    <string name="lyrics">歌詞</string>
+    <string name="now_more_options">その他のオプション</string>
+    <string name="lyrics_show">歌詞を表示</string>
+    <string name="lyrics_import">歌詞をインポート</string>
+    <string name="lyrics_remove">歌詞を削除</string>
+    <string name="lyrics_remove_confirm_title">インポートした歌詞を削除しますか？</string>
+    <string name="lyrics_remove_confirm_body">Vesqen が保存している歌詞のコピーを削除します。インポート元のファイルには影響しません。</string>
+    <string name="lyrics_remove_confirm_action">削除</string>
+    <string name="lyrics_none">歌詞がありません</string>
+    <string name="lyrics_folder_hint">同名の .lrc ファイルは、Vesqen に追加した音楽フォルダ内でのみ検索します。</string>
+    <string name="lyrics_unreadable">この歌詞を読み込めません</string>
+    <string name="lyrics_unreadable_body">この歌詞の文字コードを判別できません。UTF-8 で保存し直してからインポートしてください。</string>
+    <string name="lyrics_play_from_line">この行へ移動</string>
+    <string name="lyrics_imported">歌詞をインポートしました</string>
+    <string name="lyrics_import_unreadable">このファイルを読み込めません。UTF-8 で保存し直してから、もう一度インポートしてください。</string>
+    <string name="lyrics_import_no_lyrics">このファイルには歌詞が含まれていません</string>
+    <string name="lyrics_import_too_large">このファイルは大きすぎるため、歌詞としてインポートできません</string>
+    <string name="lyrics_import_failed">歌詞をインポートできませんでした。もう一度お試しください。</string>
+    <string name="lyrics_import_result_ok">OK</string>
+    <string name="detail_lyrics">歌詞</string>
+    <string name="lyrics_source_imported">インポート済み</string>
+    <string name="lyrics_source_same_name_file">同名の .lrc ファイル</string>
+    <string name="lyrics_source_embedded">音楽ファイルに埋め込み</string>
+    <string name="lyrics_source_none">なし</string>
+    <string name="lyrics_source_unreadable">読み込めません</string>
 </resources>

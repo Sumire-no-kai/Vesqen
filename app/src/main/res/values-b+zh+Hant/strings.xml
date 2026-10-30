@@ -198,7 +198,7 @@
     <string name="crash_prompt_review">查看並傳送</string>
     <string name="crash_prompt_decline">不用了</string>
     <string name="library_rebuilt_title">音樂庫資料已重建</string>
-    <string name="library_rebuilt_body">音樂庫資料已損壞，Vesqen 已依據裝置中的音樂重建音樂庫。收藏、播放次數、播放記錄和播放清單無法保留，播放佇列已清空。先前加入的音樂資料夾需重新加入。裝置中的音樂檔案不受影響。</string>
+    <string name="library_rebuilt_body">音樂庫資料已損壞，Vesqen 已依據裝置中的音樂重建音樂庫。收藏、播放次數、播放記錄、播放清單和匯入的歌詞無法保留，播放佇列已清空。先前加入的音樂資料夾需重新加入。裝置中的音樂檔案不受影響。</string>
     <string name="library_rebuilt_ok">確定</string>
     <string name="licenses_title">開放原始碼授權</string>
     <string name="licenses_intro">Vesqen 使用了下列開放原始碼軟體。</string>
@@ -252,7 +252,7 @@
     <string name="about_developer">開發者</string>
     <string name="about_developer_value">Sumire Studio</string>
     <string name="about_data_title">你的資料</string>
-    <string name="about_data_body">音樂庫、我的最愛、播放清單、播放記錄和設定只保存在這支手機上，也不需要帳號。Vesqen 不會備份這些資料，也不會把它們轉移到新手機。換新手機後，需要重新加入音樂，我的最愛和播放清單也要重新整理。</string>
+    <string name="about_data_body">音樂庫、我的最愛、播放清單、播放記錄和設定只保存在這支手機上，也不需要帳號。匯入的歌詞會複製到 Vesqen 中，同樣只保存在這支手機上。Vesqen 不會備份這些資料，也不會把它們轉移到新手機。換新手機後，需要重新加入音樂，我的最愛和播放清單也要重新整理。</string>
     <string name="privacy_policy_title">隱私權政策</string>
     <string name="privacy_policy_open_web">在瀏覽器中開啟網頁版</string>
     <string name="privacy_policy_no_browser">這部裝置上沒有可以開啟網頁的應用程式。</string>
@@ -351,7 +351,7 @@
     <string name="cancel">取消</string>
     <string name="delete_playlist">刪除播放清單</string>
     <string name="remove_folder_confirm_title">移除這個資料夾？</string>
-    <string name="remove_folder_confirm_body">Vesqen 會忘掉「%1$s」裡的歌曲，以及它們的收藏、播放次數和在播放清單中的位置。手機上的檔案不會被刪除。重新加入這個資料夾也找不回這些記錄。</string>
+    <string name="remove_folder_confirm_body">Vesqen 將從音樂庫中移除「%1$s」裡的歌曲，以及它們的收藏、播放次數、在播放清單中的位置和匯入的歌詞。手機上的檔案不會被刪除。重新加入此資料夾也無法復原這些記錄。</string>
     <string name="delete_playlist_confirm_title">刪除播放清單「%1$s」？</string>
     <string name="delete_playlist_confirm_body">清單裡的歌曲仍會留在音樂庫中。</string>
     <string name="edit_playlist">編輯播放清單</string>
@@ -954,5 +954,31 @@
     <string name="unmatched_record_assign">選擇這首歌曲</string>
     <string name="unmatched_record_discard">捨棄記錄</string>
     <string name="unmatched_record_discard_confirm_title">捨棄「%1$s」的記錄？</string>
-    <string name="unmatched_record_discard_confirm_body">這首歌曲的收藏、播放次數和在播放清單中的位置將被刪除，且無法復原。音樂檔案不受影響。</string>
+    <string name="unmatched_record_discard_confirm_body">這首歌曲的收藏、播放次數、在播放清單中的位置和匯入的歌詞將被刪除，且無法復原。音樂檔案不受影響。</string>
+    <!-- #169 local lyrics -->
+    <string name="lyrics">歌詞</string>
+    <string name="now_more_options">更多選項</string>
+    <string name="lyrics_show">顯示歌詞</string>
+    <string name="lyrics_import">匯入歌詞</string>
+    <string name="lyrics_remove">移除歌詞</string>
+    <string name="lyrics_remove_confirm_title">移除匯入的歌詞？</string>
+    <string name="lyrics_remove_confirm_body">Vesqen 將刪除其保存的這份歌詞副本。匯入時所選的檔案不受影響。</string>
+    <string name="lyrics_remove_confirm_action">移除</string>
+    <string name="lyrics_none">沒有歌詞</string>
+    <string name="lyrics_folder_hint">同名 .lrc 檔案僅在 Vesqen 中加入的音樂資料夾裡尋找。</string>
+    <string name="lyrics_unreadable">無法讀取這份歌詞</string>
+    <string name="lyrics_unreadable_body">無法識別這份歌詞的文字編碼。請將歌詞另存為 UTF-8 後匯入。</string>
+    <string name="lyrics_play_from_line">跳到這一行</string>
+    <string name="lyrics_imported">歌詞已匯入</string>
+    <string name="lyrics_import_unreadable">無法讀取此檔案。請另存為 UTF-8 後重新匯入。</string>
+    <string name="lyrics_import_no_lyrics">此檔案中沒有歌詞</string>
+    <string name="lyrics_import_too_large">此檔案過大，無法作為歌詞匯入</string>
+    <string name="lyrics_import_failed">歌詞未能匯入，請重試。</string>
+    <string name="lyrics_import_result_ok">確定</string>
+    <string name="detail_lyrics">歌詞</string>
+    <string name="lyrics_source_imported">已匯入</string>
+    <string name="lyrics_source_same_name_file">同名 .lrc 檔案</string>
+    <string name="lyrics_source_embedded">內嵌於音樂檔案</string>
+    <string name="lyrics_source_none">無</string>
+    <string name="lyrics_source_unreadable">無法讀取</string>
 </resources>

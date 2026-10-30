@@ -96,8 +96,10 @@ class SpeakerChainLifecycleDeviceTest {
             compose.waitForIdle()
             compose.onNodeWithTag("vesqen.nav.now").performClick()
             // Use the product's explicit control; Library and Chain intentionally stay portrait.
+            compose.onNodeWithTag("vesqen.now.more").performClick()
             compose.onNodeWithTag("vesqen.now.orientation-toggle").performClick()
             compose.waitUntil(5_000) { resumedActivityMatches { it.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE } }
+            compose.onNodeWithTag("vesqen.now.more").performClick()
             compose.onNodeWithTag("vesqen.now.orientation-toggle").performClick()
             compose.waitUntil(5_000) { resumedActivityMatches { it.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT } }
             compose.onNodeWithTag("vesqen.now.back").performClick()

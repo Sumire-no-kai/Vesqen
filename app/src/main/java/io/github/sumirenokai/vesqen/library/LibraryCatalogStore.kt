@@ -18,6 +18,7 @@ internal class LibraryCatalogStore internal constructor(
     databaseName: String,
     /** Tests call it to report corruption at a chosen moment, as SQLite would. */
     private val corruptionHandler: LibraryCatalogCorruptionHandler,
+    private val mergeFollower: TrackMergeFollower = TrackMergeFollower.None,
 ) : SQLiteOpenHelper(
     context.applicationContext,
     databaseName,
@@ -27,13 +28,15 @@ internal class LibraryCatalogStore internal constructor(
 ), Closeable {
     /**
      * [beforeRebuild] runs when SQLite reports the database corrupt, before its files are set aside
-     * and an empty catalog replaces them (#165).
+     * and an empty catalog replaces them (#165). [mergeFollower] moves data kept outside the
+     * database when two rows merge (#169).
      */
     constructor(
         context: Context,
         databaseName: String = DATABASE_NAME,
         beforeRebuild: () -> Unit = {},
-    ) : this(context, databaseName, LibraryCatalogCorruptionHandler(beforeRebuild))
+        mergeFollower: TrackMergeFollower = TrackMergeFollower.None,
+    ) : this(context, databaseName, LibraryCatalogCorruptionHandler(beforeRebuild), mergeFollower)
 
     /** See [LibraryCatalogCorruptionHandler.rebuilds]. */
     val rebuilds: StateFlow<Int> get() = corruptionHandler.rebuilds
@@ -262,7 +265,7 @@ internal class LibraryCatalogStore internal constructor(
         identities: Collection<MediaStoreLegacyIdentity>,
     ): Boolean {
         var changed = false
-        writableDatabase.transaction {
+        withTrackMerges { merges -> writableDatabase.transaction {
             identities.forEach { identity ->
                 val legacy = readTrackMigrationState(
                     database = this,
@@ -275,6 +278,7 @@ internal class LibraryCatalogStore internal constructor(
                     requireSyntheticExternalUri = false,
                 )
                 if (target != null && target.trackId != legacy.trackId) {
+                    merges.merge(from = target.trackId, into = legacy.trackId)
                     foldUserState(this, into = legacy, from = target)
                     delete(TRACKS_TABLE, "$TRACK_ID = ?", arrayOf(target.trackId.toString()))
                 }
@@ -329,7 +333,7 @@ internal class LibraryCatalogStore internal constructor(
                     arrayOf(LibrarySourceId.DEVICE),
                 )
             }
-        }
+        } }
         return changed
     }
 
@@ -838,7 +842,7 @@ internal class LibraryCatalogStore internal constructor(
         prunableMediaStoreVolumes: Set<String>?,
     ) {
         val database = writableDatabase
-        database.transaction {
+        withTrackMerges { merges -> database.transaction {
             val prunePatterns = prunableMediaStoreVolumes?.map { volumeName ->
                 "content://media/$volumeName/*"
             }
@@ -877,7 +881,7 @@ internal class LibraryCatalogStore internal constructor(
                 // ID, so a scan wrote it as a new row. Its old row, with the user's data, takes that
                 // file over; rows still unmatched are hidden until their file is listed again, like
                 // MediaStore's (#164).
-                reattachFolderTracks(database, session)
+                reattachFolderTracks(database, session, merges)
                 database.execSQL(
                     "UPDATE $TRACKS_TABLE SET $TRACK_REMOTE_ID = '$HIDDEN_FOLDER_PREFIX' || $TRACK_ID " +
                         "WHERE $pruneSelection AND $TRACK_REMOTE_ID NOT GLOB '$HIDDEN_FOLDER_PREFIX*' " +
@@ -893,7 +897,7 @@ internal class LibraryCatalogStore internal constructor(
             check(updateCompletedSource(database, session.sourceId, generation) == 1) {
                 "Cannot complete a scan for a missing source"
             }
-        }
+        } }
     }
 
     /**
@@ -902,7 +906,7 @@ internal class LibraryCatalogStore internal constructor(
      * plays and playlist places stay; it takes the listed file's columns and any data the listed row
      * gathered, and the listed row goes. Runs inside the completing transaction.
      */
-    private fun reattachFolderTracks(database: SQLiteDatabase, session: SourceScanSession) {
+    private fun reattachFolderTracks(database: SQLiteDatabase, session: SourceScanSession, merges: TrackMerges) {
         fun identities(selection: String): List<FolderTrackIdentity> = database.query(
             TRACKS_TABLE,
             arrayOf(
@@ -939,7 +943,7 @@ internal class LibraryCatalogStore internal constructor(
         if (missing.none(FolderTrackIdentity::holdsUserState)) return
         val listed = identities("$TRACK_SEEN_EPOCH = ?")
         for ((oldTrackId, listedTrackId) in planFolderReattachments(missing, listed, session.epoch)) {
-            takeOverListedRow(database, oldTrackId, listedTrackId)
+            takeOverListedRow(database, oldTrackId, listedTrackId, merges)
         }
     }
 
@@ -948,7 +952,13 @@ internal class LibraryCatalogStore internal constructor(
      * over [listedTrackId]'s file: the listed row's scanned columns and any data it gathered, since a
      * listed row can play before it is paired. The listed row goes.
      */
-    private fun takeOverListedRow(database: SQLiteDatabase, oldTrackId: Long, listedTrackId: Long) {
+    private fun takeOverListedRow(
+        database: SQLiteDatabase,
+        oldTrackId: Long,
+        listedTrackId: Long,
+        merges: TrackMerges,
+    ) {
+        merges.merge(from = listedTrackId, into = oldTrackId)
         val remoteId = database.query(
             TRACKS_TABLE, arrayOf(TRACK_REMOTE_ID), "$TRACK_ID = ?", arrayOf(listedTrackId.toString()),
             null, null, null,
@@ -969,6 +979,61 @@ internal class LibraryCatalogStore internal constructor(
             arrayOf(oldTrackId.toString()),
         )
     }
+
+    /**
+     * The merges of one transaction, reported to [mergeFollower]: it prepares as the rows merge,
+     * cleans up after the commit, and undoes its preparation on a rollback.
+     */
+    private inner class TrackMerges {
+        private val merged = ArrayList<Pair<Long, Long>>()
+
+        fun merge(from: Long, into: Long) {
+            mergeFollower.prepareMerge(from, into)
+            merged += from to into
+        }
+
+        fun committed() = merged.forEach { (from, into) -> mergeFollower.mergeCommitted(from, into) }
+
+        fun rolledBack() = merged.forEach { (from, into) -> mergeFollower.mergeRolledBack(from, into) }
+    }
+
+    private inline fun <T> withTrackMerges(transaction: (TrackMerges) -> T): T {
+        val merges = TrackMerges()
+        val result = try {
+            transaction(merges)
+        } catch (failure: Throwable) {
+            merges.rolledBack()
+            throw failure
+        }
+        merges.committed()
+        return result
+    }
+
+    /**
+     * Every row's ID, hidden and displaced rows included (#169). The largest assigned ID is read
+     * first: a row inserted after it has a larger ID, so the lyrics clean-up never takes its import.
+     */
+    fun readTrackIdsForSweep(): CatalogTrackIds {
+        val database = readableDatabase
+        val largestAssignedId = database.rawQuery(
+            "SELECT seq FROM sqlite_sequence WHERE name = ?",
+            arrayOf(TRACKS_TABLE),
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else 0L }
+        val trackIds = database.query(TRACKS_TABLE, arrayOf(TRACK_ID), null, null, null, null, null).use { cursor ->
+            buildSet { while (cursor.moveToNext()) add(cursor.getLong(0)) }
+        }
+        return CatalogTrackIds(trackIds, largestAssignedId)
+    }
+
+    fun readTrackContentUri(trackId: Long): String? = readableDatabase.query(
+        TRACKS_TABLE,
+        arrayOf(TRACK_CONTENT_URI),
+        "$TRACK_ID = ?",
+        arrayOf(trackId.toString()),
+        null,
+        null,
+        null,
+    ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
 
     /** Folder rows whose file a completed scan did not find; they keep user data but cannot play. */
     fun readHiddenFolderTrackIds(): Set<Long> = readableDatabase.query(
@@ -997,10 +1062,12 @@ internal class LibraryCatalogStore internal constructor(
      * nothing changed, when the record no longer waits for a choice or [chosenTrackId] is not one of
      * its songs, as after a scan reattached it.
      */
-    fun assignUnmatchedRecord(recordTrackId: Long, chosenTrackId: Long): Boolean = writableDatabase.transaction {
-        val waits = chosenTrackId in readUnmatchedRecords(this)[recordTrackId].orEmpty()
-        if (waits) takeOverListedRow(this, recordTrackId, chosenTrackId)
-        waits
+    fun assignUnmatchedRecord(recordTrackId: Long, chosenTrackId: Long): Boolean = withTrackMerges { merges ->
+        writableDatabase.transaction {
+            val waits = chosenTrackId in readUnmatchedRecords(this)[recordTrackId].orEmpty()
+            if (waits) takeOverListedRow(this, recordTrackId, chosenTrackId, merges)
+            waits
+        }
     }
 
     /** Deletes the record [recordTrackId] with its favorite, plays and playlist places while it waits for a choice. */

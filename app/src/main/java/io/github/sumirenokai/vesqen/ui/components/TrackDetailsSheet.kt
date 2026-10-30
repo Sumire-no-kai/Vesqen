@@ -38,6 +38,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.lyrics.LyricsSource
+import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
 import io.github.sumirenokai.vesqen.ui.formatDuration
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
@@ -64,6 +66,11 @@ fun TrackDetailsSheet(
     onRemoveFromPlaylist: (() -> Unit)? = null,
     onMoveUp: (() -> Unit)? = null,
     onMoveDown: (() -> Unit)? = null,
+    /** The track's lyrics and their source (owner decision 6); null while they load. */
+    lyrics: TrackLyrics? = null,
+    onImportLyrics: (() -> Unit)? = null,
+    /** Only for lyrics the listener imported. */
+    onRemoveLyrics: (() -> Unit)? = null,
 ) {
     ModalBottomSheet(
         modifier = Modifier.testTag("vesqen.track-details"),
@@ -142,8 +149,10 @@ fun TrackDetailsSheet(
                     onRemoveFromPlaylist = onRemoveFromPlaylist,
                     onMoveUp = onMoveUp,
                     onMoveDown = onMoveDown,
+                    onImportLyrics = onImportLyrics,
+                    onRemoveLyrics = onRemoveLyrics,
                 )
-                TrackFacts(track)
+                TrackFacts(track, lyrics)
                 if (track.playCount > 0) {
                     Text(
                         text = pluralStringResource(R.plurals.play_count_value, track.playCount, track.playCount),
@@ -181,6 +190,8 @@ private fun TrackActions(
     onRemoveFromPlaylist: (() -> Unit)?,
     onMoveUp: (() -> Unit)?,
     onMoveDown: (() -> Unit)?,
+    onImportLyrics: (() -> Unit)?,
+    onRemoveLyrics: (() -> Unit)?,
 ) {
     val actions = buildList<@Composable () -> Unit> {
         onPlayNext?.let { add { TrackActionRow(stringResource(R.string.play_next), it, enabled = queueActionsEnabled) } }
@@ -197,6 +208,24 @@ private fun TrackActions(
         onRemoveFromPlaylist?.let { add { TrackActionRow(stringResource(R.string.remove_from_playlist), it) } }
         onMoveUp?.let { add { TrackActionRow(stringResource(R.string.move_up), it) } }
         onMoveDown?.let { add { TrackActionRow(stringResource(R.string.move_down), it) } }
+        onImportLyrics?.let {
+            add {
+                TrackActionRow(
+                    label = stringResource(R.string.lyrics_import),
+                    onClick = it,
+                    modifier = Modifier.testTag("vesqen.track-details.import-lyrics"),
+                )
+            }
+        }
+        onRemoveLyrics?.let {
+            add {
+                TrackActionRow(
+                    label = stringResource(R.string.lyrics_remove),
+                    onClick = it,
+                    modifier = Modifier.testTag("vesqen.track-details.remove-lyrics"),
+                )
+            }
+        }
     }
     if (actions.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xs)) {
@@ -243,7 +272,7 @@ private fun TrackActionRow(
 
 /** The file's facts, in the order they matter for listening; empty values are left out. */
 @Composable
-private fun TrackFacts(track: AudioTrack) {
+private fun TrackFacts(track: AudioTrack, lyrics: TrackLyrics?) {
     val facts = buildList {
         add(stringResource(R.string.detail_album) to track.album.ifBlank { stringResource(R.string.unknown_album) })
         add(stringResource(R.string.detail_duration) to formatDuration(track.durationMs))
@@ -272,6 +301,7 @@ private fun TrackFacts(track: AudioTrack) {
         track.fileName.takeIf(String::isNotBlank)?.let { add(stringResource(R.string.detail_file) to it) }
         track.folderName.takeIf(String::isNotBlank)?.let { add(stringResource(R.string.detail_folder) to it) }
         track.fileSizeBytes.takeIf { it > 0 }?.let { add(stringResource(R.string.detail_size) to formatFileSize(it)) }
+        lyrics?.let { add(stringResource(R.string.detail_lyrics) to lyricsSourceLabel(it)) }
     }
     PaperCard {
         facts.forEachIndexed { index, (label, value) ->
@@ -280,6 +310,19 @@ private fun TrackFacts(track: AudioTrack) {
         }
     }
 }
+
+@Composable
+private fun lyricsSourceLabel(lyrics: TrackLyrics): String = stringResource(
+    when (lyrics) {
+        is TrackLyrics.Found -> when (lyrics.source) {
+            LyricsSource.Imported -> R.string.lyrics_source_imported
+            LyricsSource.SameNameFile -> R.string.lyrics_source_same_name_file
+            LyricsSource.Embedded -> R.string.lyrics_source_embedded
+        }
+        is TrackLyrics.None -> R.string.lyrics_source_none
+        TrackLyrics.Unreadable -> R.string.lyrics_source_unreadable
+    },
+)
 
 private fun formatFileSize(bytes: Long): String = when {
     bytes >= 1_073_741_824 -> "%.1f GB".format(bytes / 1_073_741_824.0)

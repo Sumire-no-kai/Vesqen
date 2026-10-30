@@ -9,6 +9,8 @@ import io.github.sumirenokai.vesqen.diagnostics.AndroidDiagnosticRecordingStore
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
 import io.github.sumirenokai.vesqen.library.AndroidLibraryRebuildNotice
 import io.github.sumirenokai.vesqen.library.LibraryCatalogStore
+import io.github.sumirenokai.vesqen.lyrics.LocalLyricsResolver
+import io.github.sumirenokai.vesqen.lyrics.LyricsStore
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryRecorder
 import io.github.sumirenokai.vesqen.playback.PlaybackStateStore
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
@@ -26,6 +28,7 @@ import io.github.sumirenokai.vesqen.telemetry.AndroidPlaybackTelemetry
 import io.github.sumirenokai.vesqen.telemetry.PlaybackTelemetry
 import io.github.sumirenokai.vesqen.verification.AndroidOutputVerificationRepository
 import io.github.sumirenokai.vesqen.verification.OutputVerificationRepository
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -104,10 +107,18 @@ class VesqenApplication : Application() {
             this,
             beforeRebuild = {
                 PlaybackStateStore(this).clear(durable = true)
+                // Imported lyrics are bound to the old IDs too (#169, owner decision 7).
+                lyricsStore.clearAll()
                 libraryRebuildNotice.markDue()
             },
+            mergeFollower = lyricsStore,
         )
     }
+
+    /** #169: imported lyrics, kept with the other private data that is never backed up. */
+    internal val lyricsStore by lazy { LyricsStore(File(noBackupFilesDir, "lyrics")) }
+
+    internal val lyricsResolver by lazy { LocalLyricsResolver(contentResolver, lyricsStore) }
 
     /** #165: says once that a corrupt catalog was rebuilt and what was lost with it. */
     internal val libraryRebuildNotice by lazy { AndroidLibraryRebuildNotice(this) }

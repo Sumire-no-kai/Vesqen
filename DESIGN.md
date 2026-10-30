@@ -199,11 +199,17 @@ Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hai
 ### Now
 
 - **Focus mode.** With a track, Now takes the whole window: the bottom bar and the rail yield, and the top-left collapse button or Android Back returns to where Now was opened. Without a track, Now shows its empty state with the navigation.
-- Top bar: collapse, "Now" with the queue position, the orientation toggle when the phone can rotate, and the queue.
+- Top bar: collapse and Lyrics on the left, "Now" with the queue position in the middle, the queue and More on the right. More holds Import lyrics, Remove lyrics (only for imported lyrics), Track information and, when the phone can rotate, the orientation toggle. Owner decision, 2026-10-30 (#169).
 - Cover as wide as the content, up to 360 dp, shrinking to 164 dp while the liner notes are open; under 64 dp it is dropped rather than squeezed. Then the serif title, "artist — album", progress, transport (playback order, previous, play/pause, next, favorite) and the liner notes. Height the cover cannot use is shared above and below the cover, so the transport and the liner notes sit at the bottom on tall phones.
 - **Liner notes:** collapsed to one summary line ("FLAC 24/96 · SYSTEM MIXED"); open, they list 01 Source file, 02 Sent to Android and 03 Output and stability with each value and its confidence, then the evidence chip, its explanation, Output mode and Track information. The step numbers are the liner-notes metaphor of the B design, not section numbering. Rows 02 and 03 use the Chain page's names: "Sent to Android" for the AudioTrack format, and the output by kind (Speaker, Wired, Bluetooth) rather than Android's route name such as "Phone". Owner decision, 2026-10-22 (#35).
 - Landscape is a separate composition: cover or liner notes on the left, identity and controls on the right, system bars hidden.
-- The page never scrolls; only the open liner notes scroll inside their own region.
+- The page never scrolls; only the open liner notes and the lyrics scroll inside their own region.
+- **Lyrics** (#169, owner decisions of 2026-10-30): the Lyrics button or a tap on the cover puts the lyrics in the cover's place, and the same button brings the cover back. The choice stays when Now closes, the track changes or the app restarts, so Back leaves Now as before; it does not switch the lyrics off. While the liner notes are open the lyrics take the cover's open size and, like the cover, are left out when that size is under the minimum; in landscape open notes take the left pane and closing them brings the lyrics back.
+  - Lines are body sans, centred. The current line is the body colour and bold; the others are the secondary colour at the same size, so the highlight never relies on colour alone. A translation sits under its line one step smaller.
+  - The current line stays in the middle. Scrolling the lyrics, by touch or through an accessibility service, pauses following; 4 s after the scrolling stops the list returns to the current line. TalkBack pauses following while touch exploration is on. Reduced motion jumps instead of scrolling. Tapping a line goes to its time; it does not start a paused track. TalkBack reads each line with its translations as one stop, in order, and announces nothing when the line changes.
+  - Plain text without times is shown as is, without a highlight or following.
+  - No lyrics: "No lyrics" and Import lyrics; a track known only through MediaStore adds one line saying same-name `.lrc` files are read only from added music folders. Unreadable lyrics say so, why, and what to do (save as UTF-8 and import).
+  - In the Library the import result shows in a snackbar like Queue cleared; opening Now dismisses it. On Now, whose edges hold controls at large text and in landscape, a failed import is a dialog with one OK button, and a successful one switches Now to the lyrics and is announced once to screen readers as "Lyrics imported", never on a line change. This Now behaviour was set in the 2026-10-30 review, not by an owner decision, so that no notice covers a control; the owner may change it after testing. Remove lyrics asks first. Track information names the source: imported, same-name `.lrc` file or embedded.
 
 ### Chain
 
@@ -269,6 +275,7 @@ Vesqen's voice is plain, concrete and calm. It tells people what happened and wh
 | Now | 正在播放 |
 | Chain | 链路 |
 | Liner notes | 链路注记 |
+| Lyrics | 歌词 |
 | Settings | 设置 |
 | Favorites | 我的喜欢 |
 | Playlists | 播放列表 |

@@ -48,15 +48,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.FormatListNumbered
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -115,6 +122,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
 import io.github.sumirenokai.vesqen.playback.PlaybackProblem
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
@@ -137,6 +145,7 @@ import io.github.sumirenokai.vesqen.ui.chain.outputRoute
 import io.github.sumirenokai.vesqen.ui.chain.telemetryConfidenceLabel
 import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
 import io.github.sumirenokai.vesqen.ui.components.BluetoothCodecPermissionButton
+import io.github.sumirenokai.vesqen.ui.components.ConfirmDestructiveDialog
 import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.components.PlaybackControls
 import io.github.sumirenokai.vesqen.ui.components.QueueSheet
@@ -304,6 +313,11 @@ fun NowScreen(
     onToggleFavorite: (Long, Boolean) -> Unit = { _, _ -> },
     onSetUsbOutputMode: (UsbOutputMode) -> Unit = {},
     onExplainStrictUsbUnavailable: () -> Unit = {},
+    lyrics: NowLyricsState = NowLyricsState(),
+    loadLyrics: suspend (AudioTrack) -> TrackLyrics = { TrackLyrics.None(folderHint = false) },
+    onToggleLyrics: () -> Unit = {},
+    onImportLyrics: (AudioTrack) -> Unit = {},
+    onRemoveLyrics: (Long) -> Unit = {},
 ) {
     if (!snapshot.hasActiveTrack) {
         NowEmbeddedEmptyState(modifier = modifier)
@@ -314,6 +328,11 @@ fun NowScreen(
     var showQueue by rememberSaveable { mutableStateOf(false) }
     var showOutputMode by rememberSaveable { mutableStateOf(false) }
     var notesOpen by rememberSaveable { mutableStateOf(false) }
+    // The track the remove confirmation was opened for; playback may move on while it is open.
+    var removeLyricsTrackId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // Read only while the lyrics or the track details show them (owner decision 12).
+    val trackLyrics = rememberTrackLyrics(currentTrack?.takeIf { lyrics.shown || showDetails }, lyrics, loadLyrics)
+    val hasImportedLyrics = currentTrack != null && currentTrack.id in lyrics.imported.trackIds
     val trackPresentation = NowTrackPresentation(
         trackId = snapshot.trackId,
         title = snapshot.title,
@@ -351,6 +370,9 @@ fun NowScreen(
     LaunchedEffect(currentTrack) {
         if (currentTrack == null) showDetails = false
     }
+    LaunchedEffect(currentTrack?.id) {
+        if (removeLyricsTrackId != currentTrack?.id) removeLyricsTrackId = null
+    }
     BackHandler(enabled = showDetails || notesOpen) {
         if (showDetails) showDetails = false else notesOpen = false
     }
@@ -375,6 +397,10 @@ fun NowScreen(
         onNext = onNext,
         onSeek = onSeek,
         onToggleFavorite = onToggleFavorite,
+        lyricsShown = lyrics.shown,
+        onToggleLyrics = onToggleLyrics,
+        onImportLyrics = currentTrack?.let { track -> { onImportLyrics(track) } },
+        onRemoveLyrics = currentTrack?.takeIf { hasImportedLyrics }?.let { track -> { removeLyricsTrackId = track.id } },
     )
 
     Surface(
@@ -390,6 +416,7 @@ fun NowScreen(
                     snapshot = snapshot,
                     currentTrack = currentTrack,
                     presentation = trackPresentation,
+                    trackLyrics = trackLyrics,
                     notesOpen = notesOpen,
                     telemetry = playbackTelemetry,
                     motionPolicy = motionPolicy,
@@ -401,6 +428,7 @@ fun NowScreen(
                     snapshot = snapshot,
                     currentTrack = currentTrack,
                     presentation = trackPresentation,
+                    trackLyrics = trackLyrics,
                     notesOpen = notesOpen,
                     telemetry = playbackTelemetry,
                     motionPolicy = motionPolicy,
@@ -443,6 +471,33 @@ fun NowScreen(
             onDismiss = { showDetails = false },
             // The track is already playing; "Play" would replace the queue with the whole library.
             onPlay = null,
+            lyrics = trackLyrics,
+            // The sheet closes first, as in the Library, so the import's result is not hidden behind it.
+            onImportLyrics = actions.onImportLyrics?.let { importLyrics ->
+                {
+                    showDetails = false
+                    importLyrics()
+                }
+            },
+            onRemoveLyrics = actions.onRemoveLyrics?.let { removeLyrics ->
+                {
+                    showDetails = false
+                    removeLyrics()
+                }
+            },
+        )
+    }
+    removeLyricsTrackId?.let { trackId ->
+        ConfirmDestructiveDialog(
+            title = stringResource(R.string.lyrics_remove_confirm_title),
+            body = stringResource(R.string.lyrics_remove_confirm_body),
+            confirmLabel = stringResource(R.string.lyrics_remove_confirm_action),
+            onConfirm = {
+                removeLyricsTrackId = null
+                onRemoveLyrics(trackId)
+            },
+            onDismiss = { removeLyricsTrackId = null },
+            tag = "vesqen.now.remove-lyrics-confirm",
         )
     }
     if (showQueue) {
@@ -473,6 +528,12 @@ private class NowActions(
     val onNext: () -> Unit,
     val onSeek: (Long) -> Unit,
     val onToggleFavorite: (Long, Boolean) -> Unit,
+    val lyricsShown: Boolean,
+    val onToggleLyrics: () -> Unit,
+    /** Null until the catalog lists the playing track (#169). */
+    val onImportLyrics: (() -> Unit)?,
+    /** Only for lyrics the listener imported; it asks first. */
+    val onRemoveLyrics: (() -> Unit)?,
 )
 
 @Composable
@@ -480,6 +541,7 @@ private fun NowPortraitPage(
     snapshot: PlaybackSnapshot,
     currentTrack: AudioTrack?,
     presentation: NowTrackPresentation,
+    trackLyrics: TrackLyrics?,
     notesOpen: Boolean,
     telemetry: PlaybackTelemetry?,
     motionPolicy: VesqenMotionPolicy,
@@ -511,18 +573,48 @@ private fun NowPortraitPage(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(Modifier.height(VesqenSpacing.xs))
-                // Tall phones have height the cover cannot use; share it around the cover so the
-                // controls and the liner notes sit at the bottom instead of leaving a gap there.
-                Spacer(Modifier.weight(1f))
-                if (artworkSize > 0.dp) {
-                    NowCover(
-                        presentation = presentation,
-                        size = artworkSize,
-                        isPlaying = snapshot.isPlaying,
-                        motionPolicy = motionPolicy,
-                    )
+                if (actions.lyricsShown) {
+                    // Closed notes are not composed, so the lyrics can take the whole stage by
+                    // weight. Open notes are measured first and would squeeze a weighted pane to
+                    // nothing, so it takes the cover's open size, and like the cover it is left out
+                    // when that size is too small.
+                    val pane = @Composable { stage: Modifier ->
+                        NowLyricsPane(
+                            lyrics = trackLyrics,
+                            positionMs = snapshot.positionMs,
+                            durationMs = snapshot.durationMs,
+                            isPlaying = snapshot.isPlaying,
+                            canSeek = snapshot.isControllerReady,
+                            motionPolicy = motionPolicy,
+                            onSeek = actions.onSeek,
+                            onImportLyrics = actions.onImportLyrics,
+                            modifier = stage.fillMaxWidth(),
+                        )
+                    }
+                    when {
+                        !notesOpen && layout.artwork > 0.dp -> pane(Modifier.weight(1f))
+                        notesOpen && artworkSize > 0.dp -> {
+                            Spacer(Modifier.weight(1f))
+                            pane(Modifier.height(artworkSize))
+                            Spacer(Modifier.weight(1f))
+                        }
+                        else -> Spacer(Modifier.weight(1f))
+                    }
+                } else {
+                    // Tall phones have height the cover cannot use; share it around the cover so the
+                    // controls and the liner notes sit at the bottom instead of leaving a gap there.
+                    Spacer(Modifier.weight(1f))
+                    if (artworkSize > 0.dp) {
+                        NowCover(
+                            presentation = presentation,
+                            size = artworkSize,
+                            isPlaying = snapshot.isPlaying,
+                            motionPolicy = motionPolicy,
+                            onClick = actions.onToggleLyrics,
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
                 }
-                Spacer(Modifier.weight(1f))
                 NowTrackIdentity(
                     presentation = presentation,
                     isControllerReady = snapshot.isControllerReady,
@@ -562,6 +654,7 @@ private fun NowLandscapePage(
     snapshot: PlaybackSnapshot,
     currentTrack: AudioTrack?,
     presentation: NowTrackPresentation,
+    trackLyrics: TrackLyrics?,
     notesOpen: Boolean,
     telemetry: PlaybackTelemetry?,
     motionPolicy: VesqenMotionPolicy,
@@ -582,16 +675,30 @@ private fun NowLandscapePage(
                 .padding(VesqenSpacing.lg),
             contentAlignment = Alignment.Center,
         ) {
+            // Open notes take the left pane over the lyrics; closing them brings the lyrics back.
             if (notesOpen) {
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                     NowLinerNotesBody(snapshot, currentTrack, telemetry, actions)
                 }
+            } else if (actions.lyricsShown) {
+                NowLyricsPane(
+                    lyrics = trackLyrics,
+                    positionMs = snapshot.positionMs,
+                    durationMs = snapshot.durationMs,
+                    isPlaying = snapshot.isPlaying,
+                    canSeek = snapshot.isControllerReady,
+                    motionPolicy = motionPolicy,
+                    onSeek = actions.onSeek,
+                    onImportLyrics = actions.onImportLyrics,
+                    modifier = Modifier.fillMaxSize(),
+                )
             } else {
                 NowCover(
                     presentation = presentation,
                     size = minOf(maxWidth, maxHeight, COVER_MAX_DP.dp),
                     isPlaying = snapshot.isPlaying,
                     motionPolicy = motionPolicy,
+                    onClick = actions.onToggleLyrics,
                 )
             }
         }
@@ -645,14 +752,27 @@ private fun NowTopBar(
             .heightIn(min = 48.dp)
             .padding(horizontal = if (isLandscape) 0.dp else VesqenSpacing.xs),
     ) {
-        IconButton(
-            onClick = actions.onBack,
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .size(48.dp)
-                .testTag("vesqen.now.back"),
-        ) {
-            Icon(Icons.Filled.KeyboardArrowDown, stringResource(R.string.collapse_player))
+        Row(modifier = Modifier.align(Alignment.CenterStart)) {
+            IconButton(
+                onClick = actions.onBack,
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag("vesqen.now.back"),
+            ) {
+                Icon(Icons.Filled.KeyboardArrowDown, stringResource(R.string.collapse_player))
+            }
+            // Owner decision 1: the lyrics switch sits beside collapse. Its state is read out and the
+            // stage itself shows it, so the Moss tint is not the only cue.
+            IconToggleButton(
+                checked = actions.lyricsShown,
+                onCheckedChange = { actions.onToggleLyrics() },
+                colors = IconButtonDefaults.iconToggleButtonColors(
+                    checkedContentColor = MaterialTheme.colorScheme.primary,
+                ),
+                modifier = Modifier.size(48.dp).testTag("vesqen.now.lyrics-toggle"),
+            ) {
+                Icon(Icons.Filled.Lyrics, stringResource(R.string.lyrics))
+            }
         }
         // Landscape gives the title row's height to the controls; the page header stays portrait-only.
         if (!isLandscape) Column(
@@ -677,22 +797,61 @@ private fun NowTopBar(
             }
         }
         Row(modifier = Modifier.align(Alignment.CenterEnd)) {
-            if (actions.showOrientationToggle) {
-                IconButton(
-                    onClick = actions.onToggleOrientation,
-                    modifier = Modifier.size(48.dp).testTag("vesqen.now.orientation-toggle"),
-                ) {
-                    Icon(
-                        Icons.Filled.ScreenRotation,
-                        stringResource(if (isLandscape) R.string.switch_to_portrait else R.string.switch_to_landscape),
-                    )
-                }
-            }
             IconButton(
                 onClick = actions.onOpenQueue,
                 modifier = Modifier.size(48.dp).testTag("vesqen.now.queue"),
             ) {
                 Icon(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.queue))
+            }
+            NowMoreMenu(actions = actions, isLandscape = isLandscape)
+        }
+    }
+}
+
+/** Lyrics import and removal, track information and, on a phone that can rotate, the orientation (#169). */
+@Composable
+private fun NowMoreMenu(actions: NowActions, isLandscape: Boolean) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(
+            onClick = { expanded = true },
+            modifier = Modifier.size(48.dp).testTag("vesqen.now.more"),
+        ) {
+            Icon(Icons.Filled.MoreVert, stringResource(R.string.now_more_options))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            actions.onImportLyrics?.let { importLyrics ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.lyrics_import)) },
+                    leadingIcon = { Icon(Icons.Filled.FileOpen, null) },
+                    onClick = { expanded = false; importLyrics() },
+                    modifier = Modifier.testTag("vesqen.now.import-lyrics"),
+                )
+            }
+            actions.onRemoveLyrics?.let { removeLyrics ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.lyrics_remove)) },
+                    leadingIcon = { Icon(Icons.Filled.Delete, null) },
+                    onClick = { expanded = false; removeLyrics() },
+                    modifier = Modifier.testTag("vesqen.now.remove-lyrics"),
+                )
+            }
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.track_information)) },
+                leadingIcon = { Icon(Icons.Filled.Info, null) },
+                onClick = { expanded = false; actions.onOpenDetails() },
+                enabled = actions.canOpenDetails,
+                modifier = Modifier.testTag("vesqen.now.more.info"),
+            )
+            if (actions.showOrientationToggle) {
+                DropdownMenuItem(
+                    text = {
+                        Text(stringResource(if (isLandscape) R.string.switch_to_portrait else R.string.switch_to_landscape))
+                    },
+                    leadingIcon = { Icon(Icons.Filled.ScreenRotation, null) },
+                    onClick = { expanded = false; actions.onToggleOrientation() },
+                    modifier = Modifier.testTag("vesqen.now.orientation-toggle"),
+                )
             }
         }
     }
@@ -704,6 +863,7 @@ private fun NowCover(
     size: Dp,
     isPlaying: Boolean,
     motionPolicy: VesqenMotionPolicy,
+    onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(VesqenRadii.album)
     val shadowColor = LocalVesqenColors.current.shadow
@@ -715,39 +875,57 @@ private fun NowCover(
         label = "vesqen.now.artwork-play-state",
     )
     val latest = rememberUpdatedState(presentation)
-    AnimatedContent(
-        targetState = presentation.animationIdentity,
-        transitionSpec = {
-            if (motionPolicy.reduceMotion) {
-                fadeIn(tween(motionPolicy.coverChangeMillis)) togetherWith fadeOut(tween(motionPolicy.coverChangeMillis))
-            } else {
-                (fadeIn(tween(motionPolicy.coverChangeMillis, easing = PaperEasing)) +
-                    slideInVertically(tween(motionPolicy.coverChangeMillis, easing = PaperEasing)) { it / 35 }) togetherWith
-                    fadeOut(tween(motionPolicy.coverChangeMillis / 2))
-            }
-        },
-        contentAlignment = Alignment.Center,
-        label = "vesqen.now.artwork-transition",
-    ) { key ->
-        val cover = shownPresentation(key, latest)
-        Box(
-            modifier = Modifier
-                .size(size)
-                .graphicsLayer {
-                    scaleX = playScale
-                    scaleY = playScale
-                }
-                .shadow(24.dp, shape, ambientColor = shadowColor.copy(alpha = .24f), spotColor = shadowColor.copy(alpha = .24f))
-                .testTag("vesqen.now.artwork-stage"),
-        ) {
-            AlbumArtwork(
-                track = cover.artworkTrack,
-                targetSize = COVER_MAX_DP.dp,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .testTag("vesqen.now.artwork"),
-                emphasized = true,
+    val showLyrics = stringResource(R.string.lyrics_show)
+    // Tapping the cover shows the lyrics (owner decision 1). The handler and the stage tag sit
+    // outside the cover change, which holds two covers while one track's gives way to the next;
+    // the button merges what is inside it, so a tag there would not be found.
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = showLyrics,
+                onClick = onClick,
             )
+            .semantics { contentDescription = showLyrics }
+            .testTag("vesqen.now.artwork-stage"),
+        contentAlignment = Alignment.Center,
+    ) {
+        AnimatedContent(
+            targetState = presentation.animationIdentity,
+            transitionSpec = {
+                if (motionPolicy.reduceMotion) {
+                    fadeIn(tween(motionPolicy.coverChangeMillis)) togetherWith fadeOut(tween(motionPolicy.coverChangeMillis))
+                } else {
+                    (fadeIn(tween(motionPolicy.coverChangeMillis, easing = PaperEasing)) +
+                        slideInVertically(tween(motionPolicy.coverChangeMillis, easing = PaperEasing)) { it / 35 }) togetherWith
+                        fadeOut(tween(motionPolicy.coverChangeMillis / 2))
+                }
+            },
+            contentAlignment = Alignment.Center,
+            label = "vesqen.now.artwork-transition",
+        ) { key ->
+            val cover = shownPresentation(key, latest)
+            Box(
+                modifier = Modifier
+                    .size(size)
+                    .graphicsLayer {
+                        scaleX = playScale
+                        scaleY = playScale
+                    }
+                    .shadow(24.dp, shape, ambientColor = shadowColor.copy(alpha = .24f), spotColor = shadowColor.copy(alpha = .24f)),
+            ) {
+                AlbumArtwork(
+                    track = cover.artworkTrack,
+                    targetSize = COVER_MAX_DP.dp,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag("vesqen.now.artwork"),
+                    emphasized = true,
+                )
+            }
         }
     }
 }

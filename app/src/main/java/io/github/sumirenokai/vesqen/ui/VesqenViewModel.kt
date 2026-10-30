@@ -20,10 +20,13 @@ import io.github.sumirenokai.vesqen.library.UnmatchedLibraryRecord
 import io.github.sumirenokai.vesqen.library.LibrarySource
 import io.github.sumirenokai.vesqen.library.LibrarySourceKind
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
+import io.github.sumirenokai.vesqen.lyrics.LyricsImportResult
+import io.github.sumirenokai.vesqen.lyrics.LyricsStore
 import io.github.sumirenokai.vesqen.playback.PlaybackController
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryUpdate
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
+import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -63,7 +66,20 @@ data class LibraryUiState(
 data class VesqenUiState(
     val library: LibraryUiState = LibraryUiState(),
     val playback: PlaybackSnapshot = PlaybackSnapshot(),
+    /** The result of the latest lyrics import, shown once (#169). */
+    val lyricsImportNotice: LyricsImportNotice? = null,
 )
+
+/** A lyrics import to finish after the system picker returns (#169). */
+internal data class LyricsImportTarget(
+    val trackId: Long,
+    /** The picker can outlive the process; the ID must still name this file when it returns. */
+    val contentUri: String,
+    /** [LyricsStore.generation] when the picker opened: a rebuild since then gives the ID to another song. */
+    val generation: Long,
+)
+
+data class LyricsImportNotice(val id: Long, val result: LyricsImportResult)
 
 class VesqenViewModel(application: Application) : AndroidViewModel(application) {
     private val catalog: LibraryCatalog =
@@ -79,6 +95,9 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     private var lastMusicPermissionGranted: Boolean? = null
     private val latestPlaybackHistory = mutableMapOf<Long, PlaybackHistoryUpdate>()
     private val unmatchedRecordPrompt = UnmatchedRecordPrompt(application)
+    private val lyricsStore = (application as VesqenApplication).lyricsStore
+    private val lyricsResolver = (application as VesqenApplication).lyricsResolver
+    private var lyricsImports = 0L
 
     // Until the private catalog has been read once, an empty list means "not read yet", not "no
     // music": the first frames show the loading rows instead of flashing the empty state.
@@ -115,6 +134,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
             viewModelScope.launch {
                 vesqenApplication.libraryCatalogStore.rebuilds.drop(1).collect { onCatalogRebuilt() }
             }
+            viewModelScope.launch(Dispatchers.IO) { lyricsStore.load() }
         }
     }
 
@@ -280,12 +300,83 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                 controller.syncLibrary(refreshedTracks ?: snapshot.tracks)
             }
             activeLibraryScan = null
+            if (result.isSuccess) cleanUpLyrics()
             if (catalogEditedDuringScan) {
                 catalogEditedDuringScan = false
                 refreshCachedLibrary()
             }
             refreshQueuedLibrary()
         }
+    }
+
+    /**
+     * After a completed scan: same-name `.lrc` files may have changed without any signal, and
+     * imports whose rows the scan, a removed folder or a discarded record deleted go (#169). Only a
+     * full refresh does this, not the cached read on every resume.
+     */
+    private fun cleanUpLyrics() {
+        lyricsResolver.clearCache()
+        viewModelScope.launch(Dispatchers.IO) {
+            val generation = lyricsStore.generation()
+            val rebuildsBefore = catalogRebuilds.value
+            val trackIds = try {
+                catalog.readTrackIdsForSweep()
+            } catch (_: SQLiteException) {
+                // Nothing is deleted; the next completed refresh tries again.
+                return@launch
+            } catch (failure: IllegalStateException) {
+                // A rebuild that closed the catalog under the read has removed every import already.
+                failure.rethrowUnlessCatalogRebuiltSince(rebuildsBefore)
+                return@launch
+            }
+            lyricsStore.sweep(trackIds, generation)
+        }
+    }
+
+    /** Lyrics imports and removals run here, so they finish when the activity is recreated. */
+    internal fun importLyrics(target: LyricsImportTarget, source: Uri) {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { importLyricsFile(target, source) }
+            uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(++lyricsImports, result))
+        }
+    }
+
+    /**
+     * The picker can return after process death, before the Library is read again, so the catalog
+     * row itself says whether the ID still names the same file; no scan has to finish first.
+     */
+    private suspend fun importLyricsFile(target: LyricsImportTarget, source: Uri): LyricsImportResult {
+        val rebuildsBefore = catalogRebuilds.value
+        val contentUri = try {
+            catalog.trackContentUri(target.trackId)
+        } catch (_: SQLiteException) {
+            return LyricsImportResult.FAILED
+        } catch (failure: IllegalStateException) {
+            failure.rethrowUnlessCatalogRebuiltSince(rebuildsBefore)
+            return LyricsImportResult.TRACK_CHANGED
+        }
+        if (contentUri != target.contentUri) return LyricsImportResult.TRACK_CHANGED
+        return readLyricsImport(target, source)
+    }
+
+    private fun readLyricsImport(target: LyricsImportTarget, source: Uri): LyricsImportResult = try {
+        getApplication<Application>().contentResolver.openInputStream(source)?.use { input ->
+            lyricsStore.import(target.trackId, input, target.generation)
+        } ?: LyricsImportResult.FAILED
+    } catch (_: IOException) {
+        LyricsImportResult.FAILED
+    } catch (_: SecurityException) {
+        LyricsImportResult.FAILED
+    }
+
+    internal fun lyricsImportGeneration(): Long = lyricsStore.generation()
+
+    internal fun lyricsImportNoticeShown(id: Long) {
+        if (uiState.lyricsImportNotice?.id == id) uiState = uiState.copy(lyricsImportNotice = null)
+    }
+
+    internal fun removeLyrics(trackId: Long) {
+        viewModelScope.launch(Dispatchers.IO) { lyricsStore.remove(trackId) }
     }
 
     fun addLibraryFolder(treeUri: Uri) {

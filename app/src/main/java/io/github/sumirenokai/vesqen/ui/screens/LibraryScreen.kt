@@ -133,6 +133,7 @@ import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.ArtistNames
 import io.github.sumirenokai.vesqen.library.ArtistSplitSettings
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.library.LibraryBrowseMode
 import io.github.sumirenokai.vesqen.library.LibraryNameOrder
 import io.github.sumirenokai.vesqen.library.LibraryCollection
@@ -236,6 +237,10 @@ fun LibraryScreen(
     motionPolicy: VesqenMotionPolicy? = null,
     onPageBackgroundChange: (Color) -> Unit = {},
     artistSplit: ArtistSplitSettings = ArtistSplitSettings(),
+    lyrics: NowLyricsState = NowLyricsState(),
+    loadLyrics: suspend (AudioTrack) -> TrackLyrics = { TrackLyrics.None(folderHint = false) },
+    onImportLyrics: (AudioTrack) -> Unit = {},
+    onRemoveLyrics: (Long) -> Unit = {},
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     val listStateHolder = rememberSaveableStateHolder()
@@ -247,6 +252,7 @@ fun LibraryScreen(
     // opened went stale once a play count or favorite changed, and Play then found no list entry
     // equal to it and did nothing (#136 R28).
     var detailsTrackId by remember { mutableStateOf<Long?>(null) }
+    var removeLyricsTrackId by rememberSaveable { mutableStateOf<Long?>(null) }
     val detailsTrack = remember(state.tracks, detailsTrackId) {
         detailsTrackId?.let { id -> state.tracks.firstOrNull { it.id == id } }
     }
@@ -692,6 +698,8 @@ fun LibraryScreen(
         }
     }
 
+    // Read only while the details are open, which names the source (owner decisions 6 and 12).
+    val detailsLyrics = rememberTrackLyrics(detailsTrack, lyrics, loadLyrics)
     detailsTrack?.let { track ->
         val playlistId = selectedCollection?.playlistId
         val playlistTrackIndex = selectedCollection?.tracks?.indexOfFirst { it.id == track.id } ?: -1
@@ -745,6 +753,31 @@ fun LibraryScreen(
                     detailsTrackId = null
                 }
             } else null,
+            lyrics = detailsLyrics,
+            // Every Library action closes the sheet; the picker's result does not depend on it.
+            onImportLyrics = {
+                onImportLyrics(track)
+                detailsTrackId = null
+            },
+            onRemoveLyrics = if (track.id in lyrics.imported.trackIds) {
+                {
+                    removeLyricsTrackId = track.id
+                    detailsTrackId = null
+                }
+            } else null,
+        )
+    }
+    removeLyricsTrackId?.let { trackId ->
+        ConfirmDestructiveDialog(
+            title = stringResource(R.string.lyrics_remove_confirm_title),
+            body = stringResource(R.string.lyrics_remove_confirm_body),
+            confirmLabel = stringResource(R.string.lyrics_remove_confirm_action),
+            onConfirm = {
+                removeLyricsTrackId = null
+                onRemoveLyrics(trackId)
+            },
+            onDismiss = { removeLyricsTrackId = null },
+            tag = "vesqen.library.remove-lyrics-confirm",
         )
     }
 
