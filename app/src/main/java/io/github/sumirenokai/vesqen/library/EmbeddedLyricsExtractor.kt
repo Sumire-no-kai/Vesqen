@@ -8,6 +8,7 @@ import io.github.sumirenokai.vesqen.lyrics.decodeLyricsText
 import io.github.sumirenokai.vesqen.lyrics.decodeMarkedUtf16LyricsText
 import io.github.sumirenokai.vesqen.lyrics.parseLyrics
 import java.io.BufferedInputStream
+import java.io.ByteArrayInputStream
 import java.io.InputStream
 
 /**
@@ -27,7 +28,7 @@ internal fun extractBoundedEmbeddedLyrics(
     buffered.reset()
     val candidates = EmbeddedLyricsCandidates()
     when {
-        header.hasAsciiPrefix("ID3") -> collectId3Lyrics(buffered, candidates)
+        header.hasAsciiPrefix("ID3") -> collectLeadingId3Lyrics(buffered, candidates)
         header.hasAsciiPrefix("fLaC") -> collectFlacLyrics(buffered, candidates)
         header.hasAsciiPrefix("OggS") -> collectOggLyrics(buffered, candidates)
         header.hasAsciiPrefix("RIFF") && header.hasAsciiAt("WAVE", 8) ->
@@ -55,6 +56,9 @@ private class EmbeddedLyricsCandidates {
 
     val done: Boolean get() = synced != null || offered >= MAX_EMBEDDED_LYRICS_CANDIDATES
 
+    /** No lyrics tag was found at all, readable or not. */
+    val isEmpty: Boolean get() = offered == 0
+
     /** [text] is null when the tag exists but cannot be decoded. */
     fun offer(text: String?) {
         offered++
@@ -73,6 +77,25 @@ private class EmbeddedLyricsCandidates {
         ?: if (unreadable) SourceLyrics.Unreadable else SourceLyrics.Absent
 }
 
+/**
+ * An ID3 tag and, when it holds no lyrics, the FLAC stream after it: some taggers put an ID3 tag
+ * before "fLaC", and Media3 plays such files. The tag is skipped with its v2.4 footer, if any.
+ */
+private fun collectLeadingId3Lyrics(input: BufferedInputStream, candidates: EmbeddedLyricsCandidates) {
+    input.mark(ID3_HEADER_BYTES)
+    val header = input.readArtworkExact(ID3_HEADER_BYTES) ?: return
+    input.reset()
+    val tagSize = decodeSynchsafeInt(header, 6)?.takeIf { it in 1..MAX_ID3_TAG_BYTES } ?: return
+    val hasFooter = (header[3].toInt() and 0xff) == 4 && (header[5].toInt() and ID3_V24_FOOTER_FLAG) != 0
+    val tag = BoundedArtworkInputStream(input, ID3_HEADER_BYTES + tagSize.toLong() + if (hasFooter) ID3_HEADER_BYTES else 0)
+    collectId3Lyrics(tag, candidates)
+    if (!candidates.isEmpty || !tag.skipRemaining()) return
+    input.mark(FLAC_MAGIC_BYTES)
+    val magic = input.readArtworkExact(FLAC_MAGIC_BYTES) ?: return
+    input.reset()
+    if (magic.hasAsciiPrefix("fLaC")) collectFlacLyrics(input, candidates)
+}
+
 private fun collectId3Lyrics(input: InputStream, candidates: EmbeddedLyricsCandidates) {
     val header = input.readArtworkExact(ID3_HEADER_BYTES) ?: return
     if (!header.hasAsciiPrefix("ID3")) return
@@ -82,7 +105,9 @@ private fun collectId3Lyrics(input: InputStream, candidates: EmbeddedLyricsCandi
     if (tagSize <= 0 || tagSize > MAX_ID3_TAG_BYTES) return
     val tagUsesUnsynchronisation = (header[5].toInt() and ID3_UNSYNCHRONISATION_FLAG) != 0
     val rawTagInput = BoundedArtworkInputStream(input, tagSize.toLong())
-    val tagInput: InputStream = if (tagUsesUnsynchronisation) {
+    // v2.2 and v2.3 unsynchronise the whole tag and give frame sizes before it. v2.4 unsynchronises
+    // frame by frame and gives the stored size, so its frames are read raw and undone one by one.
+    val tagInput: InputStream = if (tagUsesUnsynchronisation && majorVersion < 4) {
         UnsynchronisationInputStream(rawTagInput)
     } else {
         rawTagInput
@@ -117,16 +142,22 @@ private fun collectId3Lyrics(input: InputStream, candidates: EmbeddedLyricsCandi
         remaining -= frameSize
 
         if (frameId == "USLT" || frameId == "ULT") {
-            // The same format-flag rule as the artwork walker: compressed, encrypted or grouped
-            // frames are not decoded.
+            // Compressed, encrypted or grouped frames are not decoded. A v2.4 frame may be
+            // unsynchronised on its own and then start with a four-byte data length.
             val formatFlags = if (majorVersion >= 3) frameHeader[9].toInt() and 0xff else 0
-            val allowedFormatFlags = if (majorVersion == 4 && tagUsesUnsynchronisation) {
-                ID3_V24_FRAME_UNSYNCHRONISATION_FLAG
+            val readableFlags = if (majorVersion == 4) {
+                ID3_V24_FRAME_UNSYNCHRONISATION_FLAG or ID3_V24_DATA_LENGTH_FLAG
             } else {
                 0
             }
-            if ((formatFlags and allowedFormatFlags.inv()) == 0 && frameSize <= MAX_ID3_LYRICS_FRAME_BYTES) {
-                val frame = tagInput.readArtworkExact(frameSize) ?: return
+            if ((formatFlags and readableFlags.inv()) == 0 && frameSize <= MAX_ID3_LYRICS_FRAME_BYTES) {
+                var frame = tagInput.readArtworkExact(frameSize) ?: return
+                if ((formatFlags and ID3_V24_DATA_LENGTH_FLAG) != 0) {
+                    frame = if (frame.size >= ID3_DATA_LENGTH_BYTES) frame.copyOfRange(ID3_DATA_LENGTH_BYTES, frame.size) else ByteArray(0)
+                }
+                val unsynchronised = majorVersion == 4 &&
+                    (tagUsesUnsynchronisation || (formatFlags and ID3_V24_FRAME_UNSYNCHRONISATION_FLAG) != 0)
+                if (unsynchronised) frame = UnsynchronisationInputStream(ByteArrayInputStream(frame)).readBytes()
                 candidates.offer(decodeId3LyricsFrame(frame))
                 continue
             }
@@ -424,6 +455,10 @@ private class OggPacketInputStream(private val delegate: InputStream) : InputStr
 }
 
 private const val MAX_EMBEDDED_LYRICS_CANDIDATES = 8
+private const val ID3_V24_FOOTER_FLAG = 0x10
+private const val ID3_V24_DATA_LENGTH_FLAG = 0x01
+private const val ID3_DATA_LENGTH_BYTES = 4
+private const val FLAC_MAGIC_BYTES = 4
 private const val ID3_LYRICS_DESCRIPTOR_OFFSET = 4
 private const val MAX_ID3_LYRICS_FRAME_BYTES = MAX_LYRICS_TEXT_BYTES + 4_096
 private const val FLAC_VORBIS_COMMENT_BLOCK = 4

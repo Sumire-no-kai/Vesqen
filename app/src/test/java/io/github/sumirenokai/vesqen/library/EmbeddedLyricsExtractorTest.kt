@@ -45,6 +45,36 @@ class EmbeddedLyricsExtractorTest {
     }
 
     @Test
+    fun id3v24UnsynchronisationIsUndoneFrameByFrame() {
+        // 0xFF bytes in a picture and in the UTF-16 mark grow both frames; v2.4 counts the grown size.
+        val picture = unsynchronised(byteArrayOf(0) + "image/jpeg".toByteArray() + byteArrayOf(0, 3, 0, 0xFF.toByte(), 0xE0.toByte(), 0xFF.toByte(), 0xD9.toByte()))
+        val lyrics = unsynchronised(uslt(1, utf16Le(LRC), descriptor = utf16Le("A")))
+        val title = frame4("TIT2", byteArrayOf(3) + "Title".toByteArray())
+
+        assertEquals(syncedLyrics, extract(id3Tag(4, frame4("APIC", picture, 0x02) + frame4("USLT", lyrics, 0x02) + title, flags = 0x80)))
+        // Only the frame says it is unsynchronised, with and without a leading data length.
+        assertEquals(syncedLyrics, extract(id3Tag(4, frame4("USLT", lyrics, 0x02) + title)))
+        val dataLength = ByteArrayOutputStream().apply { writeSynchsafeInt(uslt(1, utf16Le(LRC), descriptor = utf16Le("A")).size) }.toByteArray()
+        assertEquals(syncedLyrics, extract(id3Tag(4, frame4("USLT", dataLength + lyrics, 0x03) + title)))
+    }
+
+    @Test
+    fun flacAfterAnId3TagWithoutLyricsIsStillRead() {
+        val flac = "fLaC".toByteArray() + flacBlock(4, vorbisComments("LYRICS=$LRC"), last = true) + ByteArray(16)
+        val title = frame3("TIT2", byteArrayOf(3) + "Title".toByteArray())
+
+        assertEquals(syncedLyrics, extract(id3(3, title) + flac))
+        val footer = ByteArrayOutputStream().apply {
+            write("3DI".toByteArray())
+            write(byteArrayOf(4, 0, 0x10))
+            writeSynchsafeInt(frame4("TIT2", byteArrayOf(3) + "Title".toByteArray()).size)
+        }.toByteArray()
+        assertEquals(syncedLyrics, extract(id3Tag(4, frame4("TIT2", byteArrayOf(3) + "Title".toByteArray()), flags = 0x10) + footer + flac))
+        // Lyrics in the ID3 tag are used as they are; the FLAC stream after it is not read.
+        assertEquals(readable("From the ID3 tag"), extract(id3(3, frame3("USLT", uslt(3, "From the ID3 tag".toByteArray()))) + flac))
+    }
+
+    @Test
     fun picturesAndOtherFramesAreSkippedAndSyncedLyricsArePreferred() {
         val picture = frame3("APIC", byteArrayOf(0) + "image/jpeg".toByteArray() + byteArrayOf(0, 3, 0) + ByteArray(4_000))
         val title = frame3("TIT2", byteArrayOf(3) + "Title".toByteArray())
@@ -152,11 +182,20 @@ class EmbeddedLyricsExtractorTest {
         write(payload)
     }.toByteArray()
 
-    private fun frame4(id: String, payload: ByteArray): ByteArray = ByteArrayOutputStream().apply {
+    private fun frame4(id: String, payload: ByteArray, formatFlags: Int = 0): ByteArray = ByteArrayOutputStream().apply {
         write(id.toByteArray())
         writeSynchsafeInt(payload.size)
-        write(byteArrayOf(0, 0))
+        write(byteArrayOf(0, formatFlags.toByte()))
         write(payload)
+    }.toByteArray()
+
+    /** ID3 unsynchronisation of one frame's bytes: a zero after every 0xFF that a 0x00 or 0xE0+ follows. */
+    private fun unsynchronised(bytes: ByteArray): ByteArray = ByteArrayOutputStream().apply {
+        bytes.forEachIndexed { index, byte ->
+            write(byte.toInt())
+            val next = bytes.getOrNull(index + 1)?.toInt()?.and(0xff)
+            if ((byte.toInt() and 0xff) == 0xff && (next == null || next == 0 || next >= 0xe0)) write(0)
+        }
     }.toByteArray()
 
     private fun frame2(id: String, payload: ByteArray): ByteArray = ByteArrayOutputStream().apply {
@@ -171,9 +210,9 @@ class EmbeddedLyricsExtractorTest {
 
     private fun id3v22(vararg frames: ByteArray): ByteArray = id3Tag(2, frames.reduce { joined, frame -> joined + frame })
 
-    private fun id3Tag(majorVersion: Int, body: ByteArray): ByteArray = ByteArrayOutputStream().apply {
+    private fun id3Tag(majorVersion: Int, body: ByteArray, flags: Int = 0): ByteArray = ByteArrayOutputStream().apply {
         write("ID3".toByteArray())
-        write(byteArrayOf(majorVersion.toByte(), 0, 0))
+        write(byteArrayOf(majorVersion.toByte(), 0, flags.toByte()))
         writeSynchsafeInt(body.size)
         write(body)
     }.toByteArray()
