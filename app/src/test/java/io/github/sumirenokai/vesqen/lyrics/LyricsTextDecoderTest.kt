@@ -71,6 +71,8 @@ class LyricsTextDecoderTest {
             "我在这里等你回来\n心里有一句话想说\n这一路走来都是你\n不要让时间带走我们的梦",
             "雨下了一整夜\n窗外的树也睡了\n我把信折好放在桌上\n等天亮再寄给远方的你",
             "城市的夜晚很长\n路口的红灯亮了又灭\n有人在等车\n有人在唱一首旧歌",
+            // Short, and nearly all its hanzi sit in rows EUC-JP reads as level-1 kanji.
+            "[00:01.00]晚风吹过安静的街道\n[00:05.00]我们沿着河岸慢慢走\n[00:09.00]灯光落在水面上",
         ).forEach { sample ->
             assertEquals(sample, decodeLyricsText(sample.toByteArray(Charset.forName("GBK"))))
         }
