@@ -32,7 +32,7 @@
     <string name="library_source_scan_failed">このソースを更新できませんでした。既存の曲はそのまま残ります。</string>
     <string name="library_folder_access_needs_renewal">このフォルダの曲を再生するには、フォルダを追加し直してアクセスを許可してください。</string>
     <string name="library_source_paused">スキャンを一時停止中</string>
-    <string name="library_source_interrupted">スキャンが中断されました。再開すると続きからスキャンします</string>
+    <string name="library_source_interrupted">スキャンが中断されました。再開すると続きからスキャンします。</string>
     <plurals name="library_source_track_count">
         <item quantity="other">%1$d 曲</item>
     </plurals>
@@ -51,7 +51,7 @@
     <string name="playback_order">再生順</string>
     <string name="playback_order_sequential">順番に再生</string>
     <string name="playback_order_shuffle">シャッフル</string>
-    <string name="playback_order_repeat_all">すべてリピート</string>
+    <string name="playback_order_repeat_all">全曲リピート</string>
     <string name="playback_order_repeat_one">1 曲リピート</string>
     <string name="playback_order_shuffle_repeat_all">シャッフル・全曲リピート</string>
     <string name="playback_order_shuffle_repeat_one">シャッフル・1 曲リピート</string>
@@ -71,7 +71,7 @@
     <string name="settings_strict_usb_waiting">再生を始めるときに、このスマートフォンと USB DAC が厳格出力に対応しているかを Vesqen が確認します。</string>
     <string name="settings_strict_usb_platform_unavailable">このスマートフォンの Android %1$s（API %2$d）には、公式の bit-perfect 出力機能がありません。タップすると詳しい理由を表示します。</string>
     <string name="strict_usb_unavailable_title">厳格 USB は使用できません</string>
-    <string name="strict_usb_unavailable_body">このスマートフォンは Android %1$s（API %2$d）で、公式の bit-perfect インターフェースがないため、Vesqen は厳格 USB 出力をオンにできません。システム出力は普段どおり使えます。</string>
+    <string name="strict_usb_unavailable_body">このスマートフォンの Android %1$s（API %2$d）には、公式の bit-perfect インターフェースがないため、Vesqen は厳格 USB 出力をオンにできません。システム出力は通常どおり使用できます。</string>
     <string name="settings_strict_usb_available">%1$s は厳格出力に対応しています。</string>
     <string name="settings_strict_usb_applying">%1$s の厳格出力を準備中…</string>
     <string name="settings_strict_usb_active">%1$s で有効：%2$s。Android から取得した情報に基づく状態で、外部検証は行っていません。</string>
@@ -82,7 +82,7 @@
     <string name="usb_failure_host_unavailable">このスマートフォンは USB オーディオデバイスに対応していません。</string>
     <string name="usb_failure_permission">Android により、Vesqen によるオーディオ設定の変更が許可されていません。</string>
     <string name="usb_failure_no_device">USB オーディオデバイスが接続されていません。</string>
-    <string name="usb_failure_source_unknown">この曲のサンプルレート、ビット深度、チャンネル数がわかりません。</string>
+    <string name="usb_failure_source_unknown">この曲のサンプルレート、ビット深度、チャンネル数のいずれかが不明です。</string>
     <string name="usb_failure_source_unsupported">厳格出力はこの曲の形式に対応していません。</string>
     <string name="usb_failure_query">DAC の対応形式を Android から取得できませんでした。</string>
     <string name="usb_failure_no_profile">この DAC の bit-perfect 出力は、この曲の形式に対応していません。</string>
@@ -90,8 +90,8 @@
     <string name="usb_failure_request">Android が bit-perfect 出力のリクエストを拒否しました。</string>
     <string name="usb_failure_readback">Android が bit-perfect 出力の設定を保持しませんでした。</string>
     <string name="usb_failure_clear">Android が bit-perfect の設定を元に戻せなかったため、再生は止まったままです。</string>
-    <string name="usb_failure_track_format">AudioTrack の音声形式が、DAC の bit-perfect 出力形式と一致しません。</string>
-    <string name="usb_failure_preferred_device">Android が選択された USB デバイスに音声を出力しませんでした。</string>
+    <string name="usb_failure_track_format">実際に送られた音声の形式が、DAC の bit-perfect 出力形式と一致しません。</string>
+    <string name="usb_failure_preferred_device">選択した USB デバイスに、Android が音声を出力しませんでした。</string>
     <string name="usb_failure_route_unavailable">音声の実際の出力先を、制限時間内に Android から確認できませんでした。</string>
     <string name="usb_failure_route">音声が別のデバイスに送られました。</string>
     <string name="usb_failure_disconnected">USB オーディオデバイスが取り外されました。</string>
@@ -124,7 +124,7 @@
     <string name="settings_auto_update">アップデートの自動確認</string>
     <string name="settings_auto_update_body">アプリを開いたときに、1 日 1 回まで確認します。</string>
     <string name="settings_check_update">アップデートを確認</string>
-    <string name="settings_footer">再生にアカウントもネットワークも必要ありません。音楽とアートワークはこのスマートフォンの中にだけあります。</string>
+    <string name="settings_footer">再生にアカウントもネットワークも必要ありません。音楽とアートワークはこのスマートフォンにだけ保存されています。</string>
     <string name="settings_privacy_data">プライバシーとデータ</string>
     <string name="settings_usage_statistics">利用統計</string>
     <string name="settings_usage_on">オン</string>
@@ -141,7 +141,7 @@
     <string name="settings_artist_list_empty">なし</string>
     <string name="settings_artist_split_restore">初期設定に戻す</string>
     <string name="usage_title">利用統計</string>
-    <string name="usage_body">Vesqen は、どの機種で使われているかを知るために、ID を付けずに 1 日 1 回まで利用統計を送信します。送る内容は次の項目だけです。</string>
+    <string name="usage_body">Vesqen は、どの機種で使われているかを知るために、ID を付けずに 1 日 1 回まで利用統計を送信します。送信する内容は次の項目のみです。</string>
     <string name="usage_field_app">アプリのバージョンと配布元</string>
     <string name="usage_field_device">Android のバージョン、メーカー、機種、システムのビルド番号</string>
     <string name="usage_field_bit_perfect">接続中の USB オーディオデバイスで公式の bit-perfect 経路が使えるか</string>
@@ -170,7 +170,7 @@
     <string name="report_formats">再生に失敗した曲の形式</string>
     <string name="report_formats_body">形式、サンプルレート、ビット深度、チャンネル数</string>
     <string name="report_file_names">ファイル名を含める</string>
-    <string name="report_file_names_body">ファイル名のみ。フォルダのパスは含まれません</string>
+    <string name="report_file_names_body">ファイル名のみ。フォルダのパスは含まれません。</string>
     <string name="report_never">レポートには、ライブラリ、再生履歴、フォルダのパス、Bluetooth デバイス名、MAC アドレスは含まれません。</string>
     <string name="report_create">レポートを作成</string>
     <string name="report_generating">レポートを作成中…</string>
@@ -185,7 +185,7 @@
     <string name="report_shared">共有シートを開きました。</string>
     <string name="report_uploaded">アップロードしました。</string>
     <string name="report_receipt">受付番号：%1$s</string>
-    <string name="report_receipt_note">サーバーには 7 日間保存されます。早めに削除してほしい場合は、受付番号を vesqen@sumirenokai.com に送ってください。</string>
+    <string name="report_receipt_note">サーバーには 7 日間保存されます。それより前に削除をご希望の場合は、受付番号を vesqen@sumirenokai.com までお送りください。</string>
     <string name="report_failure_generation">レポートを作成できませんでした。</string>
     <string name="report_failure_share">共有先の選択画面を開けませんでした。</string>
     <string name="report_failure_no_app">このスマートフォンには、レポートを受け取れるアプリがありません。</string>
@@ -221,7 +221,7 @@
     <string name="update_downloading_unknown">%1$s をダウンロード済み</string>
     <string name="update_verifying">パッケージを確認中…</string>
     <string name="update_installing">システムのインストーラーの応答を待っています…</string>
-    <string name="update_permission_needed">初めてのインストールでは、アプリのインストールを許可する必要があります。「インストール」をタップするとその設定が開くので、許可してから戻り、もう一度「インストール」をタップしてください。</string>
+    <string name="update_permission_needed">初めてのインストールでは、アプリのインストールを許可する必要があります。「インストール」をタップすると、その設定画面が開きます。許可してからこの画面に戻り、もう一度「インストール」をタップしてください。</string>
     <string name="update_notes_more">すべて表示</string>
     <string name="update_notes_less">折りたたむ</string>
     <string name="update_requires_android">このバージョンを使うには、Android の更新（API %1$d 以降）が必要です。</string>
@@ -245,7 +245,7 @@
     <string name="about_license_value">Apache-2.0</string>
     <string name="about_support">開発を支援</string>
     <string name="support_prompt_title">Vesqen の開発を支援</string>
-    <string name="support_prompt_body">Vesqen 1.x は無料で、広告もありません。役に立っていれば、Buy Me a Coffee で支援していただけます。支援は次の開発に使います。\n\n• 独自の USB 出力エンジン：公式の bit-perfect 経路がないスマートフォンでも、音声をそのまま USB DAC に送れるようにします。\n• より多くのスマートフォンと DAC への低レベルの対応：テスト用の機器を購入し、1 台ずつテストして修正します。\n\n支援は任意で、どの機能もロック解除されません。</string>
+    <string name="support_prompt_body">Vesqen 1.x は無料で、広告もありません。Vesqen がお役に立っている場合は、Buy Me a Coffee でご支援いただけます。ご支援は次の開発に充てます。\n\n• 独自の USB 出力エンジン：公式の bit-perfect 経路がないスマートフォンでも、音声をそのまま USB DAC に送れるようにします。\n• より多くのスマートフォンと DAC への低レベルの対応：テスト用の機器を購入し、1 台ずつテストして修正します。\n\nご支援は任意で、どの機能もロック解除されません。</string>
     <string name="support_prompt_support">支援する</string>
     <string name="support_prompt_later">後で</string>
     <string name="support_prompt_never">今後表示しない</string>
@@ -268,7 +268,7 @@
     <string name="no_search_results">一致する音楽がありません</string>
     <string name="no_search_results_body">別の曲名、アーティスト名、アルバム名で検索してください。</string>
     <string name="library_load_failed_body">もう一度スキャンしてください。ライブラリの内容は変わっていません。</string>
-    <string name="library_load_failed_playback_continues">もう一度スキャンしてください。いまの再生は続けられます。</string>
+    <string name="library_load_failed_playback_continues">もう一度スキャンしてください。現在の再生はそのまま続けられます。</string>
     <string name="library_change_save_failed">ライブラリの変更を保存できませんでした。既存の音楽とメタデータはそのままです。</string>
     <string name="output_status_label">出力ステータス</string>
     <string name="open_playback_chain">再生経路を開く</string>
@@ -499,7 +499,7 @@
         <item quantity="other">%1$d 件のイベント</item>
     </plurals>
     <plurals name="chain_diagnostic_sequence_warning">
-        <item quantity="other">イベントの連番に %1$d か所の飛びが見つかりました。イベントが失われたことの証明にはなりません。</item>
+        <item quantity="other">イベントの連番に %1$d か所の欠番が見つかりました。イベントが失われたことの証明にはなりません。</item>
     </plurals>
     <string name="chain_diagnostic_start">記録を開始</string>
     <string name="chain_diagnostic_restoring_action">復元中…</string>
@@ -828,7 +828,7 @@
     <string name="custom_track_order">カスタムの順番</string>
     <string name="drag_track_order">ドラッグして並べ替え</string>
     <string name="show_alphabet_index">A-Z インデックスを表示</string>
-    <string name="hide_alphabet_index">A-Z インデックスを隠す</string>
+    <string name="hide_alphabet_index">A-Z インデックスを非表示</string>
     <string name="jump_to_letter">文字へ移動</string>
     <string name="track_order_save_failed">この順番を保存できませんでした。もう一度お試しください。</string>
     <string name="chain_metric_route_bluetooth_connected_names">接続中の Bluetooth オーディオエンドポイント（選択中のルートではありません）</string>
@@ -844,15 +844,15 @@
     <plurals name="library_song_total">
         <item quantity="other">%1$d 曲</item>
     </plurals>
-    <string name="library_favorites_empty">プレーヤーでハートをタップすると、その曲がここに入ります。</string>
+    <string name="library_favorites_empty">プレーヤーでハートをタップすると、その曲がここに追加されます。</string>
     <string name="chain_current_playing">再生中</string>
     <string name="chain_segment_app">Vesqen の部分</string>
     <string name="chain_segment_system">システムの部分</string>
     <string name="chain_segment_waiting">データを待っています</string>
-    <string name="chain_segment_unchanged_lossless">音声は変えていません。ロスレスです。</string>
+    <string name="chain_segment_unchanged_lossless">音声は変更していません。ロスレスです。</string>
     <string name="chain_segment_unchanged_lossy">音声に追加の変更は加えていません。</string>
-    <string name="chain_segment_unchanged">音声は変えていません。</string>
-    <string name="chain_segment_modified">音声を変えています（%1$s）。</string>
+    <string name="chain_segment_unchanged">音声は変更していません。</string>
+    <string name="chain_segment_modified">音声を変更しています（%1$s）。</string>
     <string name="chain_segment_unknown">まだ判断できません（%1$s）。</string>
     <string name="chain_segment_reason_transition">曲の切り替えか出力の再起動の直後</string>
     <string name="chain_segment_reason_decoder">AAC デコーダーがサンプルレートやチャンネルを変えることがある</string>
@@ -870,7 +870,7 @@
     <string name="bluetooth_codec_permission_body">Vesqen は「付近のデバイス」権限を、Android が報告する Bluetooth コーデック情報の取得にのみ使用します。音楽の再生には、この権限は必要ありません。</string>
     <string name="bluetooth_ldac_adaptive_or_990">自動調整または 990 kbps</string>
     <string name="bluetooth_codec_unnamed">名前のないコーデック</string>
-    <string name="chain_segment_bluetooth_reported">Android が報告したコーデック：%1$s。コーデックによって、非可逆の場合と、可逆かどうか分からない場合があります。</string>
+    <string name="chain_segment_bluetooth_reported">Android が報告したコーデック：%1$s。コーデックによって、非可逆の場合と、可逆かどうか判別できない場合があります。</string>
     <string name="chain_segment_bluetooth_reconnect">ヘッドホンを接続し直すと、Android が報告するコーデックがここに表示されます。</string>
     <string name="chain_segment_bluetooth_nominally_lossless">仕様上はロスレスに対応していますが、電波状況が悪い場合は非可逆圧縮に切り替わります。現在の動作モードは Vesqen では確認できません。</string>
     <string name="chain_source_android_bluetooth_codec_report">Android の Bluetooth コーデック情報</string>
@@ -921,7 +921,7 @@
     </plurals>
     <string name="premium_status_trial_ended">無料トライアルは終了しました。</string>
     <string name="premium_status_unlocked">Pro 機能はロック解除済みです。</string>
-    <string name="premium_free_features">ライブラリ、再生、システム出力、経路はずっと無料です。</string>
+    <string name="premium_free_features">ライブラリ、再生、システム出力、経路は引き続き無料です。</string>
     <string name="premium_paid_features">現在の Pro 機能は厳格 USB 出力です。今後追加される Pro 機能も、一度購入すれば追加料金なしで使えます。</string>
     <string name="premium_terms">厳格 USB 出力で初めて再生したときから 7 日間、無料で試せます。その後は買い切りで利用できます。サブスクリプションではありません。</string>
     <string name="premium_terms_not_charging">バージョン 2.0 からは、7 日間の無料トライアル後、買い切りで利用できます。サブスクリプションではありません。</string>
@@ -944,7 +944,7 @@
     <string name="unmatched_records_review">確認</string>
     <string name="unmatched_records_later">後で</string>
     <string name="unmatched_records_title">対応付けられなかった記録</string>
-    <string name="unmatched_records_body">以下の記録には、ファイル名とサイズが同じ曲が複数あるため、Vesqen はどの曲の記録か判断できません。記録ごとに対応する曲を選ぶか、記録を破棄してください。音楽ファイルは変更されません。</string>
+    <string name="unmatched_records_body">以下の各記録には、ファイル名とサイズが同じ曲が複数該当するため、Vesqen はどの曲の記録か判断できません。記録ごとに対応する曲を選ぶか、記録を破棄してください。音楽ファイルは変更されません。</string>
     <string name="unmatched_record_favorite">お気に入り</string>
     <plurals name="unmatched_record_play_count">
         <item quantity="other">%1$d 回再生</item>
