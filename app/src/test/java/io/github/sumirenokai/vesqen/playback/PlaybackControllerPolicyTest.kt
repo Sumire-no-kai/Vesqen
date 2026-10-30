@@ -315,6 +315,24 @@ class PlaybackControllerPolicyTest {
     }
 
     @Test
+    fun `a cleared queue put back by undo is the same listen`() {
+        val gate = PlaybackStartGate()
+        gate.onMediaItemTransition(1, Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED, "a")
+        assertEquals(1L, gate.trackStarted(isPlaying = true, trackId = 1))
+
+        // Clear queue, then Undo with the same entries (#165).
+        gate.onMediaItemTransition(null, Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED)
+        gate.onMediaItemTransition(1, Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED, "a")
+        assertEquals("a", gate.countedOccurrence(currentTrackId = 1))
+        assertNull(gate.trackStarted(isPlaying = true, trackId = 1))
+
+        // A new queue after the clear, even of the same song, is a new listen.
+        gate.onMediaItemTransition(null, Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED)
+        gate.onMediaItemTransition(1, Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED, "b")
+        assertEquals(1L, gate.trackStarted(isPlaying = true, trackId = 1))
+    }
+
+    @Test
     fun `unknown occurrence identity cannot suppress a new same song listen`() {
         val gate = PlaybackStartGate()
         assertEquals(1L, gate.trackStarted(true, 1))

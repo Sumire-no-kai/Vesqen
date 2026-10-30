@@ -264,6 +264,7 @@ class PlaybackService : MediaSessionService() {
                 setWakeMode(C.WAKE_MODE_LOCAL)
                 pauseAtEndOfMediaItems = false
                 setShuffleOrder(PlayOrder(IntArray(0)))
+                applyKeptPlayModes(playbackStateStore)
             }
         player.addListener((application as VesqenApplication).deviceReportRuntime.playbackListener(player))
         player.addListener(playbackListener)

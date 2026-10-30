@@ -141,7 +141,10 @@ internal class PlaybackStateKeeper(
             )
         ) {
             PlaybackPersistenceDecision.SKIP -> Unit
-            PlaybackPersistenceDecision.CLEAR -> stateStore.clear()
+            // The player keeps its modes for the next queue, and the store keeps them for a new service.
+            PlaybackPersistenceDecision.CLEAR -> stateStore.clear(
+                PlaybackOrderSettings(player.shuffleModeEnabled, player.repeatMode.toPlaybackRepeatMode()),
+            )
             PlaybackPersistenceDecision.SAVE_QUEUE -> stateStore.save(
                 PersistedPlaybackState(
                     queueTrackIds = queueTrackIds,
@@ -208,6 +211,9 @@ internal class PlaybackStartGate {
     private var currentOccurrenceId: String? = null
 
     fun onMediaItemTransition(trackId: Long?, reason: Int, occurrenceId: String? = null) {
+        // No entry: the queue was emptied. Undo puts back the same occurrence, which is the same
+        // listen (#165); a new queue has new occurrences and resets the gate when it starts.
+        if (trackId == null && occurrenceId == null) return
         // Catalog refreshes preserve the queue occurrence token; an explicit queue replacement
         // allocates new tokens even for the same song. Unknown identity must not suppress a listen.
         // The token is unique to its queue entry, so the same token under another track ID is the

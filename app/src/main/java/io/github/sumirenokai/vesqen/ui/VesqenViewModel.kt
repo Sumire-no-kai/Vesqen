@@ -128,6 +128,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         libraryRefreshEpoch++
         cachedLibraryReader.invalidate()
         latestPlaybackHistory.clear()
+        playbackController?.discardClearedQueue()
         updateLibrary {
             it.copy(
                 tracks = emptyList(),
@@ -345,6 +346,8 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     fun moveQueueItem(fromIndex: Int, toIndex: Int) = playbackController?.moveQueueItem(fromIndex, toIndex)
 
     fun clearQueue() = playbackController?.clearQueue()
+
+    fun undoClearQueue() = playbackController?.undoClearQueue()
 
     fun retryPlayback() = playbackController?.retryPlayback()
 
