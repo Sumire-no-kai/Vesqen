@@ -22,11 +22,11 @@ import io.github.sumirenokai.vesqen.library.LibrarySourceKind
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
 import io.github.sumirenokai.vesqen.lyrics.LyricsImportResult
 import io.github.sumirenokai.vesqen.lyrics.LyricsStore
+import io.github.sumirenokai.vesqen.lyrics.readProviderLyrics
 import io.github.sumirenokai.vesqen.playback.PlaybackController
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryUpdate
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
-import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -68,6 +68,11 @@ data class VesqenUiState(
     val playback: PlaybackSnapshot = PlaybackSnapshot(),
     /** The result of the latest lyrics import, shown once (#169). */
     val lyricsImportNotice: LyricsImportNotice? = null,
+    /**
+     * The ID of the Undo offer after Clear queue (#165), kept here so an activity recreated meanwhile
+     * offers it again (#191 D2). It ends with Undo, a queue that starts, a catalog rebuild or its time.
+     */
+    val queueClearedOffer: Long? = null,
 )
 
 /** A lyrics import to finish after the system picker returns (#169). */
@@ -79,7 +84,8 @@ internal data class LyricsImportTarget(
     val generation: Long,
 )
 
-data class LyricsImportNotice(val id: Long, val result: LyricsImportResult)
+/** [trackId]: the track the lyrics were imported for, which need not be the one playing by now (#191 D5). */
+data class LyricsImportNotice(val id: Long, val trackId: Long, val result: LyricsImportResult)
 
 class VesqenViewModel(application: Application) : AndroidViewModel(application) {
     private val catalog: LibraryCatalog =
@@ -98,6 +104,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     private val lyricsStore = (application as VesqenApplication).lyricsStore
     private val lyricsResolver = (application as VesqenApplication).lyricsResolver
     private var lyricsImports = 0L
+    private var queueClearedOffers = 0L
 
     // Until the private catalog has been read once, an empty list means "not read yet", not "no
     // music": the first frames show the loading rows instead of flashing the empty state.
@@ -148,7 +155,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         libraryRefreshEpoch++
         cachedLibraryReader.invalidate()
         latestPlaybackHistory.clear()
-        playbackController?.discardClearedQueue()
+        discardClearedQueue()
         updateLibrary {
             it.copy(
                 tracks = emptyList(),
@@ -337,7 +344,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     internal fun importLyrics(target: LyricsImportTarget, source: Uri) {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { importLyricsFile(target, source) }
-            uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(++lyricsImports, result))
+            uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(++lyricsImports, target.trackId, result))
         }
     }
 
@@ -359,14 +366,10 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         return readLyricsImport(target, source)
     }
 
-    private fun readLyricsImport(target: LyricsImportTarget, source: Uri): LyricsImportResult = try {
-        getApplication<Application>().contentResolver.openInputStream(source)?.use { input ->
-            lyricsStore.import(target.trackId, input, target.generation)
-        } ?: LyricsImportResult.FAILED
-    } catch (_: IOException) {
-        LyricsImportResult.FAILED
-    } catch (_: SecurityException) {
-        LyricsImportResult.FAILED
+    private fun readLyricsImport(target: LyricsImportTarget, source: Uri): LyricsImportResult {
+        val contentResolver = getApplication<Application>().contentResolver
+        val bytes = readProviderLyrics { contentResolver.openInputStream(source) } ?: return LyricsImportResult.FAILED
+        return lyricsStore.import(target.trackId, bytes, target.generation)
     }
 
     internal fun lyricsImportGeneration(): Long = lyricsStore.generation()
@@ -436,9 +439,25 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     fun moveQueueItem(fromIndex: Int, toIndex: Int) = playbackController?.moveQueueItem(fromIndex, toIndex)
 
-    fun clearQueue() = playbackController?.clearQueue()
+    fun clearQueue() {
+        if (playbackController?.clearQueue() == true) uiState = uiState.copy(queueClearedOffer = ++queueClearedOffers)
+    }
 
-    fun undoClearQueue() = playbackController?.undoClearQueue()
+    fun undoClearQueue() {
+        uiState = uiState.copy(queueClearedOffer = null)
+        playbackController?.undoClearQueue()
+    }
+
+    /** The Undo notice of [offer] timed out or was dismissed. */
+    fun queueClearedOfferEnded(offer: Long) {
+        if (uiState.queueClearedOffer == offer) uiState = uiState.copy(queueClearedOffer = null)
+    }
+
+    /** The catalog's IDs changed (#165): the cleared queue names other songs now, so Undo goes with it. */
+    private fun discardClearedQueue() {
+        playbackController?.discardClearedQueue()
+        uiState = uiState.copy(queueClearedOffer = null)
+    }
 
     fun retryPlayback() = playbackController?.retryPlayback()
 
@@ -530,7 +549,13 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun playbackController(): PlaybackController = playbackController ?: PlaybackController(
         context = getApplication(),
-        onSnapshotChanged = { snapshot -> uiState = uiState.copy(playback = snapshot) },
+        onSnapshotChanged = { snapshot ->
+            uiState = uiState.copy(
+                playback = snapshot,
+                // A queue started meanwhile, here or from a media button, takes the cleared one's place.
+                queueClearedOffer = uiState.queueClearedOffer.takeUnless { snapshot.hasActiveTrack },
+            )
+        },
         outputVerificationLookup = (getApplication() as VesqenApplication)
             .outputVerificationRepository::match,
     ).also { controller ->

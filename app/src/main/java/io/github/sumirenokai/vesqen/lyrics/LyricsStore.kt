@@ -7,7 +7,6 @@ import java.io.FileInputStream
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.io.IOException
-import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,23 +74,21 @@ internal class LyricsStore(
     }
 
     /**
-     * Reads at most [MAX_LYRICS_TEXT_BYTES] from [input] and stores the lyrics for [trackId],
-     * replacing an earlier import (owner decision 4). A file that cannot be decoded or holds no
-     * lyrics is refused and nothing is stored.
+     * Stores the lyrics file [bytes] for [trackId] as UTF-8, replacing an earlier import (owner
+     * decision 4). A file that cannot be decoded or holds no lyrics is refused and nothing is stored.
+     * The stored UTF-8 must fit [MAX_LYRICS_TEXT_BYTES] too, since every reader refuses a larger
+     * file: Chinese or Japanese text in GBK, Big5, Shift_JIS or UTF-16 grows by up to half (#191 D12).
      */
-    fun import(trackId: Long, input: InputStream, expectedGeneration: Long): LyricsImportResult {
-        val bytes = try {
-            input.readAtMost(MAX_LYRICS_TEXT_BYTES + 1)
-        } catch (_: IOException) {
-            return LyricsImportResult.FAILED
-        }
+    fun import(trackId: Long, bytes: ByteArray, expectedGeneration: Long): LyricsImportResult {
         if (bytes.size > MAX_LYRICS_TEXT_BYTES) return LyricsImportResult.TOO_LARGE
         val text = decodeLyricsText(bytes) ?: return LyricsImportResult.UNREADABLE
         if (parseLyrics(text) == null) return LyricsImportResult.NO_LYRICS
+        val stored = text.toByteArray(Charsets.UTF_8)
+        if (stored.size > MAX_LYRICS_TEXT_BYTES) return LyricsImportResult.TOO_LARGE
         return synchronized(lock) {
             if (generation != expectedGeneration) return LyricsImportResult.TRACK_CHANGED
             try {
-                writeAtomically(fileFor(trackId)) { output -> output.write(text.toByteArray(Charsets.UTF_8)) }
+                writeAtomically(fileFor(trackId)) { output -> output.write(stored) }
             } catch (_: IOException) {
                 return LyricsImportResult.FAILED
             }

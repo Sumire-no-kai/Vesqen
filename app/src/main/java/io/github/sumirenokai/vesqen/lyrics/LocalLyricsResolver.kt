@@ -73,7 +73,11 @@ internal class LocalLyricsResolver(
 
     suspend fun load(track: AudioTrack): TrackLyrics = withContext(dispatcher) {
         val key = track.lyricsKey(store.importedLyrics.value.revision)
-        results[key] ?: resolve(track).also { results.put(key, it) }
+        results[key] ?: resolve(track).let { resolved ->
+            // A folder the provider could not list completely is asked again on the next load (#191 D13).
+            if (resolved.folderListed) results.put(key, resolved.lyrics)
+            resolved.lyrics
+        }
     }
 
     fun clearCache() {
@@ -92,21 +96,26 @@ internal class LocalLyricsResolver(
         forgottenListings.value++
     }
 
-    private fun resolve(track: AudioTrack): TrackLyrics {
+    private fun resolve(track: AudioTrack): ResolvedLyrics {
         val uri = track.contentUri.toUri()
         val inAddedFolder = DocumentsContract.isTreeUri(uri)
+        var folderListed = true
         val picked = pickLyrics { source ->
             when (source) {
                 LyricsSource.Imported -> readImported(track.id)
-                LyricsSource.SameNameFile -> if (inAddedFolder) readSameNameFile(uri, track.fileName) else SourceLyrics.Absent
+                LyricsSource.SameNameFile -> when {
+                    !inAddedFolder -> SourceLyrics.Absent
+                    else -> readSameNameFile(uri, track.fileName) ?: SourceLyrics.Absent.also { folderListed = false }
+                }
                 LyricsSource.Embedded -> readEmbedded(uri, track.fileSizeBytes)
             }
         }
-        return when (picked) {
+        val lyrics = when (picked) {
             is PickedLyrics.Found -> TrackLyrics.Found(picked.source, picked.lyrics)
             PickedLyrics.Absent -> TrackLyrics.None(folderHint = !inAddedFolder)
             PickedLyrics.Unreadable -> TrackLyrics.Unreadable
         }
+        return ResolvedLyrics(lyrics, folderListed)
     }
 
     private fun readImported(trackId: Long): SourceLyrics = try {
@@ -119,18 +128,19 @@ internal class LocalLyricsResolver(
      * Each provider call below treats any failure of the provider as "no same-name file", so a
      * misbehaving documents provider falls through to the embedded tags (owner decision 8) instead
      * of failing Now. With targetSdk 26+ DocumentsContract rethrows what the provider threw, and a
-     * provider that died answers with a NullPointerException.
+     * provider that died answers with a NullPointerException. Null when the folder could not be
+     * listed completely now, so the result is not kept.
      */
-    private fun readSameNameFile(trackUri: Uri, fileName: String): SourceLyrics {
+    private fun readSameNameFile(trackUri: Uri, fileName: String): SourceLyrics? {
         val parentId = parentDocumentId(trackUri) ?: return SourceLyrics.Absent
         // One listing serves every track of the folder.
         val folderUri = DocumentsContract.buildChildDocumentsUriUsingTree(trackUri, parentId)
         val folderKey = folderUri.toString()
-        val candidates = folderLyricsFiles[folderKey] ?: (listLyricsFiles(folderUri) ?: return SourceLyrics.Absent)
+        val candidates = folderLyricsFiles[folderKey] ?: (listLyricsFiles(folderUri) ?: return null)
             .also { folderLyricsFiles.put(folderKey, it) }
         val documentId = sameNameLyricsDocumentId(fileName, candidates) ?: return SourceLyrics.Absent
-        val bytes = readDocument(DocumentsContract.buildDocumentUriUsingTree(trackUri, documentId))
-            ?: return SourceLyrics.Absent
+        val documentUri = DocumentsContract.buildDocumentUriUsingTree(trackUri, documentId)
+        val bytes = readProviderLyrics { contentResolver.openInputStream(documentUri) } ?: return SourceLyrics.Absent
         return if (bytes.size > MAX_LYRICS_TEXT_BYTES) SourceLyrics.Unreadable else readLyricsFile(bytes)
     }
 
@@ -143,7 +153,11 @@ internal class LocalLyricsResolver(
         null
     }
 
-    /** The folder's `.lrc` files, or null when the provider cannot list it now. */
+    /**
+     * The folder's `.lrc` files, or null when the provider cannot list it completely now: a cloud
+     * provider can answer with a partial list while it loads, or with an error, as TreeAudioScanner
+     * also treats them.
+     */
     private fun listLyricsFiles(folderUri: Uri): List<LyricsFileCandidate>? = try {
         contentResolver.query(
             folderUri,
@@ -152,8 +166,10 @@ internal class LocalLyricsResolver(
             null,
             null,
         )?.use { cursor ->
-            // A cloud provider can answer with a partial list while it loads; it is not kept.
-            if (cursor.extras.getBoolean(DocumentsContract.EXTRA_LOADING, false)) return null
+            val extras = cursor.extras
+            if (extras.getBoolean(DocumentsContract.EXTRA_LOADING, false) || extras.containsKey(DocumentsContract.EXTRA_ERROR)) {
+                return null
+            }
             buildList {
                 while (cursor.moveToNext()) {
                     val name = cursor.getString(1) ?: continue
@@ -161,15 +177,6 @@ internal class LocalLyricsResolver(
                 }
             }
         }
-    } catch (_: RuntimeException) {
-        null
-    }
-
-    /** Up to one byte past the size limit, so an oversized file is recognised; null when it cannot be opened. */
-    private fun readDocument(documentUri: Uri): ByteArray? = try {
-        contentResolver.openInputStream(documentUri)?.use { input -> input.readAtMost(MAX_LYRICS_TEXT_BYTES + 1) }
-    } catch (_: IOException) {
-        null
     } catch (_: RuntimeException) {
         null
     }
@@ -203,6 +210,8 @@ internal class LocalLyricsResolver(
     }
 }
 
+private class ResolvedLyrics(val lyrics: TrackLyrics, val folderListed: Boolean)
+
 internal class LyricsFileCandidate(val documentId: String, val displayName: String)
 
 /**
@@ -217,6 +226,20 @@ internal fun sameNameLyricsDocumentId(audioFileName: String, candidates: List<Ly
         .filter { it.displayName.equals(wanted, ignoreCase = true) }
         .minByOrNull(LyricsFileCandidate::displayName)
         ?.documentId
+}
+
+/**
+ * A lyrics file from a provider, up to one byte past the size limit so an oversized file is
+ * recognised; null when it cannot be read. Any failure of the provider is caught here: with
+ * targetSdk 26+ ContentResolver rethrows what the provider threw, such as IllegalStateException,
+ * and a provider that died answers with a NullPointerException (#191 D3).
+ */
+internal fun readProviderLyrics(open: () -> InputStream?): ByteArray? = try {
+    open()?.use { input -> input.readAtMost(MAX_LYRICS_TEXT_BYTES + 1) }
+} catch (_: IOException) {
+    null
+} catch (_: RuntimeException) {
+    null
 }
 
 internal fun InputStream.readAtMost(limit: Int): ByteArray {

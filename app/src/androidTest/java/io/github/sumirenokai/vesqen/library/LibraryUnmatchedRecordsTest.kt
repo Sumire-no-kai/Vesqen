@@ -109,14 +109,14 @@ class LibraryUnmatchedRecordsTest {
                 val b = store.track("Tide")
                 store.setFavorite(a.id, true)
                 store.setFavorite(b.id, true)
-                lyrics.import(b.id, "[00:01.00]Tide's own".byteInputStream(), lyrics.generation())
+                lyrics.import(b.id, "[00:01.00]Tide's own".toByteArray(), lyrics.generation())
                 store.scan(aira.at(3), tide.at(4))
                 store.scan(aira.at(3), tide.at(4))
                 val listed = store.readTracks(listOf(LibrarySourceId.DEVICE)).filterNot { it.id in setOf(a.id, b.id) }
                 val newAira = listed.single { it.title == "Aira" }
                 val newTide = listed.single { it.title == "Tide" }
-                lyrics.import(newAira.id, "[00:01.00]Aira, imported on the new row".byteInputStream(), lyrics.generation())
-                lyrics.import(newTide.id, "[00:01.00]Tide, imported on the new row".byteInputStream(), lyrics.generation())
+                lyrics.import(newAira.id, "[00:01.00]Aira, imported on the new row".toByteArray(), lyrics.generation())
+                lyrics.import(newTide.id, "[00:01.00]Tide, imported on the new row".toByteArray(), lyrics.generation())
                 assertTrue(store.readTrackIdsForSweep().trackIds.containsAll(listOf(a.id, b.id, newAira.id, newTide.id)))
 
                 assertTrue(store.assignUnmatchedRecord(a.id, newAira.id))

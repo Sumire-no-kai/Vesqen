@@ -377,24 +377,27 @@ class PlaybackController(
         }
     }
 
-    /** Empties the queue. Until another queue starts, [undoClearQueue] can put it back (#165). */
-    fun clearQueue() {
-        controller?.let { player ->
-            clearedQueue = player.takeIf { it.mediaItemCount > 0 }?.let(::clearedQueueOf)
-            player.stop()
-            player.clearMediaItems()
-            tracksById.clear()
-            currentProblem = null
-            queueCache = PlaybackQueueCache()
-            updateSnapshot(
-                PlaybackSnapshot(
-                    isControllerReady = true,
-                    canSetUsbOutputMode = player.isSessionCommandAvailable(usbOutputCommand),
-                    usbOutputStatus = usbOutputStatus,
-                    outputVerification = outputVerificationLookup(usbOutputStatus),
-                ),
-            )
-        }
+    /**
+     * Empties the queue. Until another queue starts, [undoClearQueue] can put it back (#165). Returns
+     * whether there was a queue to put back.
+     */
+    fun clearQueue(): Boolean {
+        val player = controller ?: return false
+        clearedQueue = player.takeIf { it.mediaItemCount > 0 }?.let(::clearedQueueOf)
+        player.stop()
+        player.clearMediaItems()
+        tracksById.clear()
+        currentProblem = null
+        queueCache = PlaybackQueueCache()
+        updateSnapshot(
+            PlaybackSnapshot(
+                isControllerReady = true,
+                canSetUsbOutputMode = player.isSessionCommandAvailable(usbOutputCommand),
+                usbOutputStatus = usbOutputStatus,
+                outputVerification = outputVerificationLookup(usbOutputStatus),
+            ),
+        )
+        return clearedQueue != null
     }
 
     /**
