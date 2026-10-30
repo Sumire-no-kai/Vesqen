@@ -70,7 +70,10 @@ class EmbeddedLyricsExtractorTest {
             writeSynchsafeInt(frame4("TIT2", byteArrayOf(3) + "Title".toByteArray()).size)
         }.toByteArray()
         assertEquals(syncedLyrics, extract(id3Tag(4, frame4("TIT2", byteArrayOf(3) + "Title".toByteArray()), flags = 0x10) + footer + flac))
-        // Lyrics in the ID3 tag are used as they are; the FLAC stream after it is not read.
+        // An empty or undecodable USLT does not hide the FLAC comments.
+        assertEquals(syncedLyrics, extract(id3(3, frame3("USLT", uslt(3, ByteArray(0)))) + flac))
+        assertEquals(syncedLyrics, extract(id3(3, frame3("USLT", uslt(1, LRC.toByteArray(Charsets.UTF_16LE)))) + flac))
+        // Readable lyrics in the ID3 tag are used as they are; the FLAC stream after it is not read.
         assertEquals(readable("From the ID3 tag"), extract(id3(3, frame3("USLT", uslt(3, "From the ID3 tag".toByteArray()))) + flac))
     }
 

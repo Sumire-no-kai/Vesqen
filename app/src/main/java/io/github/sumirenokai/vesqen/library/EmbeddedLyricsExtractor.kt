@@ -56,8 +56,8 @@ private class EmbeddedLyricsCandidates {
 
     val done: Boolean get() = synced != null || offered >= MAX_EMBEDDED_LYRICS_CANDIDATES
 
-    /** No lyrics tag was found at all, readable or not. */
-    val isEmpty: Boolean get() = offered == 0
+    /** Some tag gave lyrics that can be shown. */
+    val hasReadable: Boolean get() = synced != null || plain != null
 
     /** [text] is null when the tag exists but cannot be decoded. */
     fun offer(text: String?) {
@@ -78,8 +78,9 @@ private class EmbeddedLyricsCandidates {
 }
 
 /**
- * An ID3 tag and, when it holds no lyrics, the FLAC stream after it: some taggers put an ID3 tag
- * before "fLaC", and Media3 plays such files. The tag is skipped with its v2.4 footer, if any.
+ * An ID3 tag and, unless it gave readable lyrics, the FLAC stream after it: some taggers put an ID3
+ * tag before "fLaC", and Media3 plays such files. An empty or undecodable USLT does not hide the
+ * Vorbis comments. The tag is skipped with its v2.4 footer, if any.
  */
 private fun collectLeadingId3Lyrics(input: BufferedInputStream, candidates: EmbeddedLyricsCandidates) {
     input.mark(ID3_HEADER_BYTES)
@@ -89,7 +90,7 @@ private fun collectLeadingId3Lyrics(input: BufferedInputStream, candidates: Embe
     val hasFooter = (header[3].toInt() and 0xff) == 4 && (header[5].toInt() and ID3_V24_FOOTER_FLAG) != 0
     val tag = BoundedArtworkInputStream(input, ID3_HEADER_BYTES + tagSize.toLong() + if (hasFooter) ID3_HEADER_BYTES else 0)
     collectId3Lyrics(tag, candidates)
-    if (!candidates.isEmpty || !tag.skipRemaining()) return
+    if (candidates.hasReadable || !tag.skipRemaining()) return
     input.mark(FLAC_MAGIC_BYTES)
     val magic = input.readArtworkExact(FLAC_MAGIC_BYTES) ?: return
     input.reset()
