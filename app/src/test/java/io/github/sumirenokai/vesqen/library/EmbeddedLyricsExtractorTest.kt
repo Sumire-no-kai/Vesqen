@@ -4,6 +4,7 @@ import io.github.sumirenokai.vesqen.lyrics.LyricLine
 import io.github.sumirenokai.vesqen.lyrics.Lyrics
 import io.github.sumirenokai.vesqen.lyrics.MAX_LYRICS_TEXT_BYTES
 import io.github.sumirenokai.vesqen.lyrics.SourceLyrics
+import io.github.sumirenokai.vesqen.lyrics.UnreadableReason
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.io.ByteArrayInputStream
@@ -128,7 +129,7 @@ class EmbeddedLyricsExtractorTest {
     fun mp4LyricsAtomIsReadAsUtf8OrUtf16() {
         assertEquals(syncedLyrics, extract(mp4(lyricsData(type = 1, LRC.toByteArray(Charsets.UTF_8)))))
         assertEquals(syncedLyrics, extract(mp4(lyricsData(type = 2, LRC.toByteArray(Charsets.UTF_16BE)))))
-        assertEquals(SourceLyrics.Unreadable, extract(mp4(lyricsData(type = 13, LRC.toByteArray()))))
+        assertEquals(SourceLyrics.Unreadable(UnreadableReason.Encoding), extract(mp4(lyricsData(type = 13, LRC.toByteArray()))))
         val audioBeforeMetadata = mp4(lyricsData(type = 1, LRC.toByteArray()), beforeMoov = atom("mdat", ByteArray(5_000)))
         assertEquals(syncedLyrics, extract(audioBeforeMetadata))
     }
@@ -137,12 +138,12 @@ class EmbeddedLyricsExtractorTest {
     fun oversizedOrUndecodableLyricsAreUnreadable() {
         val oversized = "a".repeat(MAX_LYRICS_TEXT_BYTES + 10).toByteArray()
 
-        assertEquals(SourceLyrics.Unreadable, extract(id3(3, frame3("USLT", uslt(3, oversized)))))
-        assertEquals(SourceLyrics.Unreadable, extract("fLaC".toByteArray() + flacBlock(4, vorbisComments("LYRICS=" + String(oversized)), last = true)))
-        assertEquals(SourceLyrics.Unreadable, extract(mp4(lyricsData(type = 1, oversized))))
+        assertEquals(SourceLyrics.Unreadable(UnreadableReason.Encoding), extract(id3(3, frame3("USLT", uslt(3, oversized)))))
+        assertEquals(SourceLyrics.Unreadable(UnreadableReason.Encoding), extract("fLaC".toByteArray() + flacBlock(4, vorbisComments("LYRICS=" + String(oversized)), last = true)))
+        assertEquals(SourceLyrics.Unreadable(UnreadableReason.Encoding), extract(mp4(lyricsData(type = 1, oversized))))
         // Encoding 1 without its byte order mark, and a compressed frame.
-        assertEquals(SourceLyrics.Unreadable, extract(id3(3, frame3("USLT", uslt(1, LRC.toByteArray(Charsets.UTF_16LE), descriptor = ByteArray(0))))))
-        assertEquals(SourceLyrics.Unreadable, extract(id3(3, frame3("USLT", uslt(3, LRC.toByteArray()), formatFlags = 0x80))))
+        assertEquals(SourceLyrics.Unreadable(UnreadableReason.Encoding), extract(id3(3, frame3("USLT", uslt(1, LRC.toByteArray(Charsets.UTF_16LE), descriptor = ByteArray(0))))))
+        assertEquals(SourceLyrics.Unreadable(UnreadableReason.Encoding), extract(id3(3, frame3("USLT", uslt(3, LRC.toByteArray()), formatFlags = 0x80))))
         // A readable frame after an unreadable one still wins.
         assertEquals(
             syncedLyrics,

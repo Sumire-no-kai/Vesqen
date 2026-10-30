@@ -320,7 +320,7 @@ private fun lyricsSourceLabel(lyrics: TrackLyrics): String = stringResource(
             LyricsSource.Embedded -> R.string.lyrics_source_embedded
         }
         is TrackLyrics.None -> R.string.lyrics_source_none
-        TrackLyrics.Unreadable -> R.string.lyrics_source_unreadable
+        is TrackLyrics.Unreadable -> R.string.lyrics_source_unreadable
     },
 )
 

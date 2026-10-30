@@ -968,6 +968,8 @@
     <string name="lyrics_folder_hint">同名 .lrc 檔案僅在 Vesqen 中加入的音樂資料夾裡尋找。</string>
     <string name="lyrics_unreadable">無法讀取這份歌詞</string>
     <string name="lyrics_unreadable_body">無法辨識這份歌詞的文字編碼。請將歌詞另存為 UTF-8 後匯入。</string>
+    <string name="lyrics_too_large_body">此歌詞檔案過大，無法讀取。</string>
+    <string name="lyrics_read_failed_body">歌詞檔案未能讀取，請稍後重試。</string>
     <string name="lyrics_play_from_line">跳到這一行</string>
     <string name="lyrics_imported">歌詞已匯入</string>
     <string name="lyrics_import_unreadable">無法讀取此檔案。請另存為 UTF-8 後重新匯入。</string>

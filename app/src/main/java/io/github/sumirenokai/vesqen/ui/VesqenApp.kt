@@ -1678,14 +1678,19 @@ private fun VesqenDestinationFrame(
                 )
             }
         }
-        // Where the mini player is, or was before Clear queue: the queue it played is the one Undo puts
+        // Just above the mini player while it shows, so a notice never takes its controls (#191 C1),
+        // and in its place once Clear queue has removed it: the queue it played is the one Undo puts
         // back. Now with a track shows no lyrics snackbar (see VesqenAppContent).
         SnackbarHost(
             hostState = noticeHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
-                .padding(start = VesqenSpacing.md, end = VesqenSpacing.md, bottom = miniPlayerBottomPadding),
+                .padding(
+                    start = VesqenSpacing.md,
+                    end = VesqenSpacing.md,
+                    bottom = miniPlayerBottomPadding + miniPlayerContentClearance,
+                ),
         ) { data ->
             // Only the cleared-queue notice has an action, Undo.
             if (data.visuals.actionLabel != null) {

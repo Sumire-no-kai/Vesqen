@@ -70,7 +70,12 @@ private fun readLegacyCjk(bytes: ByteArray): LegacyCjkReading {
     }
     val best = readings.maxByOrNull { it.count.share } ?: return LegacyCjkReading.None
     if (best.count.counted < MIN_LEGACY_CHARACTERS || best.count.share < MIN_LEGACY_SHARE) {
-        return LegacyCjkReading.None
+        // Mostly common characters, yet too few or too mixed to name the encoding: still East Asian
+        // text, which a Western reading would turn into mojibake (#191 B1). Western text that decodes
+        // at all reads as rare characters, or as a few among many Latin letters: in all-caps
+        // "CORAÇÃO", "ÇÃ" is one common GB18030 hanzi.
+        val eastAsian = best.count.share >= MIN_EAST_ASIAN_SHARE && best.count.counted > best.text.asciiLetters()
+        return if (eastAsian) LegacyCjkReading.Ambiguous else LegacyCjkReading.None
     }
     val runnerUpShare = readings.filter { it !== best }.maxOfOrNull { it.count.share } ?: 0.0
     return if (best.encoding.shown && best.count.share - runnerUpShare >= MIN_LEGACY_MARGIN) {
@@ -81,6 +86,8 @@ private fun readLegacyCjk(bytes: ByteArray): LegacyCjkReading {
 }
 
 private class LegacyReading(val encoding: LegacyCjkEncoding, val text: String, val count: CharacterCount)
+
+private fun String.asciiLetters(): Int = count { it in 'a'..'z' || it in 'A'..'Z' }
 
 /**
  * Non-ASCII characters of a byte sequence read in one encoding, and how many of them fall in that
@@ -262,6 +269,7 @@ internal const val MAX_LYRICS_TEXT_BYTES = 512 * 1024
 private const val MIN_LEGACY_CHARACTERS = 6
 private const val MIN_LEGACY_SHARE = 0.8
 private const val MIN_LEGACY_MARGIN = 0.2
+private const val MIN_EAST_ASIAN_SHARE = 0.5
 private const val MAX_STRAY_CONTROLS = 2
 
 /** EUC-JP competes only when at least a tenth of its characters are kana. */

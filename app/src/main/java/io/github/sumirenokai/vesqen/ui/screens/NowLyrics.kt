@@ -56,6 +56,7 @@ import io.github.sumirenokai.vesqen.lyrics.LyricLine
 import io.github.sumirenokai.vesqen.lyrics.Lyrics
 import io.github.sumirenokai.vesqen.lyrics.LyricsTrackKey
 import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
+import io.github.sumirenokai.vesqen.lyrics.UnreadableReason
 import io.github.sumirenokai.vesqen.lyrics.lineIndexAt
 import io.github.sumirenokai.vesqen.lyrics.lyricsKey
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
@@ -132,9 +133,15 @@ internal fun NowLyricsPane(
                 body = if (lyrics.folderHint) stringResource(R.string.lyrics_folder_hint) else null,
                 onImportLyrics = onImportLyrics,
             )
-            TrackLyrics.Unreadable -> LyricsMessage(
+            is TrackLyrics.Unreadable -> LyricsMessage(
                 title = stringResource(R.string.lyrics_unreadable),
-                body = stringResource(R.string.lyrics_unreadable_body),
+                body = stringResource(
+                    when (lyrics.reason) {
+                        UnreadableReason.Encoding -> R.string.lyrics_unreadable_body
+                        UnreadableReason.TooLarge -> R.string.lyrics_too_large_body
+                        UnreadableReason.ReadFailed -> R.string.lyrics_read_failed_body
+                    },
+                ),
                 onImportLyrics = onImportLyrics,
             )
         }

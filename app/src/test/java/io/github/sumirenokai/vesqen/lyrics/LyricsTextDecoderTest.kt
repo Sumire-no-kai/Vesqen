@@ -108,6 +108,28 @@ class LyricsTextDecoderTest {
         assertEquals("a\u0081b", decodeLatinLabelledLyricsText(byteArrayOf(0x61, 0x81.toByte(), 0x62)))
     }
 
+    // #191 B1: an ID3 frame labelled ISO-8859-1 that holds GBK traditional Chinese, or only a few
+    // hanzi, has no clear encoding but is plainly East Asian. It is unreadable, never mojibake.
+    @Test
+    fun latinLabelledEastAsianTextWithoutAClearEncodingIsUnreadable() {
+        val gbk = Charset.forName("GBK")
+        assertNull(decodeLatinLabelledLyricsText(GBK_TRADITIONAL.toByteArray(gbk)))
+        assertNull(decodeLatinLabelledLyricsText("纯音乐".toByteArray(gbk)))
+        assertNull(decodeLatinLabelledLyricsText("[00:01.00]纯音乐".toByteArray(gbk)))
+        // A few English words do not make it Western.
+        assertNull(decodeLatinLabelledLyricsText("[00:01.00]Baby 還記得那年的夏天".toByteArray(gbk)))
+        assertNull(decodeLyricsText(GBK_TRADITIONAL.toByteArray(gbk)))
+    }
+
+    // #191 B1, the other direction: Western lyrics labelled ISO-8859-1 still read as Western.
+    @Test
+    fun latinLabelledWesternTextStillReadsAsWestern() {
+        val windows1252 = Charset.forName("windows-1252")
+        WESTERN_SAMPLES.forEach { sample ->
+            assertEquals(sample, decodeLatinLabelledLyricsText(sample.toByteArray(windows1252)))
+        }
+    }
+
     @Test
     fun markedUtf16NeedsItsByteOrderMark() {
         assertEquals("歌", decodeMarkedUtf16LyricsText(byteArrayOf(0xFE.toByte(), 0xFF.toByte(), 0x6B, 0x4C)))
@@ -124,6 +146,24 @@ class LyricsTextDecoderTest {
 
     private companion object {
         // Sample lines written for these tests.
+        // Traditional Chinese as mainland taggers stored it: GBK reads it, with many hanzi outside the
+        // common block (們, 過, 還, 記, 說).
+        const val GBK_TRADITIONAL = "[00:01.00]我們一起走過的路\n[00:05.00]還記得那年的夏天\n" +
+            "[00:09.00]說好了不再回頭"
+        // Sample lines written for these tests: German, French, Spanish, Portuguese, Danish, Italian.
+        val WESTERN_SAMPLES = listOf(
+            "[00:01.00]Über die Brücke gehen wir langsam\n[00:05.00]Die Straßen sind leer, der Fluss ist still\n" +
+                "[00:09.00]Morgen früh fährt der Zug nach Süden",
+            "[00:01.00]Le soleil se lève sur la forêt\n[00:05.00]Nous marchons près de la rivière\n" +
+                "[00:09.00]Où est passé l'été ?",
+            "[00:01.00]El corazón late más fuerte\n[00:05.00]Cuando la noche llega a la ciudad\n" +
+                "[00:09.00]Mañana será otro día",
+            "[00:01.00]Meu coração não esquece\n[00:05.00]A canção que você cantou",
+            "CORAÇÃO",
+            "AÇÃO, CANÇÃO E CORAÇÃO",
+            "[00:01.00]Søren går på stranden\n[00:05.00]Æblerne er røde i år",
+            "[00:01.00]Perché la città è così bella\n[00:05.00]Più forte del vento",
+        )
         const val SIMPLIFIED = "[00:01.00]晚风吹过安静的街道\n[00:05.00]我们沿着河岸慢慢走\n" +
             "[00:09.00]灯光落在水面上，像一首没唱完的歌\n[00:13.00]明天还会再见面吗？"
         const val TRADITIONAL = "[00:01.00]晚風吹過安靜的街道\n[00:05.00]我們沿著河岸慢慢走\n" +

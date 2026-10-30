@@ -185,6 +185,7 @@ import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.ui.screens.NowLyricsState
 import io.github.sumirenokai.vesqen.lyrics.LyricsImportResult
 import io.github.sumirenokai.vesqen.ui.LyricsImportNotice
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import kotlin.math.abs
 import kotlin.math.min
@@ -3900,9 +3901,8 @@ class VesqenAppTest {
         uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(1, 1, LyricsImportResult.NO_LYRICS))
         composeRule.onNodeWithTag("vesqen.lyrics-notice").assertIsDisplayed()
         // A stopped clock keeps the notice well inside its 4 s, so only opening Now can remove it.
-        // The notice sits over the mini-player, so Now opens through its click action, as with TalkBack.
         composeRule.mainClock.autoAdvance = false
-        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
         composeRule.mainClock.advanceTimeBy(1_000)
         composeRule.mainClock.autoAdvance = true
 
@@ -3910,6 +3910,27 @@ class VesqenAppTest {
         composeRule.onAllNodesWithTag("vesqen.lyrics-notice").assertCountEquals(0)
         composeRule.onAllNodesWithTag("vesqen.lyrics-import-result").assertCountEquals(0)
         assertFocusedNowControlsAreFullyVisible()
+    }
+
+    // #191 C1: while a song plays, the notice sits above the mini-player, whose controls stay usable.
+    @Test
+    fun a_lyrics_notice_in_the_library_leaves_the_mini_player_uncovered() {
+        var uiState by mutableStateOf(grantedState(tracks = sampleTracks, playback = pausedLyricsPlayback()))
+        var playPauses = 0
+        render(
+            state = uiState,
+            stateProvider = { uiState },
+            onPlayPause = { playPauses++ },
+            onLyricsImportNoticeShown = { id -> if (uiState.lyricsImportNotice?.id == id) uiState = uiState.copy(lyricsImportNotice = null) },
+        )
+
+        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(1, 1, LyricsImportResult.IMPORTED))
+        val notice = composeRule.onNodeWithTag("vesqen.lyrics-notice").assertIsDisplayed().getBoundsInRoot()
+        val miniPlayer = composeRule.onNodeWithTag("vesqen.mini-player").assertIsDisplayed().getBoundsInRoot()
+        assertTrue("The notice $notice overlaps the mini-player $miniPlayer", notice.bottom <= miniPlayer.top)
+        composeRule.onNodeWithTag("vesqen.mini-player.play-pause").performClick()
+        assertEquals(1, playPauses)
+        composeRule.onNodeWithTag("vesqen.lyrics-notice").assertIsDisplayed()
     }
 
     // #191 D5: after process death Now comes back before the player does; the result waits until the
