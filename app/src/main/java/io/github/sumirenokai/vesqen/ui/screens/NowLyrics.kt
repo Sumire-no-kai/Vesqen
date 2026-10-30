@@ -150,15 +150,19 @@ private fun SyncedLyrics(
     val currentIndex = rememberCurrentLyricLine(lyrics, positionMs, isPlaying)
     val listState = rememberLazyListState()
     val touchExploration = rememberTouchExplorationEnabled()
-    val follow = remember { FollowedPosition() }
     // Any move of the list that following did not make is the listener's: a drag, a fling, or a
     // scroll by Switch Access, Voice Access or another accessibility service. Each one restarts
-    // the pause, so it runs from the end of the scrolling.
+    // the pause, so it runs from the end of the scrolling. Following keeps its own state in snapshot
+    // state and the check reads it together with the list's position, so a position read while
+    // following scrolled is never compared with where following ended.
+    var following by remember { mutableStateOf(false) }
+    var followedPosition by remember { mutableStateOf(0 to 0) }
     var listenerScrolls by remember { mutableIntStateOf(0) }
     LaunchedEffect(listState) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }.collect { position ->
-            if (!follow.scrolling && position != follow.position) listenerScrolls++
-        }
+        snapshotFlow {
+            val position = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+            position.takeUnless { following || it == followedPosition }
+        }.collect { moved -> if (moved != null) listenerScrolls++ }
     }
     var followPaused by remember { mutableStateOf(false) }
     LaunchedEffect(listenerScrolls) {
@@ -172,13 +176,13 @@ private fun SyncedLyrics(
     // TalkBack users move through the lines themselves; following would pull the focus away.
     LaunchedEffect(lyrics, currentIndex, touchExploration, followPaused) {
         if (touchExploration || followPaused) return@LaunchedEffect
-        follow.scrolling = true
+        following = true
         try {
             // Item 0 is the leading spacer that lets the first line reach the middle.
             listState.centerItem(currentIndex.coerceAtLeast(0) + 1, animate = positioned && !motionPolicy.reduceMotion)
         } finally {
-            follow.scrolling = false
-            follow.position = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+            followedPosition = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+            following = false
         }
         positioned = true
     }
@@ -202,12 +206,6 @@ private fun SyncedLyrics(
             item(key = "end") { Spacer(Modifier.height(edge)) }
         }
     }
-}
-
-/** Where following last left the list, and whether it is scrolling it now. */
-private class FollowedPosition {
-    var scrolling = false
-    var position = 0 to 0
 }
 
 /**
