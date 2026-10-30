@@ -229,7 +229,7 @@ class CrashReportTest {
         withTimeout(5_000) { newer.due.first { it } }
     }
 
-    @Test fun `No thanks deletes the crash records and a sent report deletes only its own`() = runBlocking<Unit> {
+    @Test fun `Do not send deletes the crash records and a sent report deletes only its own`() = runBlocking<Unit> {
         val directory = temporary.newFolder()
         val store = CrashReportStore(directory)
         store.write(record(1_000))
