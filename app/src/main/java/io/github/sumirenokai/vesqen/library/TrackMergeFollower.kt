@@ -6,26 +6,26 @@ package io.github.sumirenokai.vesqen.library
  * the #164 folder reattachment and the legacy MediaStore re-key. The survivor keeps its own data;
  * [from]'s moves over only when [into] has none (owner decision 7).
  *
- * The copy is made inside the merging transaction, before it commits, so a crash between the
+ * [into]'s copy is made inside the merging transaction, before it commits, so a crash between the
  * commit and the clean-up never loses data on the row the user keeps.
  */
 internal interface TrackMergeFollower {
-    /** True when it copied [from]'s data to [into]. */
-    fun copyForMerge(from: Long, into: Long): Boolean
+    /** Inside the merging transaction, as the rows merge. */
+    fun prepareMerge(from: Long, into: Long)
 
     /** The merge committed: [from] no longer exists. */
-    fun mergeCommitted(from: Long)
+    fun mergeCommitted(from: Long, into: Long)
 
-    /** The merge rolled back: undoes a copy for which [copyForMerge] returned true. */
-    fun mergeRolledBack(into: Long)
+    /** The merge rolled back: undoes what [prepareMerge] did. */
+    fun mergeRolledBack(from: Long, into: Long)
 
     companion object {
         val None: TrackMergeFollower = object : TrackMergeFollower {
-            override fun copyForMerge(from: Long, into: Long): Boolean = false
+            override fun prepareMerge(from: Long, into: Long) = Unit
 
-            override fun mergeCommitted(from: Long) = Unit
+            override fun mergeCommitted(from: Long, into: Long) = Unit
 
-            override fun mergeRolledBack(into: Long) = Unit
+            override fun mergeRolledBack(from: Long, into: Long) = Unit
         }
     }
 }

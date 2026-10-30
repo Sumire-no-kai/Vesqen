@@ -97,46 +97,38 @@ internal class LocalLyricsResolver(
         SourceLyrics.Unreadable
     }
 
+    /**
+     * Each provider call below treats any failure of the provider as "no same-name file", so a
+     * misbehaving documents provider falls through to the embedded tags (owner decision 8) instead
+     * of failing Now. With targetSdk 26+ DocumentsContract rethrows what the provider threw, and a
+     * provider that died answers with a NullPointerException.
+     */
     private fun readSameNameFile(trackUri: Uri, fileName: String): SourceLyrics {
         val parentId = parentDocumentId(trackUri) ?: return SourceLyrics.Absent
-        val folderKey = "$trackUri\n$parentId"
-        val candidates = folderLyricsFiles[folderKey] ?: (listLyricsFiles(trackUri, parentId) ?: return SourceLyrics.Absent)
+        // One listing serves every track of the folder.
+        val folderUri = DocumentsContract.buildChildDocumentsUriUsingTree(trackUri, parentId)
+        val folderKey = folderUri.toString()
+        val candidates = folderLyricsFiles[folderKey] ?: (listLyricsFiles(folderUri) ?: return SourceLyrics.Absent)
             .also { folderLyricsFiles.put(folderKey, it) }
         val documentId = sameNameLyricsDocumentId(fileName, candidates) ?: return SourceLyrics.Absent
-        val documentUri = DocumentsContract.buildDocumentUriUsingTree(trackUri, documentId)
-        return try {
-            contentResolver.openInputStream(documentUri)?.use { input ->
-                val bytes = input.readAtMost(MAX_LYRICS_TEXT_BYTES + 1)
-                if (bytes.size > MAX_LYRICS_TEXT_BYTES) SourceLyrics.Unreadable else readLyricsFile(bytes)
-            } ?: SourceLyrics.Absent
-        } catch (_: IOException) {
-            SourceLyrics.Absent
-        } catch (_: SecurityException) {
-            SourceLyrics.Absent
-        }
+        val bytes = readDocument(DocumentsContract.buildDocumentUriUsingTree(trackUri, documentId))
+            ?: return SourceLyrics.Absent
+        return if (bytes.size > MAX_LYRICS_TEXT_BYTES) SourceLyrics.Unreadable else readLyricsFile(bytes)
     }
 
-    /**
-     * The folder holding a track inside an added tree. Document IDs are opaque, so the provider is
-     * asked; one that cannot say (many third-party providers) means no same-name file. With
-     * targetSdk 26+ DocumentsContract rethrows the provider's exception instead of returning null.
-     */
+    /** The folder holding a track inside an added tree. Document IDs are opaque, so the provider is asked. */
     private fun parentDocumentId(trackUri: Uri): String? = try {
         DocumentsContract.findDocumentPath(contentResolver, trackUri)?.path?.let { path -> path.getOrNull(path.size - 2) }
-    } catch (_: UnsupportedOperationException) {
-        null
-    } catch (_: IllegalArgumentException) {
-        null
-    } catch (_: SecurityException) {
-        null
     } catch (_: FileNotFoundException) {
+        null
+    } catch (_: RuntimeException) {
         null
     }
 
     /** The folder's `.lrc` files, or null when the provider cannot list it now. */
-    private fun listLyricsFiles(trackUri: Uri, parentId: String): List<LyricsFileCandidate>? = try {
+    private fun listLyricsFiles(folderUri: Uri): List<LyricsFileCandidate>? = try {
         contentResolver.query(
-            DocumentsContract.buildChildDocumentsUriUsingTree(trackUri, parentId),
+            folderUri,
             arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME),
             null,
             null,
@@ -151,25 +143,40 @@ internal class LocalLyricsResolver(
                 }
             }
         }
-    } catch (_: IllegalArgumentException) {
-        null
-    } catch (_: SecurityException) {
+    } catch (_: RuntimeException) {
         null
     }
 
-    private fun readEmbedded(trackUri: Uri, fileSizeBytes: Long): SourceLyrics = try {
-        contentResolver.openAssetFileDescriptor(trackUri, "r")?.use { descriptor ->
-            descriptor.createInputStream().use { input ->
-                extractBoundedEmbeddedLyrics(
-                    input = input,
-                    declaredLength = descriptor.length.takeIf { it > 0 } ?: fileSizeBytes.takeIf { it > 0 },
-                )
-            }
-        } ?: SourceLyrics.Absent
+    /** Up to one byte past the size limit, so an oversized file is recognised; null when it cannot be opened. */
+    private fun readDocument(documentUri: Uri): ByteArray? = try {
+        contentResolver.openInputStream(documentUri)?.use { input -> input.readAtMost(MAX_LYRICS_TEXT_BYTES + 1) }
     } catch (_: IOException) {
-        SourceLyrics.Absent
-    } catch (_: SecurityException) {
-        SourceLyrics.Absent
+        null
+    } catch (_: RuntimeException) {
+        null
+    }
+
+    private fun readEmbedded(trackUri: Uri, fileSizeBytes: Long): SourceLyrics {
+        val descriptor = try {
+            contentResolver.openAssetFileDescriptor(trackUri, "r")
+        } catch (_: IOException) {
+            null
+        } catch (_: RuntimeException) {
+            // The same provider boundary as above: SecurityException, or a provider's own failure.
+            null
+        } ?: return SourceLyrics.Absent
+        return try {
+            descriptor.use {
+                descriptor.createInputStream().use { input ->
+                    extractBoundedEmbeddedLyrics(
+                        input = input,
+                        declaredLength = descriptor.length.takeIf { it > 0 } ?: fileSizeBytes.takeIf { it > 0 },
+                    )
+                }
+            }
+        } catch (_: IOException) {
+            SourceLyrics.Absent
+        }
     }
 
     private companion object {

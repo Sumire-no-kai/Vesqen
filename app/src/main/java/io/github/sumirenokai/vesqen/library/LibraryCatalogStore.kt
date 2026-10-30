@@ -981,21 +981,20 @@ internal class LibraryCatalogStore internal constructor(
     }
 
     /**
-     * The merges of one transaction, reported to [mergeFollower]: copies are made as rows merge,
-     * clean-up waits for the commit, and a rollback undoes the copies.
+     * The merges of one transaction, reported to [mergeFollower]: it prepares as the rows merge,
+     * cleans up after the commit, and undoes its preparation on a rollback.
      */
     private inner class TrackMerges {
-        private val copiedInto = ArrayList<Long>()
-        private val removed = ArrayList<Long>()
+        private val merged = ArrayList<Pair<Long, Long>>()
 
         fun merge(from: Long, into: Long) {
-            if (mergeFollower.copyForMerge(from, into)) copiedInto += into
-            removed += from
+            mergeFollower.prepareMerge(from, into)
+            merged += from to into
         }
 
-        fun committed() = removed.forEach(mergeFollower::mergeCommitted)
+        fun committed() = merged.forEach { (from, into) -> mergeFollower.mergeCommitted(from, into) }
 
-        fun rolledBack() = copiedInto.forEach(mergeFollower::mergeRolledBack)
+        fun rolledBack() = merged.forEach { (from, into) -> mergeFollower.mergeRolledBack(from, into) }
     }
 
     private inline fun <T> withTrackMerges(transaction: (TrackMerges) -> T): T {
@@ -1025,6 +1024,16 @@ internal class LibraryCatalogStore internal constructor(
         }
         return CatalogTrackIds(trackIds, largestAssignedId)
     }
+
+    fun readTrackContentUri(trackId: Long): String? = readableDatabase.query(
+        TRACKS_TABLE,
+        arrayOf(TRACK_CONTENT_URI),
+        "$TRACK_ID = ?",
+        arrayOf(trackId.toString()),
+        null,
+        null,
+        null,
+    ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
 
     /** Folder rows whose file a completed scan did not find; they keep user data but cannot play. */
     fun readHiddenFolderTrackIds(): Set<Long> = readableDatabase.query(

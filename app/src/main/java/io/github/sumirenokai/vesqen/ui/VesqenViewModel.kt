@@ -6,7 +6,6 @@ import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.sumirenokai.vesqen.VesqenApplication
@@ -33,7 +32,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -338,15 +336,27 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     /** Lyrics imports and removals run here, so they finish when the activity is recreated. */
     internal fun importLyrics(target: LyricsImportTarget, source: Uri) {
         viewModelScope.launch {
-            // After process death the picker can return before the catalog has been read again.
-            val library = snapshotFlow { uiState.library }.first { !it.isLoading }
-            val result = if (library.tracks.none { it.id == target.trackId && it.contentUri == target.contentUri }) {
-                LyricsImportResult.TRACK_CHANGED
-            } else {
-                withContext(Dispatchers.IO) { readLyricsImport(target, source) }
-            }
+            val result = withContext(Dispatchers.IO) { importLyricsFile(target, source) }
             uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(++lyricsImports, result))
         }
+    }
+
+    /**
+     * The picker can return after process death, before the Library is read again, so the catalog
+     * row itself says whether the ID still names the same file; no scan has to finish first.
+     */
+    private suspend fun importLyricsFile(target: LyricsImportTarget, source: Uri): LyricsImportResult {
+        val rebuildsBefore = catalogRebuilds.value
+        val contentUri = try {
+            catalog.trackContentUri(target.trackId)
+        } catch (_: SQLiteException) {
+            return LyricsImportResult.FAILED
+        } catch (failure: IllegalStateException) {
+            failure.rethrowUnlessCatalogRebuiltSince(rebuildsBefore)
+            return LyricsImportResult.TRACK_CHANGED
+        }
+        if (contentUri != target.contentUri) return LyricsImportResult.TRACK_CHANGED
+        return readLyricsImport(target, source)
     }
 
     private fun readLyricsImport(target: LyricsImportTarget, source: Uri): LyricsImportResult = try {

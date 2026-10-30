@@ -3,7 +3,9 @@ package io.github.sumirenokai.vesqen.lyrics
 import io.github.sumirenokai.vesqen.library.CatalogTrackIds
 import io.github.sumirenokai.vesqen.library.TrackMergeFollower
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileNotFoundException
+import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.nio.file.Files
@@ -39,10 +41,18 @@ enum class LyricsImportResult {
  * before deleting, and an import or sweep that began under an older generation commits nothing:
  * its track IDs name other songs, or none, in the rebuilt catalog.
  */
-internal class LyricsStore(private val directory: File) : TrackMergeFollower {
+internal class LyricsStore(
+    private val directory: File,
+    /** Gives `into` the content of `from`; tests replace it to fail as a full disk would. */
+    duplicate: ((from: File, into: File) -> Unit)? = null,
+) : TrackMergeFollower {
     private val lock = Any()
     private var generation = 0L
     private var loadedTrackIds: MutableSet<Long>? = null
+    private val duplicate: (File, File) -> Unit = duplicate ?: ::linkOrCopy
+
+    /** What [prepareMerge] did for each `(from, into)` of the open merging transaction. */
+    private val preparedMerges = HashMap<Pair<Long, Long>, MergePreparation>()
     private val state = MutableStateFlow(ImportedLyrics())
     val importedLyrics: StateFlow<ImportedLyrics> = state.asStateFlow()
 
@@ -81,7 +91,7 @@ internal class LyricsStore(private val directory: File) : TrackMergeFollower {
         return synchronized(lock) {
             if (generation != expectedGeneration) return LyricsImportResult.TRACK_CHANGED
             try {
-                writeAtomically(fileFor(trackId)) { temporary -> temporary.writeText(text, Charsets.UTF_8) }
+                writeAtomically(fileFor(trackId)) { output -> output.write(text.toByteArray(Charsets.UTF_8)) }
             } catch (_: IOException) {
                 return LyricsImportResult.FAILED
             }
@@ -124,21 +134,59 @@ internal class LyricsStore(private val directory: File) : TrackMergeFollower {
         }
     }
 
-    override fun copyForMerge(from: Long, into: Long): Boolean = synchronized(lock) {
-        if (from == into || into in trackIds() || from !in trackIds()) return false
-        try {
-            writeAtomically(fileFor(into)) { temporary -> fileFor(from).copyTo(temporary, overwrite = true) }
-        } catch (_: IOException) {
-            return false
+    override fun prepareMerge(from: Long, into: Long) {
+        synchronized(lock) {
+            preparedMerges[from to into] = when {
+                from == into || into in trackIds() || from !in trackIds() -> MergePreparation.NOTHING
+                else -> try {
+                    duplicate(fileFor(from), fileFor(into))
+                    trackIds().add(into)
+                    publish()
+                    MergePreparation.DUPLICATED
+                } catch (_: IOException) {
+                    // A full disk: the file is renamed after the commit instead, which needs no space.
+                    MergePreparation.MOVE_AT_COMMIT
+                }
+            }
         }
-        trackIds().add(into)
-        publish()
-        true
     }
 
-    override fun mergeCommitted(from: Long) = remove(from)
+    override fun mergeCommitted(from: Long, into: Long) {
+        synchronized(lock) {
+            if (preparedMerges.remove(from to into) == MergePreparation.MOVE_AT_COMMIT && into !in trackIds()) {
+                try {
+                    Files.move(fileFor(from).toPath(), fileFor(into).toPath(), StandardCopyOption.ATOMIC_MOVE)
+                    trackIds().remove(from)
+                    trackIds().add(into)
+                    publish()
+                } catch (_: IOException) {
+                    // Never delete the only copy; the next clean-up decides.
+                }
+                return
+            }
+            remove(from)
+        }
+    }
 
-    override fun mergeRolledBack(into: Long) = remove(into)
+    override fun mergeRolledBack(from: Long, into: Long) {
+        synchronized(lock) {
+            if (preparedMerges.remove(from to into) == MergePreparation.DUPLICATED) remove(into)
+        }
+    }
+
+    /**
+     * A hard link needs no space and the file it names is complete, so it survives a crash between
+     * the commit and the clean-up; a copy is the fallback where links are not allowed.
+     */
+    private fun linkOrCopy(from: File, into: File) {
+        try {
+            Files.createLink(into.toPath(), from.toPath())
+            return
+        } catch (_: UnsupportedOperationException) {
+        } catch (_: IOException) {
+        }
+        writeAtomically(into) { output -> FileInputStream(from).use { input -> input.copyTo(output) } }
+    }
 
     private fun trackIds(): MutableSet<Long> = loadedTrackIds ?: HashSet<Long>().also { ids ->
         directory.listFiles()?.forEach { file ->
@@ -155,16 +203,22 @@ internal class LyricsStore(private val directory: File) : TrackMergeFollower {
 
     private fun fileFor(trackId: Long) = File(directory, "$trackId$LYRICS_SUFFIX")
 
-    private inline fun writeAtomically(target: File, write: (File) -> Unit) {
+    private inline fun writeAtomically(target: File, write: (FileOutputStream) -> Unit) {
         if (!directory.isDirectory && !directory.mkdirs()) throw IOException("Cannot create $directory")
         val temporary = File(directory, target.name + TEMPORARY_SUFFIX)
         try {
-            write(temporary)
+            FileOutputStream(temporary).use { output ->
+                write(output)
+                // Durable before the rename, so a power loss cannot leave an empty file in its place.
+                output.fd.sync()
+            }
             Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         } finally {
             temporary.delete()
         }
     }
+
+    private enum class MergePreparation { NOTHING, DUPLICATED, MOVE_AT_COMMIT }
 }
 
 private const val LYRICS_SUFFIX = ".lrc"

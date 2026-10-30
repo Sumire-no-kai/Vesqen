@@ -86,26 +86,59 @@ class LyricsStoreTest {
     fun aMergeKeepsTheSurvivorsLyricsAndMovesTheOtherOnlyWhenItHasNone() {
         store.import(10, "[00:01.00]merged away".byteInput(), 0)
 
-        assertTrue(store.copyForMerge(from = 10, into = 20))
+        store.prepareMerge(from = 10, into = 20)
+        // Inside the transaction both rows hold the lyrics, so a crash before the clean-up loses nothing.
         assertEquals("[00:01.00]merged away", store.read(20)!!.toString(Charsets.UTF_8))
-        store.mergeCommitted(from = 10)
+        assertEquals("[00:01.00]merged away", store.read(10)!!.toString(Charsets.UTF_8))
+        store.mergeCommitted(from = 10, into = 20)
         assertNull(store.read(10))
+        assertEquals("[00:01.00]merged away", store.read(20)!!.toString(Charsets.UTF_8))
 
         store.import(30, "[00:01.00]other".byteInput(), 0)
-        assertFalse(store.copyForMerge(from = 30, into = 20))
+        store.prepareMerge(from = 30, into = 20)
+        store.mergeCommitted(from = 30, into = 20)
         assertEquals("[00:01.00]merged away", store.read(20)!!.toString(Charsets.UTF_8))
-        assertFalse(store.copyForMerge(from = 40, into = 50))
+        assertNull(store.read(30))
+        assertEquals(setOf(20L), store.importedLyrics.value.trackIds)
     }
 
     @Test
     fun aRolledBackMergeUndoesItsCopy() {
         store.import(10, SAMPLE.byteInput(), 0)
-        assertTrue(store.copyForMerge(from = 10, into = 20))
+        store.prepareMerge(from = 10, into = 20)
 
-        store.mergeRolledBack(into = 20)
+        store.mergeRolledBack(from = 10, into = 20)
 
         assertNull(store.read(20))
         assertEquals(setOf(10L), store.importedLyrics.value.trackIds)
+    }
+
+    @Test
+    fun aMergeOnAFullDiskMovesTheFileAfterTheCommitInsteadOfLosingIt() {
+        val full = LyricsStore(directory, duplicate = { _, _ -> throw IOException("No space left on device") })
+        full.import(10, SAMPLE.byteInput(), 0)
+
+        full.prepareMerge(from = 10, into = 20)
+        assertNull(full.read(20))
+        full.mergeCommitted(from = 10, into = 20)
+
+        assertNull(full.read(10))
+        assertArrayEquals(SAMPLE.toByteArray(Charsets.UTF_8), full.read(20))
+        assertEquals(setOf(20L), full.importedLyrics.value.trackIds)
+
+        // Rolled back, nothing moves: the rows are as they were.
+        full.prepareMerge(from = 20, into = 30)
+        full.mergeRolledBack(from = 20, into = 30)
+        assertEquals(setOf(20L), full.importedLyrics.value.trackIds)
+    }
+
+    @Test
+    fun storedFilesLeaveNoTemporaryFileBehind() {
+        store.import(7, SAMPLE.byteInput(), 0)
+        store.prepareMerge(from = 7, into = 8)
+        store.mergeCommitted(from = 7, into = 8)
+
+        assertEquals(listOf("8.lrc"), directory.list()!!.sorted())
     }
 
     @Test
