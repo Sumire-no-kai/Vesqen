@@ -49,6 +49,15 @@ internal class PlaybackStateKeeper(
         updateCheckpointSchedule()
     }
 
+    /**
+     * The catalog merged rows (#139, #164), each key into its value, and their entries are about to
+     * take the new IDs. A counted listen follows its track (#191 A2): Media3 updates an entry of the
+     * same file in place, without a transition the start gate would see.
+     */
+    fun tracksMerged(merges: Map<Long, Long>) {
+        playbackStartGate.tracksMerged(merges)
+    }
+
     fun stop() {
         if (!started) return
         handler.removeCallbacks(checkpoint)
@@ -247,6 +256,11 @@ internal class PlaybackStartGate {
     fun resumeCounted(counted: CountedPlayback) {
         lastCountedTrackId = counted.trackId
         currentOccurrenceId = counted.occurrenceId
+    }
+
+    /** The counted listen's track was merged into another row, which its entry now names. */
+    fun tracksMerged(merges: Map<Long, Long>) {
+        lastCountedTrackId?.let(merges::get)?.let { lastCountedTrackId = it }
     }
 
     fun reset() {

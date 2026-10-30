@@ -16,6 +16,12 @@ internal interface TrackMergeFollower {
     /** The merge committed: [from] no longer exists. */
     fun mergeCommitted(from: Long, into: Long)
 
+    /**
+     * A transaction committed [merges], each (from, into) in the order they merged: one call for all
+     * of them (#191 A4).
+     */
+    fun mergesCommitted(merges: List<Pair<Long, Long>>) = merges.forEach { (from, into) -> mergeCommitted(from, into) }
+
     /** The merge rolled back: undoes what [prepareMerge] did. */
     fun mergeRolledBack(from: Long, into: Long)
 
@@ -35,6 +41,8 @@ internal class TrackMergeFollowers(private vararg val followers: TrackMergeFollo
     override fun prepareMerge(from: Long, into: Long) = followers.forEach { it.prepareMerge(from, into) }
 
     override fun mergeCommitted(from: Long, into: Long) = followers.forEach { it.mergeCommitted(from, into) }
+
+    override fun mergesCommitted(merges: List<Pair<Long, Long>>) = followers.forEach { it.mergesCommitted(merges) }
 
     override fun mergeRolledBack(from: Long, into: Long) = followers.forEach { it.mergeRolledBack(from, into) }
 }

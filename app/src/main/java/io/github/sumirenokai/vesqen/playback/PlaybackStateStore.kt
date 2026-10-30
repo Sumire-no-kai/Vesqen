@@ -189,35 +189,36 @@ internal class PlaybackStateStore(context: Context) {
     }
 
     /**
-     * Puts [toTrackId] wherever the saved queue and cursor hold [fromTrackId]: the Library merged the
-     * two rows, which now name one file (#139). A progress file and a play order that apply to the
+     * Puts each merge's value wherever the saved queue and cursor hold its key: the Library merged the
+     * rows, which now name one file (#139, #164). A progress file and a play order that apply to the
      * queue's file follow it, so the saved position and shuffled order are kept; the order holds list
-     * indexes, which the new ID leaves as they are (#170 W1).
+     * indexes, which the new IDs leave as they are (#170 W1). One pass for a transaction's merges
+     * (#191 A4).
      */
-    fun replaceTrackId(fromTrackId: Long, toTrackId: Long) {
+    fun replaceTrackIds(merges: Map<Long, Long>) {
         val queue = preferences.getString(KEY_QUEUE_IDS, null)?.toTrackIds() ?: return
-        if (fromTrackId !in queue) return
-        fun List<Long>.replaced() = joinToString(",") { if (it == fromTrackId) toTrackId.toString() else it.toString() }
+        if (queue.none(merges::containsKey)) return
+        fun List<Long>.replaced() = joinToString(",") { (merges[it] ?: it).toString() }
         val progressApplies = currentCursorPreferences() === progressPreferences
         val playOrderApplies = savedPlayOrder(queue.size) != null
         preferences.edit {
             putString(KEY_QUEUE_IDS, queue.replaced())
             preferences.getString(KEY_HELD_BACK_TRACK_IDS, null)?.let { putString(KEY_HELD_BACK_TRACK_IDS, it.toTrackIds().replaced()) }
-            replaceCursorTrackId(preferences, fromTrackId, toTrackId)
+            replaceCursorTrackIds(preferences, merges)
         }
         savedQueueSignature = queueFileSignature()
         if (playOrderApplies) preferences.edit { putInt(KEY_PLAY_ORDER_SIGNATURE, queueFileSignature()) }
         if (progressApplies) {
             progressPreferences.edit {
-                replaceCursorTrackId(progressPreferences, fromTrackId, toTrackId)
+                replaceCursorTrackIds(progressPreferences, merges)
                 putInt(KEY_QUEUE_FILE_SIGNATURE, queueFileSignature())
             }
         }
     }
 
-    private fun SharedPreferences.Editor.replaceCursorTrackId(cursor: SharedPreferences, fromTrackId: Long, toTrackId: Long) {
+    private fun SharedPreferences.Editor.replaceCursorTrackIds(cursor: SharedPreferences, merges: Map<Long, Long>) {
         for (key in listOf(KEY_CURRENT_TRACK_ID, KEY_COUNTED_TRACK_ID)) {
-            if (cursor.getLong(key, NO_TRACK_ID) == fromTrackId) putLong(key, toTrackId)
+            merges[cursor.getLong(key, NO_TRACK_ID)]?.let { putLong(key, it) }
         }
     }
 

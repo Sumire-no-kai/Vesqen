@@ -992,7 +992,9 @@ internal class LibraryCatalogStore internal constructor(
             merged += from to into
         }
 
-        fun committed() = merged.forEach { (from, into) -> mergeFollower.mergeCommitted(from, into) }
+        fun committed() {
+            if (merged.isNotEmpty()) mergeFollower.mergesCommitted(merged)
+        }
 
         fun rolledBack() = merged.forEach { (from, into) -> mergeFollower.mergeRolledBack(from, into) }
     }
@@ -1166,6 +1168,13 @@ internal class LibraryCatalogStore internal constructor(
     fun markSourceScanning(sourceId: String) = setSourceState(sourceId, LibraryScanState.SCANNING)
 
     fun markSourceInterrupted(sourceId: String) = setSourceState(sourceId, LibraryScanState.INTERRUPTED)
+
+    /**
+     * A scan stopped at its next row for an edit that waits for the catalog (#191 D17). The source is
+     * left IDLE at that scan's epoch, as a paused scan is once resumed, so a #139 choice made by that
+     * edit finds the records the completed scans left (#191 A1); the Library then scans it again.
+     */
+    fun markSourceYieldedToEdit(sourceId: String) = setSourceState(sourceId, LibraryScanState.IDLE)
 
     fun markSourceFailed(sourceId: String) = setSourceState(sourceId, LibraryScanState.FAILED)
 

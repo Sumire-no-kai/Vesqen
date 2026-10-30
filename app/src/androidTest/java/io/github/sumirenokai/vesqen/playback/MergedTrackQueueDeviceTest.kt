@@ -4,9 +4,17 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.SharedPreferences
+import android.os.Bundle
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Player
+import androidx.media3.common.Timeline
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.VesqenApplication
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.library.LibrarySourceId
+import io.github.sumirenokai.vesqen.library.LibraryTrackCandidate
 import io.github.sumirenokai.vesqen.telemetry.isolatedPlaybackTestApplication
 import java.io.File
 import java.util.UUID
@@ -65,7 +73,7 @@ class MergedTrackQueueDeviceTest {
             countedOccurrenceId = "occurrence",
         )
 
-        store.replaceTrackId(fromTrackId = 2, toTrackId = 7)
+        store.replaceTrackIds(mapOf(2L to 7L))
 
         val restored = requireNotNull(PlaybackStateStore(isolatedContext).load())
         assertEquals(listOf(1L, 7L, 3L, 7L), restored.queueTrackIds)
@@ -102,7 +110,7 @@ class MergedTrackQueueDeviceTest {
             ),
         )
 
-        store.replaceTrackId(fromTrackId = 2, toTrackId = 7)
+        store.replaceTrackIds(mapOf(2L to 7L))
 
         val restored = requireNotNull(PlaybackStateStore(isolatedContext).load())
         assertEquals(listOf(1L, 7L, 3L, 7L), restored.queueTrackIds)
@@ -157,6 +165,121 @@ class MergedTrackQueueDeviceTest {
         }
         assertEquals(listOf(queued[0].id, record.id, queued[2].id), saved.queueTrackIds)
         assertEquals(queued[0].id, saved.currentTrackId)
+    }
+
+    @Test
+    fun aMergeOfThePlayingSongContinuesItsCountedListen() = withPlayback { app ->
+        // Two catalog rows of one file in a folder of the test's own: the song that plays and the row
+        // it merges into. Listens are counted only for rows the catalog holds.
+        val store = app.libraryCatalogStore
+        val treeUri = "content://io.github.sumirenokai.vesqen.test/tree/merge-count-${System.nanoTime()}"
+        store.upsertFolderSource(treeUri, "Merge count")
+        val sourceId = LibrarySourceId.forTree(treeUri)
+        try {
+            val file = File(File(app.cacheDir, FIXTURE_DIR), "VESQEN_QA_PRIVATE_merge.wav").also { writeSilentWav(it, durationMs = 20_000) }
+            val session = store.beginSourceScan(sourceId)
+            for (name in listOf("played", "record")) {
+                store.upsertTrack(
+                    session,
+                    LibraryTrackCandidate(remoteId = name, contentUri = file.toURI().toString(), title = name, artist = "", album = "",
+                        durationMs = 20_000, fingerprint = name),
+                )
+            }
+            store.completeSourceScan(session)
+            val rows = store.readTracks(listOf(sourceId))
+            val played = rows.single { it.title == "played" }
+            val record = rows.single { it.title == "record" }
+            fun plays(trackId: Long) = store.readTracks(listOf(sourceId)).single { it.id == trackId }.playCount
+
+            main { controller.playQueue(listOf(played), 0) }
+            awaitPlayback { it.trackId == played.id && it.isPlaying }
+            withTimeout(15_000) {
+                while (plays(played.id) != 1 || PlaybackStateStore(app).loadCountedPlayback()?.trackId != played.id) delay(50)
+            }
+            val occurrence = requireNotNull(PlaybackStateStore(app).loadCountedPlayback()).occurrenceId
+
+            // #191 A2: Media3 updates the entry in place without a transition, so the start gate kept the
+            // old ID: the saved cursor lost the counted listen, and the next Play counted a second one.
+            app.playbackTrackMerges.mergeCommitted(from = played.id, into = record.id)
+            awaitPlayback { it.trackId == record.id }
+            main { controller.togglePlayback() }
+            awaitPlayback { !it.isPlaying }
+            val position = playback.get().positionMs
+            main { controller.togglePlayback() }
+            awaitPlayback { it.isPlaying && it.positionMs >= position + 1_000 }
+            main { controller.togglePlayback() }
+            awaitPlayback { !it.isPlaying }
+            // The history is written on its own thread.
+            delay(1_000)
+
+            assertEquals(1, plays(played.id))
+            assertEquals(0, plays(record.id))
+            assertEquals(CountedPlayback(record.id, occurrence), PlaybackStateStore(app).loadCountedPlayback())
+        } finally {
+            store.removeFolderSource(sourceId)
+        }
+    }
+
+    @Test
+    fun undoAfterAMergePutsBackTheRowItMergedInto() = withPlayback { app ->
+        val queued = (1L..3L).map { silentTrack(app, it) }
+        val record = queued[1].copy(id = -2_000, title = "Record")
+        main { controller.playQueue(queued, 0) }
+        awaitPlayback { it.trackId == queued[0].id && it.queueSize == 3 }
+        main { controller.clearQueue() }
+        awaitPlayback { it.queueSize == 0 }
+
+        // #191 A3: a merge while Undo is offered found no entry to rename, so Undo put back the ID of the
+        // deleted row. The queue takes the merged ID as it enters the service's player.
+        app.playbackTrackMerges.mergeCommitted(from = queued[1].id, into = record.id)
+        instrumentation.waitForIdleSync()
+        main { controller.undoClearQueue() }
+        awaitPlayback { snapshot -> snapshot.queue.map(PlaybackQueueItem::trackId) == listOf(queued[0].id, record.id, queued[2].id) }
+    }
+
+    @Test
+    fun aTransactionsMergesRenameTheQueueInOneChange() {
+        // #191 A4: each merge used to walk the whole queue and change the timeline on its own.
+        val changes = mutableListOf<Int>()
+        var entries = emptyList<String>()
+        var occurrences = emptyList<String>()
+        main {
+            val player = ExoPlayer.Builder(context).build()
+            try {
+                player.setMediaItems(listOf(1, 2, 3, 2, 4).mapIndexed { index, id -> entry(id, "o$index") })
+                player.addListener(object : Player.Listener {
+                    override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                        changes += reason
+                    }
+                })
+                player.replaceTrackEntries(mapOf(2L to 7L, 4L to 8L, 6L to 9L))
+                entries = List(player.mediaItemCount) { player.getMediaItemAt(it).mediaId }
+                occurrences = List(player.mediaItemCount) { player.getMediaItemAt(it).queueEntryId() }
+            } finally {
+                player.release()
+            }
+        }
+        assertEquals(listOf("1", "7", "3", "7", "8"), entries)
+        assertEquals(List(5) { "o$it" }, occurrences)
+        assertEquals(listOf(Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED), changes)
+
+        // The saved queue too, in one pass; a chain within the transaction ends at its last row.
+        val store = PlaybackStateStore(isolatedContext)
+        store.save(
+            PersistedPlaybackState(
+                queueTrackIds = listOf(1, 2, 3, 4),
+                currentTrackId = 4,
+                currentQueueIndex = 3,
+                positionMs = 0,
+                shuffleEnabled = false,
+                repeatMode = PlaybackRepeatMode.OFF,
+            ),
+        )
+        PlaybackTrackMerges(isolatedContext).mergesCommitted(listOf(2L to 7L, 4L to 8L, 8L to 9L))
+        instrumentation.waitForIdleSync()
+        val restored = requireNotNull(PlaybackStateStore(isolatedContext).load())
+        assertEquals(listOf(1L, 7L, 3L, 9L), restored.queueTrackIds)
+        assertEquals(9L, restored.currentTrackId)
     }
 
     @Test
@@ -240,7 +363,10 @@ class MergedTrackQueueDeviceTest {
                 controller.release()
                 // Later tests expect a service that has never played.
                 app.stopService(Intent(app, PlaybackService::class.java))
+                // The fixtures' IDs are reused by later tests, which a merge kept for this process would rename.
+                app.playbackTrackMerges.forgetMerges()
             }
+            instrumentation.waitForIdleSync()
             File(app.cacheDir, FIXTURE_DIR).deleteRecursively()
         }
     }
@@ -254,6 +380,12 @@ class MergedTrackQueueDeviceTest {
     }
 
     private fun main(action: () -> Unit) = instrumentation.runOnMainSync(action)
+
+    private fun entry(trackId: Int, occurrence: String) = MediaItem.Builder()
+        .setMediaId(trackId.toString())
+        .setUri("content://track/$trackId")
+        .setMediaMetadata(MediaMetadata.Builder().setExtras(Bundle().apply { putString(PLAYBACK_OCCURRENCE_EXTRA, occurrence) }).build())
+        .build()
 
     /** Twenty seconds of silence, private to the deviceTest app. */
     private fun silentTrack(app: Context, id: Long): AudioTrack {

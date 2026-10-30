@@ -114,6 +114,8 @@ class VesqenApplication : Application() {
                 lyricsStore.clearAll()
                 // So are the records "Later" was pressed for, and the new catalog gives their IDs out again (#191 D9).
                 UnmatchedRecordPrompt(this).clear()
+                // And this process's merges, which queues held from before them take (#191 A3).
+                playbackTrackMerges.forgetMerges()
                 libraryRebuildNotice.markDue()
             },
             mergeFollower = TrackMergeFollowers(lyricsStore, playbackTrackMerges),

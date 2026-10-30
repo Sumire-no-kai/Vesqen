@@ -402,7 +402,7 @@ internal class AndroidLibraryCatalog(
         if (scanGate.catalogRebuilt()) return SourceScanOutcome.REBUILT
         if (!iteration.completed && !scanGate.pausedByUser()) {
             // Stopped for an edit that waits for the catalog: not the user's pause, and not a failure.
-            store.markSourceInterrupted(source.id)
+            store.markSourceYieldedToEdit(source.id)
             return SourceScanOutcome.YIELDED
         }
         if (!iteration.completed) {
