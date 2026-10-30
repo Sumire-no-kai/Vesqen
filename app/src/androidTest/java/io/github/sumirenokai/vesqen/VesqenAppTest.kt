@@ -69,6 +69,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.height
 import androidx.test.espresso.Espresso
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.Lifecycle
@@ -181,6 +182,9 @@ import io.github.sumirenokai.vesqen.lyrics.Lyrics
 import io.github.sumirenokai.vesqen.lyrics.LyricsSource
 import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.ui.screens.NowLyricsState
+import io.github.sumirenokai.vesqen.lyrics.LyricsImportResult
+import io.github.sumirenokai.vesqen.ui.LyricsImportNotice
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import kotlin.math.abs
 import kotlin.math.min
 import java.util.concurrent.atomic.AtomicInteger
@@ -3855,14 +3859,82 @@ class VesqenAppTest {
 
     @Test
     fun shown_lyrics_with_open_liner_notes_keep_now_controls_visible_at_360dp() =
-        assertLyricsWithOpenLinerNotes(360.dp, 720.dp, fontScale = 1f)
+        assertLyricsWithOpenLinerNotes(360.dp, 720.dp, fontScale = 1f, lyricsBesideOpenNotes = true)
 
     @Test
     fun shown_lyrics_with_open_liner_notes_keep_now_controls_visible_in_landscape() =
         assertLyricsWithOpenLinerNotes(640.dp, 320.dp, fontScale = 1f)
 
+    @Test
+    fun a_failed_lyrics_import_on_now_is_a_dialog_at_320dp_large_text_with_open_notes() =
+        assertLyricsImportResultsOnNow(320.dp, 533.dp, fontScale = 2f, openNotes = true)
+
+    @Test
+    fun a_failed_lyrics_import_on_now_is_a_dialog_in_landscape() =
+        assertLyricsImportResultsOnNow(640.dp, 320.dp, fontScale = 1f, openNotes = false)
+
+    @Test
+    fun a_lyrics_import_result_in_the_library_is_a_snackbar() {
+        var uiState by mutableStateOf(grantedState(tracks = sampleTracks))
+        render(state = uiState, stateProvider = { uiState })
+
+        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(1, LyricsImportResult.NO_LYRICS))
+        composeRule.onNodeWithTag("vesqen.lyrics-notice").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.lyrics_import_no_lyrics)).assertIsDisplayed()
+        composeRule.onAllNodesWithTag("vesqen.lyrics-import-failure").assertCountEquals(0)
+    }
+
+    /**
+     * #169 Y17: Now's edges hold controls at large text and in landscape, so a failed import is a
+     * dialog there and a successful one shows nothing, never a notice over a control.
+     */
+    private fun assertLyricsImportResultsOnNow(width: Dp, height: Dp, fontScale: Float, openNotes: Boolean) {
+        var uiState by mutableStateOf(
+            grantedState(
+                tracks = sampleTracks,
+                playback = PlaybackSnapshot(
+                    isControllerReady = true,
+                    trackId = 1,
+                    title = "Dawn Signal",
+                    artist = "Mori",
+                    durationMs = 245_000,
+                    positionMs = 30_000,
+                    hasPrevious = true,
+                    hasNext = true,
+                ),
+            ),
+        )
+        render(
+            state = uiState,
+            stateProvider = { uiState },
+            containerWidth = width,
+            containerHeight = height,
+            fontScale = fontScale,
+        )
+        composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
+        if (openNotes) openLinerNotes()
+
+        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(1, LyricsImportResult.UNREADABLE))
+        composeRule.onNodeWithTag("vesqen.lyrics-import-failure").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.lyrics_import_unreadable)).assertIsDisplayed()
+        composeRule.onAllNodesWithTag("vesqen.lyrics-notice").assertCountEquals(0)
+        composeRule.onNodeWithText(context.getString(R.string.lyrics_import_result_ok)).performClick()
+        composeRule.onAllNodesWithTag("vesqen.lyrics-import-failure").assertCountEquals(0)
+
+        uiState = uiState.copy(lyricsImportNotice = LyricsImportNotice(2, LyricsImportResult.IMPORTED))
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithTag("vesqen.lyrics-notice").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("vesqen.lyrics-import-failure").assertCountEquals(0)
+        assertFocusedNowControlsAreFullyVisible()
+    }
+
     /** #169: lyrics in the cover's place with the liner notes open and closed again. */
-    private fun assertLyricsWithOpenLinerNotes(width: Dp, height: Dp, fontScale: Float) {
+    private fun assertLyricsWithOpenLinerNotes(
+        width: Dp,
+        height: Dp,
+        fontScale: Float,
+        lyricsBesideOpenNotes: Boolean = false,
+    ) {
         render(
             state = grantedState(
                 tracks = sampleTracks,
@@ -3889,6 +3961,11 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.mini-player.open-now").performClick()
         composeRule.onNodeWithTag("vesqen.now.lyrics").assertIsDisplayed()
         openLinerNotes()
+        if (lyricsBesideOpenNotes) {
+            // The cover's open size (nowPortraitLayout.notesArtwork, 96–164 dp), not a weighted share.
+            val pane = composeRule.onNodeWithTag("vesqen.now.lyrics").assertIsDisplayed().getUnclippedBoundsInRoot()
+            assertTrue("Lyrics beside open notes are ${pane.height}", pane.height >= 96.dp && pane.height <= 164.dp)
+        }
         composeRule.onNodeWithTag("vesqen.now.player-page").assert(
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
         )

@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -27,6 +28,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
@@ -148,6 +150,47 @@ class NowLyricsUiTest {
     }
 
     @Test
+    fun aDragHeldStillKeepsFollowingPausedUntilItEnds() {
+        val long = Lyrics.Synced((0 until 40).map { LyricLine(it * 5_000L, "Line $it") })
+        setNow(lyrics = TrackLyrics.Found(LyricsSource.Embedded, long), positionMs = { 30 * 5_000L + 100 })
+        compose.onNodeWithTag("vesqen.now.lyrics.line.30").assertIsDisplayed()
+
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("vesqen.now.lyrics.lines").performTouchInput {
+            down(center)
+            moveBy(Offset(0f, height * 0.8f))
+            moveBy(Offset(0f, height * 0.8f))
+        }
+        // Held still for longer than the pause: following must not pull the list back.
+        compose.mainClock.advanceTimeBy(6_000)
+        compose.onNodeWithTag("vesqen.now.lyrics.line.30").assertIsNotDisplayed()
+        compose.onNodeWithTag("vesqen.now.lyrics.lines").performTouchInput { up() }
+        compose.mainClock.advanceTimeBy(3_000)
+        compose.onNodeWithTag("vesqen.now.lyrics.line.30").assertIsNotDisplayed()
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        compose.onNodeWithTag("vesqen.now.lyrics.line.30").assertIsDisplayed()
+    }
+
+    @Test
+    fun aNewSourcesRevisionReadsTheLyricsAgain() {
+        var found by mutableStateOf(false)
+        var revision by mutableStateOf(0L)
+        setNow(
+            loader = { if (found) TrackLyrics.Found(LyricsSource.SameNameFile, synced) else TrackLyrics.None(folderHint = false) },
+            sourcesRevision = { revision },
+        )
+        compose.onNodeWithText(context.getString(R.string.lyrics_none)).assertIsDisplayed()
+
+        // A same-name file appeared while the app was in the background.
+        found = true
+        revision = 1
+        compose.waitForIdle()
+        compose.onNodeWithTag("vesqen.now.lyrics.line.0").assertIsDisplayed()
+    }
+
+    @Test
     fun theRemoveConfirmationClosesWhenTheTrackChanges() {
         val next = track.copy(id = 8, contentUri = "content://media/external/audio/media/8", title = "Morning")
         var current by mutableStateOf(track)
@@ -258,6 +301,8 @@ class NowLyricsUiTest {
     private fun setNow(
         lyricsShown: () -> Boolean = { true },
         lyrics: TrackLyrics = TrackLyrics.Found(LyricsSource.SameNameFile, synced),
+        loader: (() -> TrackLyrics)? = null,
+        sourcesRevision: () -> Long = { 0L },
         imported: Set<Long> = emptySet(),
         currentTrack: () -> AudioTrack = { track },
         positionMs: () -> Long = { 0L },
@@ -305,8 +350,12 @@ class NowLyricsUiTest {
                         showOrientationToggle = false,
                         isLandscape = landscape,
                         motionPolicy = VesqenMotionPolicy(reduceMotion = true),
-                        lyrics = NowLyricsState(shown = lyricsShown(), imported = ImportedLyrics(imported, revision = 1)),
-                        loadLyrics = { lyrics },
+                        lyrics = NowLyricsState(
+                            shown = lyricsShown(),
+                            imported = ImportedLyrics(imported, revision = 1),
+                            sourcesRevision = sourcesRevision(),
+                        ),
+                        loadLyrics = { loader?.invoke() ?: lyrics },
                         onToggleLyrics = onToggleLyrics,
                         onImportLyrics = onImportLyrics,
                         onRemoveLyrics = onRemoveLyrics,
