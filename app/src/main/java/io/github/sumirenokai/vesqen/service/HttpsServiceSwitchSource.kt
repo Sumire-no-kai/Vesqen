@@ -61,7 +61,7 @@ internal class HttpsServiceSwitchSource(
 internal object ServiceSwitchFile {
     val Paused = ServiceStatus(ServiceState.PAUSED, ServiceState.PAUSED)
 
-    fun parse(text: String): ServiceStatus = try {
+    fun parse(text: String): ServiceStatus = if (!jsonNestedWithin(text)) Paused else try {
         val root = JSONObject(text)
         val version = root.opt("schemaVersion")
         if ((version !is Int && version !is Long) || (version as Number).toLong() != 1L) Paused

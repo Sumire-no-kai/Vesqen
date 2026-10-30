@@ -81,6 +81,14 @@ internal class ActivationCodeBook(
     }
 }
 
+/**
+ * Any app or page can open an activation link, with a code that may leak and be revoked later, so a
+ * link never replaces a working code; the Pro page then shows the kept one, and typing a code there
+ * still replaces it (#194 S3). Null when the link was not used.
+ */
+internal fun ActivationCodes.activateFromLink(text: String): ActivationResult? =
+    if (state.value is ActivationState.Active) null else activate(text)
+
 private class AndroidKeptCodeStore(context: Context) : KeptCodeStore {
     private val preferences = context.getSharedPreferences("activation", Context.MODE_PRIVATE)
     override fun read(): String? = preferences.getString(KEY, null)

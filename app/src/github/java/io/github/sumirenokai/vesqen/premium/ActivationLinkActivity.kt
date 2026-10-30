@@ -18,7 +18,7 @@ class ActivationLinkActivity : Activity() {
         val code = link?.takeIf { it.scheme == "https" && it.host == HOST && it.path?.trimEnd('/') == PATH }?.fragment
         val activationCodes = (application as VesqenApplication).activationCodes
         val checked = code != null && activationCodes != null
-        if (checked) activationCodes?.activate(code.orEmpty())
+        if (checked) activationCodes?.activateFromLink(code.orEmpty())
         startActivity(
             Intent(this, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)

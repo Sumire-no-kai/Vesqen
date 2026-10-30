@@ -6,20 +6,32 @@ import java.io.IOException
 import java.net.MalformedURLException
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 
 internal interface UpdateTransport {
     suspend fun manifest(url: String): String
     suspend fun download(url: String, target: File, progress: (Long, Long?) -> Unit)
 }
 
-/** HTTPS only; no identifiers, cookies or app/device headers. Redirects cannot downgrade to HTTP. */
+/**
+ * HTTPS only; no identifiers, cookies or app/device headers. Redirects cannot downgrade to HTTP.
+ * The version file, with its redirects, and a download's response headers each get [responseDeadlineMs];
+ * a download's body then gets time for its size at [minimumBytesPerSecond] (#194 S4).
+ */
 internal class HttpsUpdateTransport(
     private val allocatableBytes: (File) -> Long,
+    private val responseDeadlineMs: Long = 90_000,
+    private val minimumBytesPerSecond: Long = 8 * 1024,
     private val open: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
 ) : UpdateTransport {
-    private fun connection(url: String, invalidResponse: UpdateFailure): HttpURLConnection {
+    private fun connection(url: String, invalidResponse: UpdateFailure, deadline: RequestDeadline): HttpURLConnection {
         var current = url
         repeat(6) {
             if (!isHttpsDownloadUrl(current)) throw UpdateOperationException(invalidResponse)
@@ -32,8 +44,10 @@ internal class HttpsUpdateTransport(
                 setRequestProperty("Accept-Encoding", "identity")
                 setRequestProperty("User-Agent", "")
             }
+            deadline.connection = connection
             var handedOff = false
             try {
+                deadline.check()
                 val response = connection.responseCode
                 if (response in setOf(301, 302, 303, 307, 308)) {
                     val location = connection.getHeaderField("Location") ?: throw UpdateOperationException(invalidResponse)
@@ -52,8 +66,8 @@ internal class HttpsUpdateTransport(
         throw UpdateOperationException(invalidResponse)
     }
 
-    override suspend fun manifest(url: String): String {
-        val connection = connection(url, UpdateFailure.INVALID_MANIFEST)
+    override suspend fun manifest(url: String): String = withDeadline(responseDeadlineMs) { deadline ->
+        val connection = connection(url, UpdateFailure.INVALID_MANIFEST, deadline)
         try {
             val bytes = ByteArrayOutputStream()
             connection.inputStream.use { input ->
@@ -61,21 +75,23 @@ internal class HttpsUpdateTransport(
                 while (true) {
                     currentCoroutineContext().ensureActive()
                     val count = input.read(buffer)
+                    deadline.check()
                     if (count < 0) break
                     if (bytes.size() + count > UpdateManifest.MAX_BYTES) throw UpdateOperationException(UpdateFailure.INVALID_MANIFEST)
                     bytes.write(buffer, 0, count)
                 }
             }
-            return bytes.toString(Charsets.UTF_8.name())
+            bytes.toString(Charsets.UTF_8.name())
         } finally { connection.disconnect() }
     }
 
-    override suspend fun download(url: String, target: File, progress: (Long, Long?) -> Unit) {
-        val connection = connection(url, UpdateFailure.DOWNLOAD_FAILED)
+    override suspend fun download(url: String, target: File, progress: (Long, Long?) -> Unit): Unit = withDeadline(responseDeadlineMs) { deadline ->
+        val connection = connection(url, UpdateFailure.DOWNLOAD_FAILED, deadline)
         try {
             val total = connection.getHeaderFieldLong("Content-Length", -1).takeIf { it > 0 }
             if (total != null && total > MAX_APK_BYTES) throw UpdateOperationException(UpdateFailure.DOWNLOAD_FAILED)
             if (total != null && availableBytes(target.parentFile!!) < total) throw UpdateOperationException(UpdateFailure.INSUFFICIENT_STORAGE)
+            deadline.restart(responseDeadlineMs + (total ?: UNKNOWN_LENGTH_BYTES) * 1000 / minimumBytesPerSecond)
             val output = try { target.outputStream().buffered() }
                 catch (failure: IOException) { throw storageFailure(target, failure) }
             output.use { sink ->
@@ -85,6 +101,7 @@ internal class HttpsUpdateTransport(
                     while (true) {
                         currentCoroutineContext().ensureActive()
                         val count = input.read(buffer)
+                        deadline.check()
                         if (count < 0) break
                         received += count
                         if (received > MAX_APK_BYTES || (total != null && received > total))
@@ -115,5 +132,52 @@ internal class HttpsUpdateTransport(
         return UpdateOperationException(reason, failure)
     }
 
-    private companion object { const val MAX_APK_BYTES = 512 * 1024 * 1024L }
+    /** Inline, so the request's own exception reaches the caller as it was thrown. */
+    private inline fun <T> withDeadline(timeoutMs: Long, block: (RequestDeadline) -> T): T {
+        val deadline = RequestDeadline().apply { restart(timeoutMs) }
+        try { return block(deadline) } finally { deadline.cancel() }
+    }
+
+    private companion object {
+        const val MAX_APK_BYTES = 512 * 1024 * 1024L
+        /** A download without a Content-Length gets the time of one this large. */
+        const val UNKNOWN_LENGTH_BYTES = 64 * 1024 * 1024L
+    }
+}
+
+/**
+ * Ends a request at its deadline by disconnecting its connection, which ends a blocked read with an
+ * IOException. The read timeout restarts with every byte, so a server that sends a few now and then
+ * would otherwise hold the updater, which runs one operation at a time, for the life of the process,
+ * and a download would never move on to the next URL (#194 S4).
+ */
+private class RequestDeadline {
+    /** Its own scope: the request blocks its thread, so the watchdog runs elsewhere. */
+    private val scope = CoroutineScope(Dispatchers.Default)
+
+    @Volatile
+    var connection: HttpURLConnection? = null
+
+    @Volatile
+    private var expired = false
+    private var watchdog: Job? = null
+
+    /** From the request only. */
+    fun restart(timeoutMs: Long) {
+        watchdog?.cancel()
+        watchdog = scope.launch {
+            delay(timeoutMs)
+            expired = true
+            connection?.disconnect()
+        }
+    }
+
+    /** A read can still return after the disconnect, or the deadline passed before the connection was set. */
+    fun check() {
+        if (expired) throw IOException("Update request passed its deadline")
+    }
+
+    fun cancel() {
+        scope.cancel()
+    }
 }
