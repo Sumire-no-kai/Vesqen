@@ -34,8 +34,31 @@ Optional configuration:
 | --- | --- | --- |
 | Variable | `PR_REVIEW_VERIFY_PROVIDER` | Defaults to the discovery provider |
 | Variable | `PR_REVIEW_VERIFY_MODEL` | Defaults to the discovery model when using the same provider; required when switching providers |
+| Variable | `PR_REVIEW_LOWEST_PRIORITY` | `P1`, `P2` (default) or `P3`: the most minor priority the review reports. Any other value fails the run before a model call |
 | Secret | `PR_REVIEW_ANTHROPIC_BASE_URL` | Optional HTTPS base URL including `/v1`; default `https://api.anthropic.com/v1` |
 | Secret | `PR_REVIEW_OPENAI_BASE_URL` | Optional HTTPS base URL including `/v1`; default `https://api.openai.com/v1` |
+
+## What the review looks for
+
+Two settings change the review without code changes:
+
+- **Review rules.** `docs/PR_REVIEW_RULES.md` on the default branch lists areas to check closely
+  and findings to skip. It is the first trusted rules file, so the rules budget cannot drop it.
+  It directs attention but does not lower the evidence a finding needs. Only its first 6,000
+  characters are used.
+- **Lowest priority.** `PR_REVIEW_LOWEST_PRIORITY` selects which priorities are reported. The
+  definitions are sent to both model calls, and the JSON schema and local validation accept only
+  the selected priorities:
+
+| Priority | Meaning |
+| --- | --- |
+| P1 | Data loss or corruption, a crash, a security or privacy exposure, or a broken core flow such as playback, the library, updates or release signing |
+| P2 | A reachable wrong result, race, lifetime or recovery bug with real but narrower impact |
+| P3 | A minor but concrete defect: a small user-visible error in copy, layout or accessibility, an unhandled edge case with low impact, or changed behavior that its tests no longer cover |
+
+`P1` reports only P1, `P2` reports P1 and P2, and `P3` reports all three. Style preferences,
+speculative improvements and pre-existing bugs are not reported at any setting. Each review
+header names the reported priorities and whether the rules file was used.
 
 For example, use Anthropic for discovery and OpenAI for verification by setting
 `PR_REVIEW_PROVIDER=anthropic`, its model, `PR_REVIEW_VERIFY_PROVIDER=openai`, and
@@ -63,13 +86,13 @@ the review workload; they do not classify a small change as low risk.
   when a fork's workflow payload has no PR list. An obsolete CI commit cannot be
   used as the status of a newer PR commit.
 - Trusted project rules come from the checked-out default-branch snapshot:
-  `AGENTS.md`, `PRODUCT.md`, `CONTEXT.md`, `docs/PRD.md`, `CONTRIBUTING.md`, and
-  applicable nested agent instructions. Changed instructions are reviewed as
+  `docs/PR_REVIEW_RULES.md`, `AGENTS.md`, `PRODUCT.md`, `CONTEXT.md`, `docs/PRD.md`,
+  `CONTRIBUTING.md`, and applicable nested agent instructions. Changed instructions are reviewed as
   data, not adopted as authority.
 - Discovery receives the PR description, complete supported text patches,
   bounded source excerpts at the reviewed commits, and up to five matching
   `NameTest`, `NameTests` or `test_name` files. It can propose at most eight concrete
-  P1/P2 defects. A second call challenges every candidate. Only retained findings appear in the review.
+  defects at the selected priorities (P1/P2 by default). A second call challenges every candidate. Only retained findings appear in the review.
   With no candidates, there is no verification call.
 - Publication is one consolidated **COMMENT** review bound to the head commit,
   written in detailed English. Each finding explains its trigger, impact,
