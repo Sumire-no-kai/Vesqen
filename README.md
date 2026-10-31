@@ -29,7 +29,7 @@
 
 Vesqen is an offline music player for Android. It plays the music stored on your phone and needs no account. While a track plays, Vesqen records each step from the file to your headphones, and the Chain page shows where every value came from and how it was obtained.
 
-> **Current version:** `1.0.1`, released on October 27, 2026 on [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.0.1). The Google Play version is in a closed test and will get the same version once Google approves it. Read the [known limitations](#known-limitations) before relying on strict USB output.
+> **Current version:** `1.1.0`, released on October 31, 2026 on [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.1.0). The Google Play version is in a closed test and will get the same version once Google approves it. Read the [known limitations](#known-limitations) before relying on strict USB output.
 
 ## Features
 
@@ -78,8 +78,6 @@ Vesqen 1.x is free. Library, playback and the Chain page stay free. Pro features
 
 There are no dates, and the order may change with feedback. Details and progress are in [issue #163](https://github.com/Sumire-no-kai/Vesqen/issues/163) and the [milestones](https://github.com/Sumire-no-kai/Vesqen/milestones).
 
-- **Next update (1.1.0):** better matching after Android rebuilds its media library, with old entries that no longer match kept for you to reassign; the shuffled order kept when Android stops Vesqen in the background.
-- **Before 2.0:** clearer Chinese names for Pro features and the advanced Chain view.
 - **2.0:** Vesqen's own USB output, so phones without Android's official bit-perfect path can still play strictly (in development; we can't promise it yet); strict USB output that keeps each source's format, including 16-bit sources sent through a 24-bit path; sample-by-sample checks with real DACs and external equipment for the first `BIT-PERFECT VERIFIED` record; Pro features with a 7-day free trial and a one-time purchase.
 
 ## Privacy
@@ -93,7 +91,8 @@ Playback and your library never use the network, and your library, playlists and
 - Android 13 and earlier don't provide the official bit-perfect mixer API, so strict USB output isn't available there.
 - Even on phones that do offer the bit-perfect path, strict USB output currently stops for most files: Vesqen hands Android floating-point audio, and USB DACs' bit-perfect formats are integer. This is being fixed together with Vesqen's own USB output, planned for 2.0.
 - In strict USB mode, there is a short gap between tracks, even on gapless albums.
-- With shuffle on, the shuffled order isn't kept after Android stops Vesqen in the background: when you come back, the queue is shuffled again. The next update (1.1.0) keeps it.
+- Same-name `.lrc` lyrics files are read only in folders added with Add music folder, not for songs that Vesqen finds through Android's media library.
+- If Vesqen's library data is damaged and has to be rebuilt, folders added with Add music folder have to be added again.
 - Bluetooth is never bit-perfect. The Chain page can say that Vesqen's part left the audio unchanged; the phone still re-encodes it for Bluetooth.
 - If Android stops Vesqen in the background, the queue comes back when you open the app again. Resuming straight from headphone buttons doesn't work on the phones we tested, which pass those buttons only to music apps on a list built into the system. On Android 13 and later, the Play button in the notification shade and on the lock screen can't restart it either.
 - On vivo phones, Vesqen's playback controls show on the lock screen only after you turn on Lock screen notifications for Vesqen in the phone's notification settings.
