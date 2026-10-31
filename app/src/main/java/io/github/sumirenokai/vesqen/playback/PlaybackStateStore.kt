@@ -55,6 +55,9 @@ internal data class CountedPlayback(
  * before 1.1.0 read. Later cursors go to the small progress file, which names the queue file's state
  * it was written over and is ignored once that file was changed by anything else.
  *
+ * Catalog-open recovery can repair a committed merge on an IO thread (#191 A5). Instances share
+ * the queue preferences' monitor so that repair cannot interleave with a cursor or queue save.
+ *
  * While the player holds a restored queue unchanged, the saved queue also keeps the tracks the
  * restore held back, and the saved cursor indexes that queue ([holdBack]).
  *
@@ -82,32 +85,36 @@ internal class PlaybackStateStore(context: Context) {
     private var savedQueueIndexes: IntArray? = null
 
     fun load(): PersistedPlaybackState? {
-        val queueIds = preferences.getString(KEY_QUEUE_IDS, null)
-            ?.toTrackIds()
-            ?.takeIf(List<Long>::isNotEmpty)
-            ?: return null
-        val cursor = currentCursorPreferences()
-        val currentTrackId = cursor.getLong(KEY_CURRENT_TRACK_ID, NO_TRACK_ID).takeIf { it != NO_TRACK_ID }
-        return PersistedPlaybackState(
-            queueTrackIds = queueIds,
-            currentTrackId = currentTrackId,
-            positionMs = cursor.getLong(KEY_POSITION_MS, 0).coerceAtLeast(0),
-            shuffleEnabled = cursor.getBoolean(KEY_SHUFFLE_ENABLED, false),
-            repeatMode = cursor.repeatMode(),
-            currentQueueIndex = cursor.getInt(KEY_CURRENT_QUEUE_INDEX, -1).takeIf { it >= 0 },
-            queueEnded = if (cursor.contains(KEY_QUEUE_ENDED)) cursor.getBoolean(KEY_QUEUE_ENDED, false) else null,
-            countedOccurrenceId = cursor.countedOccurrenceId(currentTrackId),
-            playOrder = savedPlayOrder(queueIds.size),
-        )
+        synchronized(preferences) {
+            val queueIds = preferences.getString(KEY_QUEUE_IDS, null)
+                ?.toTrackIds()
+                ?.takeIf(List<Long>::isNotEmpty)
+                ?: return null
+            val cursor = currentCursorPreferences()
+            val currentTrackId = cursor.getLong(KEY_CURRENT_TRACK_ID, NO_TRACK_ID).takeIf { it != NO_TRACK_ID }
+            return PersistedPlaybackState(
+                queueTrackIds = queueIds,
+                currentTrackId = currentTrackId,
+                positionMs = cursor.getLong(KEY_POSITION_MS, 0).coerceAtLeast(0),
+                shuffleEnabled = cursor.getBoolean(KEY_SHUFFLE_ENABLED, false),
+                repeatMode = cursor.repeatMode(),
+                currentQueueIndex = cursor.getInt(KEY_CURRENT_QUEUE_INDEX, -1).takeIf { it >= 0 },
+                queueEnded = if (cursor.contains(KEY_QUEUE_ENDED)) cursor.getBoolean(KEY_QUEUE_ENDED, false) else null,
+                countedOccurrenceId = cursor.countedOccurrenceId(currentTrackId),
+                playOrder = savedPlayOrder(queueIds.size),
+            )
+        }
     }
 
     /** The listen counted for the saved current entry, without parsing the queue. */
     fun loadCountedPlayback(): CountedPlayback? {
-        if (!hasSavedQueue()) return null
-        val cursor = currentCursorPreferences()
-        val trackId = cursor.getLong(KEY_CURRENT_TRACK_ID, NO_TRACK_ID).takeIf { it != NO_TRACK_ID } ?: return null
-        val occurrenceId = cursor.countedOccurrenceId(trackId) ?: return null
-        return CountedPlayback(trackId, occurrenceId)
+        synchronized(preferences) {
+            if (!hasSavedQueue()) return null
+            val cursor = currentCursorPreferences()
+            val trackId = cursor.getLong(KEY_CURRENT_TRACK_ID, NO_TRACK_ID).takeIf { it != NO_TRACK_ID } ?: return null
+            val occurrenceId = cursor.countedOccurrenceId(trackId) ?: return null
+            return CountedPlayback(trackId, occurrenceId)
+        }
     }
 
     /**
@@ -129,45 +136,49 @@ internal class PlaybackStateStore(context: Context) {
      * can play by then. Once the queue is edited, it is saved as the player holds it.
      */
     fun holdBack(trackIds: Set<Long>) {
-        preferences.edit {
-            if (trackIds.isEmpty()) remove(KEY_HELD_BACK_TRACK_IDS) else putString(KEY_HELD_BACK_TRACK_IDS, trackIds.joinToString(","))
+        synchronized(preferences) {
+            preferences.edit {
+                if (trackIds.isEmpty()) remove(KEY_HELD_BACK_TRACK_IDS) else putString(KEY_HELD_BACK_TRACK_IDS, trackIds.joinToString(","))
+            }
         }
     }
 
     fun save(state: PersistedPlaybackState) {
-        if (state.queueTrackIds.isEmpty()) {
-            clear(PlaybackOrderSettings(state.shuffleEnabled, state.repeatMode))
-            return
-        }
-        val heldBack = heldBackSavedQueue(state.queueTrackIds)
-        val savedIndexes = heldBack?.indexes
-        savedQueueIndexes = savedIndexes
-        val playOrder = state.playOrder?.let { order -> heldBack?.let { heldBackPlayOrder(order, it) } ?: order }
-        preferences.edit {
-            if (savedIndexes == null) {
-                putString(KEY_QUEUE_IDS, state.queueTrackIds.joinToString(","))
-                remove(KEY_HELD_BACK_TRACK_IDS)
+        synchronized(preferences) {
+            if (state.queueTrackIds.isEmpty()) {
+                clear(PlaybackOrderSettings(state.shuffleEnabled, state.repeatMode))
+                return
             }
-            if (playOrder == null) remove(KEY_PLAY_ORDER) else putString(KEY_PLAY_ORDER, playOrder.joinToString(","))
-            remove(KEY_PLAY_ORDER_SIGNATURE)
-            putCursor(
-                currentTrackId = state.currentTrackId,
-                currentQueueIndex = savedQueueIndex(state.currentQueueIndex ?: -1),
-                positionMs = state.positionMs,
-                shuffleEnabled = state.shuffleEnabled,
-                repeatMode = state.repeatMode,
-                // Only states built without the field (tests, a 1.0.0 save loaded and saved back) lack
-                // it; the state keeper always knows it. Unknown stays unknown, so the position rule
-                // still applies.
-                queueEnded = state.queueEnded,
-                countedOccurrenceId = state.countedOccurrenceId,
-            )
+            val heldBack = heldBackSavedQueue(state.queueTrackIds)
+            val savedIndexes = heldBack?.indexes
+            savedQueueIndexes = savedIndexes
+            val playOrder = state.playOrder?.let { order -> heldBack?.let { heldBackPlayOrder(order, it) } ?: order }
+            preferences.edit {
+                if (savedIndexes == null) {
+                    putString(KEY_QUEUE_IDS, state.queueTrackIds.joinToString(","))
+                    remove(KEY_HELD_BACK_TRACK_IDS)
+                }
+                if (playOrder == null) remove(KEY_PLAY_ORDER) else putString(KEY_PLAY_ORDER, playOrder.joinToString(","))
+                remove(KEY_PLAY_ORDER_SIGNATURE)
+                putCursor(
+                    currentTrackId = state.currentTrackId,
+                    currentQueueIndex = savedQueueIndex(state.currentQueueIndex ?: -1),
+                    positionMs = state.positionMs,
+                    shuffleEnabled = state.shuffleEnabled,
+                    repeatMode = state.repeatMode,
+                    // Only states built without the field (tests, a 1.0.0 save loaded and saved back) lack
+                    // it; the state keeper always knows it. Unknown stays unknown, so the position rule
+                    // still applies.
+                    queueEnded = state.queueEnded,
+                    countedOccurrenceId = state.countedOccurrenceId,
+                )
+            }
+            // The queue's file now holds this cursor; an older progress file must no longer apply.
+            val signature = queueFileSignature().also { savedQueueSignature = it }
+            // The order names the file it was written with, which is known only once the file holds it.
+            if (playOrder != null) preferences.edit { putInt(KEY_PLAY_ORDER_SIGNATURE, signature) }
+            progressPreferences.edit { clear() }
         }
-        // The queue's file now holds this cursor; an older progress file must no longer apply.
-        val signature = queueFileSignature().also { savedQueueSignature = it }
-        // The order names the file it was written with, which is known only once the file holds it.
-        if (playOrder != null) preferences.edit { putInt(KEY_PLAY_ORDER_SIGNATURE, signature) }
-        progressPreferences.edit { clear() }
     }
 
     /** Update only the cursor, in the progress file; the queue's file is left untouched. */
@@ -180,11 +191,13 @@ internal class PlaybackStateStore(context: Context) {
         queueEnded: Boolean,
         countedOccurrenceId: String? = null,
     ) {
-        if (!hasSavedQueue()) return
-        val base = savedQueueSignature ?: queueFileSignature().also { savedQueueSignature = it }
-        progressPreferences.edit {
-            putInt(KEY_QUEUE_FILE_SIGNATURE, base)
-            putCursor(currentTrackId, savedQueueIndex(currentQueueIndex), positionMs, shuffleEnabled, repeatMode, queueEnded, countedOccurrenceId)
+        synchronized(preferences) {
+            if (!hasSavedQueue()) return
+            val base = savedQueueSignature ?: queueFileSignature().also { savedQueueSignature = it }
+            progressPreferences.edit {
+                putInt(KEY_QUEUE_FILE_SIGNATURE, base)
+                putCursor(currentTrackId, savedQueueIndex(currentQueueIndex), positionMs, shuffleEnabled, repeatMode, queueEnded, countedOccurrenceId)
+            }
         }
     }
 
@@ -196,29 +209,42 @@ internal class PlaybackStateStore(context: Context) {
      * (#191 A4).
      */
     fun replaceTrackIds(merges: Map<Long, Long>) {
-        val queue = preferences.getString(KEY_QUEUE_IDS, null)?.toTrackIds() ?: return
-        if (queue.none(merges::containsKey)) return
-        fun List<Long>.replaced() = joinToString(",") { (merges[it] ?: it).toString() }
-        val progressApplies = currentCursorPreferences() === progressPreferences
-        val playOrderApplies = savedPlayOrder(queue.size) != null
-        preferences.edit {
-            putString(KEY_QUEUE_IDS, queue.replaced())
-            preferences.getString(KEY_HELD_BACK_TRACK_IDS, null)?.let { putString(KEY_HELD_BACK_TRACK_IDS, it.toTrackIds().replaced()) }
-            replaceCursorTrackIds(preferences, merges)
-        }
-        savedQueueSignature = queueFileSignature()
-        if (playOrderApplies) preferences.edit { putInt(KEY_PLAY_ORDER_SIGNATURE, queueFileSignature()) }
-        if (progressApplies) {
-            progressPreferences.edit {
-                replaceCursorTrackIds(progressPreferences, merges)
-                putInt(KEY_QUEUE_FILE_SIGNATURE, queueFileSignature())
+        synchronized(preferences) {
+            val state = load()
+            if (state == null) {
+                // Flush an earlier asynchronous Clear before its recovery intent can be acknowledged.
+                check(preferences.edit().commit()) { "Could not save the cleared playback queue" }
+                return
             }
-        }
-    }
-
-    private fun SharedPreferences.Editor.replaceCursorTrackIds(cursor: SharedPreferences, merges: Map<Long, Long>) {
-        for (key in listOf(KEY_CURRENT_TRACK_ID, KEY_COUNTED_TRACK_ID)) {
-            merges[cursor.getLong(key, NO_TRACK_ID)]?.let { putLong(key, it) }
+            val updated = state.copy(
+                queueTrackIds = state.queueTrackIds.map { merges[it] ?: it },
+                currentTrackId = merges[state.currentTrackId] ?: state.currentTrackId,
+            )
+            val queue = updated.queueTrackIds.joinToString(",")
+            val signature = listOf(
+                queue, updated.currentTrackId ?: NO_TRACK_ID, updated.currentQueueIndex ?: -1,
+                updated.positionMs, updated.shuffleEnabled, updated.repeatMode.name,
+                updated.queueEnded, updated.countedOccurrenceId,
+            ).hashCode()
+            val editor = preferences.edit()
+            editor.putString(KEY_QUEUE_IDS, queue)
+            preferences.getString(KEY_HELD_BACK_TRACK_IDS, null)?.let { heldBack ->
+                editor.putString(KEY_HELD_BACK_TRACK_IDS, heldBack.toTrackIds().joinToString(",") { (merges[it] ?: it).toString() })
+            }
+            editor.putCursor(
+                updated.currentTrackId, updated.currentQueueIndex ?: -1, updated.positionMs,
+                updated.shuffleEnabled, updated.repeatMode, updated.queueEnded, updated.countedOccurrenceId,
+            )
+            if (updated.playOrder == null) {
+                editor.remove(KEY_PLAY_ORDER).remove(KEY_PLAY_ORDER_SIGNATURE)
+            } else {
+                editor.putString(KEY_PLAY_ORDER, updated.playOrder.joinToString(",")).putInt(KEY_PLAY_ORDER_SIGNATURE, signature)
+            }
+            // Queue, latest progress, counted occurrence and shuffle signature land in one atomic file
+            // replacement. Only then may the catalog merge journal forget this intent (#191 A5).
+            check(editor.commit()) { "Could not save the merged playback queue" }
+            savedQueueSignature = signature
+            progressPreferences.edit { clear() }
         }
     }
 
@@ -229,17 +255,19 @@ internal class PlaybackStateStore(context: Context) {
      * catalog IDs are about to name other songs (#165); the modes name none.
      */
     fun clear(modes: PlaybackOrderSettings? = savedPlayModes(), durable: Boolean = false) {
-        savedQueueSignature = null
-        savedQueueIndexes = null
-        preferences.edit(commit = durable) {
-            // Applied before the puts, whatever their order (SharedPreferences.Editor.clear).
-            clear()
-            if (modes != null) {
-                putBoolean(KEY_SHUFFLE_ENABLED, modes.shuffleEnabled)
-                putString(KEY_REPEAT_MODE, modes.repeatMode.name)
+        synchronized(preferences) {
+            savedQueueSignature = null
+            savedQueueIndexes = null
+            preferences.edit(commit = durable) {
+                // Applied before the puts, whatever their order (SharedPreferences.Editor.clear).
+                clear()
+                if (modes != null) {
+                    putBoolean(KEY_SHUFFLE_ENABLED, modes.shuffleEnabled)
+                    putString(KEY_REPEAT_MODE, modes.repeatMode.name)
+                }
             }
+            progressPreferences.edit(commit = durable) { clear() }
         }
-        progressPreferences.edit(commit = durable) { clear() }
     }
 
     private fun savedPlayModes(): PlaybackOrderSettings? {

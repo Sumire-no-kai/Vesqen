@@ -58,6 +58,24 @@ class PlaybackResumptionTest {
     }
 
     @Test
+    fun `catalog open repairs a committed merge before media button restoration`() = runBlocking {
+        var saved = PersistedPlaybackState(listOf(2, 2), 2, 7_000, true, PlaybackRepeatMode.ONE,
+            currentQueueIndex = 1, countedOccurrenceId = "counted", playOrder = listOf(1, 0))
+        val restored = PlaybackResumption(
+            loadSavedState = { saved },
+            readPlayableTracks = {
+                saved = saved.copy(queueTrackIds = listOf(7, 7), currentTrackId = 7)
+                listOf(track(7))
+            },
+        ).restore()!!
+        assertEquals(listOf(7L, 7L), restored.tracks.map(AudioTrack::id))
+        assertEquals(1, restored.startIndex)
+        assertEquals(7_000, restored.positionMs)
+        assertEquals("counted", restored.startOccurrenceId)
+        assertEquals(listOf(1, 0), restored.playOrder)
+    }
+
+    @Test
     fun `only a Play press may start the service`() {
         val playKeys = listOf(
             KeyEvent.KEYCODE_MEDIA_PLAY,
