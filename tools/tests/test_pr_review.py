@@ -141,6 +141,57 @@ class ReviewFlowTests(unittest.TestCase):
                 self.assertEqual("openai", call.args[0].provider)
                 self.assertEqual("gpt-6.1-sol", call.args[0].model)
 
+    def test_lowest_priority_sets_the_instructions_schema_and_accepted_findings(self):
+        verdict = {"verdicts": [{"candidate_id": 1, "confirmed": True, "reason": "Trigger traced."}]}
+        minor = {**FINDING, "priority": "P3"}
+        with patch.object(review.Model, "generate", autospec=True, side_effect=[{"findings": [minor]}, verdict]) as model:
+            summary = review.run(self.github, {**ENV, "PR_REVIEW_LOWEST_PRIORITY": "p3"}, self.root, {})
+        discovery = model.call_args_list[0]
+        self.assertIn("- P3:", discovery.args[0].system)
+        self.assertEqual(["P1", "P2", "P3"],
+                         discovery.args[3]["properties"]["findings"]["items"]["properties"]["priority"]["enum"])
+        self.assertIn("[P3] Preserve idle state", summary)
+        self.assertIn("Reported priorities: P1–P3", summary)
+
+        with patch.object(review.Model, "generate", autospec=True, return_value={"findings": []}) as model:
+            summary = review.run(FakeGitHub(), {**ENV, "PR_REVIEW_LOWEST_PRIORITY": "P1"}, self.root, {})
+        self.assertNotIn("- P2:", model.call_args.args[0].system)
+        self.assertIn("No introduced P1 defects", summary)
+        with patch.object(review.Model, "generate", side_effect=[{"findings": [FINDING]}]):
+            with self.assertRaises(review.ReviewError):
+                review.run(FakeGitHub(), {**ENV, "PR_REVIEW_LOWEST_PRIORITY": "P1"}, self.root, {})
+
+    def test_default_priorities_stay_p1_and_p2(self):
+        with patch.object(review.Model, "generate", autospec=True, return_value={"findings": []}) as model:
+            summary = review.run(self.github, ENV, self.root, {})
+        self.assertIn("- P2:", model.call_args.args[0].system)
+        self.assertNotIn("- P3:", model.call_args.args[0].system)
+        self.assertIn("Reported priorities: P1–P2", summary)
+
+    def test_invalid_lowest_priority_fails_before_spending_api_budget(self):
+        for value in ("P4", "high", "P0"):
+            with self.subTest(value=value), patch.object(review.Model, "generate") as model:
+                with self.assertRaisesRegex(review.ReviewError, "P1, P2 or P3"):
+                    review.run(self.github, {**ENV, "PR_REVIEW_LOWEST_PRIORITY": value}, self.root, {})
+            model.assert_not_called()
+
+    def test_review_rules_come_first_and_survive_a_long_prd(self):
+        (self.root / "docs").mkdir()
+        (self.root / review.REVIEW_RULES).write_text("Check closely: queue checkpoints.")
+        for name in ("PRODUCT.md", "CONTEXT.md", "docs/PRD.md", "CONTRIBUTING.md"):
+            (self.root / name).write_text("x" * 7000)
+        rules = review.trusted_rules(self.root, [PATH])
+        self.assertEqual(review.REVIEW_RULES, next(iter(rules)))
+        self.assertIn("queue checkpoints", rules[review.REVIEW_RULES])
+        with patch.object(review.Model, "generate", return_value={"findings": []}):
+            summary = review.run(self.github, ENV, self.root, {})
+        self.assertIn(f"Review rules: `{review.REVIEW_RULES}`", summary)
+
+    def test_review_header_says_when_there_are_no_review_rules(self):
+        with patch.object(review.Model, "generate", return_value={"findings": []}):
+            summary = review.run(self.github, ENV, self.root, {})
+        self.assertIn("Review rules: none on the default branch", summary)
+
     def test_anthropic_override_still_requires_its_own_model(self):
         with patch.object(review.Model, "generate") as model:
             with self.assertRaises(review.ReviewError):
