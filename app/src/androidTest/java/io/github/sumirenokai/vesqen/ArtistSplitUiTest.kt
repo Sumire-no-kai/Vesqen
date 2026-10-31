@@ -234,6 +234,34 @@ class ArtistSplitUiTest {
     }
 
     @Test
+    fun anArtistPageASettingRemovedStaysClosedAfterTripsToSettings() {
+        // #191 R3-C1: the setting changes in Settings, while the Library is not composed. The first
+        // C3 fix compared settings held in plain memory, which the Library dropped on the way, so a
+        // second change in Settings reopened the old artist page by itself.
+        var split by mutableStateOf(ArtistSplitSettings())
+        renderApp(getSplit = { split }, onSplitChange = { split = it })
+        compose.onNodeWithTag("vesqen.library.mode.artists").performClick()
+        compose.onNodeWithText("Adam Gubman").performClick()
+        compose.onNodeWithTag("vesqen.library.track.1").assertIsDisplayed()
+
+        fun toggleSplittingInSettings() {
+            compose.onNodeWithTag("vesqen.nav.settings").performClick()
+            compose.onNodeWithTag("vesqen.settings").performScrollToNode(hasTestTag("vesqen.settings.artist-split"))
+            compose.onNodeWithTag("vesqen.settings.artist-split").performClick()
+            compose.onNodeWithTag("vesqen.nav.library").performClick()
+        }
+        toggleSplittingInSettings()
+        compose.runOnIdle { assertFalse(split.enabled) }
+        compose.onNodeWithText("Adam Gubman feat. Nari").assertIsDisplayed()
+        compose.onAllNodesWithTag("vesqen.library.track.1").assertCountEquals(0)
+
+        toggleSplittingInSettings()
+        compose.runOnIdle { assertTrue(split.enabled) }
+        compose.onNodeWithText("Nari").assertIsDisplayed()
+        compose.onAllNodesWithTag("vesqen.library.track.1").assertCountEquals(0)
+    }
+
+    @Test
     fun anOpenListDialogStaysWhenItsGroupLeavesTheSettingsList() {
         var split by mutableStateOf(ArtistSplitSettings())
         var height by mutableStateOf(900.dp)

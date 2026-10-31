@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
+import io.github.sumirenokai.vesqen.library.LibraryScanProgress
 import io.github.sumirenokai.vesqen.library.LibrarySource
 import io.github.sumirenokai.vesqen.library.LibrarySourceKind
 import io.github.sumirenokai.vesqen.library.UnmatchedLibraryRecord
@@ -154,6 +155,43 @@ class UnmatchedRecordsUiTest {
         assertTrue("The first song shows $visible of its row", visible >= 48.dp)
         // The card scrolls inside its share of the header, so the line's buttons stay reachable.
         compose.onNodeWithTag("vesqen.library.unmatched.review").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun shortNoticesStayInViewUnderAScanningCardAtNormalText() {
+        // #191 R3-C2: on a 360 x 640 dp phone with a song playing, a scanning folder card reached the
+        // notices' height limit at 100 % text, and the notifications and "could not save" notices
+        // inside the same column fell below its fold.
+        val folder = LibrarySource("folder:music", LibrarySourceKind.FOLDER, "Music")
+        compose.setContent {
+            VesqenTheme {
+                Box(Modifier.size(width = 360.dp, height = 640.dp)) {
+                    VesqenAppContent(
+                        state = VesqenUiState(
+                            library = state(dismissed = setOf(record.id)).copy(
+                                sources = listOf(folder),
+                                scanProgress = LibraryScanProgress(folder.id, folder.displayName, scannedTrackCount = 120),
+                                notificationsAllowed = false,
+                                catalogMutationFailed = true,
+                            ),
+                            playback = PlaybackSnapshot(trackId = aira.id),
+                        ),
+                        onRequestMusicAccess = {}, onOpenAppSettings = {}, onOpenNotificationSettings = {},
+                        onRescan = {}, onTrackSelected = {}, onPrevious = {}, onPlayPause = {}, onNext = {},
+                        onSeek = {}, onCyclePlaybackOrder = {},
+                        motionPolicy = VesqenMotionPolicy(reduceMotion = true), supportUrl = null,
+                    )
+                }
+            }
+        }
+
+        listOf("vesqen.library.notifications-notice", "vesqen.library.mutation-failed").forEach { tag ->
+            val node = compose.onNodeWithTag(tag).assertIsDisplayed()
+            val shown = node.fetchSemanticsNode().boundsInRoot.height
+            val full = with(compose.density) { node.getUnclippedBoundsInRoot().height.toPx() }
+            assertTrue("$tag shows $shown of $full px", shown >= full - 1f)
+        }
+        compose.onNodeWithTag("vesqen.library.track.11").assertIsDisplayed()
     }
 
     @Test
