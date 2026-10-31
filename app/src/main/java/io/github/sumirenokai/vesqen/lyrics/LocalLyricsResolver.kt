@@ -103,15 +103,16 @@ internal class LocalLyricsResolver(
         // result of a lower-priority source would hide that source until the next completed refresh.
         var complete = true
         val picked = pickLyrics { source ->
-            when (source) {
-                LyricsSource.Imported ->
-                    readImported(track.id) ?: SourceLyrics.Unreadable(UnreadableReason.ReadFailed).also { complete = false }
+            val read = when (source) {
+                LyricsSource.Imported -> readImported(track.id) ?: SourceLyrics.Unreadable(UnreadableReason.ReadFailed)
                 LyricsSource.SameNameFile -> when {
                     !inAddedFolder -> SourceLyrics.Absent
                     else -> readSameNameFile(uri, track.fileName) ?: SourceLyrics.Absent.also { complete = false }
                 }
                 LyricsSource.Embedded -> readEmbedded(uri, track.fileSizeBytes)
             }
+            if (read == SourceLyrics.Unreadable(UnreadableReason.ReadFailed)) complete = false
+            read
         }
         val lyrics = when (picked) {
             is PickedLyrics.Found -> TrackLyrics.Found(picked.source, picked.lyrics)
@@ -129,11 +130,14 @@ internal class LocalLyricsResolver(
     }
 
     /**
-     * Each provider call below treats any failure of the provider as "no same-name file", so a
-     * misbehaving documents provider falls through to the embedded tags (owner decision 8) instead
-     * of failing Now. With targetSdk 26+ DocumentsContract rethrows what the provider threw, and a
-     * provider that died answers with a NullPointerException. Null when the provider failed for now:
-     * the path lookup failed, the folder was not listed completely, or the listed file did not open.
+     * A failure of any provider call below falls through to the embedded tags (owner decision 8),
+     * so a misbehaving documents provider never fails Now. With targetSdk 26+ DocumentsContract
+     * rethrows what the provider threw, and a provider that died answers with a NullPointerException.
+     * Null when the provider could not say for now whether there is a same-name file: the path lookup
+     * failed or the folder was not listed completely. A listed file that does not open is there but
+     * could not be read just now (#191 B4), also with FileNotFoundException, which offline cloud
+     * providers give; a file deleted since the listing reads as absent once the listing is forgotten
+     * on the next return to the foreground.
      */
     private fun readSameNameFile(trackUri: Uri, fileName: String): SourceLyrics? {
         // Document IDs are opaque, so the provider is asked for the folder holding the track.
@@ -155,7 +159,8 @@ internal class LocalLyricsResolver(
             .also { folderLyricsFiles.put(folderKey, it) }
         val documentId = sameNameLyricsDocumentId(fileName, candidates) ?: return SourceLyrics.Absent
         val documentUri = DocumentsContract.buildDocumentUriUsingTree(trackUri, documentId)
-        val bytes = readProviderLyrics { contentResolver.openInputStream(documentUri) } ?: return null
+        val bytes = readProviderLyrics { contentResolver.openInputStream(documentUri) }
+            ?: return SourceLyrics.Unreadable(UnreadableReason.ReadFailed)
         return if (bytes.size > MAX_LYRICS_TEXT_BYTES) SourceLyrics.Unreadable(UnreadableReason.TooLarge) else readLyricsFile(bytes)
     }
 

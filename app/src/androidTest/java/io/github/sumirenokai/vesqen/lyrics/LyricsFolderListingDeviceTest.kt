@@ -70,6 +70,19 @@ class LyricsFolderListingDeviceTest {
         assertEquals(LyricsSource.SameNameFile, (resolver.load(track) as TrackLyrics.Found).source)
     }
 
+    // #191 B4: with nothing else to show, a listed file that does not open is there but could not be
+    // read just now, not "no lyrics".
+    @Test
+    fun aSameNameFileThatFailsToOpenSaysItCouldNotBeRead() = runBlocking {
+        FakeDocumentsProvider.files["music/song.flac"] = ByteArray(0)
+        FakeDocumentsProvider.files["music/song.lrc"] = "[00:01.00]Beside the song".toByteArray()
+        FakeDocumentsProvider.openFailures["music/song.lrc"] = IllegalStateException("The provider is offline")
+
+        assertEquals(TrackLyrics.Unreadable(UnreadableReason.ReadFailed), resolver.load(track))
+        FakeDocumentsProvider.openFailures.clear()
+        assertEquals(LyricsSource.SameNameFile, (resolver.load(track) as TrackLyrics.Found).source)
+    }
+
     @Test
     fun aPathLookupThatFailsForNowIsTriedAgain() = runBlocking {
         FakeDocumentsProvider.files["music/song.flac"] = withEmbeddedLyrics("[00:01.00]Embedded in the song")
