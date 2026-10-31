@@ -5,6 +5,7 @@ on:
     branches: [master, "release/**"]
   # Stacked feature PRs need the same checks before their prerequisite is merged.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read

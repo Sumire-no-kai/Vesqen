@@ -31,6 +31,9 @@ Use JDK 25 and Android SDK Platform 36. Before submitting a change, run:
 
 On Windows, use `.\gradlew.bat`. Add unit tests for core logic and instrumentation tests for Android integration when practical. Device-dependent audio claims must name the app version, phone, ROM or build, DAC, source format and verification method.
 
+The optional [automated PR review](docs/PR_REVIEW.md) adds advisory findings after
+Android CI. It does not replace these checks or device-dependent verification.
+
 ## Changes and pull requests
 
 - Branch from `master`, or from the current `release/*` branch for a fix that must ship in that release. Name the branch by its purpose with a prefix such as `feature/`, `fix/`, `docs/`, `refactor/` or `test/`.
