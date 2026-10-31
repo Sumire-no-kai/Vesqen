@@ -72,9 +72,13 @@ the review workload; they do not classify a small change as low risk.
   P1/P2 defects. A second call challenges every candidate. Only retained findings appear in the review.
   With no candidates, there is no verification call.
 - Publication is one consolidated **COMMENT** review bound to the head commit,
-  with file/line links and coverage limits. It never approves, requests changes,
+  written in detailed English. Each finding explains its trigger, impact,
+  code evidence and suggested fix, followed by verification evidence. The report
+  also lists input scope, CI status, file/line links and coverage limits.
+  It never approves, requests changes,
   modifies code, merges, or dismisses another review. Manual runs default to
-  summary-only mode.
+  summary-only mode: the same detailed report is written to the Actions summary
+  without posting to the PR. This changes the destination, not the detail level.
 - The exact base/head pair is deduplicated against prior reviews by
   `github-actions[bot]`. The script checks for drift before model calls and before
   publication. GitHub also binds the review to the inspected head, so a push

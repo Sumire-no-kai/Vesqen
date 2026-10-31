@@ -32,8 +32,12 @@ Only report defects with a reachable trigger, wrong outcome and code evidence.
 Do not report style preferences, speculative improvements, pre-existing bugs,
 or device behavior that cannot be established from the supplied evidence.
 Do not claim to have run tests or verified hardware. CI status is separate.
-Return the requested JSON, with concise English prose and no external links,
-images, mentions, secrets, or copied private data. No tools are available.
+Return the requested JSON in detailed English. Each finding body must contain
+four labeled paragraphs: Trigger, Impact, Evidence, and Suggested fix. Name the
+relevant code symbols and explain the reachable failure; keep each body within
+2,000 characters. Be specific without padding or inventing findings.
+Use no external links, images, mentions, secrets, or copied private data.
+No tools are available.
 """
 
 
@@ -116,12 +120,12 @@ FINDING_SCHEMA = object_schema({
     "side": {"type": "string", "enum": ["LEFT", "RIGHT"]},
     "priority": {"type": "string", "enum": ["P1", "P2"]},
     "title": {"type": "string"},
-    "body": {"type": "string", "description": "Concrete trigger, wrong outcome, evidence and a small fix."},
+    "body": {"type": "string", "description": "Detailed English, at most 2,000 characters: Trigger, Impact, Evidence, Suggested fix, each in its own labeled paragraph."},
 })
 DISCOVERY_SCHEMA = object_schema({"findings": {"type": "array", "items": FINDING_SCHEMA}})
 VERIFICATION_SCHEMA = object_schema({"verdicts": {"type": "array", "items": object_schema({
     "candidate_id": {"type": "integer"}, "confirmed": {"type": "boolean"},
-    "reason": {"type": "string", "description": "Trace the trigger or cite the guard that prevents it."},
+    "reason": {"type": "string", "description": "Detailed English evidence, at most 2,000 characters: trace the trigger through the supplied code or cite the guard that prevents it."},
 })}})
 
 
@@ -419,7 +423,7 @@ def ensure_current(github, pr):
 
 
 def render_review(repository, pr, data, findings, candidate_count, discovery, verifier, ci):
-    body = [marker(pr), "## Automated code review", "",
+    body = [marker(pr), "## Detailed code review", "",
             f"Commit: `{pr['head']['sha']}` · Base: `{pr['base']['sha']}`",
             f"Discovery: {markdown(discovery.provider + '/' + discovery.model)} · "
             f"Verification: {markdown(verifier.provider + '/' + verifier.model)}",
@@ -427,7 +431,13 @@ def render_review(repository, pr, data, findings, candidate_count, discovery, ve
             "This reviewer does not execute tests or device QA.", "",
             f"{len(findings)} finding(s) retained from {candidate_count} candidate(s). "
             "This is advisory, not an approval or proof that the PR is defect-free.",
-            "Candidate verification: " + ("completed." if candidate_count else "not run (no candidates)."), ""]
+            "Candidate verification: " + ("completed." if candidate_count else "not run (no candidates)."), "",
+            "### Review input", f"- Changed text files: {len(data['files'])}",
+            f"- Supplied source-context files: {len(data['context'])}",
+            f"- Text-diff characters: {sum(len(f['patch']) for f in data['files'])}",
+            "", "### Findings", ""]
+    if not findings:
+        body.extend(["No introduced P1/P2 defects were confirmed in the supplied context.", ""])
     old_paths = {f["filename"]: f.get("previous_filename", f["filename"]) for f in data["files"]}
     for item in findings:
         sha = data["pr"]["diff_base_sha"] if item["side"] == "LEFT" else pr["head"]["sha"]
