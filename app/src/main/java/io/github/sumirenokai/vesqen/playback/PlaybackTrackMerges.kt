@@ -35,6 +35,9 @@ internal class PlaybackTrackMerges(context: Context) : TrackMergeFollower {
     /** Every merge committed in this catalog during this process, on the main thread. */
     private val merged = HashMap<Long, Long>()
 
+    /** The catalog generation of each merge from [prepareMerge] to its commit or rollback, by the merged row. */
+    private val preparedGenerations = HashMap<Long, Long>() // Under journal's lock.
+
     /** On the main thread, from the service's creation until [detach]. */
     fun attach(applyMerges: (merges: Map<Long, Long>) -> Unit) {
         service = applyMerges
@@ -52,7 +55,10 @@ internal class PlaybackTrackMerges(context: Context) : TrackMergeFollower {
         return current
     }
 
-    /** Before the catalog is rebuilt: its IDs name other songs, or none, afterwards. From any thread. */
+    /**
+     * Before the catalog is rebuilt: its IDs name other songs, or none, afterwards. From any thread.
+     * The generation rises at once, so a merge whose step is posted after this one's is dropped too.
+     */
     fun forgetMerges() {
         synchronized(journal) {
             generation++
@@ -61,7 +67,10 @@ internal class PlaybackTrackMerges(context: Context) : TrackMergeFollower {
         }
     }
 
-    override fun prepareMerge(from: Long, into: Long) = Unit
+    override fun prepareMerge(from: Long, into: Long) {
+        // Inside the merging transaction, so before any rebuild of this catalog can start.
+        synchronized(journal) { preparedGenerations[from] = generation }
+    }
 
     /** Written once per catalog transaction, before SQLite can commit (#191 A5). */
     override fun prepareCommit(merges: List<Pair<Long, Long>>) {
@@ -89,7 +98,10 @@ internal class PlaybackTrackMerges(context: Context) : TrackMergeFollower {
 
     override fun mergesCommitted(merges: List<Pair<Long, Long>>) {
         if (merges.isEmpty()) return
-        synchronized(journal) { publish(merges.toList(), merges.toMap()) }
+        synchronized(journal) {
+            val current = merges.filter { (from, _) -> (preparedGenerations.remove(from) ?: generation) == generation }
+            if (current.isNotEmpty()) publish(current, current.toMap())
+        }
     }
 
     /** Called under journal's lock; acknowledgment follows the durable queue write, never precedes it. */
@@ -123,7 +135,10 @@ internal class PlaybackTrackMerges(context: Context) : TrackMergeFollower {
     }
 
     override fun mergeRolledBack(from: Long, into: Long) {
-        synchronized(journal) { removePending(mapOf(from to into)) }
+        synchronized(journal) {
+            preparedGenerations.remove(from)
+            removePending(mapOf(from to into))
+        }
     }
 }
 

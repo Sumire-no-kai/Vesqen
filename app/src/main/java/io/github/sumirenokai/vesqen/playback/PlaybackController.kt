@@ -201,6 +201,12 @@ class PlaybackController(
         if (activeController != null) synchronizeLibrary(activeController, currentLibrary)
     }
 
+    /**
+     * The track of a queue entry: the one it was queued with, else the Library's. An entry can take a
+     * merged row's ID the controller never queued, such as an Undo after a merge (#191 R3-A2).
+     */
+    private fun trackOf(mediaId: String): AudioTrack? = tracksById[mediaId] ?: availableTracksById[mediaId]
+
     private fun startQueue(
         activeController: MediaController,
         tracks: List<AudioTrack>,
@@ -476,7 +482,7 @@ class PlaybackController(
                 latestSnapshot.withPlayerPosition(
                     isPlaying = player.isPlaying,
                     durationMs = player.duration,
-                    libraryDurationMs = player.currentMediaItem?.mediaId?.let(tracksById::get)?.durationMs,
+                    libraryDurationMs = player.currentMediaItem?.mediaId?.let(::trackOf)?.durationMs,
                     positionMs = player.currentPosition,
                 ),
             )
@@ -510,7 +516,7 @@ class PlaybackController(
             queueCache = buildQueueCache(player)
         }
         val item = player.currentMediaItem
-        val track = item?.mediaId?.let(tracksById::get)
+        val track = item?.mediaId?.let(::trackOf)
         val metadata = item?.mediaMetadata
         updateSnapshot(
             PlaybackSnapshot(
@@ -572,7 +578,7 @@ class PlaybackController(
         val queueItems = List(player.mediaItemCount, player::getMediaItemAt)
         val projection = playOrderOf(player, queueItems).mapNotNull { index ->
             val queueItem = queueItems[index]
-            val queueTrack = tracksById[queueItem.mediaId] ?: availableTracksById[queueItem.mediaId]
+            val queueTrack = trackOf(queueItem.mediaId)
             val queueTrackId = queueItem.mediaId.toLongOrNull() ?: return@mapNotNull null
             PlaybackQueueItem(
                 trackId = queueTrackId,

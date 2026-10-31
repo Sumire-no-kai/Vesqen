@@ -24,6 +24,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -224,8 +225,8 @@ class MergedTrackQueueDeviceTest {
     fun undoAfterAMergePutsBackTheRowItMergedInto() = withPlayback { app ->
         val queued = (1L..3L).map { silentTrack(app, it) }
         val record = queued[1].copy(id = -2_000, title = "Record")
-        main { controller.playQueue(queued, 0) }
-        awaitPlayback { it.trackId == queued[0].id && it.queueSize == 3 }
+        main { controller.playQueue(queued, 1) }
+        awaitPlayback { it.trackId == queued[1].id && it.queueSize == 3 }
         main { controller.clearQueue() }
         awaitPlayback { it.queueSize == 0 }
 
@@ -233,8 +234,40 @@ class MergedTrackQueueDeviceTest {
         // deleted row. The queue takes the merged ID as it enters the service's player.
         app.playbackTrackMerges.mergeCommitted(from = queued[1].id, into = record.id)
         instrumentation.waitForIdleSync()
+        // The Library read after the merge holds the record.
+        main { controller.syncLibrary(listOf(queued[0], record, queued[2])) }
         main { controller.undoClearQueue() }
         awaitPlayback { snapshot -> snapshot.queue.map(PlaybackQueueItem::trackId) == listOf(queued[0].id, record.id, queued[2].id) }
+        // #191 R3-A2: the restored queue is paused and not prepared, so Now takes the duration from the
+        // record's track; the controller looked only among the tracks it had queued, which had none.
+        awaitPlayback { it.trackId == record.id }
+        assertFalse(playback.get().isPlaying)
+        assertEquals(record.durationMs, playback.get().durationMs)
+    }
+
+    @Test
+    fun aMergeCommittedJustBeforeARebuildDoesNotOutliveIt() {
+        // #191 R3-A1: the rebuild's clear could run before the step of a merge that committed just before
+        // it, which then kept renaming the old ID, now another song's, for the rest of the process.
+        val merges = PlaybackTrackMerges(isolatedContext)
+        val applied = mutableListOf<Map<Long, Long>>()
+        main { merges.attach { applied += it } }
+        merges.prepareMerge(from = 2, into = 7)
+        merges.forgetMerges()
+        merges.mergesCommitted(listOf(2L to 7L))
+        instrumentation.waitForIdleSync()
+        var renamed = 0L
+        main { renamed = merges.mergedTrackId(2) }
+        assertEquals(2L, renamed)
+        assertEquals(emptyList<Map<Long, Long>>(), applied)
+
+        // A merge in the rebuilt catalog applies.
+        merges.prepareMerge(from = 3, into = 8)
+        merges.mergesCommitted(listOf(3L to 8L))
+        instrumentation.waitForIdleSync()
+        main { renamed = merges.mergedTrackId(3) }
+        assertEquals(8L, renamed)
+        assertEquals(listOf(mapOf(3L to 8L)), applied)
     }
 
     @Test

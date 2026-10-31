@@ -52,6 +52,12 @@ class BaselineProfileGenerator {
         click(ALBUM_ROW)
         click("vesqen.library.album.play")
         click("vesqen.mini-player.open-now")
+        // #169: the lyrics in the cover's place, then the cover again, so later runs start from it.
+        // The first demo track embeds synced lyrics (tools/demo_library); any other shows the message.
+        click("vesqen.now.lyrics-toggle")
+        waitFor(By.res(LYRICS_SHOWN), LYRICS_SHOWN.pattern(), UI_TIMEOUT_MS)
+        click("vesqen.now.lyrics-toggle")
+        waitFor("vesqen.now.artwork-stage")
         click("vesqen.now.notes-toggle")
         click("vesqen.now.open-chain")
         waitFor("vesqen.chain")
@@ -152,5 +158,6 @@ class BaselineProfileGenerator {
         const val SCAN_TIMEOUT_MS = 180_000L
         val TRACK_ROW: Pattern = Pattern.compile("""vesqen\.library\.track\.-?\d+""")
         val ALBUM_ROW: Pattern = Pattern.compile("""vesqen\.library\.collection\..+""")
+        val LYRICS_SHOWN: Pattern = Pattern.compile("""vesqen\.now\.lyrics\.(line\.0|message)""")
     }
 }

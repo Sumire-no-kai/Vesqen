@@ -83,8 +83,9 @@ internal class ActivationCodeBook(
 
 /**
  * Any app or page can open an activation link, with a code that may leak and be revoked later, so a
- * link never replaces a working code; the Pro page then shows the kept one, and typing a code there
- * still replaces it (#194 S3). Null when the link was not used.
+ * link never replaces a working code, and the Pro page then shows the kept one (#194 S3). Null when
+ * the link was not used. The Pro page takes a typed code only while none works, so a working code
+ * cannot be replaced at all yet; a way to enter another one is due before sales open (#194 B5).
  */
 internal fun ActivationCodes.activateFromLink(text: String): ActivationResult? =
     if (state.value is ActivationState.Active) null else activate(text)

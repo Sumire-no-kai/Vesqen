@@ -34,5 +34,16 @@ class RemoteJsonTest {
         assertFalse(jsonNestedWithin("""[/* " */ ${"[".repeat(100)}"""))
         assertFalse(jsonNestedWithin("""[# "
 ${"[".repeat(100)}"""))
+        // #194 round 3 B3: org.json reads an unquoted string up to a bracket or comma, quote included,
+        // so a quote inside one starts no string and the brackets after it nest.
+        assertFalse(jsonNestedWithin("""[0", ${"[".repeat(100)}"""))
+        assertFalse(jsonNestedWithin("""{a":${"[".repeat(100)}"""))
+        // A quote after a value without a comma is refused too; org.json would stop there anyway.
+        assertFalse(jsonNestedWithin("""{"a":1 "b":2}"""))
+    }
+
+    @Test
+    fun whitespaceBeforeAQuoteKeepsTheStringStart() {
+        assertTrue(jsonNestedWithin("{\n  \"a\" :\t\"b\",\r\n  \"c\": [ \"d\" ]\n}"))
     }
 }
