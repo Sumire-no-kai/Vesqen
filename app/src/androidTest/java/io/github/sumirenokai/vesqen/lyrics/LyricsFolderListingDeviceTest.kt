@@ -6,6 +6,7 @@ import io.github.sumirenokai.vesqen.telemetry.isolatedPlaybackTestApplication
 import io.github.sumirenokai.vesqen.testing.FakeDocumentsProvider
 import io.github.sumirenokai.vesqen.testing.FakeDocumentsProvider.Listing
 import java.io.File
+import java.io.FileNotFoundException
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -104,6 +105,33 @@ class LyricsFolderListingDeviceTest {
         assertEquals(LyricsSource.Embedded, (resolver.load(track) as TrackLyrics.Found).source)
         FakeDocumentsProvider.pathFailure = null
         assertEquals(LyricsSource.Embedded, (resolver.load(track) as TrackLyrics.Found).source)
+    }
+
+    @Test
+    fun embeddedLyricsAreRetriedAfterTheProviderRestarts() =
+        assertEmbeddedReadAgainAfter(IllegalStateException("The provider restarted"))
+
+    @Test
+    fun embeddedLyricsAreRetriedAfterTheProviderWasOffline() =
+        assertEmbeddedReadAgainAfter(FileNotFoundException("The provider was offline"))
+
+    @Test
+    fun aSuccessfulReadWithoutEmbeddedLyricsStaysCached() = runBlocking {
+        FakeDocumentsProvider.files["music/song.flac"] = ByteArray(0)
+        assertEquals(TrackLyrics.None(folderHint = false), resolver.load(track))
+        FakeDocumentsProvider.openFailures["music/song.flac"] = IllegalStateException("The provider restarted")
+        assertEquals(TrackLyrics.None(folderHint = false), resolver.load(track))
+        resolver.clearCache()
+        assertEquals(TrackLyrics.Unreadable(UnreadableReason.ReadFailed), resolver.load(track))
+    }
+
+    private fun assertEmbeddedReadAgainAfter(failure: Exception) = runBlocking {
+        FakeDocumentsProvider.files["music/song.flac"] = withEmbeddedLyrics("[00:01.00]Embedded in the song")
+        FakeDocumentsProvider.openFailures["music/song.flac"] = failure
+        assertEquals(TrackLyrics.Unreadable(UnreadableReason.ReadFailed), resolver.load(track))
+        FakeDocumentsProvider.openFailures.clear()
+        val found = resolver.load(track) as TrackLyrics.Found
+        assertEquals(LyricsSource.Embedded, found.source)
     }
 
     private fun assertListedAgainAfter(incomplete: Listing) = runBlocking {

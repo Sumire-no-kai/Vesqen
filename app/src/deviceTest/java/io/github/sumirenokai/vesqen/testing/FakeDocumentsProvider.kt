@@ -42,6 +42,7 @@ class FakeDocumentsProvider : DocumentsProvider() {
     }
 
     override fun openDocument(documentId: String, mode: String, signal: CancellationSignal?): ParcelFileDescriptor {
+        beforeOpen?.invoke(documentId)
         openFailures[documentId]?.let { throw it }
         val bytes = files[documentId] ?: throw FileNotFoundException(documentId)
         val copy = File.createTempFile("fake-document", null, requireNotNull(context).cacheDir)
@@ -76,7 +77,10 @@ class FakeDocumentsProvider : DocumentsProvider() {
         @Volatile var listing = Listing.COMPLETE
 
         /** Thrown when the document is opened, as a provider's own failure reaches the app. */
-        val openFailures: MutableMap<String, RuntimeException> = java.util.concurrent.ConcurrentHashMap()
+        val openFailures: MutableMap<String, Exception> = java.util.concurrent.ConcurrentHashMap()
+
+        /** Lets a test complete a catalog edit while a selected document is being opened. */
+        @Volatile var beforeOpen: ((String) -> Unit)? = null
 
         /** Thrown by the path lookup; UnsupportedOperationException is a provider that has none. */
         @Volatile var pathFailure: RuntimeException? = null
@@ -86,6 +90,7 @@ class FakeDocumentsProvider : DocumentsProvider() {
         fun authority(packageName: String) = "$packageName.fake-documents"
 
         fun reset() {
+            beforeOpen = null
             files.clear()
             listing = Listing.COMPLETE
             openFailures.clear()

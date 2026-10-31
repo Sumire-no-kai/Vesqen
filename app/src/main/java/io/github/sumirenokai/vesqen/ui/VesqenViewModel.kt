@@ -357,26 +357,24 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     /**
      * The picker can return after process death, before the Library is read again, so the catalog
-     * row itself says whether the ID still names the same file; no scan has to finish first.
+     * row itself says whether the ID still names the same file. Check and save together after the
+     * provider read: a scan or another activity may merge the row while that read waits (#205).
      */
     private suspend fun importLyricsFile(target: LyricsImportTarget, source: Uri): LyricsImportResult {
-        val rebuildsBefore = catalogRebuilds.value
-        val contentUri = try {
-            catalog.trackContentUri(target.trackId)
-        } catch (_: SQLiteException) {
-            return LyricsImportResult.FAILED
-        } catch (failure: IllegalStateException) {
-            failure.rethrowUnlessCatalogRebuiltSince(rebuildsBefore)
-            return LyricsImportResult.TRACK_CHANGED
-        }
-        if (contentUri != target.contentUri) return LyricsImportResult.TRACK_CHANGED
-        return readLyricsImport(target, source)
-    }
-
-    private fun readLyricsImport(target: LyricsImportTarget, source: Uri): LyricsImportResult {
         val contentResolver = getApplication<Application>().contentResolver
         val bytes = readProviderLyrics { contentResolver.openInputStream(source) } ?: return LyricsImportResult.FAILED
-        return lyricsStore.import(target.trackId, bytes, target.generation)
+        val rebuildsBefore = catalogRebuilds.value
+        return try {
+            catalog.withTrackContentUri(target.trackId) { contentUri ->
+                if (contentUri != target.contentUri) LyricsImportResult.TRACK_CHANGED
+                else lyricsStore.import(target.trackId, bytes, target.generation)
+            }
+        } catch (_: SQLiteException) {
+            LyricsImportResult.FAILED
+        } catch (failure: IllegalStateException) {
+            failure.rethrowUnlessCatalogRebuiltSince(rebuildsBefore)
+            LyricsImportResult.TRACK_CHANGED
+        }
     }
 
     internal fun lyricsImportGeneration(): Long = lyricsStore.generation()

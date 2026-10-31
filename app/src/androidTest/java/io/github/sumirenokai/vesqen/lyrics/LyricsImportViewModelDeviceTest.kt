@@ -5,7 +5,10 @@ import android.os.SystemClock
 import android.provider.DocumentsContract
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.library.AndroidLibraryCatalog
+import io.github.sumirenokai.vesqen.library.LibrarySourceId
 import io.github.sumirenokai.vesqen.library.LibraryTrackCandidate
+import io.github.sumirenokai.vesqen.library.mediaStoreRemoteId
 import io.github.sumirenokai.vesqen.telemetry.isolatedPlaybackTestApplication
 import io.github.sumirenokai.vesqen.testing.FakeDocumentsProvider
 import io.github.sumirenokai.vesqen.ui.LyricsImportNotice
@@ -14,6 +17,12 @@ import io.github.sumirenokai.vesqen.ui.VesqenViewModel
 import java.io.File
 import java.nio.charset.Charset
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -104,6 +113,100 @@ class LyricsImportViewModelDeviceTest {
             FakeDocumentsProvider.reset()
             app.lyricsStore.remove(track.id)
         }
+    }
+
+    @Test
+    fun aTrackMergedWhileReadingCannotReceiveAnOrphanedImport() {
+        val catalog = app.libraryCatalogStore
+        val (from, into) = seedUnmatchedTracks()
+        val target = LyricsImportTarget(from, requireNotNull(catalog.readTrackContentUri(from)), app.lyricsStore.generation())
+        val documentId = "music/import-during-merge.lrc"
+        val document = DocumentsContract.buildDocumentUri(FakeDocumentsProvider.authority(app.packageName), documentId)
+        FakeDocumentsProvider.files[documentId] = "[00:01.00]Imported during merge".toByteArray()
+        lateinit var viewModel: VesqenViewModel
+        instrumentation.runOnMainSync { viewModel = VesqenViewModel(app) }
+        try {
+            FakeDocumentsProvider.beforeOpen = { opened ->
+                check(opened == documentId)
+                FakeDocumentsProvider.beforeOpen = null
+                AndroidLibraryCatalog(app, catalog).use { otherCatalog ->
+                    assertTrue(runBlocking { otherCatalog.assignUnmatchedRecord(into, from) })
+                }
+            }
+            val notice = importAndAwait(viewModel, target, document)
+            assertEquals(null, catalog.readTrackContentUri(from))
+            assertEquals(LyricsImportResult.TRACK_CHANGED, notice.result)
+            assertEquals(null, app.lyricsStore.read(from))
+            assertEquals(null, app.lyricsStore.read(into))
+        } finally {
+            FakeDocumentsProvider.reset()
+            app.lyricsStore.remove(from)
+            app.lyricsStore.remove(into)
+        }
+    }
+
+    @Test
+    fun aMergeFromAnotherCatalogWaitsUntilTheLyricsWriteFinishes() = runBlocking {
+        val (from, into) = seedUnmatchedTracks()
+        val writing = CountDownLatch(1)
+        val finishWrite = CountDownLatch(1)
+        val store = app.lyricsStore
+        val generation = store.generation()
+        val bytes = "[00:01.00]Saved before the merge".toByteArray()
+        val uri = requireNotNull(app.libraryCatalogStore.readTrackContentUri(from))
+        val catalog = AndroidLibraryCatalog(app, app.libraryCatalogStore)
+        val otherCatalog = AndroidLibraryCatalog(app, app.libraryCatalogStore)
+        try {
+            val imported = async(Dispatchers.IO) {
+                catalog.withTrackContentUri(from) { currentUri ->
+                    assertEquals(uri, currentUri)
+                    writing.countDown()
+                    check(finishWrite.await(10, TimeUnit.SECONDS)) { "The test did not release the lyrics write" }
+                    store.import(from, bytes, generation)
+                }
+            }
+            assertTrue("The lyrics write did not start", writing.await(10, TimeUnit.SECONDS))
+            // Starts inline and reaches the shared catalog lock before returning to this test.
+            val merged = async(start = CoroutineStart.UNDISPATCHED) { otherCatalog.assignUnmatchedRecord(into, from) }
+            try {
+                assertFalse("A merge must not delete the row between the identity check and save", merged.isCompleted)
+            } finally {
+                finishWrite.countDown()
+            }
+            assertEquals(LyricsImportResult.IMPORTED, imported.await())
+            assertTrue(merged.await())
+            assertEquals(null, store.read(from))
+            assertEquals(bytes.decodeToString(), store.read(into)?.decodeToString())
+        } finally {
+            finishWrite.countDown()
+            catalog.close()
+            otherCatalog.close()
+            store.remove(from)
+            store.remove(into)
+        }
+    }
+
+    private fun seedUnmatchedTracks(): Pair<Long, Long> {
+        val catalog = app.libraryCatalogStore
+        fun candidate(id: Long, title: String) = LibraryTrackCandidate(
+            remoteId = mediaStoreRemoteId("external", id), contentUri = "content://media/external/audio/media/$id",
+            title = title, artist = "Artist", album = title, durationMs = if (title == "A") 200_000 else 300_000,
+            sizeBytes = 10_000, fileName = "01.flac", folderName = "CD1", fingerprint = "$id-$title",
+        )
+        fun scan(first: Long, second: Long) {
+            val scan = catalog.beginMediaStoreScan(pathIdentifiesFile = false)
+            listOf(candidate(first, "A"), candidate(second, "B")).forEach { track ->
+                if (scan.firstOffer(track) && !catalog.markSeenIfUnchanged(scan, track)) catalog.upsertMediaStoreTrack(scan, track)
+            }
+            catalog.completeMediaStoreScan(scan.session, null, listOf("external"))
+        }
+        catalog.ensureDeviceSource()
+        scan(81_001, 81_002)
+        val record = catalog.readTracks(listOf(LibrarySourceId.DEVICE)).first { it.title == "A" }
+        catalog.setFavorite(record.id, true)
+        scan(81_003, 81_004)
+        scan(81_003, 81_004)
+        return catalog.readUnmatchedRecords().getValue(record.id).first() to record.id
     }
 
     private fun addFixtureTrack(contentUri: String): AudioTrack {
