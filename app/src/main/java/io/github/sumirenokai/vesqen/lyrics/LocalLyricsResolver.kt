@@ -200,7 +200,7 @@ internal class LocalLyricsResolver(
         } catch (_: RuntimeException) {
             // The same provider boundary as above: SecurityException, or a provider's own failure.
             null
-        } ?: return SourceLyrics.Absent
+        } ?: return SourceLyrics.Unreadable(UnreadableReason.ReadFailed)
         return try {
             descriptor.use {
                 descriptor.createInputStream().use { input ->
@@ -211,7 +211,7 @@ internal class LocalLyricsResolver(
                 }
             }
         } catch (_: IOException) {
-            SourceLyrics.Absent
+            SourceLyrics.Unreadable(UnreadableReason.ReadFailed)
         }
     }
 

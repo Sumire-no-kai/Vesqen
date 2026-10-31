@@ -59,8 +59,11 @@ interface LibraryCatalog : Closeable {
     /** Every row's ID, hidden ones included, for the lyrics clean-up (#169). */
     suspend fun readTrackIdsForSweep(): CatalogTrackIds
 
-    /** The file a catalog row names now, or null without that row (#169 lyrics import). */
-    suspend fun trackContentUri(trackId: Long): String?
+    /**
+     * Runs a short local [update] with the row's URI (null if gone), while scans, merges and removals
+     * cannot change its identity. Read provider files before entering this step (#205 lyrics import).
+     */
+    suspend fun <T> withTrackContentUri(trackId: Long, update: (String?) -> T): T
 
     suspend fun refresh(
         includeDeviceLibrary: Boolean,
@@ -190,7 +193,9 @@ internal class AndroidLibraryCatalog(
 
     override suspend fun readTrackIdsForSweep(): CatalogTrackIds = serialized { store.readTrackIdsForSweep() }
 
-    override suspend fun trackContentUri(trackId: Long): String? = serialized { store.readTrackContentUri(trackId) }
+    override suspend fun <T> withTrackContentUri(trackId: Long, update: (String?) -> T): T = betweenScans {
+        serialized { update(store.readTrackContentUri(trackId)) }
+    }
 
     override suspend fun discardUnmatchedRecord(recordId: Long): Unit = betweenScans {
         serialized { store.discardUnmatchedRecord(recordId) }
