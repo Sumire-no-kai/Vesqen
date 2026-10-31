@@ -76,8 +76,9 @@ use them, so a pool that may have leaked is revoked as a batch.
   builds take no codes.
 - **Activation links.** `https://vesqen-api.sumirenokai.com/activate#<code>` opens
   `ActivationLinkActivity`, which checks the code and opens the Pro features page. Any app or page
-  can open such a link, so a link never replaces a code that is already active; typing a code on the
-  Pro features page still can (#194 S3). The code sits in
+  can open such a link, so a link never replaces a code that is already active (#194 S3). The Pro
+  features page takes a typed code only while no code works, so an active code cannot be replaced
+  yet; a way to enter another code is due before sales open (#194, round 3 B5). The code sits in
   the fragment, which browsers do not send to the server. The link uses the API host on purpose:
   Chrome keeps a link that stays on the current site in the browser, so a link on
   `vesqen.sumirenokai.com` could never leave the website's purchase page for the app. The Worker
