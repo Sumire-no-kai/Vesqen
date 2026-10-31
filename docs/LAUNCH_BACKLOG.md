@@ -137,6 +137,7 @@ Play 正式版的时间取决于 Google：2026-10-16 查看时封闭测试已满
 - 留到 1.1.0 之后（所有者 2026-10-31 同意），见下面"1.1.0 之后、2.0 之前"：D20。
 - 留到开放销售之前：S2 和 B5，以及官网的两项核对。
 - 发布提交（`release: prepare 1.1.0`）把版本号改为 1.1.0（`versionCode` 15），附发布说明 `docs/releases/1.1.0.md`。推送到 master 即开始发版运行，须所有者确认。
+- 2026-10-31 已发布：所有者批准签名和发布。iQOO 和 Honor 从 1.0.1 升级验收通过（`docs/M4_DEVICE_ACCEPTANCE.md`，`docs/releases/1.1.0.acceptance.json`）；`v1.1.0` 于 13:18 发布为 Latest；README、官网（`4f2044e`）和 #163 已同步。未做：Google Play 是否提交 1.1.0 由所有者决定；清除媒体存储后的真机检查（#159、#139）和真机 TalkBack 未做。
 
 新功能：
 

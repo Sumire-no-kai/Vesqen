@@ -363,3 +363,4 @@
   - 应用内更新器（要等发布和官网 `updates/` 上线后再测）。
   - 蓝牙和重启。
 - 结论：安装、versionCode 增大的同签名升级和数据保留通过（Android 15 和 Android 9 都从 GitHub 版 1.0.1 升级）；歌词、进程结束后恢复（含随机顺序和播放计数）、清空队列的撤销和新队列沿用播放模式在 iQOO 上的行为符合发布说明。
+- 发布后（2026-10-31 13:18，[Publish run #41159406928](https://github.com/Sumire-no-kai/Vesqen/actions/runs/41159406928)）：`v1.1.0` 为 Latest，标签指向 `0a77a8f`，附件 APK 的 SHA-256 为 `68a4830a…246d`。官网 `4f2044e` 上线后，线上 `updates/stable.json` 和 `beta.json` 与发布运行生成的文件逐字节一致，指向 1.1.0。两台测试手机都已是 1.1.0，没有再测应用内更新器。
