@@ -21,8 +21,11 @@ internal class PlaybackResumption(
      * be played. The catalog is read only when a queue was saved.
      */
     suspend fun restore(): RestoredPlaybackQueue? {
-        val saved = loadSavedState() ?: return null
-        return saved.restoreAgainst(readPlayableTracks())
+        if (loadSavedState() == null) return null
+        val tracks = readPlayableTracks()
+        // Opening the catalog may replay a merge committed just before the previous process died.
+        // The pre-read queue can still name a row that no longer exists (#191 A5).
+        return loadSavedState()?.restoreAgainst(tracks)
     }
 }
 

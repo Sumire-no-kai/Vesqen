@@ -13,6 +13,12 @@ internal interface TrackMergeFollower {
     /** Inside the merging transaction, as the rows merge. */
     fun prepareMerge(from: Long, into: Long)
 
+    /** Once per transaction, before SQLite commits; durable recovery must be ready on return. */
+    fun prepareCommit(merges: List<Pair<Long, Long>>) = Unit
+
+    /** On opening the catalog, before any queue can restore; distinguishes a commit from a rollback. */
+    fun recoverMerges(trackExists: (Long) -> Boolean) = Unit
+
     /** The merge committed: [from] no longer exists. */
     fun mergeCommitted(from: Long, into: Long)
 
@@ -39,6 +45,10 @@ internal interface TrackMergeFollower {
 /** Several followers of the same merges, each told in turn: imported lyrics and the playback queue. */
 internal class TrackMergeFollowers(private vararg val followers: TrackMergeFollower) : TrackMergeFollower {
     override fun prepareMerge(from: Long, into: Long) = followers.forEach { it.prepareMerge(from, into) }
+
+    override fun prepareCommit(merges: List<Pair<Long, Long>>) = followers.forEach { it.prepareCommit(merges) }
+
+    override fun recoverMerges(trackExists: (Long) -> Boolean) = followers.forEach { it.recoverMerges(trackExists) }
 
     override fun mergeCommitted(from: Long, into: Long) = followers.forEach { it.mergeCommitted(from, into) }
 
