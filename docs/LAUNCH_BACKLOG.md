@@ -183,6 +183,8 @@ Honor 测试前要重启共用的 adb 服务，会短暂影响其他会话，先
 
 ### 1.1.0 之后、2.0 之前
 
+2026-10-31：从 1.1.0 到 2.0 的版本排期（暂定）见 [#210](https://github.com/Sumire-no-kai/Vesqen/issues/210)，包括 1.1.1、可能的 1.2.0、M7 各阶段、2.0 开卖准备和 2.0 的关卡。1.1.0 的遗留（D20、S2、B5、官网两项核对）在 [1.1.1 里程碑](https://github.com/Sumire-no-kai/Vesqen/milestone/7)。
+
 | Issue | 内容 |
 | --- | --- |
 | [#147](https://github.com/Sumire-no-kai/Vesqen/issues/147) | 按音质筛选。入口、读不到采样率的曲目、有损格式的条件都没定，暂不排期 |
