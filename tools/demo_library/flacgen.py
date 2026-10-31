@@ -118,6 +118,19 @@ def synth(seconds, rate, bps, chords, tempo_s, seed):
     full = (1 << (bps - 1)) - 1
     return np.round(mix * 0.5 * full).astype(np.int32)
 
+# Synced lyrics written for the demo, embedded in the first track of the album that sorts first, so
+# Now's lyrics pane has lines to show (#169).
+LYRICS = {
+    "Brass Lantern": "\n".join([
+        "[00:00.00]Brass Lantern",
+        "[00:08.00]A lantern swings above the door",
+        "[00:16.00]The street is wet, the night is warm",
+        "[00:24.00]We keep the tempo slow",
+        "[00:32.00]And let the copper glow",
+        "[00:40.00]One more chorus, then we go",
+    ]),
+}
+
 if __name__ == '__main__':
     out_dir, cover_dir = sys.argv[1], sys.argv[2]
     albums = [
@@ -142,5 +155,7 @@ if __name__ == '__main__':
         for i, (title, secs, chords, tempo) in enumerate(tracks, 1):
             pcm = synth(secs, rate, bps, chords, tempo, seed=i * 7 + rate)
             tags = {"TITLE": title, "ARTIST": artist, "ALBUM": album, "ALBUMARTIST": artist, "TRACKNUMBER": str(i), "DATE": "2025", "GENRE": genre}
+            if title in LYRICS:
+                tags["LYRICS"] = LYRICS[title]
             encode(f"{d}/{i:02d} {title}.flac", pcm, rate, bps, tags, cover, 600)
             print(f"{d}/{i:02d} {title}.flac", os.path.getsize(f"{d}/{i:02d} {title}.flac") // 1024, "KiB", flush=True)
