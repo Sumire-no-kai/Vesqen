@@ -329,3 +329,37 @@
 - 没有覆盖：#160（MediaStore 重建期间的匹配）、同名不同艺术家专辑和分碟文件夹的分组（手机曲库里没有这样的专辑）、应用内更新器（要等发布和官网 `updates/` 上线后再测）、浏览器下载后用系统安装器安装、蓝牙和重启。
 - 结论：安装、versionCode 增大的同签名升级和数据保留通过（Android 9 和 Android 15 都从 GitHub 版 1.0.0 升级）；#164、#175、#158 和 #170 P2 在 iQOO 上的行为符合发布说明。
 - 发布后（2026-10-27 20:44，[Publish run #40483022708](https://github.com/Sumire-no-kai/Vesqen/actions/runs/40483022708)）：`v1.0.1` 为 Latest，附件 APK 的 SHA-256 为 `db8149fe…6d1a`。官网 `c1caef0` 上线后，线上 `updates/stable.json` 和 `beta.json` 与仓库文件一致，指向 1.0.1。1.0.0 和 1.0.1 之间 `app/src/github` 与 `tools/github_update_manifest.py` 没有改动，完整的应用内更新流程沿用 1.0.0 时在模拟器上的结果；这次只在 iQOO 的 1.0.1 上点“检查更新”，读到线上的清单后显示“已是最新版本”。没有再从 1.0.0 通过应用内更新器升级。
+
+### 2026-10-31 · 1.1.0 CI 签名 APK 从 1.0.1 升级
+
+- 候选：`master` 推到 `0a77a8fb49973e04dc6dd00dfd8cf349ec1fb642`（1.1.0 / 15）后自动运行的 [GitHub APK release #41155704819](https://github.com/Sumire-no-kai/Vesqen/actions/runs/41155704819)，所有者批准签名后生成草稿 `v1.1.0`。`Vesqen-1.1.0.apk` 的 SHA-256 为 `68a4830a17fe6e9532cd0e4acbaa62560d01a4c6730f14928b3e7f1dd6ae246d`（未签名包 `ab4b27b3…bd3f`）。运行的最后一步"draft"报失败（"Expected exactly one release for this version"）：创建草稿后立即列出 Release 时还查不到这个新草稿。随后在本机重新核对：只有一个 `v1.1.0` 草稿，三个附件与签名产物逐字节一致，发布说明中的 SHA-256 已填入。发布流程从草稿下载并再次校验，不依赖这次运行的结果，因此没有重跑。R8 映射（GitHub 版、Play 版）和未签名的 Play 版 AAB 保存在被忽略的 `build/release/1.1.0/`。
+- 本机复核签名包：apksigner 只有一个签名者，证书 SHA-256 为 `743e96fc…6293`，按 API 24 验证时 v2、v3 都通过；aapt 显示 1.1.0 / 15，包名 `io.github.sumirenokai.vesqen`。
+- iQOO 9 V2171A / Android 15（USB）：装的是 GitHub 版 1.0.1（versionCode 14，base.apk `db8149fe…6d1a`，备份在被忽略的 `build/qa/device-backups/2026-10-31-iqoo-1.0.1/`）。队列在第 6 / 112 首“brave heart”，暂停在 0:50 / 4:12，链路注记为 FLAC 24/192 · SYSTEM MIXED，安装前收藏了这首。`adb install -r` 后 vivo 安全守护提示应用来自外部来源，勾选后继续安装：versionCode 14 → 15，firstInstallTime 不变（2026-10-13 15:37:21），lastUpdateTime 为 2026-10-31 12:50:44，设备上 base.apk 哈希为 `68a4830a…246d`。打开后曲库完整，队列、进度 0:50、收藏和链路注记保留，Now 顶栏为 1.1.0 的布局（歌词、队列、更多）。
+- iQOO 上的 1.1.0 功能检查（媒体音量先调到 0，结束后恢复为 4）：
+  - 歌词（#169）：
+    - 这首歌只在 MediaStore 中，歌词区域显示“No lyrics”、同名 `.lrc` 的说明和“Import lyrics”。
+    - 经系统文件选择器导入 `/sdcard/Download/` 中的测试歌词后，Now 直接切到歌词，0:50 的一行加粗居中；播放到 0:57 时高亮移到 0:55 的一行。曲目信息显示歌词来源“Imported”。
+    - 在 `/sdcard/Music/Vesqen QA 1.1.0/` 放两首 8 kHz 静音 WAV、同名 `QA Lyrics.lrc` 和 `.nomedia`，经“Add music folder”和系统文件夹选择器加入。播放 QA Lyrics 时显示同名文件的歌词，0:13 时 0:10 的一行加粗，曲目信息显示“Same-name .lrc file”。
+    - 深色、字号 2.0、应用语言简体中文时，歌词区域、顶栏和运输控制都可见，长的链路注记以省略号结尾。横屏时歌词在左、控制在右，运输控制完整；这时顶栏只显示按钮，标题和艺术家不显示。
+  - 进程结束后恢复：开启随机后队列为第 1 / 112 首（brave heart 在前，其后依次为桜高軽音部的歌曲、Aoharu、深海少女、Time Flows Ever Onward），暂停在 1:12，曲目信息显示“Played 4 times”。`am kill` 因前台服务未结束进程，改用 `am force-stop`。重新打开后随机顺序的前 5 首相同，位置 72.6 秒；继续播放再暂停后仍为“Played 4 times”。
+  - 清空队列（#187）：
+    - 第一次点“Undo”时提示已超时（截图查看用了十几秒），原 112 首的队列没有恢复。这不算缺陷。
+    - 从歌曲列表新建队列后，随机保持开启，所选歌曲为第 1 / 112 首。
+    - 清空后 1.5 秒内点“Undo”：队列、当前歌曲和位置 29.35 秒恢复，保持暂停。
+  - 清理：
+    - 移除测试文件夹，删除测试文件和导入的歌词，取消测试收藏。
+    - 关闭随机，回到按列表顺序。
+    - 恢复字号 1.0、浅色模式、应用语言跟随系统和媒体音量 4。
+    - 队列为从歌曲列表重新开始的第 6 / 112 首，暂停在 0:05，回到桌面。
+- Honor STF-AL00 / Android 9（无线 adb，所有者同意后重启了共用的 adb 服务，事先通知了使用 Termux 的会话）：
+  - 升级前：装的是 GitHub 版 1.0.1（base.apk `db8149fe…6d1a`，备份在 `build/qa/device-backups/2026-10-31-honor-1.0.1/`）。队列在第 93 / 106 首“05. 前前前世 (original ver.)”，已收藏，暂停在 1:33 / 4:37，链路注记为 WAV 24/48 · SYSTEM MIXED。
+  - 升级：`adb install -r` 后 versionCode 14 → 15，firstInstallTime 不变（2026-10-16 12:22:47），lastUpdateTime 为 2026-10-31 13:07:45，设备上 base.apk 哈希为 `68a4830a…246d`。
+  - 升级后：曲库、队列、进度 1:33、收藏和链路注记保留。歌词区域（中文界面）显示“没有歌词”、同名 `.lrc` 的说明和“导入歌词”。清空队列后立即“撤销”，恢复到第 93 首、93.4 秒。`am force-stop` 后重新打开，恢复到同一首和同一位置。没有播放声音。
+  - Termux：测试前后 com.termux、nginx、cloudflared 和 termux-api 的进程号不变；com.termux.api（Termux:API 的应用进程）的进程号由 25566 变为 31541，测试没有操作它。结束时 Termux 回到前台。
+- 没有覆盖：
+  - 清除媒体存储后对不上的记录（#159、#139）及其提示（#185）。会让手机上其他应用引用的媒体编号失效，没有在共用手机上做；这部分由 PR #182、#185、#195 的设备测试覆盖。
+  - 真机 TalkBack（已知限制）。
+  - 日文和繁体中文界面。
+  - 应用内更新器（要等发布和官网 `updates/` 上线后再测）。
+  - 蓝牙和重启。
+- 结论：安装、versionCode 增大的同签名升级和数据保留通过（Android 15 和 Android 9 都从 GitHub 版 1.0.1 升级）；歌词、进程结束后恢复（含随机顺序和播放计数）、清空队列的撤销和新队列沿用播放模式在 iQOO 上的行为符合发布说明。
