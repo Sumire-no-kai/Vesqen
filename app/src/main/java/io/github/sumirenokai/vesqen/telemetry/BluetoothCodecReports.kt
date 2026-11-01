@@ -12,9 +12,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
+import java.util.Locale
 
 /** Estimated-evidence method: the nominal ceiling of the LDAC quality tier Android reports. */
 internal const val LDAC_NOMINAL_BITRATE_METHOD = "bluetooth.ldac_quality_nominal_bitrate"
@@ -98,16 +101,22 @@ internal data class BluetoothCodecReport(
 
 /**
  * Keeps each connected device's last report and shows only the active device's own: Android reports
- * the codec of every A2DP device, not just the one playing (#213). Until a broadcast names the active
- * device nothing is shown. A change of active device keeps only the new one's report, which may have
- * come first; a device's report also goes when it disconnects, all go when Bluetooth turns off, and a
- * report without a device is never shown. Device keys stay in memory.
+ * the codec of every A2DP device, not just the one playing (#213). The active device is the one a
+ * broadcast last named; before any did, it is the device Android routes media to (#231 K9: switching
+ * the codec sends a report but no such broadcast). A change of active device keeps only the new one's
+ * report, which may have come first; a device's report also goes when it disconnects, all go when
+ * Bluetooth turns off, and a report without a device is never shown. Device keys stay in memory.
  */
 internal class BluetoothCodecState {
     private var activeDevice: String? = null
     private val reports = HashMap<String, BluetoothCodecReport>()
 
-    val current: BluetoothCodecReport? get() = activeDevice?.let(reports::get)
+    /** [routedDevice] is asked only while no broadcast has named the active device. */
+    fun current(routedDevice: () -> String? = { null }): BluetoothCodecReport? {
+        if (reports.isEmpty()) return null
+        val device = activeDevice ?: routedDevice() ?: return null
+        return reports[device]
+    }
 
     fun onCodecReported(device: String?, value: BluetoothCodecReport) {
         if (device != null) reports[device] = value
@@ -179,7 +188,18 @@ internal class AndroidBluetoothCodecObserver(
             ContextCompat.checkSelfPermission(appContext, Manifest.permission.BLUETOOTH_CONNECT) ==
             PackageManager.PERMISSION_GRANTED
 
-    val current: BluetoothCodecReport? get() = synchronized(lock) { state.current }
+    val current: BluetoothCodecReport? get() = synchronized(lock) { state.current(::routedA2dpDevice) }
+
+    /**
+     * The Bluetooth device Android plays media through. Android connects only the active A2DP device
+     * to its audio routing, so this is that device; with BLUETOOTH_CONNECT its address is the full one.
+     */
+    private fun routedA2dpDevice(): String? = appContext.getSystemService(AudioManager::class.java)
+        ?.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        ?.firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
+        ?.address
+        ?.takeIf(String::isNotBlank)
+        ?.uppercase(Locale.ROOT)
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -244,7 +264,7 @@ internal class AndroidBluetoothCodecObserver(
     }
 
     // Only compared for equality within this process; never stored, shown or exported.
-    private fun deviceKey(device: BluetoothDevice): String = device.address
+    private fun deviceKey(device: BluetoothDevice): String = device.address.uppercase(Locale.ROOT)
 
     private companion object {
         const val ACTION_CODEC_CONFIG_CHANGED = "android.bluetooth.a2dp.profile.action.CODEC_CONFIG_CHANGED"
