@@ -308,15 +308,15 @@ internal class AndroidLibraryCatalog(
      * picked again, and the scan that called this reads them (#191 D20). Once they are added the mark
      * clears; a folder removed after that keeps its row deleted, even if its grant could not be released.
      */
-    private suspend fun restoreFoldersToNewCatalog() {
+    private suspend fun restoreFoldersToNewCatalog(): Unit = serialized {
+        // A corruption found while the app runs only sets the old files aside; the new catalog, which
+        // marks the folders due, is created by the next read. So the catalog is read before the mark.
+        val listedTreeUris = store.readSources().mapNotNullTo(HashSet()) { it.treeUri }
         val due = store.folderRestore.due()
-        if (due == 0L) return
-        serialized {
-            val listedTreeUris = store.readSources().mapNotNullTo(HashSet()) { it.treeUri }
-            folderGrants()
-                .filterNot { it.toString() in listedTreeUris }
-                .forEach { treeUri -> store.upsertFolderSource(treeUri.toString(), treeScanner.displayName(treeUri)) }
-        }
+        if (due == 0L) return@serialized
+        folderGrants()
+            .filterNot { it.toString() in listedTreeUris }
+            .forEach { treeUri -> store.upsertFolderSource(treeUri.toString(), treeScanner.displayName(treeUri)) }
         // A catalog created during these writes marked the folders due again, and the next scan adds them.
         store.folderRestore.restored(due)
     }

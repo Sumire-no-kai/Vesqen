@@ -11,6 +11,16 @@ import org.junit.Test
 
 class PlaybackControllerPolicyTest {
     @Test
+    fun `a seek meant for one queue entry does not reach another`() {
+        // #216: Now names the entry a drag or a lyric tap was for; another entry may play by then.
+        assertEquals(true, seekStillApplies(requestedEntryId = "a", currentEntryId = "a"))
+        assertEquals(false, seekStillApplies(requestedEntryId = "a", currentEntryId = "b"))
+        assertEquals(false, seekStillApplies(requestedEntryId = "a", currentEntryId = null))
+        // A seek that names no entry acts on whatever plays, as before.
+        assertEquals(true, seekStillApplies(requestedEntryId = null, currentEntryId = "b"))
+    }
+
+    @Test
     fun `requested playback can be paused while buffering or suppressed`() {
         assertEquals(PlaybackToggleAction.PAUSE, playbackToggleAction(true, Player.STATE_BUFFERING))
         assertEquals(PlaybackToggleAction.PAUSE, playbackToggleAction(true, Player.STATE_READY))

@@ -435,7 +435,7 @@ class PlaybackController(
      */
     fun seekTo(positionMs: Long, queueEntryId: String? = null) {
         val activeController = controller ?: return
-        if (queueEntryId != null && activeController.currentMediaItem?.queueEntryId() != queueEntryId) return
+        if (!seekStillApplies(queueEntryId, activeController.currentMediaItem?.queueEntryId())) return
         activeController.seekTo(positionMs.coerceAtLeast(0))
     }
 
@@ -1100,3 +1100,7 @@ internal enum class NeighborSeekRoute {
     DEDICATED,
     UNAVAILABLE,
 }
+
+/** A seek that names no queue entry acts on the current one; one that names an entry, only on that entry (#216). */
+internal fun seekStillApplies(requestedEntryId: String?, currentEntryId: String?): Boolean =
+    requestedEntryId == null || requestedEntryId == currentEntryId

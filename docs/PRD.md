@@ -327,7 +327,7 @@ Telemetry Module 默认不常驻采样。只有相关页面可见或用户主动
 
 - **来源**：A2DP codec 协商变化时，蓝牙服务发送广播 `android.bluetooth.a2dp.profile.action.CODEC_CONFIG_CHANGED`，附带当前 codec、采样率、位深和声道。2026-10-02 核查 AOSP main：`A2dpService` 发送时只要求接收方有 `BLUETOOTH_CONNECT`；`BluetoothCodecStatus`、`BluetoothCodecConfig`、`EXTRA_CODEC_STATUS` 和 `BluetoothCodecType.getCodecName()` 在公开 SDK 里，只有广播动作字符串本身标为 `@SystemApi`。主动查询的 `getCodecStatus()` 需要 `BLUETOOTH_PRIVILEGED`，仍然不能用。
 - 这条来源只作为可选证据：不用反射，不调用隐藏方法，收不到就显示 `UNAVAILABLE` 和原因。各 Android 版本和厂商 ROM 是否照样发送，要靠真机验证，并通过设备报告（#69）收集。
-- 广播不是粘性的，只在协商变化时发出。Vesqen 启动前就已连接的耳机，通常要等下一次重新协商才有数据。显示时带观察时间；断开、切换设备、关闭蓝牙或撤销权限时立即清除。权限沿用 F6.5 的按需申请规则。
+- 广播不是粘性的，只在协商变化时发出。Vesqen 启动前就已连接的耳机，通常要等重新连接、或再次成为活动设备后才有数据：从 1.1.1 起，只有收到活动设备的通知后才显示报告（#213）。显示时带观察时间；断开、切换设备、关闭蓝牙或撤销权限时立即清除。权限沿用 F6.5 的按需申请规则。
 - aptX Adaptive、aptX Lossless 等厂商 codec 不在 AOSP 的 codec 编号里，只有拿到真机证据后才映射成具体名称，不按耳机或手机型号推断。
 - 系统报告的是标称无损的 codec 时，只写“系统报告 codec：aptX Lossless（标称支持无损，信号不好时会退回有损）”。高通资料中 aptX Lossless 为 16 位 44.1 kHz（部分平台到 48 kHz），并随连接质量在无损和有损之间切换；应用读不到当前处于哪种模式，所以不显示任何无损标识。
 - codec 的采样率和位深是协商值，不能填进 F6.5 的实时传输码率字段。

@@ -1136,12 +1136,12 @@ private fun CollectionRow(
             collection.subtitle.toIntOrNull() ?: 0,
             collection.subtitle.toIntOrNull() ?: 0,
         )
-        // The title is the folder's own name; its path follows the track count, and its storage when
-        // another folder has the same name and path (#218).
+        // The title is the folder's own name; its path follows the track count. When another folder has
+        // the same name and path, its storage comes before the path, which a narrow row cuts off (#218).
         LibraryBrowseMode.FOLDERS -> listOf(
             pluralStringResource(R.plurals.collection_track_count, collection.tracks.size, collection.tracks.size),
-            collection.subtitle,
             storage.orEmpty(),
+            collection.subtitle,
         ).filter(String::isNotBlank).joinToString(" · ")
         else -> pluralStringResource(
             R.plurals.collection_track_count,
