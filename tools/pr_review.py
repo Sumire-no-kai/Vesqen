@@ -17,7 +17,7 @@ import zipfile
 
 
 MAX_FILES = 40
-MAX_DIFF = 60000
+MAX_DIFF = 100000
 MAX_CONTEXT = 60000
 MAX_RULES = 24000
 MAX_FINDINGS = 8
@@ -524,7 +524,8 @@ def collect_context(github, pr, root):
     if not data["files"]:
         raise ReviewSkipped("No supported text changes to review")
     remaining = MAX_CONTEXT
-    for item in data["files"]:
+    context_files = sorted(data["files"], key=lambda item: PurePosixPath(item["filename"]).suffix.lower() in {".md", ".txt"})
+    for item in context_files:
         path = item["filename"]
         if remaining < 1000:
             notes.append(f"Source context omitted by budget: {path}")
@@ -544,7 +545,8 @@ def collect_context(github, pr, root):
     if tree.get("truncated"):
         notes.append("Repository tree truncated; matching test lookup is partial")
     stems = {PurePosixPath(f["filename"]).stem for f in data["files"]}
-    test_stems = {name for stem in stems for name in (stem + "Test", stem + "Tests", "test_" + stem)}
+    test_stems = {name for stem in stems for name in
+                  (stem + "Test", stem + "Tests", "test_" + stem, stem + "_test", stem + ".test")}
     tests = [node["path"] for node in tree.get("tree", []) if node["type"] == "blob"
              and PurePosixPath(node["path"]).stem in test_stems
              and node["path"] not in data["context"] and reviewable(node["path"])]
@@ -563,12 +565,16 @@ def collect_context(github, pr, root):
     return data, anchors
 
 
+def finding_key(item):
+    return (item["path"], item["side"], item["line"], item["title"].strip().casefold(), item["body"])
+
+
 def validate_findings(result, anchors, priorities=DEFAULT_PRIORITIES):
     if not isinstance(result, dict) or set(result) != {"findings"} or not isinstance(result["findings"], list):
         raise ReviewError("Invalid discovery output")
     if len(result["findings"]) > MAX_FINDINGS:
         raise ReviewError("Discovery exceeded its finding limit")
-    findings, seen = [], set()
+    findings = {}
     for item in result["findings"]:
         if not isinstance(item, dict) or set(item) != set(FINDING_SCHEMA["properties"]):
             raise ReviewError("Invalid finding fields")
@@ -579,11 +585,12 @@ def validate_findings(result, anchors, priorities=DEFAULT_PRIORITIES):
                 or not isinstance(item["title"], str) or not 1 <= len(item["title"]) <= 120
                 or not isinstance(item["body"], str) or not 1 <= len(item["body"]) <= 2000):
             raise ReviewError("Finding does not identify a valid changed line or bounded explanation")
-        key = (path, side, line, item["title"])
-        if key not in seen:
-            findings.append(item)
-            seen.add(key)
-    return findings
+        key = finding_key(item)
+        if key in findings:
+            findings[key]["priority"] = min(findings[key]["priority"], item["priority"])
+        else:
+            findings[key] = dict(item)
+    return list(findings.values())
 
 
 def verification_verdicts(model, data, candidates):
@@ -617,9 +624,11 @@ def merge_candidates(results):
     merged = {}
     for reviewer, result in enumerate(results, 1):
         for item in result["findings"]:
-            key = (item["path"], item["side"], item["line"], item["title"].strip().casefold())
+            key = finding_key(item)
             if key not in merged:
                 merged[key] = {**item, "found_by": []}
+            else:
+                merged[key]["priority"] = min(merged[key]["priority"], item["priority"])
             merged[key]["found_by"].append(reviewer)
     return list(merged.values())
 
@@ -645,7 +654,7 @@ def markdown(text):
 
 
 def marker(pr):
-    return f"<!-- vesqen-pr-review:v2:{pr['base']['sha']}:{pr['head']['sha']} -->"
+    return f"<!-- vesqen-pr-review:v3:{pr['base']['sha']}:{pr['head']['sha']} -->"
 
 
 def already_reviewed(github, pr):
@@ -734,7 +743,9 @@ def run(github, env, root, event):
     with ThreadPoolExecutor(max_workers=2) as pool:
         snapshots = dict(zip(("HEAD", "BASE"), pool.map(github.snapshot,
                               (pr["head"]["sha"], data["pr"]["diff_base_sha"]))))
+        ensure_current(github, pr)
         results = list(pool.map(lambda model: discover_findings(model, data, anchors, snapshots, priorities), models))
+        ensure_current(github, pr)
         candidates = merge_candidates(results)
         verification_data = {**data, "retrieved_context": [result["retrieval"] for result in results]}
         verdicts = list(pool.map(lambda model: verification_verdicts(model, verification_data, candidates), models))
