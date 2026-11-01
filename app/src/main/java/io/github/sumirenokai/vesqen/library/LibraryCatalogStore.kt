@@ -184,6 +184,16 @@ internal class LibraryCatalogStore internal constructor(
         }
     }
 
+    fun renameFolderSource(sourceId: String, displayName: String) {
+        val values = ContentValues().apply { put(SOURCE_DISPLAY_NAME, displayName) }
+        writableDatabase.update(
+            SOURCES_TABLE,
+            values,
+            "$SOURCE_ID = ? AND $SOURCE_KIND = ?",
+            arrayOf(sourceId, LibrarySourceKind.FOLDER.name),
+        )
+    }
+
     fun removeFolderSource(sourceId: String): String? {
         val source = findSource(sourceId) ?: return null
         if (source.kind != LibrarySourceKind.FOLDER) return null

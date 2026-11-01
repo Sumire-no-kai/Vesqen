@@ -74,8 +74,9 @@ interface LibraryCatalog : Closeable {
 
 /**
  * [store] is the application's one database helper (#165); every catalog shares it and none closes it.
- * [folderGrants] lists the folder grants a new catalog takes its folders back from (#191 D20); tests
- * list their own, since only the system picker can grant a folder.
+ * [folderGrants] lists the folders this app may read: a new catalog takes its folders back from them
+ * (#191 D20), and only those folders are shown and scanned. Tests list their own, since only the
+ * system picker can grant a folder.
  */
 internal class AndroidLibraryCatalog(
     context: Context,
@@ -273,7 +274,7 @@ internal class AndroidLibraryCatalog(
         }
 
         if (!scanPaused) {
-            val availableTreeUris = persistedReadableTreeUris()
+            val availableTreeUris = readableTreeUris()
             store.readSources()
                 .asSequence()
                 .filter { it.kind == LibrarySourceKind.FOLDER && it.treeUri in availableTreeUris }
@@ -389,11 +390,15 @@ internal class AndroidLibraryCatalog(
         onProgress: suspend (LibraryScanProgress) -> Unit,
     ): SourceScanOutcome = try {
         val treeUri = source.treeUri?.let(Uri::parse) ?: return SourceScanOutcome.FAILED
+        // A folder added back while its provider could not be read has a stand-in name (#191 D20).
+        val displayName = treeScanner.readDisplayName(treeUri)
+            ?.also { name -> if (name != source.displayName) store.renameFolderSource(source.id, name) }
+            ?: source.displayName
         val session = store.beginSourceScan(source.id)
         onProgress(
             LibraryScanProgress(
                 sourceId = source.id,
-                sourceName = source.displayName,
+                sourceName = displayName,
                 scannedTrackCount = 0,
             ),
         )
@@ -406,7 +411,7 @@ internal class AndroidLibraryCatalog(
             }
         }
         finishIteration(
-            source = source,
+            source = source.copy(displayName = displayName),
             session = session,
             iteration = iteration,
             generation = null,
@@ -456,7 +461,7 @@ internal class AndroidLibraryCatalog(
     }
 
     private fun snapshotInternal(includeDeviceLibrary: Boolean, readUnmatchedRecords: Boolean = true): LibraryCatalogSnapshot {
-        val readableTreeUris = persistedReadableTreeUris()
+        val readableTreeUris = readableTreeUris()
         val mountedMediaStoreVolumes = if (includeDeviceLibrary) {
             mediaStore.currentVolumeNames()
         } else {
@@ -538,11 +543,7 @@ internal class AndroidLibraryCatalog(
         }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.record.title })
     }
 
-    private fun persistedReadableTreeUris(): Set<String> = contentResolver.persistedUriPermissions
-        .asSequence()
-        .filter { it.isReadPermission }
-        .map { it.uri.toString() }
-        .toSet()
+    private fun readableTreeUris(): Set<String> = folderGrants().mapTo(HashSet(), Uri::toString)
 
     /**
      * Refuses new operations. The store stays open: the other catalogs and listening history keep
