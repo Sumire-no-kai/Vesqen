@@ -183,14 +183,21 @@ Honor 测试前要重启共用的 adb 服务，会短暂影响其他会话，先
 
 ### 1.1.0 之后、2.0 之前
 
-2026-10-31：从 1.1.0 到 2.0 的版本排期（暂定）见 [#210](https://github.com/Sumire-no-kai/Vesqen/issues/210)，包括 1.1.1、可能的 1.2.0、M7 各阶段、2.0 开卖准备和 2.0 的关卡。1.1.0 的遗留（D20、S2、B5、官网两项核对）在 [1.1.1 里程碑](https://github.com/Sumire-no-kai/Vesqen/milestone/7)。
+2026-10-31：从 1.1.0 到 2.0 的版本排期（暂定）见 [#210](https://github.com/Sumire-no-kai/Vesqen/issues/210)，包括 1.1.1、可能的 1.2.0、M7 各阶段、2.0 开卖准备和 2.0 的关卡。
+
+2026-11-01 所有者同意的分配：
+- [1.1.1 里程碑](https://github.com/Sumire-no-kai/Vesqen/milestone/7)：D20、B5，以及 1.1.0 发布后全仓扫描的应用端缺陷 #213、#214、#216–#219、#221。#218 不需要改表结构（`contentUri` 已带卷和授权树身份）。
+- [1.2.0 里程碑](https://github.com/Sumire-no-kai/Vesqen/milestone/8)：所有者同意做 1.2.0。按优先顺序为 #209、#212、#211、#208，另测量 #223、#224。
+- 2.0 里程碑：S2 改由 #222 跟踪，与 #215、#220 一起在开放销售前完成；官网两项核对记在 #120。
+- #225 只改文档，直接提交。
 
 | Issue | 内容 |
 | --- | --- |
 | [#147](https://github.com/Sumire-no-kai/Vesqen/issues/147) | 按音质筛选。入口、读不到采样率的曲目、有损格式的条件都没定，暂不排期 |
-| PRD | 睡眠定时器（PRD"稳定版后续的小型功能"），还没有 issue |
+| PRD | 睡眠定时器（PRD"稳定版后续的小型功能"），还没有 issue；排在 1.2.0 之后 |
 | [#191](https://github.com/Sumire-no-kai/Vesqen/issues/191) D20 | 曲库重建后的文件夹授权：目前要用户重新添加文件夹，原有系统授权保留。2026-10-31 所有者决定：按保留的授权自动加回文件夹并开始扫描，修改重建提示的文案（四种语言）。随 1.1.1 |
-| [#194](https://github.com/Sumire-no-kai/Vesqen/issues/194) S2、B5 | 开放销售前：Worker 发放激活码前核对商品、币种和金额（需要所有者定商品并部署）；Pro 页提供替换已生效激活码的入口；官网核对下载按钮读取的版本文件和购买成功页地址中的订单编号 |
+| [#194](https://github.com/Sumire-no-kai/Vesqen/issues/194) B5 | Pro 页提供替换已生效激活码的入口。随 1.1.1 |
+| [#222](https://github.com/Sumire-no-kai/Vesqen/issues/222)（#194 S2）、[#220](https://github.com/Sumire-no-kai/Vesqen/issues/220)、[#215](https://github.com/Sumire-no-kai/Vesqen/issues/215) | 开放销售前：Worker 发放激活码前核对商品、价格和支付环境（需要所有者定商品并部署）；持久记录先到的退款和争议；发码工具先持久预留序列号。官网核对下载按钮读取的版本文件和购买成功页地址中的订单编号，记在 #120 |
 | #136、#143、#156、#165 | 1.1.0 没挑中的审查遗留：链路和遥测的判断与文案、界面和无障碍的小问题、CI 跑设备测试和编译 `:baselineprofile`、`UsbOutputCoordinator` 单元测试、依赖校验、架构整理 |
 
 ### Google Play 正式版
