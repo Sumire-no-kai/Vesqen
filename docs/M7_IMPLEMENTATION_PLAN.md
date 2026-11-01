@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-**M7 尚未开始编写代码。** 分支 `feature/usb-host-output` 及其 worktree `.claude/worktrees/usb-host-output` 于 2026-10-26 从 `master` 建立，目前没有提交。
+**M7 尚未开始编写代码。** 分支 `feature/usb-host-output` 及其 worktree `.claude/worktrees/usb-host-output` 于 2026-10-26 从 `master` 建立，目前没有自己的提交。M7-1 和 M7-2 在这个分支上开发，何时合入 `master` 见 D6。
 
 可直接复用的部分：
 
@@ -38,17 +38,17 @@
 | D3 | 第一版范围 | PRD 写明先做 UAC1 PCM。建议在 M7-1 读取参考 DAC 的描述符后再定；如参考 DAC 为 UAC2，第一版应包含 UAC2 双声道 PCM 和异步反馈，否则无法覆盖主要设备。DSD/DoP 和多声道留到之后。 |
 | D4 | 音量 | 建议使用 DAC 硬件音量（Feature Unit），并由媒体会话的远程音量接收音量键（候选方案，需验证 Media3 与 vivo ROM 的行为）。开始播放前先把硬件音量设到较低值。没有硬件音量的 DAC 是否允许以固定音量播放，需要决定。 |
 | D5 | 打包 | 建议 native 库直接打入 GitHub 版 APK，ABI 为 arm64-v8a 和 armeabi-v7a，另为模拟器测试加入 x86_64；从一开始按 16 KB 页对齐（NDK r28 起默认）。 |
-| D6 | Play 版 1.x 的维护分支 | Play 版停留在 1.x。M7 的第一批代码合入 `master` 之前，应从最后一个 1.x 标签建立维护分支，Play 版的小修从该分支发布。 |
+| D6 | M7 的开发分支与 Play 版 1.x 的维护分支 | 2026-11-01 所有者决定：M7-1 和 M7-2 在 `feature/usb-host-output` 上开发，这两个阶段的 PR 合入该分支，不进 `master`；每发布一个 1.x 版本，就把 `master` 合并进该分支一次。M7-2 通过（G1）且 1.2.0 发布之后，从最后一个 1.x 标签建立 `release/1.x` 维护分支，再把 M7 合入 `master`，M7-3 起的 PR 直接合入 `master`。G1 不通过时，代码留在该分支，由所有者重新评估范围。Play 版停留在 1.x，之后的小修从 `release/1.x` 发布；两边都需要的修复分别合入 `master` 和 `release/1.x`。 |
 | D7 | 设备报告是否记录"这台手机是否开放官方通道" | 设备报告目前只记录严格模式的失败原因。增加字段属于数据收集变更，须先说明上传内容，经所有者确认后再做；不做也不影响 M7。 |
 
 ## 分阶段实施
 
-每个阶段对应一个或数个 PR。阶段之间按依赖顺序推进，前一阶段的结论可能改变后续范围。
+每个阶段对应一个或数个 PR，按 D6 合入：M7-1 和 M7-2 合入 `feature/usb-host-output`，M7-3 起合入 `master`。阶段之间按依赖顺序推进，前一阶段的结论可能改变后续范围。
 
 ### M7-0 准备（不含代码）
 
-- [ ] 所有者确定 D2–D7；D1 的设备在具备购买条件后确定，不阻挡 M7-1 和 M7-2。
-- [ ] 按 D6 建立 1.x 维护分支。
+- [ ] 所有者确定 D2–D5 和 D7（D6 已于 2026-11-01 确定）；D1 的设备在具备购买条件后确定，不阻挡 M7-1 和 M7-2。
+- [ ] M7-1 开始前，按 D6 把 `feature/usb-host-output` 更新到最新的 `master`。
 - [ ] 开始真机测试前建立 `docs/M7_DEVICE_ACCEPTANCE.md`，记录格式沿用 [M4 设备验收](M4_DEVICE_ACCEPTANCE.md)。
 - [ ] 在修改 `UsbOutputCoordinator` 之前补齐其单元测试（[发布待办](LAUNCH_BACKLOG.md)"1.1.0 之后、2.0 之前"中的遗留项）。
 
@@ -70,6 +70,7 @@
 
 ### M7-3 USB 引擎
 
+- [ ] 开始前，按 D6 从最后一个 1.x 标签建立 `release/1.x`，把 `feature/usb-host-output` 合入 `master`。
 - [ ] 建立独立的 `:usb-engine` Gradle 模块（Kotlin 与 C++），对应用只暴露小型接口。
 - [ ] 实现 URB 队列、环形缓冲、按反馈调整的包长、采样率与 alternate setting 切换、错误映射，以及供 Media3 使用的播放位置。
 - [ ] 格式转换只允许无损的整数重排：float 还原为 24 位整数、按 #65 的规则补零。不做重采样、抖动或截断。
