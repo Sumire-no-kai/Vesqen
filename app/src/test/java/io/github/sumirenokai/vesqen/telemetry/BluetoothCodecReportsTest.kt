@@ -57,21 +57,21 @@ class BluetoothCodecReportsTest {
         state.onCodecReported("A", report)
         state.onDisconnected("B")
         state.onActiveDeviceChanged("A")
-        assertEquals(report, state.current)
+        assertEquals(report, state.current())
         state.onActiveDeviceChanged("B")
-        assertNull(state.current)
+        assertNull(state.current())
 
         state.onCodecReported("A", report)
         state.onDisconnected("A")
-        assertNull(state.current)
+        assertNull(state.current())
 
         state.onCodecReported("A", report)
         state.onActiveDeviceChanged(null)
-        assertNull(state.current)
+        assertNull(state.current())
 
         state.onCodecReported("A", report)
         state.clear()
-        assertNull(state.current)
+        assertNull(state.current())
     }
 
     @Test fun onlyTheActiveDevicesOwnReportIsShown() {
@@ -80,35 +80,55 @@ class BluetoothCodecReportsTest {
         val state = BluetoothCodecState()
         // A report that arrives before any broadcast names the active device is held back.
         state.onCodecReported("A", aac)
-        assertNull(state.current)
+        assertNull(state.current())
         state.onActiveDeviceChanged("A")
-        assertEquals(aac, state.current)
+        assertEquals(aac, state.current())
         // #213: B, connected but not playing, reports while A plays.
         state.onCodecReported("B", ldac)
-        assertEquals(aac, state.current)
+        assertEquals(aac, state.current())
         state.onActiveDeviceChanged("B")
-        assertEquals(ldac, state.current)
+        assertEquals(ldac, state.current())
         // A disconnecting while B plays changes nothing; B disconnecting leaves nothing shown.
         state.onDisconnected("A")
-        assertEquals(ldac, state.current)
+        assertEquals(ldac, state.current())
         state.onDisconnected("B")
-        assertNull(state.current)
+        assertNull(state.current())
         // Switching devices drops the other's report: back on A, A's old report is not shown again.
         state.onCodecReported("A", aac)
         state.onActiveDeviceChanged("A")
         state.onCodecReported("B", ldac)
         state.onActiveDeviceChanged("B")
         state.onActiveDeviceChanged("A")
-        assertNull(state.current)
+        assertNull(state.current())
         // After Bluetooth turned off, A's new report waits for A to be named active again.
         state.onActiveDeviceChanged("A")
         state.clear()
         state.onCodecReported("A", aac)
-        assertNull(state.current)
+        assertNull(state.current())
         // A report without a device is never taken for the active one.
         state.onActiveDeviceChanged("C")
         state.onCodecReported(null, ldac)
-        assertNull(state.current)
+        assertNull(state.current())
+    }
+
+    @Test fun beforeAnyBroadcastNamesTheActiveDeviceTheRoutedOneStandsIn() {
+        // #231 K9: Vesqen started after the headset connected; switching the codec sends a report only.
+        val aac = BluetoothCodecReport("AAC", BluetoothCodecSettings(44_100, 16, 2, null), at)
+        val ldac = BluetoothCodecReport("LDAC", BluetoothCodecSettings(96_000, 32, 2, LdacQuality.KBPS_990), at)
+        val state = BluetoothCodecState()
+        state.onCodecReported("A", aac)
+        state.onCodecReported("B", ldac)
+        assertEquals(aac, state.current { "A" })
+        assertEquals(ldac, state.current { "B" })
+        // No Bluetooth output routed, or one with no report of its own: nothing is shown.
+        assertNull(state.current { null })
+        assertNull(state.current { "C" })
+        // Once a broadcast names the active device, that device is the one shown.
+        state.onActiveDeviceChanged("B")
+        assertEquals(ldac, state.current { "A" })
+        // The route is not asked when there is no report to show.
+        state.clear()
+        assertNull(state.current { error("asked without a report") })
     }
 
     @Test fun theCodecIsShownOnlyForABluetoothRouteWithPermissionAndAReport() {
