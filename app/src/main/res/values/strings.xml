@@ -330,6 +330,8 @@
     <string name="library_albums">Albums</string>
     <string name="library_artists">Artists</string>
     <string name="library_folders">Folders</string>
+    <string name="library_storage_device_music">Device music</string>
+    <string name="library_storage_added_folder">Added folder</string>
     <string name="library_genres">Genres</string>
     <string name="library_playlists">Playlists</string>
     <string name="show_favorites">Show favorites only</string>

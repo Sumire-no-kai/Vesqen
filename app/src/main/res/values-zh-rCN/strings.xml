@@ -323,6 +323,8 @@
     <string name="library_albums">专辑</string>
     <string name="library_artists">艺术家</string>
     <string name="library_folders">文件夹</string>
+    <string name="library_storage_device_music">设备音乐</string>
+    <string name="library_storage_added_folder">添加的文件夹</string>
     <string name="library_genres">流派</string>
     <string name="library_playlists">播放列表</string>
     <string name="show_favorites">仅显示收藏</string>

@@ -27,6 +27,8 @@ data class LibraryCollection(
     val subtitle: String,
     val tracks: List<AudioTrack>,
     val playlistId: Long? = null,
+    /** A folder's storage ([folderStorageKey]), set only when another folder shows the same name and path. */
+    val storageKey: String? = null,
 )
 
 /** [names] is the Songs index order unless a JVM test, which has no ICU, supplies its own. */
@@ -110,7 +112,7 @@ fun buildLibraryCollections(
             subtitle = { group -> folderPathParts(group.first().folderName).first },
             trackOrder = compareBy(within) { it.fileName },
             names = names,
-        )
+        ).withStorageWhereNamesClash()
         LibraryBrowseMode.GENRES -> tracks.groupedCollections(
             key = { track -> collectionKey("genre", track.genre) },
             title = AudioTrack::genre,
@@ -230,6 +232,15 @@ private class AlbumKeys {
         if (albumArtist.isNotEmpty() || album.isEmpty()) return collectionKey(AlbumNamespace, albumArtist, album)
         val folder = folders.getOrPut(track.folderName) { albumFolder(track.folderName) }
         return collectionKey(AlbumNamespace, "", album, folderStorageKey(track.contentUri), folder)
+    }
+}
+
+/** Folders that would look the same in the list say which storage each is on (#218). */
+private fun List<LibraryCollection>.withStorageWhereNamesClash(): List<LibraryCollection> {
+    val shown = groupingBy { it.title to it.subtitle }.eachCount()
+    return map { folder ->
+        if (shown.getValue(folder.title to folder.subtitle) < 2) return@map folder
+        folder.copy(storageKey = folder.tracks.firstOrNull()?.let { folderStorageKey(it.contentUri) }?.ifEmpty { null })
     }
 }
 

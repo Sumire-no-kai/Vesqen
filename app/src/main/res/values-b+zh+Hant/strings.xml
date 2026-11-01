@@ -323,6 +323,8 @@
     <string name="library_albums">專輯</string>
     <string name="library_artists">藝人</string>
     <string name="library_folders">資料夾</string>
+    <string name="library_storage_device_music">裝置上的音樂</string>
+    <string name="library_storage_added_folder">加入的資料夾</string>
     <string name="library_genres">類型</string>
     <string name="library_playlists">播放清單</string>
     <string name="show_favorites">只顯示收藏</string>

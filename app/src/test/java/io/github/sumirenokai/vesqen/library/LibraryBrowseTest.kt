@@ -186,9 +186,21 @@ class LibraryBrowseTest {
         )
         val sameFolder = setOf(setOf(1L, 2L), setOf(3L), setOf(4L, 5L), setOf(6L))
 
-        val folders = buildLibraryCollections(LibraryBrowseMode.FOLDERS, songs, emptyList(), names)
+        val other = live(7, "content://media/external_primary/audio/media/7").copy(folderName = "Music/Studio")
+        val folders = buildLibraryCollections(LibraryBrowseMode.FOLDERS, songs + other, emptyList(), names)
+            .filter { it.title == "Live" }
         assertEquals(sameFolder, folders.map { folder -> folder.tracks.map(AudioTrack::id).toSet() }.toSet())
         assertEquals(setOf("Live" to "Music"), folders.map { it.title to it.subtitle }.toSet())
+        // Folders that look the same name their storage; one whose name is its own does not.
+        assertEquals(
+            setOf("media:external_primary", "media:1234-abcd", "tree:com.android.externalstorage.documents/primary%3AMusic",
+                "tree:com.android.externalstorage.documents/1234-ABCD%3AMusic"),
+            folders.mapNotNull(LibraryCollection::storageKey).toSet(),
+        )
+        assertEquals(
+            null,
+            buildLibraryCollections(LibraryBrowseMode.FOLDERS, songs + other, emptyList(), names).single { it.title == "Studio" }.storageKey,
+        )
         // Without an album artist, the folder decides the album, so these are four albums too.
         val albums = buildLibraryCollections(LibraryBrowseMode.ALBUMS, songs, emptyList(), names)
         assertEquals(sameFolder, albums.map { album -> album.tracks.map(AudioTrack::id).toSet() }.toSet())
