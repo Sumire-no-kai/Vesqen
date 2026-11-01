@@ -25,6 +25,19 @@ ENV = {"GITHUB_EVENT_NAME": "workflow_dispatch", "PR_NUMBER": "7", "PR_REVIEW_PU
        "ANTHROPIC_API_KEY": "test-only-not-a-credential"}
 
 
+def model_reply(findings=(), verdict=None):
+    def reply(*args):
+        task, data, schema = args[-3:]
+        if "requests" in schema["properties"]:
+            return {"requests": []}
+        if "findings" in schema["properties"]:
+            return {"findings": copy.deepcopy(list(findings))}
+        return copy.deepcopy(verdict) if verdict is not None else {"verdicts": [
+            {"candidate_id": item["candidate_id"], "confirmed": True, "reason": "Trigger traced through supplied code."}
+            for item in data["candidates"]]}
+    return reply
+
+
 class FakeGitHub:
     repository = "example/Vesqen"
 
@@ -72,6 +85,11 @@ class FakeGitHub:
     def post(self, path, payload):
         self.posts.append((path, payload))
 
+    def snapshot(self, sha):
+        if sha not in {HEAD, self.diff_base}:
+            raise AssertionError("Snapshot must use the immutable head or merge base")
+        return {"sources": {PATH: "class Engine {\n    val active = true\n}"}, "omitted": 0}
+
 
 class ReviewFlowTests(unittest.TestCase):
     def setUp(self):
@@ -83,9 +101,9 @@ class ReviewFlowTests(unittest.TestCase):
 
     def test_discover_verify_and_publish_only_a_comment_bound_to_the_commit(self):
         verdict = {"verdicts": [{"candidate_id": 1, "confirmed": True, "reason": "Initial creation reaches the active branch."}]}
-        with patch.object(review.Model, "generate", side_effect=[{"findings": [FINDING]}, verdict]) as model:
+        with patch.object(review.Model, "generate", side_effect=model_reply([FINDING], verdict)) as model:
             summary = review.run(self.github, ENV, self.root, {})
-        self.assertEqual(2, model.call_count)
+        self.assertEqual(6, model.call_count)
         self.assertIn("Only a completed scan", model.call_args_list[0].args[1]["trusted_rules"]["AGENTS.md"])
         path, payload = self.github.posts[0]
         self.assertEqual("pulls/7/reviews", path)
@@ -96,23 +114,23 @@ class ReviewFlowTests(unittest.TestCase):
         self.assertIn("not an approval", summary)
         self.assertEqual([(PATH, HEAD)], self.github.sources)
 
-    def test_no_candidates_uses_one_call_and_does_not_claim_verification_or_tests(self):
-        with patch.object(review.Model, "generate", return_value={"findings": []}) as model:
+    def test_no_candidates_still_runs_both_discoveries_without_verification_or_test_claims(self):
+        with patch.object(review.Model, "generate", side_effect=model_reply()) as model:
             summary = review.run(self.github, ENV, self.root, {})
-        self.assertEqual(1, model.call_count)
+        self.assertEqual(4, model.call_count)
         self.assertIn("0 finding(s) retained from 0 candidate(s)", summary)
         self.assertIn("does not execute tests", summary)
         self.assertIn("not run (no candidates)", summary)
 
     def test_dry_run_never_publishes(self):
-        with patch.object(review.Model, "generate", return_value={"findings": []}):
+        with patch.object(review.Model, "generate", side_effect=model_reply()):
             summary = review.run(self.github, {**ENV, "PR_REVIEW_PUBLISH": "false"}, self.root, {})
         self.assertIn("Dry run", summary)
         self.assertEqual([], self.github.posts)
 
     def test_verified_rejection_is_not_published_as_a_finding(self):
         verdict = {"verdicts": [{"candidate_id": 1, "confirmed": False, "reason": "The supplied caller guards this state."}]}
-        with patch.object(review.Model, "generate", side_effect=[{"findings": [FINDING]}, verdict]):
+        with patch.object(review.Model, "generate", side_effect=model_reply([FINDING], verdict)):
             summary = review.run(self.github, ENV, self.root, {})
         self.assertIn("0 finding(s) retained from 1 candidate(s)", summary)
         self.assertNotIn(FINDING["title"], summary)
@@ -121,11 +139,15 @@ class ReviewFlowTests(unittest.TestCase):
         env = {**ENV, "PR_REVIEW_VERIFY_PROVIDER": "openai", "PR_REVIEW_VERIFY_MODEL": "test-verifier",
                "OPENAI_API_KEY": "test-only-not-a-credential"}
         verdict = {"verdicts": [{"candidate_id": 1, "confirmed": True, "reason": "Trigger traced."}]}
-        with patch.object(review.Model, "generate", autospec=True, side_effect=[{"findings": [FINDING]}, verdict]) as model:
+        with patch.object(review.Model, "generate", autospec=True, side_effect=model_reply([FINDING], verdict)) as model:
             review.run(self.github, env, self.root, {})
-        self.assertEqual("anthropic", model.call_args_list[0].args[0].provider)
-        self.assertEqual("openai", model.call_args_list[1].args[0].provider)
-        self.assertEqual("test-verifier", model.call_args_list[1].args[0].model)
+        for provider in ("anthropic", "openai"):
+            calls = [call for call in model.call_args_list if call.args[0].provider == provider]
+            self.assertEqual(3, len(calls))
+            self.assertEqual(["requests", "findings", "verdicts"],
+                             [next(iter(call.args[3]["properties"])) for call in calls])
+        self.assertEqual("test-verifier", next(call.args[0].model for call in model.call_args_list
+                                               if call.args[0].provider == "openai"))
 
     def test_default_and_empty_configuration_use_only_gpt_6_1_sol_for_both_passes(self):
         base_env = {key: ENV[key] for key in ("GITHUB_EVENT_NAME", "PR_NUMBER", "PR_REVIEW_PUBLISH")}
@@ -134,9 +156,9 @@ class ReviewFlowTests(unittest.TestCase):
         for override in ({}, {"PR_REVIEW_PROVIDER": "", "PR_REVIEW_MODEL": "",
                               "PR_REVIEW_VERIFY_PROVIDER": "", "PR_REVIEW_VERIFY_MODEL": ""}):
             with self.subTest(override=override), patch.object(
-                    review.Model, "generate", autospec=True, side_effect=[{"findings": [FINDING]}, verdict]) as model:
+                    review.Model, "generate", autospec=True, side_effect=model_reply([FINDING], verdict)) as model:
                 review.run(FakeGitHub(), {**base_env, **override}, self.root, {})
-            self.assertEqual(2, model.call_count)
+            self.assertEqual(6, model.call_count)
             for call in model.call_args_list:
                 self.assertEqual("openai", call.args[0].provider)
                 self.assertEqual("gpt-6.1-sol", call.args[0].model)
@@ -144,25 +166,25 @@ class ReviewFlowTests(unittest.TestCase):
     def test_lowest_priority_sets_the_instructions_schema_and_accepted_findings(self):
         verdict = {"verdicts": [{"candidate_id": 1, "confirmed": True, "reason": "Trigger traced."}]}
         minor = {**FINDING, "priority": "P3"}
-        with patch.object(review.Model, "generate", autospec=True, side_effect=[{"findings": [minor]}, verdict]) as model:
+        with patch.object(review.Model, "generate", autospec=True, side_effect=model_reply([minor], verdict)) as model:
             summary = review.run(self.github, {**ENV, "PR_REVIEW_LOWEST_PRIORITY": "p3"}, self.root, {})
-        discovery = model.call_args_list[0]
+        discovery = next(call for call in model.call_args_list if "findings" in call.args[3]["properties"])
         self.assertIn("- P3:", discovery.args[0].system)
         self.assertEqual(["P1", "P2", "P3"],
                          discovery.args[3]["properties"]["findings"]["items"]["properties"]["priority"]["enum"])
         self.assertIn("[P3] Preserve idle state", summary)
         self.assertIn("Reported priorities: P1–P3", summary)
 
-        with patch.object(review.Model, "generate", autospec=True, return_value={"findings": []}) as model:
+        with patch.object(review.Model, "generate", autospec=True, side_effect=model_reply()) as model:
             summary = review.run(FakeGitHub(), {**ENV, "PR_REVIEW_LOWEST_PRIORITY": "P1"}, self.root, {})
         self.assertNotIn("- P2:", model.call_args.args[0].system)
         self.assertIn("No introduced P1 defects", summary)
-        with patch.object(review.Model, "generate", side_effect=[{"findings": [FINDING]}]):
+        with patch.object(review.Model, "generate", side_effect=model_reply([FINDING])):
             with self.assertRaises(review.ReviewError):
                 review.run(FakeGitHub(), {**ENV, "PR_REVIEW_LOWEST_PRIORITY": "P1"}, self.root, {})
 
     def test_default_priorities_stay_p1_and_p2(self):
-        with patch.object(review.Model, "generate", autospec=True, return_value={"findings": []}) as model:
+        with patch.object(review.Model, "generate", autospec=True, side_effect=model_reply()) as model:
             summary = review.run(self.github, ENV, self.root, {})
         self.assertIn("- P2:", model.call_args.args[0].system)
         self.assertNotIn("- P3:", model.call_args.args[0].system)
@@ -183,12 +205,12 @@ class ReviewFlowTests(unittest.TestCase):
         rules = review.trusted_rules(self.root, [PATH])
         self.assertEqual(review.REVIEW_RULES, next(iter(rules)))
         self.assertIn("queue checkpoints", rules[review.REVIEW_RULES])
-        with patch.object(review.Model, "generate", return_value={"findings": []}):
+        with patch.object(review.Model, "generate", side_effect=model_reply()):
             summary = review.run(self.github, ENV, self.root, {})
         self.assertIn(f"Review rules: `{review.REVIEW_RULES}`", summary)
 
     def test_review_header_says_when_there_are_no_review_rules(self):
-        with patch.object(review.Model, "generate", return_value={"findings": []}):
+        with patch.object(review.Model, "generate", side_effect=model_reply()):
             summary = review.run(self.github, ENV, self.root, {})
         self.assertIn("Review rules: none on the default branch", summary)
 
@@ -200,14 +222,14 @@ class ReviewFlowTests(unittest.TestCase):
 
     def test_failed_or_incomplete_verification_cannot_publish_a_clean_result(self):
         for second in ({"verdicts": []}, {"verdicts": [{"candidate_id": 9, "confirmed": True, "reason": "x"}]}):
-            with self.subTest(second=second), patch.object(review.Model, "generate", side_effect=[{"findings": [FINDING]}, second]):
+            with self.subTest(second=second), patch.object(review.Model, "generate", side_effect=model_reply([FINDING], second)):
                 with self.assertRaises(review.ReviewError):
                     review.run(self.github, ENV, self.root, {})
         self.assertEqual([], self.github.posts)
 
     def test_head_drift_after_review_discards_result(self):
         self.github.change_on_read = 3
-        with patch.object(review.Model, "generate", return_value={"findings": []}):
+        with patch.object(review.Model, "generate", side_effect=model_reply()):
             with self.assertRaisesRegex(review.ReviewSkipped, "changed base/head"):
                 review.run(self.github, ENV, self.root, {})
         self.assertEqual([], self.github.posts)
