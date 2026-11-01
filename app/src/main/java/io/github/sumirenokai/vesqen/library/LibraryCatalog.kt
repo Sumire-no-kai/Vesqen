@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.core.net.toUri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.StateFlow
@@ -71,10 +72,15 @@ interface LibraryCatalog : Closeable {
     ): LibraryRefreshResult
 }
 
-/** [store] is the application's one database helper (#165); every catalog shares it and none closes it. */
+/**
+ * [store] is the application's one database helper (#165); every catalog shares it and none closes it.
+ * [folderGrants] lists the folder grants a new catalog takes its folders back from (#191 D20); tests
+ * list their own, since only the system picker can grant a folder.
+ */
 internal class AndroidLibraryCatalog(
     context: Context,
     private val store: LibraryCatalogStore,
+    private val folderGrants: () -> List<Uri> = { persistedReadableTreeGrants(context.contentResolver) },
 ) : LibraryCatalog {
     private val appContext = context.applicationContext
     private val contentResolver: ContentResolver = appContext.contentResolver
@@ -241,6 +247,7 @@ internal class AndroidLibraryCatalog(
     ): LibraryRefreshResult {
         scanGate.startScan()
         store.reconcileInterruptedScans()
+        restoreFoldersToNewCatalog()
         if (resumePausedSourcesRequested.getAndSet(false)) {
             store.preparePausedSourcesForResume()
         }
@@ -293,6 +300,24 @@ internal class AndroidLibraryCatalog(
             hadFailure = hadFailure,
             yieldedToEdit = yielded,
         )
+    }
+
+    /**
+     * A catalog that replaced a corrupt one adds back each folder Android still grants, as if it were
+     * picked again, and the scan that called this reads them (#191 D20). Once they are added the mark
+     * clears; a folder removed after that keeps its row deleted, even if its grant could not be released.
+     */
+    private suspend fun restoreFoldersToNewCatalog() {
+        val due = store.folderRestore.due()
+        if (due == 0L) return
+        serialized {
+            val listedTreeUris = store.readSources().mapNotNullTo(HashSet()) { it.treeUri }
+            folderGrants()
+                .filterNot { it.toString() in listedTreeUris }
+                .forEach { treeUri -> store.upsertFolderSource(treeUri.toString(), treeScanner.displayName(treeUri)) }
+        }
+        // A catalog created during these writes marked the folders due again, and the next scan adds them.
+        store.folderRestore.restored(due)
     }
 
     private suspend fun scanDeviceLibrary(
@@ -547,6 +572,11 @@ internal class AndroidLibraryCatalog(
         val scanYieldRequests = AtomicInteger()
     }
 }
+
+/** Read grants on folder trees; Vesqen takes one for each folder added (#191 D20). */
+private fun persistedReadableTreeGrants(contentResolver: ContentResolver): List<Uri> = contentResolver.persistedUriPermissions
+    .filter { it.isReadPermission && DocumentsContract.isTreeUri(it.uri) }
+    .map { it.uri }
 
 /**
  * Serializes catalog work and refuses it once [Closeable.close] is requested.

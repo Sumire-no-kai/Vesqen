@@ -198,7 +198,7 @@
     <string name="crash_prompt_review">查看并发送</string>
     <string name="crash_prompt_decline">不发送</string>
     <string name="library_rebuilt_title">曲库数据已重建</string>
-    <string name="library_rebuilt_body">曲库数据已损坏，Vesqen 已根据设备中的音乐重建曲库。收藏、播放次数、播放记录、播放列表和导入的歌词无法保留，播放队列已清空。此前添加的音乐文件夹需重新添加。设备中的音乐文件不受影响。</string>
+    <string name="library_rebuilt_body">曲库数据已损坏，Vesqen 已根据设备中的音乐重建曲库。收藏、播放次数、播放记录、播放列表和导入的歌词无法保留，播放队列已清空。此前添加的音乐文件夹将自动重新添加并扫描。设备中的音乐文件不受影响。</string>
     <string name="library_rebuilt_ok">确定</string>
     <string name="licenses_title">开源许可</string>
     <string name="licenses_intro">Vesqen 使用了以下开源软件。</string>
