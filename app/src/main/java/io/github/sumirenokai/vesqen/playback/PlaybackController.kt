@@ -429,8 +429,14 @@ class PlaybackController(
         }
     }
 
-    fun seekTo(positionMs: Long) {
-        controller?.seekTo(positionMs.coerceAtLeast(0))
+    /**
+     * Seeks the current item. A seek meant for [queueEntryId] is dropped once the controller plays
+     * another entry, which the screen may not have drawn yet (#216).
+     */
+    fun seekTo(positionMs: Long, queueEntryId: String? = null) {
+        val activeController = controller ?: return
+        if (queueEntryId != null && activeController.currentMediaItem?.queueEntryId() != queueEntryId) return
+        activeController.seekTo(positionMs.coerceAtLeast(0))
     }
 
     fun cyclePlaybackOrderMode() {
@@ -527,6 +533,7 @@ class PlaybackController(
                 showsPauseAction = playbackToggleAction(player.playWhenReady, player.playbackState) ==
                     PlaybackToggleAction.PAUSE,
                 trackId = item?.mediaId?.toLongOrNull(),
+                queueEntryId = item?.queueEntryId(),
                 mediaUri = track?.contentUri ?: item?.localConfiguration?.uri?.toString().orEmpty(),
                 albumArtworkUri = track?.albumArtworkUri ?: metadata?.artworkUri?.toString(),
                 artworkRevision = track?.artworkRevision ?: 0,

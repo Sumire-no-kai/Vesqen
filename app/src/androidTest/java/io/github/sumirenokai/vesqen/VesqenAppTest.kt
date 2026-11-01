@@ -3221,7 +3221,7 @@ class VesqenAppTest {
                     onPrevious = {},
                     onPlayPause = {},
                     onNext = {},
-                    onSeek = {},
+                    onSeek = { _, _ -> },
                     onCyclePlaybackOrder = {
                         playbackOrder.value = when (playbackOrder.value) {
                             PlaybackOrderMode.SEQUENTIAL -> PlaybackOrderMode.SHUFFLE
@@ -3382,7 +3382,7 @@ class VesqenAppTest {
                     onPrevious = { trackIndex.value = (trackIndex.value - 1).coerceAtLeast(0) },
                     onPlayPause = {},
                     onNext = { trackIndex.value = (trackIndex.value + 1).coerceAtMost(sampleTracks.lastIndex) },
-                    onSeek = {},
+                    onSeek = { _, _ -> },
                     onCyclePlaybackOrder = {},
                     motionPolicy = VesqenMotionPolicy(reduceMotion = true),
                 )
@@ -5055,7 +5055,7 @@ class VesqenAppTest {
                         onPlayPause = onPlayPause,
                         onRefreshPlaybackPosition = onRefreshPlaybackPosition,
                         onNext = onNext,
-                        onSeek = {},
+                        onSeek = { _, _ -> },
                         onCyclePlaybackOrder = onCyclePlaybackOrder,
                         onSetUsbOutputMode = onSetUsbOutputMode,
                         premiumAccess = premiumAccess,

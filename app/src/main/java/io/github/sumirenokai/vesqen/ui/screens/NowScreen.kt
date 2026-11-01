@@ -298,7 +298,8 @@ fun NowScreen(
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
-    onSeek: (Long) -> Unit,
+    /** Seeks the given queue entry; the seek is dropped if another entry plays by then (#216). */
+    onSeek: (positionMs: Long, queueEntryId: String?) -> Unit,
     onPlayQueueIndex: (Int) -> Unit,
     onRemoveQueueItem: (Int) -> Unit,
     onMoveQueueItem: (Int, Int) -> Unit,
@@ -526,7 +527,7 @@ private class NowActions(
     val onPrevious: () -> Unit,
     val onPlayPause: () -> Unit,
     val onNext: () -> Unit,
-    val onSeek: (Long) -> Unit,
+    val onSeek: (positionMs: Long, queueEntryId: String?) -> Unit,
     val onToggleFavorite: (Long, Boolean) -> Unit,
     val lyricsShown: Boolean,
     val onToggleLyrics: () -> Unit,
@@ -586,7 +587,7 @@ private fun NowPortraitPage(
                             isPlaying = snapshot.isPlaying,
                             canSeek = snapshot.isControllerReady,
                             motionPolicy = motionPolicy,
-                            onSeek = actions.onSeek,
+                            onSeek = { actions.onSeek(it, snapshot.queueEntryId) },
                             onImportLyrics = actions.onImportLyrics,
                             modifier = stage.fillMaxWidth(),
                         )
@@ -688,7 +689,7 @@ private fun NowLandscapePage(
                     isPlaying = snapshot.isPlaying,
                     canSeek = snapshot.isControllerReady,
                     motionPolicy = motionPolicy,
-                    onSeek = actions.onSeek,
+                    onSeek = { actions.onSeek(it, snapshot.queueEntryId) },
                     onImportLyrics = actions.onImportLyrics,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -1288,16 +1289,19 @@ private fun NotesRow(step: String, valueAndConfidence: Pair<String, String>, tag
 @Composable
 private fun PlaybackProgress(
     snapshot: PlaybackSnapshot,
-    onSeek: (Long) -> Unit,
+    onSeek: (positionMs: Long, queueEntryId: String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (snapshot.durationMs <= 0) return
 
-    var isSeeking by remember { mutableStateOf(false) }
+    // The queue entry a drag started on, null between drags. When playback moves to another entry
+    // (the song ends, or a headphone Next) the drag stays with its own and seeks nothing (#216).
+    var scrubEntry by remember { mutableStateOf<String?>(null) }
+    fun scrubbing() = scrubEntry != null && scrubEntry == snapshot.queueEntryId
     var seekPosition by remember { mutableFloatStateOf(0f) }
     val interactionSource = remember { MutableInteractionSource() }
-    LaunchedEffect(snapshot.trackId, snapshot.durationMs, snapshot.positionMs) {
-        if (!isSeeking) seekPosition = snapshot.positionMs.coerceIn(0, snapshot.durationMs).toFloat()
+    LaunchedEffect(snapshot.queueEntryId, snapshot.durationMs, snapshot.positionMs) {
+        if (!scrubbing()) seekPosition = snapshot.positionMs.coerceIn(0, snapshot.durationMs).toFloat()
     }
     val positionLabel = stringResource(
         R.string.playback_position,
@@ -1327,12 +1331,12 @@ private fun PlaybackProgress(
                     },
                 value = seekPosition.coerceIn(0f, snapshot.durationMs.toFloat()),
                 onValueChange = {
-                    isSeeking = true
-                    seekPosition = it
+                    if (scrubEntry == null) scrubEntry = snapshot.queueEntryId
+                    if (scrubEntry == snapshot.queueEntryId) seekPosition = it
                 },
                 onValueChangeFinished = {
-                    onSeek(seekPosition.toLong())
-                    isSeeking = false
+                    if (scrubbing()) onSeek(seekPosition.toLong(), scrubEntry)
+                    scrubEntry = null
                 },
                 valueRange = 0f..snapshot.durationMs.toFloat(),
                 enabled = enabled,

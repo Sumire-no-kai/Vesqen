@@ -105,6 +105,8 @@ data class PlaybackSnapshot(
     val canSetUsbOutputMode: Boolean = isControllerReady,
     val isPlaying: Boolean = false,
     val trackId: Long? = null,
+    /** The current queue entry; a track queued twice has two. A seek started on one entry stays with it (#216). */
+    val queueEntryId: String? = null,
     /** Opaque source URI retained from Media3 so artwork can survive a UI/controller reconnect. */
     val mediaUri: String = "",
     /** Provider-owned or Media3 metadata artwork URI; never a filesystem path. */

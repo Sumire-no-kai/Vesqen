@@ -534,7 +534,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     fun skipToNext() = playbackController?.skipToNext()
 
-    fun seekTo(positionMs: Long) = playbackController?.seekTo(positionMs)
+    fun seekTo(positionMs: Long, queueEntryId: String? = null) = playbackController?.seekTo(positionMs, queueEntryId)
 
     fun cyclePlaybackOrderMode() = playbackController?.cyclePlaybackOrderMode()
 

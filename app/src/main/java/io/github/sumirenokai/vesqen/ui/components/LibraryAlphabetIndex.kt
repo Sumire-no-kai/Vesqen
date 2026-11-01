@@ -22,7 +22,18 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -63,6 +74,8 @@ internal fun LibraryAlphabetIndex(sections: Map<String, Int>, listState: LazyLis
     val selectedColor = MaterialTheme.colorScheme.primary
     val paint = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textAlign = android.graphics.Paint.Align.CENTER } }
     var touchY by remember { mutableFloatStateOf(0f) }
+    // The bubble sits beside the finger, so a letter chosen in the picker shows none (#221).
+    var touched by remember { mutableStateOf(false) }
     BoxWithConstraints(modifier.fillMaxHeight(), contentAlignment = Alignment.Center) {
         if (maxHeight < 420.dp || density.fontScale > 1.2f || touchExploration) {
             // A 48 dp button leaves no room for the default 12 dp side padding around "A-Z".
@@ -74,9 +87,26 @@ internal fun LibraryAlphabetIndex(sections: Map<String, Int>, listState: LazyLis
         } else {
             // #35: a slim strip along the edge, like the system contacts index. Drags are
             // forgiving, so the letters do not need a wide column taken from every row.
+            // #221: a keyboard, or Switch Access without touch exploration, cannot drag along it, so
+            // it is also one focusable button that opens the same picker as the "A-Z" button.
+            var focused by remember { mutableStateOf(false) }
             Canvas(Modifier.width(IndexWidth).fillMaxHeight().testTag("vesqen.library.alphabet")
+                .semantics {
+                    contentDescription = jumpLabel
+                    role = Role.Button
+                    onClick { showPicker = true; true }
+                }
+                .onKeyEvent { event ->
+                    val opens = event.type == KeyEventType.KeyUp && event.key in PickerKeys
+                    if (opens) showPicker = true
+                    opens
+                }
+                .onFocusChanged { focused = it.isFocused }
+                .focusable()
+                .then(if (focused) Modifier.border(2.dp, selectedColor, RoundedCornerShape(IndexWidth / 2)) else Modifier)
                 .pointerInput(sections) {
                     detectTapGestures { position ->
+                        touched = true
                         touchY = position.y
                         jump(labels[(position.y / size.height * labels.size).toInt().coerceIn(labels.indices)])
                     }
@@ -84,6 +114,7 @@ internal fun LibraryAlphabetIndex(sections: Map<String, Int>, listState: LazyLis
                 .pointerInput(sections) {
                     detectDragGestures { change, _ ->
                         change.consume()
+                        touched = true
                         touchY = change.position.y
                         jump(labels[(change.position.y / size.height * labels.size).toInt().coerceIn(labels.indices)])
                     }
@@ -99,7 +130,7 @@ internal fun LibraryAlphabetIndex(sections: Map<String, Int>, listState: LazyLis
                     drawContext.canvas.nativeCanvas.drawText(label, size.width / 2f, rowHeight * (index + .5f) - (paint.ascent() + paint.descent()) / 2f, paint)
                 }
             }
-            selected?.let { letter -> LetterBubble(letter, touchY, constraints.maxHeight) }
+            selected?.takeIf { touched }?.let { letter -> LetterBubble(letter, touchY, constraints.maxHeight) }
         }
     }
     if (showPicker) {
@@ -109,7 +140,7 @@ internal fun LibraryAlphabetIndex(sections: Map<String, Int>, listState: LazyLis
                 androidx.compose.foundation.lazy.LazyColumn {
                     items(labels.size) { index ->
                         val label = labels[index]
-                        TextButton(onClick = { jump(label); showPicker = false }, enabled = label in sections, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(label) }
+                        TextButton(onClick = { touched = false; jump(label); showPicker = false }, enabled = label in sections, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(label) }
                     }
                 }
             },
@@ -120,6 +151,7 @@ internal fun LibraryAlphabetIndex(sections: Map<String, Int>, listState: LazyLis
 
 private val IndexWidth = 24.dp
 private val BubbleSize = 56.dp
+private val PickerKeys = setOf(Key.Enter, Key.NumPadEnter, Key.Spacebar, Key.DirectionCenter)
 
 /**
  * The selected letter beside the finger, over the list. It takes no layout space, so the strip
