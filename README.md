@@ -29,7 +29,7 @@
 
 Vesqen is an offline music player for Android. It plays the music stored on your phone and needs no account. While a track plays, Vesqen records each step from the file to your headphones, and the Chain page shows where every value came from and how it was obtained.
 
-> **Current version:** `1.1.0`, released on October 31, 2026 on [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.1.0). The Google Play version is in a closed test and will get the same version once Google approves it. Read the [known limitations](#known-limitations) before relying on strict USB output.
+> **Current version:** `1.1.1`, released on November 1, 2026 on [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.1.1). The Google Play version is in a closed test and will get the same version once Google approves it. Read the [known limitations](#known-limitations) before relying on strict USB output.
 
 ## Features
 
@@ -92,7 +92,7 @@ Playback and your library never use the network, and your library, playlists and
 - Even on phones that do offer the bit-perfect path, strict USB output currently stops for most files: Vesqen hands Android floating-point audio, and USB DACs' bit-perfect formats are integer. This is being fixed together with Vesqen's own USB output, planned for 2.0.
 - In strict USB mode, there is a short gap between tracks, even on gapless albums.
 - Same-name `.lrc` lyrics files are read only in folders added with Add music folder, not for songs that Vesqen finds through Android's media library.
-- If Vesqen's library data is damaged and has to be rebuilt, folders added with Add music folder have to be added again.
+- On Android 9, folders with the same path on the phone and on an SD card are still shown as one folder.
 - Bluetooth is never bit-perfect. The Chain page can say that Vesqen's part left the audio unchanged; the phone still re-encodes it for Bluetooth.
 - If Android stops Vesqen in the background, the queue comes back when you open the app again. Resuming straight from headphone buttons doesn't work on the phones we tested, which pass those buttons only to music apps on a list built into the system. On Android 13 and later, the Play button in the notification shade and on the lock screen can't restart it either.
 - On vivo phones, Vesqen's playback controls show on the lock screen only after you turn on Lock screen notifications for Vesqen in the phone's notification settings.
