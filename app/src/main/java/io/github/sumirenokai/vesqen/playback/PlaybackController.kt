@@ -527,6 +527,7 @@ class PlaybackController(
                 showsPauseAction = playbackToggleAction(player.playWhenReady, player.playbackState) ==
                     PlaybackToggleAction.PAUSE,
                 trackId = item?.mediaId?.toLongOrNull(),
+                queueEntryId = item?.queueEntryId(),
                 mediaUri = track?.contentUri ?: item?.localConfiguration?.uri?.toString().orEmpty(),
                 albumArtworkUri = track?.albumArtworkUri ?: metadata?.artworkUri?.toString(),
                 artworkRevision = track?.artworkRevision ?: 0,

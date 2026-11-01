@@ -1293,11 +1293,14 @@ private fun PlaybackProgress(
 ) {
     if (snapshot.durationMs <= 0) return
 
-    var isSeeking by remember { mutableStateOf(false) }
+    // The queue entry a drag started on, null between drags. When playback moves to another entry
+    // (the song ends, or a headphone Next) the drag stays with its own and seeks nothing (#216).
+    var scrubEntry by remember { mutableStateOf<String?>(null) }
+    fun scrubbing() = scrubEntry != null && scrubEntry == snapshot.queueEntryId
     var seekPosition by remember { mutableFloatStateOf(0f) }
     val interactionSource = remember { MutableInteractionSource() }
-    LaunchedEffect(snapshot.trackId, snapshot.durationMs, snapshot.positionMs) {
-        if (!isSeeking) seekPosition = snapshot.positionMs.coerceIn(0, snapshot.durationMs).toFloat()
+    LaunchedEffect(snapshot.queueEntryId, snapshot.durationMs, snapshot.positionMs) {
+        if (!scrubbing()) seekPosition = snapshot.positionMs.coerceIn(0, snapshot.durationMs).toFloat()
     }
     val positionLabel = stringResource(
         R.string.playback_position,
@@ -1327,12 +1330,12 @@ private fun PlaybackProgress(
                     },
                 value = seekPosition.coerceIn(0f, snapshot.durationMs.toFloat()),
                 onValueChange = {
-                    isSeeking = true
-                    seekPosition = it
+                    if (scrubEntry == null) scrubEntry = snapshot.queueEntryId
+                    if (scrubEntry == snapshot.queueEntryId) seekPosition = it
                 },
                 onValueChangeFinished = {
-                    onSeek(seekPosition.toLong())
-                    isSeeking = false
+                    if (scrubbing()) onSeek(seekPosition.toLong())
+                    scrubEntry = null
                 },
                 valueRange = 0f..snapshot.durationMs.toFloat(),
                 enabled = enabled,
