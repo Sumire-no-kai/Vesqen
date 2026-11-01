@@ -364,3 +364,28 @@
   - 蓝牙和重启。
 - 结论：安装、versionCode 增大的同签名升级和数据保留通过（Android 15 和 Android 9 都从 GitHub 版 1.0.1 升级）；歌词、进程结束后恢复（含随机顺序和播放计数）、清空队列的撤销和新队列沿用播放模式在 iQOO 上的行为符合发布说明。
 - 发布后（2026-10-31 13:18，[Publish run #41159406928](https://github.com/Sumire-no-kai/Vesqen/actions/runs/41159406928)）：`v1.1.0` 为 Latest，标签指向 `0a77a8f`，附件 APK 的 SHA-256 为 `68a4830a…246d`。官网 `4f2044e` 上线后，线上 `updates/stable.json` 和 `beta.json` 与发布运行生成的文件逐字节一致，指向 1.1.0。两台测试手机都已是 1.1.0，没有再测应用内更新器。
+
+### 2026-11-01 · 1.1.1 CI 签名 APK 从 1.1.0 升级
+
+- 候选：`master` 合并 PR #234 到 `4b25eb50af2b6026839dcfc341885e1992625b95`（1.1.1 / 16）后自动运行的 [GitHub APK release #41280612520](https://github.com/Sumire-no-kai/Vesqen/actions/runs/41280612520)。所有者批准签名后，生成草稿 `v1.1.1`；这次 `draft` 一步也通过了。`Vesqen-1.1.1.apk` 的 SHA-256 为 `457cf571…eb7c`，与 `SHA256SUMS` 和 `release-manifest.json` 一致。
+- 本机复核签名包：apksigner 只有一个签名者“Vesqen App Signing v1”，证书 SHA-256 为 `743e96fc…6293`；aapt 显示 1.1.1 / 16，包名 `io.github.sumirenokai.vesqen`。
+- iQOO 9 V2171A / Android 15（USB）：
+  - 升级前：装的是 GitHub 版 1.1.0（versionCode 15，base.apk `68a4830a…246d`，与发布的 1.1.0 一致，备份在被忽略的 `build/qa/device-backups/2026-11-01-iqoo-1.1.0/`）。“正在播放”为第 5 / 112 首“brave heart”，暂停在 0:07 / 4:12，链路注记为 FLAC 24/192 · SYSTEM MIXED。
+  - 升级：`adb install -r`，点过 vivo 的安装检查页。versionCode 15 → 16，firstInstallTime 不变（2026-10-13 15:37:21），lastUpdateTime 为 2026-11-01 18:35:34，设备上 base.apk 的哈希为 `457cf571…eb7c`。
+  - 升级后：曲库、队列位置、进度和链路注记都与升级前相同。没有开始播放。
+- Honor STF-AL00 / Android 9（无线 adb）：
+  - 升级前：装的是 GitHub 版 1.1.0（base.apk `68a4830a…246d`，备份在 `build/qa/device-backups/2026-11-01-honor-1.1.0/`）。这是同日清除媒体存储之后 1.1.0 第一次打开，扫描后队列为第 93 / 106 首“05. 前前前世 (original ver.)”，已收藏，暂停在 1:33 / 4:37，链路注记为 WAV 24/48 · SYSTEM MIXED。也就是说，1.1.0 在媒体库重建后保留了队列和收藏。
+  - 升级：`adb install -r`，versionCode 15 → 16，firstInstallTime 不变（2026-10-16 12:22:47），lastUpdateTime 为 2026-11-01 18:37:36，设备上 base.apk 的哈希为 `457cf571…eb7c`。
+  - 升级后：曲库、第 93 / 106 首、1:33 / 4:37、收藏和链路注记都与升级前相同，仍为暂停。
+  - Termux：测试前后 com.termux、nginx、cloudflared、termux-api 和 com.termux.api 的进程号与启动时间都不变。结束时 Termux 回到前台。
+- 同日用测试版完成的检查（PR #234 和 #237 的评论中有详细记录）：
+  - 两台手机的设备测试：iQOO 76 项全部通过；Honor 的 11 个测试类全部通过，其中 4 项需要 Android 10 及以上而跳过。
+  - iQOO 上的日文和繁体中文界面。
+  - Honor 上清除媒体存储（#159、#139）：106 首歌的编号、播放次数和收藏全部保留。
+  - iQOO 上的蓝牙编码（#213）：运行中连接时显示正确；先连耳机、后启动 Vesqen 再切换编码时的问题（#231 K9）已由 PR #237 修复并验证。
+  - 模拟器上用系统文件夹选择器做 D20 的真实重建：添加的文件夹自动加回并扫描。
+- 没有覆盖：
+  - 真机 TalkBack（需要所有者操作，留作已知限制）。
+  - 应用内更新器（要等发布和官网 `updates/` 上线后再测）。
+  - 重启。
+- 结论：安装、versionCode 增大的同签名升级和数据保留通过（Android 15 和 Android 9 都从 GitHub 版 1.1.0 升级）。

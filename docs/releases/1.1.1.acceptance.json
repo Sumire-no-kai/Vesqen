@@ -1,0 +1,12 @@
+{
+  "applicationId": "io.github.sumirenokai.vesqen",
+  "versionName": "1.1.1",
+  "versionCode": 16,
+  "sourceCommit": "4b25eb50af2b6026839dcfc341885e1992625b95",
+  "apkSha256": "457cf57163b694824d196281aacd287838c9e4fcf9d1fbb2945f901b9b5deb7c",
+  "certificateSha256": "743e96fcb71dc58188496819a001a27cd88d909162c5ae929c87bfa29ab86293",
+  "install": "passed",
+  "sameSignerUpgrade": "passed",
+  "dataRetention": "passed",
+  "deviceEvidence": "docs/M4_DEVICE_ACCEPTANCE.md#2026-11-01--111-ci-签名-apk-从-110-升级"
+}
