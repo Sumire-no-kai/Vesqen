@@ -228,10 +228,11 @@ class ReviewFlowTests(unittest.TestCase):
         self.assertEqual([], self.github.posts)
 
     def test_head_drift_after_review_discards_result(self):
-        self.github.change_on_read = 3
-        with patch.object(review.Model, "generate", side_effect=model_reply()):
+        self.github.change_on_read = 5
+        with patch.object(review.Model, "generate", side_effect=model_reply()) as generate:
             with self.assertRaisesRegex(review.ReviewSkipped, "changed base/head"):
                 review.run(self.github, ENV, self.root, {})
+        self.assertEqual(4, generate.call_count)
         self.assertEqual([], self.github.posts)
 
     def test_duplicate_bot_review_skips_before_spending_api_budget(self):

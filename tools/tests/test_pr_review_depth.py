@@ -222,13 +222,14 @@ class IndependentReviewTests(unittest.TestCase):
         generate.assert_not_called()
         self.assertEqual([], github.posts)
 
-    def test_an_old_single_discovery_review_does_not_suppress_the_new_pipeline(self):
-        github = FakeGitHub()
-        github.reviews = [{"user": {"login": "github-actions[bot]"}, "commit_id": HEAD,
-                           "body": review.marker(github.pr).replace(":v2:", ":v1:")}]
-        with patch.object(review.Model, "generate", side_effect=model_reply()):
-            result = review.run(github, self.env, self.root, {})
-        self.assertIn("Published a COMMENT review", result)
+    def test_previous_pipeline_reviews_do_not_suppress_the_evidence_preserving_review(self):
+        for version in ("v1", "v2"):
+            github = FakeGitHub()
+            github.reviews = [{"user": {"login": "github-actions[bot]"}, "commit_id": HEAD,
+                               "body": review.marker(github.pr).replace(":v3:", f":{version}:")}]
+            with self.subTest(version=version), patch.object(review.Model, "generate", side_effect=model_reply()):
+                result = review.run(github, self.env, self.root, {})
+            self.assertIn("Published a COMMENT review", result)
 
     def test_large_reports_fail_before_publication(self):
         github = FakeGitHub()

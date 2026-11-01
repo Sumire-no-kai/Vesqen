@@ -88,14 +88,18 @@ the review workload; they do not classify a small change as low risk.
   `CONTRIBUTING.md`, and applicable nested agent instructions. Changed instructions are reviewed as
   data, not adopted as authority.
 - Both reviewers independently receive the PR, supported text patches, bounded
-  source excerpts and up to five matching tests. Each may request two rounds of
+  source excerpts and up to five matching tests. Initial context prioritizes code
+  over `.md`/`.txt` prose and recognizes `NameTest`, `NameTests`, `test_name`,
+  `name_test` and `name.test` test names. Each may request two rounds of
   source lookups, then propose at most eight defects at the selected priorities.
   Neither sees the other's candidates or lookup history during discovery.
 - Validated lookup plans allow literal case-sensitive text/path search and numbered
   file reads, including unchanged callers and tests. `HEAD` is the immutable PR
   head; `BASE` is its merge base. Models cannot execute code, access the network,
   write files or choose download URLs.
-- Candidates merge by path, side, line and normalized title, retaining provenance.
+- Candidates merge by path, side, line, normalized title and identical body,
+  retaining provenance. Different evidence survives even with the same title and
+  anchor. Identical evidence retains the higher priority within and across discoveries.
   Both models independently verify the union using both lookup histories and are
   asked to reject semantic duplicates. Distinct claims on one line are preserved.
   Both-confirmed findings appear in the main section; split verdicts and both
@@ -113,8 +117,9 @@ the review workload; they do not classify a small change as low risk.
   without posting to the PR. This changes the destination, not the detail level.
 - The exact base/head pair is deduplicated against prior reviews by
   `github-actions[bot]` per pipeline version; older reviews do not suppress the
-  first enhanced review. The script checks for drift before model calls and before
-  publication. GitHub also binds the review to the inspected head, so a push
+  current evidence-preserving review (marker v3). The script checks for drift before
+  loading snapshots, after loading them, between discovery and verification, and
+  before publication. GitHub also binds the review to the inspected head, so a push
   racing the final API request cannot turn it into approval of the new commit.
 
 ## Trust, privacy and limits
@@ -136,13 +141,17 @@ disabled with `store=false`; provider/account retention policies still apply.
 Known sensitive file names and certificate/key formats are excluded, but this
 is not a secret scanner or a guarantee that source contains no private data.
 
-Limits: 40 changed files, 60,000 text-diff characters, 60,000 initial source-context
+Limits: 40 changed files, 100,000 text-diff characters, 60,000 initial source-context
 characters and 24,000 rule characters. Per reviewer: two lookup rounds, four requests
 per round, 60,000 retrieved characters, 10,000 characters per read and 20 search
 results. The path list is capped at 12,000 characters; search covers the index.
 Each archive allows 16 MiB downloaded, 64 MiB expanded and 5,000 entries. Files over
 300,000 bytes, symlinks, sensitive paths, binary/unsupported formats and invalid
 UTF-8 are excluded and counted. Archive failures prevent a verdict.
+
+The diff cap leaves headroom above recent complete PRs near the old 60,000-character
+limit. It does not increase the source/retrieval budgets or model-call count;
+larger accepted diffs can still increase input cost. Incomplete patches remain skipped.
 
 At most eight model calls: three per discovery (two lookup plans plus final
 candidates) and one verification per model when candidates exist. Limits remain
