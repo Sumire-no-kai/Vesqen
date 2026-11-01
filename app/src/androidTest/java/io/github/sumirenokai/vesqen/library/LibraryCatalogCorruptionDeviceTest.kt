@@ -8,9 +8,11 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.SystemClock
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.playback.writeSilentWav
+import io.github.sumirenokai.vesqen.testing.FakeDocumentsProvider
 import java.io.File
 import java.io.RandomAccessFile
 import kotlinx.coroutines.runBlocking
@@ -18,6 +20,7 @@ import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Assume.assumeTrue
@@ -34,6 +37,77 @@ class LibraryCatalogCorruptionDeviceTest {
     fun removeDatabases() {
         SQLiteDatabase.deleteDatabase(database)
         SQLiteDatabase.deleteDatabase(copy)
+        LibraryFolderRestore(context, databaseName).run { restored(due()) }
+    }
+
+    @Test
+    fun aRebuiltCatalogAddsBackTheFoldersItIsGrantedAndScansThem() = runBlocking {
+        // Only the system picker grants a folder, so the catalog is handed two of the test provider's.
+        val authority = FakeDocumentsProvider.authority(context.packageName)
+        val albums = DocumentsContract.buildTreeDocumentUri(authority, "albums")
+        val live = DocumentsContract.buildTreeDocumentUri(authority, "live")
+        val song = File(context.cacheDir, "restore-song.wav").also { writeSilentWav(it, durationMs = 1_000) }
+        FakeDocumentsProvider.files["albums/one.wav"] = song.readBytes()
+        FakeDocumentsProvider.files["live/two.wav"] = song.readBytes()
+        song.delete()
+        try {
+            LibraryCatalogStore(context, databaseName).use { store ->
+                // A first install has no grants: nothing is added, and the mark clears.
+                AndroidLibraryCatalog(context, store, folderGrants = { emptyList() }).use { catalog ->
+                    assertEquals(emptyList<LibrarySource>(), catalog.refresh(includeDeviceLibrary = false) {}.folders())
+                }
+                assertEquals(0L, store.folderRestore.due())
+                store.upsertFolderSource(albums.toString(), "albums")
+                store.upsertFolderSource(live.toString(), "live")
+            }
+            // Opening a healthy catalog again does not mark its folders due.
+            LibraryCatalogStore(context, databaseName).use { store -> assertEquals(0L, store.folderRestore.due()) }
+            damage(database, fromByte = 0, length = 16)
+
+            LibraryCatalogStore(context, databaseName).use { store ->
+                assertEquals(emptyList<StoredLibrarySource>(), store.readSources())
+                assertEquals(1, store.rebuilds.value)
+                AndroidLibraryCatalog(context, store, folderGrants = { listOf(albums, live) }).use { catalog ->
+                    // The provider's storage is gone during the first scan: both come back under the
+                    // stand-in name, and their scans fail.
+                    FakeDocumentsProvider.unavailable = true
+                    val restored = catalog.refresh(includeDeviceLibrary = false) {}
+                    assertTrue(restored.hadFailure)
+                    assertEquals(setOf(albums.toString(), live.toString()), restored.folders().mapTo(HashSet()) { it.treeUri })
+                    assertEquals(setOf("Music folder"), restored.folders().mapTo(HashSet()) { it.displayName })
+                    assertEquals(0L, store.folderRestore.due())
+
+                    // Once it is back, the next scan reads both folders and their own names.
+                    FakeDocumentsProvider.unavailable = false
+                    val scanned = catalog.refresh(includeDeviceLibrary = false) {}
+                    assertFalse(scanned.hadFailure)
+                    assertEquals(setOf("albums", "live"), scanned.folders().mapTo(HashSet()) { it.displayName })
+                    assertEquals(setOf("one.wav", "two.wav"), scanned.snapshot.tracks.mapTo(HashSet()) { it.fileName })
+
+                    // A folder removed afterwards stays removed, even while Android still lists its grant.
+                    catalog.removeFolder(scanned.folders().single { it.treeUri == live.toString() }.id)
+                    val afterRemoval = catalog.refresh(includeDeviceLibrary = false) {}
+                    assertEquals(listOf(albums.toString()), afterRemoval.folders().map { it.treeUri })
+                }
+            }
+        } finally {
+            FakeDocumentsProvider.reset()
+        }
+    }
+
+    private fun LibraryRefreshResult.folders() = snapshot.sources.filter { it.kind == LibrarySourceKind.FOLDER }
+
+    @Test
+    fun aCatalogCreatedWhileFoldersAreAddedBackMarksThemDueAgain() {
+        val restore = LibraryFolderRestore(context, databaseName)
+        restore.markDue()
+        val due = restore.due()
+        // Another rebuild creates another catalog before the scan that read the mark finishes.
+        restore.markDue()
+        restore.restored(due)
+        assertNotEquals(0L, restore.due())
+        restore.restored(restore.due())
+        assertEquals(0L, restore.due())
     }
 
     @Test
@@ -104,7 +178,7 @@ class LibraryCatalogCorruptionDeviceTest {
         assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
         val handler = LibraryCatalogCorruptionHandler(beforeRebuild = {})
         val store = LibraryCatalogStore(context, databaseName, handler)
-        val catalog = AndroidLibraryCatalog(context, store)
+        val catalog = AndroidLibraryCatalog(context, store, folderGrants = { emptyList() })
         val inserted = mutableListOf<Uri>()
         fun LibraryRefreshResult.fixtureIds() =
             snapshot.tracks.map { it.contentUri.substringAfterLast('/').toLong() }.filter { id -> inserted.any { ContentUris.parseId(it) == id } }.toSet()

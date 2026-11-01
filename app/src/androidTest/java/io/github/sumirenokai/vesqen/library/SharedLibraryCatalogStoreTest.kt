@@ -29,8 +29,8 @@ class SharedLibraryCatalogStoreTest {
             val trackId = store.addDeviceTrack()
             // The helper reopens a closed database on its next use, so check the open one itself.
             val database = store.writableDatabase
-            val screenCatalog = AndroidLibraryCatalog(context, store)
-            val serviceCatalog = AndroidLibraryCatalog(context, store)
+            val screenCatalog = AndroidLibraryCatalog(context, store, folderGrants = { emptyList() })
+            val serviceCatalog = AndroidLibraryCatalog(context, store, folderGrants = { emptyList() })
             val history = PlaybackHistoryRecorder(store, CoroutineScope(historyJob))
 
             history.recordAndAwait(trackId)
@@ -65,12 +65,12 @@ class SharedLibraryCatalogStoreTest {
             // An earlier process stopped during a scan; the first catalog marks it interrupted.
             store.ensureDeviceSource()
             store.markSourceScanning(LibrarySourceId.DEVICE)
-            val firstCatalog = AndroidLibraryCatalog(context, store)
+            val firstCatalog = AndroidLibraryCatalog(context, store, folderGrants = { emptyList() })
             assertEquals(LibraryScanState.INTERRUPTED, firstCatalog.deviceScanState())
 
             // The first screen's catalog scans while a second screen opens its own catalog.
             val scan = store.beginSourceScan(LibrarySourceId.DEVICE)
-            val secondCatalog = AndroidLibraryCatalog(context, store)
+            val secondCatalog = AndroidLibraryCatalog(context, store, folderGrants = { emptyList() })
             assertEquals(LibraryScanState.SCANNING, secondCatalog.deviceScanState())
             assertEquals(LibraryScanState.SCANNING, firstCatalog.deviceScanState())
 

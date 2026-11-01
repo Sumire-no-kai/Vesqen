@@ -10,7 +10,10 @@ import kotlinx.coroutines.ensureActive
 internal class TreeAudioScanner(
     private val contentResolver: ContentResolver,
 ) {
-    fun displayName(treeUri: Uri): String = try {
+    fun displayName(treeUri: Uri): String = readDisplayName(treeUri) ?: DEFAULT_FOLDER_NAME
+
+    /** The provider's name for the folder, or null while it cannot be read. */
+    fun readDisplayName(treeUri: Uri): String? = try {
         val documentUri = DocumentsContract.buildDocumentUriUsingTree(
             treeUri,
             DocumentsContract.getTreeDocumentId(treeUri),
@@ -27,11 +30,11 @@ internal class TreeAudioScanner(
             } else {
                 null
             }
-        } ?: DEFAULT_FOLDER_NAME
+        }
     } catch (_: SecurityException) {
-        DEFAULT_FOLDER_NAME
+        null
     } catch (_: IllegalArgumentException) {
-        DEFAULT_FOLDER_NAME
+        null
     }
 
     suspend fun scan(

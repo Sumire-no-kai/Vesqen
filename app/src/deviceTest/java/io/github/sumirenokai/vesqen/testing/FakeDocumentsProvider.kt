@@ -20,8 +20,10 @@ class FakeDocumentsProvider : DocumentsProvider() {
 
     override fun queryRoots(projection: Array<out String>?): Cursor = MatrixCursor(projection ?: ROOT_COLUMNS)
 
-    override fun queryDocument(documentId: String, projection: Array<out String>?): Cursor =
-        MatrixCursor(projection ?: DOCUMENT_COLUMNS).apply { addDocument(this, documentId) }
+    override fun queryDocument(documentId: String, projection: Array<out String>?): Cursor {
+        if (unavailable) throw FileNotFoundException(documentId)
+        return MatrixCursor(projection ?: DOCUMENT_COLUMNS).apply { addDocument(this, documentId) }
+    }
 
     override fun queryChildDocuments(
         parentDocumentId: String,
@@ -29,6 +31,7 @@ class FakeDocumentsProvider : DocumentsProvider() {
         sortOrder: String?,
     ): Cursor {
         childQueries++
+        if (unavailable) throw FileNotFoundException(parentDocumentId)
         val cursor = MatrixCursor(projection ?: DOCUMENT_COLUMNS)
         files.keys.filter { it.substringBeforeLast('/') == parentDocumentId }.forEach { addDocument(cursor, it) }
         cursor.extras = Bundle().apply {
@@ -87,6 +90,9 @@ class FakeDocumentsProvider : DocumentsProvider() {
 
         @Volatile var childQueries = 0
 
+        /** A provider whose storage is gone, such as a removed SD card: queries find nothing. */
+        @Volatile var unavailable = false
+
         fun authority(packageName: String) = "$packageName.fake-documents"
 
         fun reset() {
@@ -96,6 +102,7 @@ class FakeDocumentsProvider : DocumentsProvider() {
             openFailures.clear()
             pathFailure = null
             childQueries = 0
+            unavailable = false
         }
 
         private val ROOT_COLUMNS = arrayOf(

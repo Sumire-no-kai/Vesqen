@@ -27,7 +27,7 @@ class LibraryCatalogScanDeviceTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val databaseName = "library-catalog-scan-${System.nanoTime()}.db"
         val store = LibraryCatalogStore(context, databaseName)
-        val catalog = AndroidLibraryCatalog(context, store)
+        val catalog = AndroidLibraryCatalog(context, store, folderGrants = { emptyList() })
         try {
             val trackId = store.addFixtureTrack()
             val scanRunning = CompletableDeferred<Unit>()
@@ -68,7 +68,7 @@ class LibraryCatalogScanDeviceTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val databaseName = "library-catalog-yield-${System.nanoTime()}.db"
         val store = LibraryCatalogStore(context, databaseName)
-        val catalog = AndroidLibraryCatalog(context, store)
+        val catalog = AndroidLibraryCatalog(context, store, folderGrants = { emptyList() })
         try {
             store.addFixtureTrack()
             val scanRunning = CompletableDeferred<Unit>()
@@ -108,7 +108,7 @@ class LibraryCatalogScanDeviceTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val databaseName = "library-catalog-choice-${System.nanoTime()}.db"
         val store = LibraryCatalogStore(context, databaseName)
-        val catalog = AndroidLibraryCatalog(context, store)
+        val catalog = AndroidLibraryCatalog(context, store, folderGrants = { emptyList() })
         try {
             // #139: two rows of one file key, missed by two completed scans, wait for the user's choice.
             store.ensureDeviceSource()

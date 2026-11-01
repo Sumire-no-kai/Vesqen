@@ -41,6 +41,9 @@ internal class LibraryCatalogStore internal constructor(
     /** See [LibraryCatalogCorruptionHandler.rebuilds]. */
     val rebuilds: StateFlow<Int> get() = corruptionHandler.rebuilds
 
+    /** Folders a new catalog takes back from Android's grants (#191 D20). */
+    val folderRestore = LibraryFolderRestore(context, databaseName)
+
     // While the corruption handler closes the damaged database and moves its files, nothing may open
     // it again: a connection to the moved file would later replace the copy with the new catalog.
     override fun getWritableDatabase(): SQLiteDatabase = synchronized(corruptionHandler) { super.getWritableDatabase() }
@@ -131,6 +134,8 @@ internal class LibraryCatalogStore internal constructor(
         db.execSQL("CREATE INDEX index_library_tracks_folder ON $TRACKS_TABLE($TRACK_FOLDER_NAME)")
         db.execSQL("CREATE INDEX index_library_tracks_recent ON $TRACKS_TABLE($TRACK_LAST_PLAYED_AT_MS)")
         createPlaylistTables(db)
+        // A catalog that replaced a corrupt one has lost its folders, not their grants (#191 D20).
+        folderRestore.markDue()
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -177,6 +182,16 @@ internal class LibraryCatalogStore internal constructor(
         } else {
             writableDatabase.update(SOURCES_TABLE, values, "$SOURCE_ID = ?", arrayOf(sourceId))
         }
+    }
+
+    fun renameFolderSource(sourceId: String, displayName: String) {
+        val values = ContentValues().apply { put(SOURCE_DISPLAY_NAME, displayName) }
+        writableDatabase.update(
+            SOURCES_TABLE,
+            values,
+            "$SOURCE_ID = ? AND $SOURCE_KIND = ?",
+            arrayOf(sourceId, LibrarySourceKind.FOLDER.name),
+        )
     }
 
     fun removeFolderSource(sourceId: String): String? {
