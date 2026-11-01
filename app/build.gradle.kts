@@ -186,6 +186,14 @@ abstract class PackagePrivacyPolicyTask : DefaultTask() {
     @get:PathSensitive(PathSensitivity.NONE)
     abstract val chinesePolicy: RegularFileProperty
 
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val traditionalChinesePolicy: RegularFileProperty
+
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val japanesePolicy: RegularFileProperty
+
     @get:OutputDirectory
     abstract val outputDirectory: DirectoryProperty
 
@@ -195,6 +203,8 @@ abstract class PackagePrivacyPolicyTask : DefaultTask() {
         privacyDirectory.mkdirs()
         englishPolicy.get().asFile.copyTo(privacyDirectory.resolve("en.md"), overwrite = true)
         chinesePolicy.get().asFile.copyTo(privacyDirectory.resolve("zh-CN.md"), overwrite = true)
+        traditionalChinesePolicy.get().asFile.copyTo(privacyDirectory.resolve("zh-Hant.md"), overwrite = true)
+        japanesePolicy.get().asFile.copyTo(privacyDirectory.resolve("ja.md"), overwrite = true)
     }
 }
 
@@ -236,6 +246,8 @@ abstract class CheckPrivacyPolicyFinalTask : DefaultTask() {
 val privacyPolicyFiles = listOf(
     rootProject.layout.projectDirectory.file("docs/PRIVACY_POLICY.md"),
     rootProject.layout.projectDirectory.file("docs/PRIVACY_POLICY.zh-CN.md"),
+    rootProject.layout.projectDirectory.file("docs/PRIVACY_POLICY.zh-Hant.md"),
+    rootProject.layout.projectDirectory.file("docs/PRIVACY_POLICY.ja.md"),
 )
 
 val checkPrivacyPolicyFinal by tasks.registering(CheckPrivacyPolicyFinalTask::class) {
@@ -347,6 +359,8 @@ androidComponents {
         ) {
             englishPolicy.set(privacyPolicyFiles[0])
             chinesePolicy.set(privacyPolicyFiles[1])
+            traditionalChinesePolicy.set(privacyPolicyFiles[2])
+            japanesePolicy.set(privacyPolicyFiles[3])
         }
         variant.sources.assets?.addGeneratedSourceDirectory(
             packagePrivacyPolicy,
