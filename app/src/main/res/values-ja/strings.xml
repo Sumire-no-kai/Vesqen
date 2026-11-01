@@ -325,6 +325,8 @@
     <string name="library_albums">アルバム</string>
     <string name="library_artists">アーティスト</string>
     <string name="library_folders">フォルダ</string>
+    <string name="library_storage_device_music">端末の音楽</string>
+    <string name="library_storage_added_folder">追加したフォルダ</string>
     <string name="library_genres">ジャンル</string>
     <string name="library_playlists">プレイリスト</string>
     <string name="show_favorites">お気に入りだけを表示</string>

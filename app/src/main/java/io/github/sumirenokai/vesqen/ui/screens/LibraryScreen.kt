@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.unit.sp
 import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
+import io.github.sumirenokai.vesqen.ui.components.folderStorageLabel
 import io.github.sumirenokai.vesqen.ui.components.rememberAlbumBackground
 import io.github.sumirenokai.vesqen.ui.formatDuration
 import io.github.sumirenokai.vesqen.ui.theme.VesqenDataStyle
@@ -1124,6 +1125,8 @@ private fun CollectionRow(
             },
         )
     }
+    val context = LocalContext.current
+    val storage = remember(collection.storageKey) { collection.storageKey?.let { folderStorageLabel(context, it) } }
     val subtitle = when (mode) {
         LibraryBrowseMode.ALBUMS -> collection.subtitle.ifBlank {
             pluralStringResource(R.plurals.collection_track_count, collection.tracks.size, collection.tracks.size)
@@ -1133,10 +1136,12 @@ private fun CollectionRow(
             collection.subtitle.toIntOrNull() ?: 0,
             collection.subtitle.toIntOrNull() ?: 0,
         )
-        // The title is the folder's own name; its path follows the track count.
+        // The title is the folder's own name; its path follows the track count, and its storage when
+        // another folder has the same name and path (#218).
         LibraryBrowseMode.FOLDERS -> listOf(
             pluralStringResource(R.plurals.collection_track_count, collection.tracks.size, collection.tracks.size),
             collection.subtitle,
+            storage.orEmpty(),
         ).filter(String::isNotBlank).joinToString(" · ")
         else -> pluralStringResource(
             R.plurals.collection_track_count,
