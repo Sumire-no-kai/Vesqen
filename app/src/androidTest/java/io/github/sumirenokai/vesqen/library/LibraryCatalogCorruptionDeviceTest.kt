@@ -95,6 +95,35 @@ class LibraryCatalogCorruptionDeviceTest {
         }
     }
 
+    @Test
+    fun aCorruptionFoundWhileTheAppRunsAddsTheFoldersBackInTheNextScan() = runBlocking {
+        // The catalog opens fine; a later statement finds it corrupt, as on a damaged page.
+        val authority = FakeDocumentsProvider.authority(context.packageName)
+        val albums = DocumentsContract.buildTreeDocumentUri(authority, "albums")
+        val song = File(context.cacheDir, "runtime-restore-song.wav").also { writeSilentWav(it, durationMs = 1_000) }
+        FakeDocumentsProvider.files["albums/one.wav"] = song.readBytes()
+        song.delete()
+        val handler = LibraryCatalogCorruptionHandler(beforeRebuild = {})
+        val store = LibraryCatalogStore(context, databaseName, handler)
+        val catalog = AndroidLibraryCatalog(context, store, folderGrants = { listOf(albums) })
+        try {
+            catalog.refresh(includeDeviceLibrary = false) {}
+            store.upsertFolderSource(albums.toString(), "albums")
+            assertEquals(listOf("one.wav"), catalog.refresh(includeDeviceLibrary = false) {}.snapshot.tracks.map { it.fileName })
+
+            // #231 K8: the next scan, the one the Library starts after a rebuild, already adds the folder back.
+            handler.onCorruption(store.writableDatabase)
+            val rescanned = catalog.refresh(includeDeviceLibrary = false) {}
+            assertEquals(1, store.rebuilds.value)
+            assertEquals(listOf(albums.toString()), rescanned.folders().map { it.treeUri })
+            assertEquals(listOf("one.wav"), rescanned.snapshot.tracks.map { it.fileName })
+        } finally {
+            catalog.close()
+            store.close()
+            FakeDocumentsProvider.reset()
+        }
+    }
+
     private fun LibraryRefreshResult.folders() = snapshot.sources.filter { it.kind == LibrarySourceKind.FOLDER }
 
     @Test
