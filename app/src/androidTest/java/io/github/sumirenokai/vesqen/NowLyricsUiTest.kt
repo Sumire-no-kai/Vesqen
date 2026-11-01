@@ -358,7 +358,7 @@ class NowLyricsUiTest {
                         onPrevious = {},
                         onPlayPause = {},
                         onNext = {},
-                        onSeek = onSeek,
+                        onSeek = { position, _ -> onSeek(position) },
                         onPlayQueueIndex = {},
                         onRemoveQueueItem = {},
                         onMoveQueueItem = { _, _ -> },

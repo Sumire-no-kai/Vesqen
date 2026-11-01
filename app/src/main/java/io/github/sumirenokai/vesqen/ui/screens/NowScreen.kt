@@ -298,7 +298,8 @@ fun NowScreen(
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
-    onSeek: (Long) -> Unit,
+    /** Seeks the given queue entry; the seek is dropped if another entry plays by then (#216). */
+    onSeek: (positionMs: Long, queueEntryId: String?) -> Unit,
     onPlayQueueIndex: (Int) -> Unit,
     onRemoveQueueItem: (Int) -> Unit,
     onMoveQueueItem: (Int, Int) -> Unit,
@@ -526,7 +527,7 @@ private class NowActions(
     val onPrevious: () -> Unit,
     val onPlayPause: () -> Unit,
     val onNext: () -> Unit,
-    val onSeek: (Long) -> Unit,
+    val onSeek: (positionMs: Long, queueEntryId: String?) -> Unit,
     val onToggleFavorite: (Long, Boolean) -> Unit,
     val lyricsShown: Boolean,
     val onToggleLyrics: () -> Unit,
@@ -586,7 +587,7 @@ private fun NowPortraitPage(
                             isPlaying = snapshot.isPlaying,
                             canSeek = snapshot.isControllerReady,
                             motionPolicy = motionPolicy,
-                            onSeek = actions.onSeek,
+                            onSeek = { actions.onSeek(it, snapshot.queueEntryId) },
                             onImportLyrics = actions.onImportLyrics,
                             modifier = stage.fillMaxWidth(),
                         )
@@ -688,7 +689,7 @@ private fun NowLandscapePage(
                     isPlaying = snapshot.isPlaying,
                     canSeek = snapshot.isControllerReady,
                     motionPolicy = motionPolicy,
-                    onSeek = actions.onSeek,
+                    onSeek = { actions.onSeek(it, snapshot.queueEntryId) },
                     onImportLyrics = actions.onImportLyrics,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -1288,7 +1289,7 @@ private fun NotesRow(step: String, valueAndConfidence: Pair<String, String>, tag
 @Composable
 private fun PlaybackProgress(
     snapshot: PlaybackSnapshot,
-    onSeek: (Long) -> Unit,
+    onSeek: (positionMs: Long, queueEntryId: String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (snapshot.durationMs <= 0) return
@@ -1334,7 +1335,7 @@ private fun PlaybackProgress(
                     if (scrubEntry == snapshot.queueEntryId) seekPosition = it
                 },
                 onValueChangeFinished = {
-                    if (scrubbing()) onSeek(seekPosition.toLong())
+                    if (scrubbing()) onSeek(seekPosition.toLong(), scrubEntry)
                     scrubEntry = null
                 },
                 valueRange = 0f..snapshot.durationMs.toFloat(),

@@ -24,7 +24,8 @@ import org.junit.Test
 class NowProgressScrubUiTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
-    private val seeks = mutableListOf<Long>()
+    /** The position of each seek, with the queue entry it was meant for. */
+    private val seeks = mutableListOf<Pair<Long, String?>>()
     private var snapshot by mutableStateOf(entry("a", trackId = 1))
 
     /** Both songs last as long, so the slider's range does not change and end the drag by itself. */
@@ -54,7 +55,7 @@ class NowProgressScrubUiTest {
                     onPrevious = {},
                     onPlayPause = {},
                     onNext = {},
-                    onSeek = { seeks += it },
+                    onSeek = { position, entry -> seeks += position to entry },
                     onPlayQueueIndex = {},
                     onRemoveQueueItem = {},
                     onMoveQueueItem = { _, _ -> },
@@ -85,8 +86,10 @@ class NowProgressScrubUiTest {
     fun aDragSeeksItsOwnSong() {
         setNow()
         dragToTheMiddleThen {}
-        assertEquals(1, seeks.size)
-        assertTrue("Seek ${seeks.single()} is near the middle", seeks.single() in 80_000L..120_000L)
+        val (position, entry) = seeks.single()
+        assertTrue("Seek $position is near the middle", position in 80_000L..120_000L)
+        // The controller drops it if another entry plays by the time it arrives.
+        assertEquals("a", entry)
     }
 
     @Test
@@ -94,14 +97,14 @@ class NowProgressScrubUiTest {
         setNow()
         compose.onNodeWithTag("vesqen.now.progress").performTouchInput { click(center) }
         compose.waitForIdle()
-        assertEquals(1, seeks.size)
+        assertEquals(listOf("a"), seeks.map { it.second })
     }
 
     @Test
     fun aDragDoesNotSeekTheSongPlayingAfterItsOwnEnded() {
         setNow()
         dragToTheMiddleThen { snapshot = entry("b", trackId = 2).copy(positionMs = 0) }
-        assertEquals(emptyList<Long>(), seeks)
+        assertEquals(emptyList<Pair<Long, String?>>(), seeks)
     }
 
     @Test
@@ -109,6 +112,6 @@ class NowProgressScrubUiTest {
         setNow()
         // A headphone Next to the same track's next entry in the queue.
         dragToTheMiddleThen { snapshot = entry("a2", trackId = 1).copy(positionMs = 0) }
-        assertEquals(emptyList<Long>(), seeks)
+        assertEquals(emptyList<Pair<Long, String?>>(), seeks)
     }
 }

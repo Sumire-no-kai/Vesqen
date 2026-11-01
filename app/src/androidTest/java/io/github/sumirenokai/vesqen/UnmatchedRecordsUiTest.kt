@@ -142,7 +142,7 @@ class UnmatchedRecordsUiTest {
                             state = VesqenUiState(library = state().copy(sources = listOf(folder))),
                             onRequestMusicAccess = {}, onOpenAppSettings = {}, onOpenNotificationSettings = {},
                             onRescan = {}, onTrackSelected = {}, onPrevious = {}, onPlayPause = {}, onNext = {},
-                            onSeek = {}, onCyclePlaybackOrder = {},
+                            onSeek = { _, _ -> }, onCyclePlaybackOrder = {},
                             motionPolicy = VesqenMotionPolicy(reduceMotion = true), supportUrl = null,
                         )
                     }
@@ -178,7 +178,7 @@ class UnmatchedRecordsUiTest {
                         ),
                         onRequestMusicAccess = {}, onOpenAppSettings = {}, onOpenNotificationSettings = {},
                         onRescan = {}, onTrackSelected = {}, onPrevious = {}, onPlayPause = {}, onNext = {},
-                        onSeek = {}, onCyclePlaybackOrder = {},
+                        onSeek = { _, _ -> }, onCyclePlaybackOrder = {},
                         motionPolicy = VesqenMotionPolicy(reduceMotion = true), supportUrl = null,
                     )
                 }

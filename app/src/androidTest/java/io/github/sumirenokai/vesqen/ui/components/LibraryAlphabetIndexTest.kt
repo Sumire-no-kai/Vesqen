@@ -17,11 +17,13 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -65,7 +67,13 @@ class LibraryAlphabetIndexTest {
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
             .assertContentDescriptionEquals(jump)
             .performSemanticsAction(SemanticsActions.OnClick)
+        // The letter bubble would show for 700 ms beside an old touch; a letter from the picker shows none.
+        compose.onNodeWithText("M").assertIsDisplayed()
+        compose.mainClock.autoAdvance = false
         compose.onNodeWithText("M").performClick()
+        compose.mainClock.advanceTimeBy(200)
+        compose.onAllNodesWithText("M").assertCountEquals(0)
+        compose.mainClock.autoAdvance = true
         compose.waitForIdle()
         assertEquals(50, listState.firstVisibleItemIndex)
     }
