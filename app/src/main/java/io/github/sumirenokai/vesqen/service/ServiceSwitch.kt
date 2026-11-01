@@ -69,7 +69,12 @@ internal class ServiceSwitchGate(
         val status = reading?.takeIf { now - it.first in 0 until ReuseMs }?.second
             ?: source.read()?.also { reading = now to it }
             ?: return@withLock null
-        val next = KnownServiceStatus(status.usagePings, status.reportUploads)
+        // A reading for one service must not bring back the other from RETIRED in this version (#214).
+        fun keepRetired(known: ServiceState?, read: ServiceState) = if (known == ServiceState.RETIRED) known else read
+        val next = KnownServiceStatus(
+            usagePings = keepRetired(mutable.value.usagePings, status.usagePings),
+            reportUploads = keepRetired(mutable.value.reportUploads, status.reportUploads),
+        )
         if (next != mutable.value) {
             mutable.value = next
             store.write(StoredServiceSwitch(next, versionCode))

@@ -60,6 +60,30 @@ class ServiceSwitchGateTest {
         assertEquals(2, source.reads)
     }
 
+    @Test fun `a reading for one service keeps the other retired in this version`() = runBlocking {
+        listOf(ReportService.USAGE_PINGS, ReportService.REPORT_UPLOADS).forEach { retired ->
+            var now = 0L
+            val store = MemoryStore()
+            val other = ReportService.entries.single { it != retired }
+            val source = Source(
+                if (retired == ReportService.USAGE_PINGS) ServiceStatus(ServiceState.RETIRED, ServiceState.ENABLED)
+                else ServiceStatus(ServiceState.ENABLED, ServiceState.RETIRED),
+            )
+            val gate = ServiceSwitchGate(source, store, 12) { now }
+            assertEquals(ServiceState.ENABLED, gate.check(other))
+            // #214: after the reading expires, a file that enables both is read for the other service.
+            now += ServiceSwitchGate.ReuseMs
+            source.status = enabled
+            assertEquals(ServiceState.ENABLED, gate.check(other))
+            assertEquals(2, source.reads)
+            assertEquals(ServiceState.RETIRED, gate.known.value.of(retired))
+            assertEquals(ServiceState.RETIRED, gate.check(retired))
+            assertEquals(2, source.reads)
+            // Also after a restart of the same version.
+            assertEquals(ServiceState.RETIRED, ServiceSwitchGate(source, store, 12) { now }.known.value.of(retired))
+        }
+    }
+
     private class Source(var status: ServiceStatus?) : ServiceSwitchSource {
         var reads = 0
         override suspend fun read(): ServiceStatus? { reads++; return status }

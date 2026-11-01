@@ -97,31 +97,36 @@ internal data class BluetoothCodecReport(
 )
 
 /**
- * Keeps the last report and drops it once it may no longer describe the active device: that device
- * disconnects, another device becomes active, or Bluetooth turns off. Device keys stay in memory.
+ * Keeps each connected device's last report and shows only the active device's own: Android reports
+ * the codec of every A2DP device, not just the one playing (#213). Until a broadcast names the active
+ * device nothing is shown. A change of active device keeps only the new one's report, which may have
+ * come first; a device's report also goes when it disconnects, all go when Bluetooth turns off, and a
+ * report without a device is never shown. Device keys stay in memory.
  */
 internal class BluetoothCodecState {
-    private var deviceKey: String? = null
-    private var report: BluetoothCodecReport? = null
+    private var activeDevice: String? = null
+    private val reports = HashMap<String, BluetoothCodecReport>()
 
-    val current: BluetoothCodecReport? get() = report
+    val current: BluetoothCodecReport? get() = activeDevice?.let(reports::get)
 
     fun onCodecReported(device: String?, value: BluetoothCodecReport) {
-        deviceKey = device
-        report = value
+        if (device != null) reports[device] = value
     }
 
     fun onDisconnected(device: String?) {
-        if (device == null || device == deviceKey) clear()
+        if (device == null) return clear()
+        reports.remove(device)
+        if (device == activeDevice) activeDevice = null
     }
 
     fun onActiveDeviceChanged(device: String?) {
-        if (device != deviceKey) clear()
+        activeDevice = device
+        reports.keys.retainAll { it == device }
     }
 
     fun clear() {
-        deviceKey = null
-        report = null
+        activeDevice = null
+        reports.clear()
     }
 }
 
