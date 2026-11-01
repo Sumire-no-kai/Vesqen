@@ -14,6 +14,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -21,6 +22,8 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -28,6 +31,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
@@ -46,6 +50,11 @@ class LibraryAlphabetIndexTest {
 
     private val jump get() = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.jump_to_letter)
     private lateinit var listState: LazyListState
+
+    /** The picker's list holds A–Z and #; the screen's own list has 100 rows. */
+    private val pickerList = SemanticsMatcher("the picker's 27 rows") {
+        it.config.getOrNull(SemanticsProperties.CollectionInfo)?.rowCount == 27
+    }
 
     /** Tall enough, at the default font size and without touch exploration, for the strip. */
     private fun setIndex() = compose.setContent {
@@ -67,6 +76,8 @@ class LibraryAlphabetIndexTest {
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
             .assertContentDescriptionEquals(jump)
             .performSemanticsAction(SemanticsActions.OnClick)
+        // On a short screen the picker's list scrolls before M is in view (Honor, Android 9).
+        compose.onNode(hasScrollToNodeAction() and pickerList).performScrollToNode(hasText("M"))
         // The letter bubble would show for 700 ms beside an old touch; a letter from the picker shows none.
         compose.onNodeWithText("M").assertIsDisplayed()
         compose.mainClock.autoAdvance = false
