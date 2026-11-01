@@ -105,7 +105,7 @@ fun buildLibraryCollections(
         // The folder's own name leads; the path above it follows in the subtitle, so a narrow row or
         // large text never cuts off the part that tells folders apart (#35).
         LibraryBrowseMode.FOLDERS -> tracks.groupedCollections(
-            key = { track -> collectionKey("folder", track.folderName) },
+            key = { track -> collectionKey("folder", folderStorageKey(track.contentUri), track.folderName) },
             title = { track -> folderPathParts(track.folderName).second },
             subtitle = { group -> folderPathParts(group.first().folderName).first },
             trackOrder = compareBy(within) { it.fileName },
@@ -228,8 +228,22 @@ private class AlbumKeys {
         val album = track.album.trim()
         // Songs without an album tag stay one group, as before #170 P3.
         if (albumArtist.isNotEmpty() || album.isEmpty()) return collectionKey(AlbumNamespace, albumArtist, album)
-        return collectionKey(AlbumNamespace, "", album, folders.getOrPut(track.folderName) { albumFolder(track.folderName) })
+        val folder = folders.getOrPut(track.folderName) { albumFolder(track.folderName) }
+        return collectionKey(AlbumNamespace, "", album, folderStorageKey(track.contentUri), folder)
     }
+}
+
+/**
+ * The storage a track's folder path is relative to: its MediaStore volume, or the folder tree it was
+ * added from. The same path on two of them is two folders (#218). Android 9 calls every volume
+ * "external", so there an SD card's folders still join the phone's of the same path. Other URIs give "".
+ */
+internal fun folderStorageKey(contentUri: String): String {
+    mediaStoreVolumeName(contentUri)?.let { return "media:$it" }
+    // content://<authority>/tree/<tree ID>/document/<document ID>; the IDs are compared, never parsed.
+    val path = contentUri.substringAfter("://", missingDelimiterValue = "")
+    val tree = path.substringAfter("/tree/", missingDelimiterValue = "").substringBefore('/')
+    return if (tree.isEmpty()) "" else "tree:${path.substringBefore('/')}/$tree"
 }
 
 /** "Music/A/Long Night/CD1" and "Music/A/Long Night (Disc 2)" both belong to "Music/A/Long Night". */
