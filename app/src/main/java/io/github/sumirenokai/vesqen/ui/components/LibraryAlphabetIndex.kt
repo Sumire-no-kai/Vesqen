@@ -22,7 +22,18 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -74,7 +85,23 @@ internal fun LibraryAlphabetIndex(sections: Map<String, Int>, listState: LazyLis
         } else {
             // #35: a slim strip along the edge, like the system contacts index. Drags are
             // forgiving, so the letters do not need a wide column taken from every row.
+            // #221: a keyboard, or Switch Access without touch exploration, cannot drag along it, so
+            // it is also one focusable button that opens the same picker as the "A-Z" button.
+            var focused by remember { mutableStateOf(false) }
             Canvas(Modifier.width(IndexWidth).fillMaxHeight().testTag("vesqen.library.alphabet")
+                .semantics {
+                    contentDescription = jumpLabel
+                    role = Role.Button
+                    onClick { showPicker = true; true }
+                }
+                .onKeyEvent { event ->
+                    val opens = event.type == KeyEventType.KeyUp && event.key in PickerKeys
+                    if (opens) showPicker = true
+                    opens
+                }
+                .onFocusChanged { focused = it.isFocused }
+                .focusable()
+                .then(if (focused) Modifier.border(2.dp, selectedColor, RoundedCornerShape(IndexWidth / 2)) else Modifier)
                 .pointerInput(sections) {
                     detectTapGestures { position ->
                         touchY = position.y
@@ -120,6 +147,7 @@ internal fun LibraryAlphabetIndex(sections: Map<String, Int>, listState: LazyLis
 
 private val IndexWidth = 24.dp
 private val BubbleSize = 56.dp
+private val PickerKeys = setOf(Key.Enter, Key.NumPadEnter, Key.Spacebar, Key.DirectionCenter)
 
 /**
  * The selected letter beside the finger, over the list. It takes no layout space, so the strip
