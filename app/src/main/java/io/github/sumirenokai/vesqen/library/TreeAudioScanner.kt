@@ -128,6 +128,10 @@ internal class TreeAudioScanner(
             }.orEmpty()
             entries.forEach { entry ->
                 scanContext.ensureActive()
+                // Each file's tags are read in onAudioDocument, the long part of a large folder (#217).
+                if (shouldPause()) {
+                    return ScanIterationResult(completed = false, processedTrackCount = processedTrackCount)
+                }
                 if (entry.mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
                     val childPath = listOf(directory.displayPath, entry.displayName)
                         .filter(String::isNotBlank)

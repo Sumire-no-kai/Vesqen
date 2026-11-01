@@ -433,19 +433,22 @@ internal fun findId3ApicImageOffset(frame: ByteArray): Int? {
     cursor++ // MIME terminator
     if (cursor >= frame.size) return null
     cursor++ // picture type
+    return id3DescriptionEnd(frame, cursor, textEncoding)?.takeIf { it < frame.size }
+}
 
-    if (textEncoding == 1 || textEncoding == 2) {
-        while (cursor + 1 < frame.size && !(frame[cursor] == 0.toByte() && frame[cursor + 1] == 0.toByte())) {
-            cursor++
-        }
-        if (cursor + 1 >= frame.size) return null
-        cursor += 2
-    } else {
-        while (cursor < frame.size && frame[cursor] != 0.toByte()) cursor++
-        if (cursor >= frame.size) return null
-        cursor++
+/**
+ * Where an ID3 picture description that starts at [start] ends, after its terminator; null if it
+ * has none. UTF-16 text (encodings 1 and 2) ends with a zero code unit, so the terminator is looked
+ * for two bytes at a time: `41 00 00 00` is "A" and its terminator, not a terminator one byte early (#219).
+ */
+internal fun id3DescriptionEnd(frame: ByteArray, start: Int, textEncoding: Int): Int? {
+    val unitBytes = if (textEncoding == 1 || textEncoding == 2) 2 else 1
+    var cursor = start
+    while (cursor + unitBytes <= frame.size) {
+        if ((0 until unitBytes).all { frame[cursor + it] == 0.toByte() }) return cursor + unitBytes
+        cursor += unitBytes
     }
-    return cursor.takeIf { it < frame.size }
+    return null
 }
 
 internal fun calculateLegacyArtworkSampleSize(width: Int, height: Int, targetPx: Int): Int {

@@ -170,6 +170,34 @@ class LibraryBrowseTest {
     }
 
     @Test
+    fun `the same folder path on two storages is two folders and two albums`() {
+        // #218: the phone and an SD card both hold Music/Live, and two added folders are both called Music.
+        fun live(id: Long, contentUri: String) =
+            track(id, "Song $id", "Mori", "Live", trackNumber = id.toInt(), genre = "Pop", playCount = 0)
+                .copy(contentUri = contentUri, folderName = "Music/Live")
+        val tree = "content://com.android.externalstorage.documents/tree"
+        val songs = listOf(
+            live(1, "content://media/external_primary/audio/media/1"),
+            live(2, "content://media/external_primary/audio/media/2"),
+            live(3, "content://media/1234-abcd/audio/media/1"),
+            live(4, "$tree/primary%3AMusic/document/primary%3AMusic%2FLive%2F4.flac"),
+            live(5, "$tree/primary%3AMusic/document/primary%3AMusic%2FLive%2F5.flac"),
+            live(6, "$tree/1234-ABCD%3AMusic/document/1234-ABCD%3AMusic%2FLive%2F6.flac"),
+        )
+        val sameFolder = setOf(setOf(1L, 2L), setOf(3L), setOf(4L, 5L), setOf(6L))
+
+        val folders = buildLibraryCollections(LibraryBrowseMode.FOLDERS, songs, emptyList(), names)
+        assertEquals(sameFolder, folders.map { folder -> folder.tracks.map(AudioTrack::id).toSet() }.toSet())
+        assertEquals(setOf("Live" to "Music"), folders.map { it.title to it.subtitle }.toSet())
+        // Without an album artist, the folder decides the album, so these are four albums too.
+        val albums = buildLibraryCollections(LibraryBrowseMode.ALBUMS, songs, emptyList(), names)
+        assertEquals(sameFolder, albums.map { album -> album.tracks.map(AudioTrack::id).toSet() }.toSet())
+        // Android 9 lists every volume as "external", and other URIs name no storage: as before #218.
+        assertEquals(folderStorageKey("content://media/external/audio/media/1"), folderStorageKey("content://media/external/audio/media/2"))
+        assertEquals("", folderStorageKey("content://track/1"))
+    }
+
+    @Test
     fun `an album artist keeps one album across folders`() {
         val split = listOf(
             tracks[0].copy(albumArtist = "Mori", folderName = "Music/One"),
