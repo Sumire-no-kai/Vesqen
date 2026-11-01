@@ -26,6 +26,24 @@ class EmbeddedArtworkExtractorTest {
     }
 
     @Test
+    fun utf16PictureDescriptionsEndOnACodeUnitBoundary() {
+        // #219: "A" in UTF-16 is 41 00, so its terminator follows at 00 00, not one byte early.
+        val utf16Descriptions = listOf(
+            1 to byteArrayOf(0xff.toByte(), 0xfe.toByte(), 0x41, 0x00, 0x00, 0x00), // LE with BOM
+            1 to byteArrayOf(0xfe.toByte(), 0xff.toByte(), 0x00, 0x41, 0x00, 0x00), // BE with BOM
+            1 to byteArrayOf(0xff.toByte(), 0xfe.toByte(), 0x00, 0x00), // empty, with BOM
+            2 to byteArrayOf(0x00, 0x41, 0x00, 0x00), // UTF-16BE without BOM
+            2 to byteArrayOf(0x00, 0x00), // empty
+        )
+        utf16Descriptions.forEach { (encoding, description) ->
+            assertArrayEquals(picture, extract(id3WithPicture(picture, encoding, description)))
+            assertArrayEquals(picture, extract(id3V22WithPicture(picture, encoding, description)))
+        }
+        // A description cut off before its terminator gives no picture.
+        assertNull(findId3ApicImageOffset(byteArrayOf(1, 0x6a, 0x00, 3, 0xff.toByte(), 0xfe.toByte(), 0x41, 0x00, 0x00)))
+    }
+
+    @Test
     fun extractsMp4CoverAtomForM4aAlacAndAacContainers() {
         assertArrayEquals(picture, extract(mp4WithCover(picture)))
         val emptyMetadataBeforeCover = atom(
@@ -66,13 +84,14 @@ class EmbeddedArtworkExtractorTest {
         declaredLength = bytes.size.toLong(),
     )
 
-    private fun id3WithPicture(image: ByteArray): ByteArray {
+    /** [description] ends with its terminator, as written in [encoding]. */
+    private fun id3WithPicture(image: ByteArray, encoding: Int = 0, description: ByteArray = byteArrayOf(0)): ByteArray {
         val apic = ByteArrayOutputStream().apply {
-            write(0)
+            write(encoding)
             write("image/jpeg".toByteArray())
             write(0)
             write(3)
-            write(0)
+            write(description)
             write(image)
         }.toByteArray()
         val frame = ByteArrayOutputStream().apply {
@@ -89,12 +108,12 @@ class EmbeddedArtworkExtractorTest {
         }.toByteArray()
     }
 
-    private fun id3V22WithPicture(image: ByteArray): ByteArray {
+    private fun id3V22WithPicture(image: ByteArray, encoding: Int = 0, description: ByteArray = byteArrayOf(0)): ByteArray {
         val pictureFrame = ByteArrayOutputStream().apply {
-            write(0)
+            write(encoding)
             write("JPG".toByteArray())
             write(3)
-            write(0)
+            write(description)
             write(image)
         }.toByteArray()
         val frame = ByteArrayOutputStream().apply {

@@ -420,19 +420,8 @@ internal fun decodeBigEndian24(bytes: ByteArray, offset: Int): Int? {
 private fun findId3V22PictureOffset(frame: ByteArray): Int? {
     if (frame.size < 6) return null
     val textEncoding = frame[0].toInt() and 0xff
-    var cursor = 5 // encoding, three-byte image format, picture type
-    if (textEncoding == 1 || textEncoding == 2) {
-        while (cursor + 1 < frame.size && !(frame[cursor] == 0.toByte() && frame[cursor + 1] == 0.toByte())) {
-            cursor++
-        }
-        if (cursor + 1 >= frame.size) return null
-        cursor += 2
-    } else {
-        while (cursor < frame.size && frame[cursor] != 0.toByte()) cursor++
-        if (cursor >= frame.size) return null
-        cursor++
-    }
-    return cursor.takeIf { it < frame.size }
+    // After the encoding, the three-byte image format and the picture type.
+    return id3DescriptionEnd(frame, start = 5, textEncoding)?.takeIf { it < frame.size }
 }
 
 internal const val ARTWORK_BUFFER_BYTES = 64 * 1024
