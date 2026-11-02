@@ -68,7 +68,7 @@
 - [x] 决定已发布版本问题的处理（2026-11-02 所有者）：官方路径的 `ACTIVE` 和链路页的"未改动音频"在起播和 seek 后的前 20 ms 并不成立。1.2.0 改文案（#242），2.0 随 M7-4 修复严格模式。
 - [ ] M7-1 开始前，按 D6 把 `feature/usb-host-output` 更新到最新的 `master`。
 - [x] 建立 [M7 设备验收](M7_DEVICE_ACCEPTANCE.md)，记录方式沿用 [M4 设备验收](M4_DEVICE_ACCEPTANCE.md)。目前没有实测记录。
-- [ ] 在修改 `UsbOutputCoordinator` 之前补齐其单元测试（[发布待办](LAUNCH_BACKLOG.md)"1.1.0 之后、2.0 之前"中的遗留项）。
+- [x] 在修改 `UsbOutputCoordinator` 之前补齐其单元测试：`UsbOutputCoordinatorTest` 使用真实的 `ExoPlayer` 和 Robolectric 模拟的平台，Robolectric 只用于测试，不进入 APK。这些测试保护现有行为，不能证明真实平台和 DAC 的行为，后者以 [M7 设备验收](M7_DEVICE_ACCEPTANCE.md)为准。
 
 ### M7-1 描述符读取（只读）
 

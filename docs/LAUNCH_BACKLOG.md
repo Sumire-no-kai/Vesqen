@@ -210,7 +210,7 @@ Honor 测试前要重启共用的 adb 服务，会短暂影响其他会话，先
 | [#191](https://github.com/Sumire-no-kai/Vesqen/issues/191) D20 | 曲库重建后的文件夹授权：1.1.0 要用户重新添加文件夹，原有系统授权保留。2026-10-31 所有者决定：按保留的授权自动加回文件夹并开始扫描，修改重建提示的文案（四种语言）。2026-11-01 已合并（PR #227），随 1.1.1 发布 |
 | [#194](https://github.com/Sumire-no-kai/Vesqen/issues/194) B5 | Pro 页提供替换已生效激活码的入口。2026-11-01 所有者决定移到 2.0，开放销售前完成 |
 | [#222](https://github.com/Sumire-no-kai/Vesqen/issues/222)（#194 S2）、[#220](https://github.com/Sumire-no-kai/Vesqen/issues/220)、[#215](https://github.com/Sumire-no-kai/Vesqen/issues/215) | 开放销售前：Worker 发放激活码前核对商品、价格和支付环境（需要所有者定商品并部署）；持久记录先到的退款和争议；发码工具先持久预留序列号。官网核对下载按钮读取的版本文件和购买成功页地址中的订单编号，记在 #120 |
-| #136、#143、#156、#165 | 1.1.0 没挑中的审查遗留：链路和遥测的判断与文案、界面和无障碍的小问题、CI 跑设备测试和编译 `:baselineprofile`、`UsbOutputCoordinator` 单元测试、依赖校验、架构整理 |
+| #136、#143、#156、#165 | 1.1.0 没挑中的审查遗留：链路和遥测的判断与文案、界面和无障碍的小问题、CI 跑设备测试和编译 `:baselineprofile`、依赖校验、架构整理 |
 
 ### Google Play 正式版
 

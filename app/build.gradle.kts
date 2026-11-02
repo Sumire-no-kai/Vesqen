@@ -398,6 +398,7 @@ dependencies {
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.profileinstaller)
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
