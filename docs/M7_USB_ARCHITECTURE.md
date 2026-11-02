@@ -1,11 +1,11 @@
 # M7 架构设计：Vesqen 自有 USB 输出
 
-2026-11-02 首版，同日按[架构审查](M7_USB_ARCHITECTURE_REVIEW.md)修订。阶段、决定和验收见 [M7 开发清单](M7_IMPLEMENTATION_PLAN.md)，范围以 [PRD 的 M7 章节](PRD.md) 为准。本文是开工前的设计，目前没有对应代码。标为"待实测"的内容由捕获测试、M7-1 和 M7-2 验证；实测结论与本文不符时，先更新本文，再继续实现。
+2026-11-02 首版，同日按[架构审查](M7_USB_ARCHITECTURE_REVIEW.md)和[二次审查](M7_USB_ARCHITECTURE_REVIEW_2.md)修订。阶段、决定和验收见 [M7 开发清单](M7_IMPLEMENTATION_PLAN.md)，范围以 [PRD 的 M7 章节](PRD.md) 为准。本文是开工前的设计，目前没有对应代码。标为"待实测"的内容由捕获测试、M7-1 和 M7-2 验证；实测结论与本文不符时，先更新本文，再继续实现。
 
 ## 设计约束
 
 1. 严格模式下送到 DAC 的样本值须与原文件的无损 PCM 一致。无法证明时停止输出，不回退到系统混音。
-2. 提取、解码、队列和媒体会话继续由 Media3 负责，普通输出继续使用 `DefaultAudioSink`。严格模式可以在 Sink 这一层增加范围受限的实现（见"样本完整性"），但不修改 Media3 源码，也不进行 M6 的内核替换。
+2. 提取、解码、队列和媒体会话继续由 Media3 负责，普通输出继续使用 `DefaultAudioSink`。严格模式在 Sink 这一层使用范围受限的实现（见"样本完整性"），但不修改 Media3 源码，也不进行 M6 的内核替换。
 3. 官方通道可用时优先使用官方通道。
 4. `UsbOutputCoordinator` 仍是严格输出状态的唯一所有者。所有触发来源都进入同一个判定流程，界面、`PlaybackSnapshot` 和 `PlaybackTelemetry` 读取同一份状态。
 5. 普通播放不加载 native 库，也不调用 USB Host API。
@@ -16,7 +16,7 @@
 
 ```mermaid
 flowchart TD
-    Player["ExoPlayer<br/>提取、解码、队列"] --> Guard["AudioSink 层<br/>普通输出：DefaultAudioSink<br/>严格模式：样本保护（方案 A 或 B）"]
+    Player["ExoPlayer<br/>提取、解码、队列"] --> Guard["AudioSink 层<br/>普通输出：DefaultAudioSink<br/>严格模式：StrictPcmAudioSink（D9 待确认）"]
     Guard --> Coordinator["UsbOutputCoordinator<br/>AudioOutputProvider，状态唯一所有者"]
     Coordinator -->|系统输出| Track["AudioTrack<br/>系统混音"]
     Coordinator -->|官方通道| Gated["StrictGatedAudioOutput<br/>官方 bit-perfect mixer"]
@@ -52,7 +52,7 @@ flowchart TD
 
 | 组件 | 位置 | 职责 |
 | --- | --- | --- |
-| 严格模式样本保护 | `:app`，新增 | 防止 Media3 淡入改动样本。形式由捕获测试决定（见"样本完整性"）。 |
+| `StrictPcmAudioSink` | `:app`，新增（D9 待确认） | 严格模式下把 PCM 不经处理写入 `AudioOutput`，避开 Media3 的淡入（见"样本完整性"）。普通输出仍使用 `DefaultAudioSink`，由一个按模式选择的外层切换，切换只发生在现有的 `stop()` 加 `prepare()` 重建时。 |
 | `UsbOutputStrategyResolver` | `:app`，修改 | 纯策略判断。结果增加路径：官方通道或自有输出。 |
 | `UsbOutputCoordinator` | `:app`，修改 | 模式、generation、统一判定、状态发布和失败关闭。自有路径的细节委托给 `DirectUsbSession`，不继续把逻辑堆入这个类。修改前先补单元测试（M7-0）。 |
 | `DirectUsbAudioOutput` | `:app`，新增 | 实现 Media3 的 `AudioOutput`。 |
@@ -70,33 +70,35 @@ flowchart TD
 
 ## 样本完整性
 
-Media3 1.11.0 的 `DefaultAudioSink` 会对写入帧数不足 20 ms 的 PCM 做线性淡入（`maybeRampUpVolume()`）。它只判断是否为 PCM 和已写入帧数，没有开关。每次新建输出或 flush 后计数归零，因此起播、seek 和格式变化后都会发生。1.11.1 所属的上游 main 分支仍然如此。淡入发生在 `AudioOutput` 之前，输出端无法还原。
+Media3 1.11.0 的 `DefaultAudioSink` 会对写入帧数不足 20 ms 的 PCM 做线性淡入（`maybeRampUpVolume()`）。它只判断是否为 PCM 和已写入帧数，没有开关。每次新建输出或 flush 后计数归零。1.11.1 所属的上游 main 分支仍然如此。淡入发生在 `AudioOutput` 之前，输出端无法还原。
 
-候选方案：
+捕获测试（`Media3PcmCaptureDeviceTest`）放在 `androidTest`，把 `AudioOutput.write()` 收到的内容保存到内存，与参考 PCM 逐字节比较，不需要 DAC。它只验证到交给输出端的数据，不代表 DAC 收到的内容。音源为 16 位和 24 位的 WAV 与 FLAC。2026-11-02 测得的现状：
 
-| 方案 | 做法 | 优点 | 风险 |
-| --- | --- | --- | --- |
-| A：静音前导（优先） | 用 `ForwardingAudioSink` 包装 `DefaultAudioSink`。严格模式下，在新一段输出的第一个缓冲之前先送入至少 20 ms 的数字静音，淡入只作用在静音上。 | 改动最小，继续使用 Media3 的时钟和格式切换逻辑。 | 依赖 Media3 的内部行为，升级时由捕获测试把关。 |
-| B：严格 PCM Sink | 实现范围受限的 `AudioSink`（接口约 30 个方法，严格模式下多数不产生作用），不做任何处理，直接写入 `AudioOutput`。另需一个按模式选择 Sink 的外层。 | 语义完全可控，不依赖 Media3 内部行为。 | 时钟、格式切换和流结束都要自己实现，代码量较大。 |
+- 起播、seek、重新 prepare 和格式切换后，前 20 ms 被改动（44.1、48、96 kHz 分别为 882、960、1920 帧），之后逐字节一致。
+- 同格式切歌不淡入，不丢帧。源位深不同但解码后都是 float 且采样率相同的曲目，同样复用输出。
+- 16 位 WAV 淡入后仍是整数，能够通过整数校验。
 
-方案 A 的已知限制：
+两个方案都做了原型，跑同一套用例（首帧、seek、重新 prepare、同格式切歌、混合位深、连续格式切换、短于 20 ms 的曲目、部分写入、播放进度、流结束）。模拟器（Android 16，Codec2）连续 5 轮、Honor（Android 9，OMX）连续 2 轮都通过。Android 9 把 24 位 FLAC 解码成 16 位（D10 会拒绝这种情况），所以 Honor 上这部分没有做字节比较，24 位 FLAC 的比较结果来自模拟器。两个方案的差别在通过之外：
 
-- 不能使用 `setAudioProcessors()`。这个公开入口的处理器只在 int16 路径上执行，float 路径不经过它们。
-- 格式变化且输出不能复用时，`DefaultAudioSink` 在 `handleBuffer()` 内部自行 flush，包装层看不到，因此须在 `configure()` 时按格式是否相同预判。同格式切歌不得插入静音。
-- `TrimmingAudioProcessor` 位于处理链前端，encoder delay 非零时前导可能被裁掉。这种音源由捕获测试确认，不能保证时拒绝。
-- 前导使播放进度提前 20 ms，由包装层扣除。
 
-不采用的做法：修改 Media3 源码，以及在输出端反向增益（第一帧已被乘以零，无法还原）。
+| 项 | A：静音前导 | B：严格 PCM Sink |
+| --- | --- | --- |
+| 做法 | 用 `ForwardingAudioSink` 包装 `DefaultAudioSink`，每段输出之前送入 20 ms 数字静音，淡入只作用在静音上 | 实现范围受限的 `AudioSink`，PCM 不经处理写入 `AudioOutput` |
+| 送到输出的内容 | 每次起播、seek 和格式切换多出 20 ms 静音 | 只有源数据 |
+| 24 位 WAV | 先转为 float，再由 `ExactPcmConverter` 还原 | int24 直通 |
+| 输出卡住 | `DefaultAudioSink` 在内部 flush 并重建，包装层看不到，重建后的真实样本被淡入（已实测）；须保证严格输出永不报告卡住 | 不经过这条路径 |
+| 格式切换 | 须在外层预判内部 flush，预判必须与 `canReuseAudioOutput()` 一致 | 直接询问 `canReuseAudioOutput()` |
+| 时间轴 | `DefaultAudioSink` 的帧含前导，输出位置也须计入前导，歌曲进度由外层换算 | 只有一条时间轴 |
+| encoder delay | 裁剪落在前导上，源文件的延迟帧留在输出里（已实测），只能拒绝 | 不裁剪，拒绝 |
+| 依赖 | 依赖 Media3 的内部行为，变化时只有测试能发现 | 依赖公开的 `AudioSink` 接口，变化时编译报错 |
+| 时钟、流结束、格式切换 | 由 Media3 实现 | 自己实现，已由同一套用例覆盖 |
+| 原型代码量 | 约 60 行 | 约 180 行，另需按模式选择 Sink 的外层 |
 
-**捕获测试。** 放在 `androidTest`，使用 `VesqenAudioRenderersFactory` 和假的 `AudioOutputProvider`，把 `write()` 收到的内容保存到内存，与参考 PCM 逐字节比较。不需要 DAC。
+**建议采用方案 B（D9，待所有者确认）。** 代价是代码更多，而且时钟和流结束要自己负责。换来的是严格模式的正确性不再依赖 Media3 的内部行为，也不向输出插入任何额外内容。普通输出继续使用 `DefaultAudioSink`。
 
-- 音源：16 位和 24 位的 WAV 与 FLAC。
-- 用例：首帧、seek 后首帧、重新 prepare、同格式切歌（不多插静音，不丢帧）、不同格式切歌、流结束的最后一帧。
-- 顺序：先跑现状，确认淡入范围；再分别跑方案 A 和 B。
-- **判定规则：方案 A 能稳定通过全部用例就采用 A，否则采用 B。**
-- 这个测试保留为 Media3 升级时的回归测试。
+不采用的做法：修改 Media3 源码；在输出端反向增益（第一帧已被乘以零，无法还原）；`setAudioProcessors()`（这个入口的处理器只在 int16 路径上执行，float 路径不经过它们）。
 
-已发布版本受到的影响和处理见开发清单的 M7-0。
+这个测试保留为 Media3 升级时的回归测试。已发布版本受到的影响和处理见开发清单的 M7-0。
 
 ## 接入 Media3
 
@@ -109,11 +111,12 @@ Media3 1.11.0 的 `DefaultAudioSink` 会对写入帧数不足 20 ms 的 PCM 做�
 
 | 方法 | 行为 |
 | --- | --- |
-| `write()` | 转换后写入环形缓冲，缓冲已满或 flush 尚未确认时返回 `false`；会话失败时抛出不可恢复的 `WriteException`。 |
+| `write()` | 转换后写入环形缓冲。缓冲已满或上一个输出尚未退休完成时返回 `false`；会话失败或本输出已退休时抛出不可恢复的 `WriteException`。 |
 | `play()`、`pause()` | 切换数据面读取缓冲或填充静音。 |
-| `flush()` | 立即返回，开始新的 epoch（见"flush 与销毁"）。 |
-| `stop()` | 标记流结束，媒体帧全部交付后填充静音。 |
-| `release()` | 只解除与会话的绑定，不释放 USB 接口。 |
+| `flush()` | Media3 1.11 不调用这个方法，它不承载任何协议。 |
+| `stop()` | 标记流结束，媒体帧全部处理后填充静音。 |
+| `release()` | 幂等。结束这个输出的数据世代（见"输出退休与销毁"），不释放 USB 接口。`Listener.onReleased()` 恰好调用一次。 |
+| `isStalled()` | 始终返回 `false`。`DefaultAudioSink` 遇到卡住的输出会自行 flush 并重建，传输停滞改由数据面报告并失败关闭。 |
 | `getPositionUs()` | 只统计媒体帧（见"媒体时钟"）。 |
 | `getBufferSizeInFrames()` | 环形缓冲容量。 |
 | `canReuseAudioOutput()` | 使用默认实现：配置相同才复用。同格式曲目连续播放依赖这一点。 |
@@ -142,6 +145,7 @@ Media3 1.11.0 的 `DefaultAudioSink` 会对写入帧数不足 20 ms 的 PCM 做�
 | 24 位无损 | 支持。解码输出须为 int24 或 float；int16 按 `DECODER_PRECISION_LOST` 拒绝。 |
 | 20 位、32 位、浮点 WAV | 拒绝。开启 float 输出时高精度整数会被转为 float，32 位无法保持；这些格式第一版不做专门路径。 |
 | 有损格式、位深未知 | 拒绝，沿用现有规则。 |
+| encoder delay 或 padding 不为 0 | 拒绝。严格模式不裁剪样本。WAV 和 FLAC 不受影响，ALAC 文件待用真实文件确认。 |
 
 Android 9 上的 OMX 解码器只输出 int16（现有的 `keepIntegerPcmForOmx()`，#107 的保护，不能为 M7 移除），这些设备上的 24 位音源会被拒绝并说明原因。
 
@@ -193,7 +197,7 @@ Android 9 上的 OMX 解码器只输出 int16（现有的 `keepIntegerPcmForOmx(
 
 duck 时不暂停的原因：通知音通常只请求 duck，接管期间它们从手机扬声器输出，不影响 DAC 上的样本，每条通知都暂停音乐过于打扰。
 
-官方路径的 `StrictGatedAudioOutput.setVolume()` 目前会把 duck 系数传给 `AudioTrack`，而 `hasNeutralProcessing()` 看不到这个系数。这一行为在 M7-4 一并核对。
+官方路径的现有行为不同：`StrictGatedAudioOutput.setVolume()` 收到非 1 的音量时立即关闭写入门、把底层音量设为 0，并按 `PROCESSING_NOT_NEUTRAL` 失败关闭。这段保护不改动。duck 系数是否真的会到达官方路径，由 M7-4 实测；官方路径的失败关闭和自有路径的 D11 分开测试。
 
 ## 控制请求
 
@@ -270,7 +274,7 @@ stateDiagram-v2
 - **会话的生命周期长于 `AudioOutput`。** 格式变化时 Media3 会释放旧输出、创建新输出，会话保持接管状态，只重新配置时钟和 alternate setting。设置采样率和切换 alternate setting 的先后顺序按协议版本处理，由 M7-2 实测确认。
 - **释放时机。** 切回系统输出、暂停超过 30 秒（默认值，待实测）、失去音频焦点、服务停止、发生失败。短暂暂停时持续发送静音，避免切换带来的爆音。
 - **释放顺序。** 停止接收旧 epoch 的数据、停止重新提交、取消并回收全部在途 URB、native 确认静止、切回 alternate setting 0、恢复接管前的音量、释放全部接口、关闭连接、清除接管标记、恢复 `BECOMING_NOISY` 处理。Android 的 `releaseInterface()` 成功后会请求内核重新连接驱动。
-- **清理记录。** 每一步的结果写入清理记录，某一步失败时继续执行后续步骤，并保留第一个失败原因。**只有确认全部接口都已释放，才清除接管标记。**
+- **清理记录和安全屏障。** 清理步骤分两类。恢复音量这类步骤失败时，写入清理记录并继续，保留第一个失败原因。native 静止是安全屏障：确认全部在途 URB 都已回收之前，不得销毁 native 资源、关闭文件描述符、释放接口或开始下一次接管（见"输出退休与销毁"）。**只有确认全部接口都已释放，才清除接管标记。**
 - **进程异常退出。** 内核关闭文件描述符时只释放接口（`usbdev_release`），不会重新绑定驱动，DAC 可能需要重新插拔才能被系统使用。下次启动时如果发现接管标记，且设备仍连接并有权限，就重新声明再释放一次，由 `releaseInterface()` 触发重新连接（待实测）。
 
 ## 数据面
@@ -319,12 +323,15 @@ URB 的大小按时长计算：每个约 16 到 32 ms，不超过内核上限的
 | --- | --- | --- |
 | `mediaFramesWritten` | 写入环形缓冲的媒体帧 | 流结束判断 |
 | `mediaFramesSubmitted` | 已放入在途 URB 的媒体帧 | 插值的上界 |
-| `mediaFramesDelivered` | 所在 URB 已完成的媒体帧 | `getPositionUs()` 的基础 |
+| `mediaFramesProcessed` | 所在 URB 已完成的媒体帧，不论包是否成功 | `getPositionUs()` 和流结束 |
+| `mediaFramesDelivered` | 包成功且 `actual_length` 完整的媒体帧 | 诊断 |
+| `mediaFramesLost` | 包失败或 `actual_length` 不足的媒体帧 | 连续性 |
 | `silenceFramesInserted` | 预填充、暂停和欠载时补入的静音帧 | 诊断 |
 | `usbFramesDelivered` | USB 总帧 | 诊断 |
 
-- `getPositionUs()` 等于 `mediaFramesDelivered` 加单调时钟插值，插值不超过 `mediaFramesSubmitted`。
-- 静音不计入。暂停和欠载时位置不增长。流结束只等待媒体帧交付。
+- `getPositionUs()` 等于 `mediaFramesProcessed` 加单调时钟插值，插值不超过 `mediaFramesSubmitted`。
+- 数据面自行补入的静音不计入。暂停和欠载时位置不增长。
+- 流结束等待全部媒体帧处理完成。丢失的帧不会让流结束一直等下去，也不算作成功交付；最后一个包失败时，流正常结束，连续性记为中断。
 - 每个 `AudioOutput` 有独立的 epoch，计数从 0 开始。会话可以跨输出存活，但旧 epoch 的完成记录只回收，不计入新输出。
 - USB 交付不等于 DAC 已经呈现，DAC 内部的缓冲延迟无法测量。Audio Proof 只说明 USB 交付的时刻，不把它写成呈现时刻。
 
@@ -334,11 +341,11 @@ URB 的大小按时长计算：每个约 16 到 32 ms，不超过内核上限的
 
 | 情况 | 判定 | 处理 |
 | --- | --- | --- |
-| 单包失败，URB 总体完成 | 逐包检查 `status` 和 `actual_length` | 计数并标记本次流不连续。时间窗内超过阈值（默认值待实测）时按 `USB_TRANSFER_FAILED` 失败关闭。 |
+| 单包失败或 `actual_length` 不足，URB 总体完成 | 逐包检查 `status` 和 `actual_length` | 这些帧计入 `mediaFramesLost`，同样计入 `mediaFramesProcessed`，标记本次流不连续。时间窗内超过阈值（默认值待实测）时按 `USB_TRANSFER_FAILED` 失败关闭。 |
 | 反馈中断 | 超过有效期没有有效反馈 | 按 `FEEDBACK_TIMEOUT` 失败关闭。 |
 | 反馈异常 | 持续超出标称速率附近的范围 | 按 `FEEDBACK_OUT_OF_RANGE` 失败关闭。 |
 | 欠载 | 环形缓冲为空 | 填充静音、计数、标记本次流不连续，触发 `onUnderrun()`。 |
-| 主动取消 | 由 flush 或停止发起 | 不算错误。 |
+| 主动取消 | 由输出退休或停止发起 | 不算错误，也不推进任何媒体计数。 |
 | 设备消失 | `ENODEV` | 按 `DEVICE_DISCONNECTED` 失败关闭。 |
 
 路径声明和流的连续性分开表达。`ACTIVE` 说明路径按原值传输；`streamContinuity` 说明本次流是否连续完整，链路页显示欠载和传输错误的次数。插入静音或丢包后不得写成完整的逐样本一致流，已有的签名验证记录也不能替代本次流的错误证据。
@@ -348,15 +355,26 @@ URB 的大小按时长计算：每个约 16 到 32 ms，不超过内核上限的
 - 只有 native 线程操作传输队列。控制命令经带 epoch 和完成确认的信箱传递。
 - native 线程不回调 JVM，只发布原子计数和错误状态。Kotlin 在 `write()` 和 `getPositionUs()` 中读取；会话存在期间，另由 `usb-control` 每 250 ms 读取一次，以便在暂停时也能发现拔出。
 - 线程请求 `THREAD_PRIORITY_URGENT_AUDIO` 级别，普通应用无法使用 `SCHED_FIFO`。实际是否生效由 M7-2 核实。
-- JNI 接口保持很小：`create(fd, plan)`、`start()`、`write(directBuffer, offset, size)`、`setRunning()`、`flush(epoch)`、`markEndOfStream()`、`readStats(long[])`、`destroy()`。
+- JNI 接口保持很小：`create(fd, plan)`、`start()`、`write(directBuffer, offset, size)`、`setRunning()`、`retireOutput(epoch)`、`markEndOfStream()`、`readStats(long[])`、`destroy()`。
 
-### flush 与销毁
+### 输出退休与销毁
 
-- **`flush()` 的保证。** 它在播放线程上立即返回，不等待：开始新的 epoch，此后旧 epoch 的数据不再提交。native 取消并回收全部在途 URB、清空环形缓冲后确认。确认前 `write()` 返回 `false`。超过上限（默认 1 秒）仍未确认时失败关闭。
+- **输出退休。** Media3 通过 `release()` 结束一个输出，不调用 `AudioOutput.flush()`。`release()` 立即返回：旧写入口失效，开始新的 epoch，旧数据不再提交。native 取消并回收全部在途 URB、清空环形缓冲后确认。
+- **新输出等待确认。** 确认之前，新输出的 `write()` 返回 `false`，格式重配和首个媒体包都排在确认之后。这一约束由会话保证，不依赖 Media3 等待。超过上限（默认 1 秒）仍未确认时失败关闭。
+- **切换生效点。** 确认点就是切换生效点。取消之前已经送出的数据无法撤回，不作这样的声明。
+- **流结束与 seek。** 正常流结束时 Sink 先等待 `hasPendingData()` 为 `false` 再释放，此时已没有媒体帧；seek 时 `release()` 丢弃尚未送出的部分。两者使用同一协议。
 - **`DISCARDURB` 之后仍须回收。** 被取消的 URB 仍会进入回收路径，停止线程不等于 URB 结构和缓冲区已经可以释放。native 确认静止的条件是所有在途 URB 都已回收。
-- **`destroy()` 和 `write()` 互斥。** Kotlin 用一把小锁保护 native 句柄，`write()` 在锁内只做不阻塞的缓冲写入。`destroy()` 先标记关闭，再取得锁销毁，因此 `write()` 不会用到已销毁的句柄。
+- **句柄生命周期。** 一把小锁只保护关闭标记、句柄摘除和短 JNI 调用（`write()`、`readStats()`、`setRunning()`、`retireOutput()`），这些调用看到关闭标记后立即返回。取消、回收和销毁的等待都在锁外的 `usb-control` 线程上进行，因此播放线程不会因回收而阻塞。
 - **文件描述符。** 由 `UsbDeviceConnection` 持有，native 只是借用，因此必须先 `destroy()` 再关闭连接。
 - `usb-control` 上的等待都有上限，`destroy()` 不在播放线程上执行。
+
+确认超时时各资源的归属：
+
+| 情况 | 处理 |
+| --- | --- |
+| 回收确认超时 | 停止新输出，失败关闭。会话继续持有 native 句柄、URB 缓冲、文件描述符和接口，不销毁也不关闭，回收完成后再继续清理。超时不等于已回收。 |
+| 设备拔出 | URB 以错误完成，回收后按正常顺序清理。 |
+| 一直无法确认 | 不允许下一次接管，状态保持失败，接管标记保留。这些资源只在进程退出时由内核回收，下次启动时按"进程异常退出"恢复。 |
 
 ## 音量
 
@@ -425,9 +443,10 @@ URB 的大小按时长计算：每个约 16 到 32 ms，不超过内核上限的
 | 描述符解析和 `StreamingPlanner` | JVM 单元测试，使用真实 DAC 的描述符样本 | 静态解析、运行时数值 unknown、畸形输入、`bInterval` 大于 1、多事务结构被拒绝 |
 | `ExactPcmConverter` | JVM 单元测试 | 全部 16 位取值和 24 位边界值经 float 还原后一致；非整数样本被拒绝；错误元数据；已截断的合法格点；真实的解码器到 Sink 输入组合 |
 | `UacControlClient` | JVM 单元测试，使用假 USB 传输 | UAC1 和 UAC2 的请求流程；固定时钟；只读音量；设置和读回失败 |
-| `DirectUsbSession` | JVM 单元测试，使用假 USB 传输 | 每一步失败后都继续清理；接管标记的保留和清除；状态转换；过期回调 |
+| `DirectUsbSession` | JVM 单元测试，使用假 USB 传输 | 可继续的清理失败和安全屏障分开；回收确认超时、拔出时各资源的归属；接管标记的保留和清除；状态转换；过期回调 |
+| `DirectUsbAudioOutput` | 真实的 Sink 加假传输 | 环形缓冲和 URB 都有数据时 seek、重建：新世代获准写入前，旧世代已停止提交并完成回收，旧数据不混入新世代；`release()` 幂等，`onReleased()` 恰好一次 |
 | `UsbOutputCoordinator` | JVM 单元测试，使用假会话 | 路径选择、generation、`reconcile()` 的全部入口、失去焦点后路由重新出现不被抢回、失败路径不出现错误的 `ACTIVE` |
-| native core | 主机上的 C++ 单元测试，使用假传输 | **各种反馈序列下，所有媒体包的载荷按顺序拼接后与输入逐字节一致**；媒体时钟（先传 5 秒静音、暂停 10 秒、欠载、流结束、seek 时 URB 在途、同格式复用、不同格式重建）；取消和回收的故障注入；单包失败；反馈中断 |
+| native core | 主机上的 C++ 单元测试，使用假传输 | **各种反馈序列下，所有媒体包的载荷按顺序拼接后与输入逐字节一致**；媒体时钟（先传 5 秒静音、暂停 10 秒、欠载、流结束、seek 时 URB 在途、同格式复用、不同格式重建）；取消和回收的故障注入；`destroy()` 与 `write()`、`readStats()` 竞争；末包失败、混合成功和失败的 URB、短包；反馈中断 |
 | 真机 | `docs/M7_DEVICE_ACCEPTANCE.md` | 见下一节；只有外部逐样本比对才能得到 `VERIFIED` |
 
 ## 仓库布局
@@ -451,7 +470,7 @@ app/src/main/java/.../playback/
   DirectUsbAudioOutput.kt       新增
   ExactPcmConverter.kt          新增
   UsbAttachActivity.kt          新增
-  严格模式样本保护              新增，形式由捕获测试决定
+  StrictPcmAudioSink.kt         新增（D9 待确认）
   UsbOutputCoordinator.kt       修改
   UsbOutputStrategyResolver.kt  修改
   UsbOutputState.kt             修改
@@ -465,8 +484,8 @@ app/src/debug/                  M7-1 的描述符读取入口和 M7-2 的技术�
 
 | 假设 | 阶段 | 不成立时 |
 | --- | --- | --- |
-| 方案 A 能让严格模式下的样本与参考 PCM 逐字节一致 | 捕获测试 | 采用方案 B |
-| 同格式切歌时输出复用，不多插静音，不丢帧 | 捕获测试 | 采用方案 B |
+| 方案 B 的时钟和流结束在真实 USB 上与捕获测试一致 | M7-2 | 修正 `StrictPcmAudioSink`，必要时重新评估方案 A |
+| 真实的 ALAC 文件 encoder delay 为 0 | M7-2 | 这些文件在严格模式下被拒绝并说明原因，由所有者决定是否实现裁剪 |
 | iQOO 的 ROM 允许强制声明接口并提交等时 URB | M7-2 | G1 不通过，由所有者重新评估范围 |
 | 关闭 `BECOMING_NOISY` 处理后，接管不会导致暂停 | M7-2 | 接管完成后再恢复播放 |
 | 释放接口后系统恢复使用该设备 | M7-2 | G1 不通过 |

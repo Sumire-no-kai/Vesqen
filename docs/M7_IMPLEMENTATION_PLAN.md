@@ -1,6 +1,6 @@
 # M7 开发清单：Vesqen 自有 USB 输出
 
-2026-10-30，2026-11-02 更新。架构见 [M7 架构设计](M7_USB_ARCHITECTURE.md)，审查及处理结果见[架构审查](M7_USB_ARCHITECTURE_REVIEW.md)。范围以 [PRD 的 M7 章节](PRD.md) 和 [#71](https://github.com/Sumire-no-kai/Vesqen/issues/71) 为准；相关事项为 [#49](https://github.com/Sumire-no-kai/Vesqen/issues/49)（外部验证）、[#53](https://github.com/Sumire-no-kai/Vesqen/issues/53)（2026-10-16 决定双机双 DAC 矩阵随 M7 完成）和 [#65](https://github.com/Sumire-no-kai/Vesqen/issues/65)（16 位补零）。按 [商业模式](MONETIZATION.md)，2.0 开始收费的条件是 M7 在没有官方通道的参考手机（iQOO）上接参考 DAC，实测达到 `BIT-PERFECT ACTIVE`。
+2026-10-30，2026-11-02 更新。架构见 [M7 架构设计](M7_USB_ARCHITECTURE.md)，审查及处理结果见[架构审查](M7_USB_ARCHITECTURE_REVIEW.md)和[二次审查](M7_USB_ARCHITECTURE_REVIEW_2.md)。范围以 [PRD 的 M7 章节](PRD.md) 和 [#71](https://github.com/Sumire-no-kai/Vesqen/issues/71) 为准；相关事项为 [#49](https://github.com/Sumire-no-kai/Vesqen/issues/49)（外部验证）、[#53](https://github.com/Sumire-no-kai/Vesqen/issues/53)（2026-10-16 决定双机双 DAC 矩阵随 M7 完成）和 [#65](https://github.com/Sumire-no-kai/Vesqen/issues/65)（16 位补零）。按 [商业模式](MONETIZATION.md)，2.0 开始收费的条件是 M7 在没有官方通道的参考手机（iQOO）上接参考 DAC，实测达到 `BIT-PERFECT ACTIVE`。
 
 ## 当前状态
 
@@ -31,6 +31,7 @@
 - **音量键。** Player 报告 `DeviceInfo.PLAYBACK_TYPE_REMOTE` 时，Media3 把媒体会话设为远程音量（`MediaSessionLegacyStub.createVolumeProviderCompat()`）。
 - **现有数据。** 使用统计已经发送 `bitPerfectMixer` 及手机型号和 ROM；设备报告的音频能力部分已经包含 VID/PID 和接口协议，可以看出 UAC 版本。
 - **Media3 淡入。** `DefaultAudioSink` 在每次新建输出或 flush 后，对前 20 ms 的 PCM 做线性淡入，没有开关（1.11.0 源码，1.11.1 所属的上游 main 分支相同）。
+- **输出生命周期。** `DefaultAudioSink.flush()` 调用 `AudioOutput.release()`，不调用 `AudioOutput.flush()`；输出报告卡住时，它会在 `handleBuffer()` 内部 flush 并重建。
 - **运行时能力。** UAC2 的采样率和 UAC1、UAC2 的音量范围须经控制请求取得，只能在声明接口后读取。固定频率的 UAC2 时钟可以不支持 `SET`。
 - **逐包状态。** 等时 URB 的总状态不能代替每个包的 `status` 和 `actual_length`。高速端点的服务间隔取决于 `bInterval`。
 - **版本范围。** 1.0 起最低版本为 API 28（#149），因此 PRD 中"Android 8–13"在实际范围上为 Android 9–13，另加没有 bit-perfect mixer attribute 的 Android 14+ 设备。
@@ -48,7 +49,7 @@
 | D6 | M7 的开发分支与 Play 版 1.x 的维护分支 | 2026-11-01 所有者决定：M7-1 和 M7-2 在 `feature/usb-host-output` 上开发，这两个阶段的 PR 合入该分支，不进 `master`；每发布一个 1.x 版本，就把 `master` 合并进该分支一次。M7-2 通过（G1）且 1.2.0 发布之后，从最后一个 1.x 标签建立 `release/1.x` 维护分支，再把 M7 合入 `master`，M7-3 起的 PR 直接合入 `master`。G1 不通过时，代码留在该分支，由所有者重新评估范围。Play 版停留在 1.x，之后的小修从 `release/1.x` 发布；两边都需要的修复分别合入 `master` 和 `release/1.x`。 |
 | D7 | 是否增加"这台手机是否开放官方通道"的数据 | 2026-11-02 关闭：不增加。使用统计已经发送 `bitPerfectMixer`，隐私政策已写明；设备报告的音频能力部分已经包含 VID/PID 和接口协议。原记录中"设备报告只记录失败原因"有误，在此更正。 |
 | D8 | USB 授权的持久方式 | 2026-11-02 决定：把匹配音频类设备的 `USB_DEVICE_ATTACHED` 过滤器放在默认禁用的 Activity 上，用户开启严格模式时启用，切回系统输出时禁用。系统授权框由此提供"始终使用"选项（AOSP `canBeDefault()`），代价是启用后插入 DAC 时系统会询问是否打开 Vesqen（待实测）。限制：带麦克风输入的 DAC，在应用没有录音权限时系统不显示该选项（`UsbPermissionActivity`），这类设备每次插入都须授权一次。Vesqen 不为此申请录音权限。 |
-| D9 | 严格模式的样本完整性 | 2026-11-02 决定：先写 Media3 到 PCM 的捕获测试，再比较静音前导（方案 A）和严格 PCM Sink（方案 B）。方案 A 能稳定通过全部用例就采用 A，否则采用 B。不修改 Media3 源码。 |
+| D9 | 严格模式的样本完整性 | 2026-11-02 决定：用捕获测试比较静音前导（方案 A）和严格 PCM Sink（方案 B），不修改 Media3 源码。比较已完成，两者都通过全部用例，差别见[架构设计](M7_USB_ARCHITECTURE.md)"样本完整性"。**建议采用 B，待所有者确认。** |
 | D10 | 严格输出的承诺 | 2026-11-02 决定：保持原文件的无损 PCM。解码器输出精度低于源文件时拒绝。第一版支持 16 位和 24 位无损音源；20 位、32 位、浮点 WAV、有损格式和位深未知的音源拒绝并说明原因。Android 9 的 OMX 解码器只输出 16 位，这些设备上的 24 位音源会被拒绝。 |
 | D11 | 音频焦点 | 2026-11-02 决定：继续使用 Media3 的自动焦点管理。失去焦点时释放 DAC，暂时失去焦点恢复后重新接管，路由增加不能单独触发接管。duck 时继续播放，不暂停，不缩放 PCM（待实测）。 |
 | D12 | G1 的标准 | 2026-11-02 决定：G1 包含最小的 Media3 到 USB 完整链路，见 M7-2 的完成条件。JBL Flip 7 不能证明的 UAC2 异步反馈和多采样率切换，留给参考 DAC 和 G2。 |
@@ -61,7 +62,8 @@
 
 - [x] 所有者确定 D2–D12（D6 于 2026-11-01，其余于 2026-11-02）。
 - [ ] D1 的设备在具备购买条件后确定，不阻挡 M7-1 和 M7-2。
-- [ ] 写 Media3 到 PCM 的捕获测试（[架构设计](M7_USB_ARCHITECTURE.md)"样本完整性"），不需要 DAC。只含测试代码，合入 `master`。先确认现状，再比较方案 A 和 B，按 D9 确定方案。
+- [x] 写 Media3 到 PCM 的捕获测试（[架构设计](M7_USB_ARCHITECTURE.md)"样本完整性"），确认现状并比较方案 A 和 B。模拟器（Android 16）连续 5 轮、Honor（Android 9）连续 2 轮通过；Honor 上的 24 位 FLAC 因解码为 16 位而没有做字节比较。
+- [ ] 所有者确认 D9 后，把捕获测试合入 `master`，只含测试代码；未选中的方案从测试中移除。
 - [ ] 按捕获测试的结果处理已发布版本的问题：官方路径的 `ACTIVE` 和链路页的"未改动音频"在起播和 seek 后的前 20 ms 并不成立，`AppSegmentAssessment` 中"Vesqen 没有淡入"的注释也须更正。修复进入 1.x 还是 2.0，由所有者决定。
 - [ ] M7-1 开始前，按 D6 把 `feature/usb-host-output` 更新到最新的 `master`。
 - [ ] 开始真机测试前建立 `docs/M7_DEVICE_ACCEPTANCE.md`，记录格式沿用 [M4 设备验收](M4_DEVICE_ACCEPTANCE.md)。
@@ -92,17 +94,19 @@
 - [ ] 开始前，按 D6 从最后一个 1.x 标签建立 `release/1.x`，把 `feature/usb-host-output` 合入 `master`。
 - [ ] 建立独立的 `:usb-engine` Gradle 模块（Kotlin 与 C++），对应用只暴露小型接口。
 - [ ] 实现 `StreamingPlan`（实际速度、服务间隔、每间隔最大载荷、反馈单位和有效期）、URB 队列、环形缓冲、按反馈调整的包长、逐包错误统计、反馈超时、时钟和 alternate setting 切换，以及只统计媒体帧的播放位置。按 D3 覆盖 UAC1 和 UAC2。
-- [ ] 实现 `ExactPcmConverter` 和四层格式判断（D10）：float 按源位深还原为整数并校验，校验失败时失败关闭；解码输出精度低于源文件时拒绝；按 #65 的规则补零。不做重采样、抖动或截断。
+- [ ] 实现 `DirectUsbAudioOutput`（`isStalled()` 始终为 `false`，`release()` 负责输出退休）。
+- [ ] 实现 `ExactPcmConverter` 和四层格式判断（D10）：严格模式拒绝 encoder delay 或 padding 不为 0 的音源；float 按源位深还原为整数并校验，校验失败时失败关闭；解码输出精度低于源文件时拒绝；按 #65 的规则补零。不做重采样、抖动或截断。
 - [ ] native core 在主机上单元测试，其中必须验证：各种反馈序列下，所有媒体包的载荷拼接后与输入逐字节一致；媒体时钟不受静音影响；取消和回收的故障注入；单包失败和反馈中断。
-- [ ] 写明并测试 flush 和 destroy 的契约以及清理记录（架构设计"flush 与销毁"）。只有确认全部接口都已释放，才清除接管标记。
+- [ ] 写明并测试输出退休和销毁的契约以及清理记录（架构设计"输出退休与销毁"）：新世代获准写入前旧世代已回收；回收确认超时时不越过安全屏障；只有确认全部接口都已释放，才清除接管标记。
 
 ### M7-4 接入播放服务
 
+- [ ] 按 D9 把确认的样本保护接入 `VesqenAudioRenderersFactory`，普通输出不变，切换只发生在现有的 `stop()` 加 `prepare()` 重建时。
 - [ ] `UsbOutputStrategyResolver` 增加自有输出候选：官方通道不可用、用户已开启严格模式、已授予 USB 权限、描述符确认支持当前源格式。路径按 USB 连接选择，不按曲目切换。由 `vesqen.directUsb` 构建开关控制，到 2.0.0-beta.1 时开启。
 - [ ] 建立统一判定 `reconcile()`：服务启动、模式切换、权限结果、USB 插拔广播、`UsbAttachActivity` 和路由变化都进入这一流程。路由增加只更新事实。
 - [ ] `UsbOutputCoordinator.getAudioOutput()` 为自有输出返回 `DirectUsbAudioOutput`，覆盖播放、暂停、flush、seek、切歌、格式变化和服务重建。
 - [ ] 区分主动接管与设备拔出：接管期间关闭 `BECOMING_NOISY` 处理，拔出由 `ACTION_USB_DEVICE_DETACHED` 和 URB 错误判断。拔出、端点出错、权限撤销和描述符不匹配时失败关闭并撤销 `ACTIVE`。
-- [ ] 按 D11 处理音频焦点：监听 `onPlaybackSuppressionReasonChanged()`，暂时失去焦点时释放接口，恢复时重新接管；duck 时继续播放，不缩放 PCM。核对官方路径的 duck 行为。
+- [ ] 按 D11 处理音频焦点：监听 `onPlaybackSuppressionReasonChanged()`，暂时失去焦点时释放接口，恢复时重新接管；duck 时继续播放，不缩放 PCM。官方路径遇到非中性音量时现有的失败关闭不改动，实测 duck 系数是否会到达官方路径，两条路径分开测试。
 - [ ] 增加与已声明接口对应的清理记录，确保任何失败路径都会释放接口。
 - [ ] 同格式曲目之间连续播放；格式变化需要切换 alternate setting 时的停顿如实列为限制。
 - [ ] 修复官方路径（#71 2026-10-23）：在开放通道的手机上，多数文件因 float 与 HAL 的整数格式不符而停止。严格模式下 16 位源保持 16 位整数，24 位源经 `ExactPcmConverter` 精确转为 24 或 32 位整数。现有测试机都没有开放官方通道，须在具备条件的手机和 DAC 上以 `getSupportedMixerAttributes()` 核对。
@@ -130,7 +134,7 @@
 
 ## 声明边界
 
-自有输出显示 `BIT-PERFECT ACTIVE` 须同时满足：D9 的样本保护已生效；已声明接口，alternate setting 与源格式一致；采样率已设置或固定时钟读回一致（设备不支持读回时显示为不可用，不得推定）；解码输出精度不低于源文件；Vesqen 的处理链没有改动样本；媒体帧已开始交付。`ACTIVE` 只说明路径按原值传输，本次流的连续性单独显示：欠载会插入静音，丢包会丢失样本，两者都必须计数并在链路页显示，不得写成完整的逐样本一致流。DAC 屏幕显示的采样率、听感和描述符声明的能力都不能作为 `VERIFIED` 的依据；`VERIFIED` 仍然只来自外部逐样本比对的签名记录。
+自有输出显示 `BIT-PERFECT ACTIVE` 须同时满足：D9 的样本保护已生效；已声明接口，alternate setting 与源格式一致；采样率已设置或固定时钟读回一致（设备不支持读回时显示为不可用，不得推定）；解码输出精度不低于源文件；Vesqen 的处理链没有改动样本；媒体帧已开始交付。`ACTIVE` 只说明路径按原值传输，本次流的连续性单独显示：欠载会插入静音，丢包会丢失样本，两者都必须计数（`mediaFramesLost`）并在链路页显示，不得写成完整的逐样本一致流。DAC 屏幕显示的采样率、听感和描述符声明的能力都不能作为 `VERIFIED` 的依据；`VERIFIED` 仍然只来自外部逐样本比对的签名记录。
 
 ## 风险
 
@@ -140,7 +144,7 @@
 | 等时传输在后台或省电策略下欠载 | 高优先级 native 线程、合并多包的 URB、真机测量欠载和耗电。 |
 | 进程异常退出后 DAC 无法被系统使用 | M7-2 实测；如无法自动恢复，在说明中写明重新插拔即可恢复。 |
 | 硬件音量缺失或开始时音量过大 | 按 D4：第一个样本之前降低硬件音量；没有硬件音量的设备须用户确认。 |
-| Media3 升级改变淡入或其他内部行为 | 捕获测试保留为回归测试，升级时必须通过。 |
+| Media3 升级改变淡入、`AudioSink` 接口或其他内部行为 | 捕获测试保留为回归测试，升级时必须通过。 |
 | JBL Flip 7 只报告单一格式，无法覆盖 UAC2 和多采样率 | G1 写明这项限制；参考 DAC 到位后由 G2 验证。 |
 | DAC 碎片化 | 以参考 DAC 为准，描述符不在支持范围内的设备失败关闭并说明原因。 |
 
