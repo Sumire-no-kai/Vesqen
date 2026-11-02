@@ -445,7 +445,7 @@ URB 的大小按时长计算：每个约 16 到 32 ms，不超过内核上限的
 | `UacControlClient` | JVM 单元测试，使用假 USB 传输 | UAC1 和 UAC2 的请求流程；固定时钟；只读音量；设置和读回失败 |
 | `DirectUsbSession` | JVM 单元测试，使用假 USB 传输 | 可继续的清理失败和安全屏障分开；回收确认超时、拔出时各资源的归属；接管标记的保留和清除；状态转换；过期回调 |
 | `DirectUsbAudioOutput` | 真实的 Sink 加假传输 | 环形缓冲和 URB 都有数据时 seek、重建：新世代获准写入前，旧世代已停止提交并完成回收，旧数据不混入新世代；`release()` 幂等，`onReleased()` 恰好一次 |
-| `UsbOutputCoordinator` | JVM 单元测试，使用假会话 | 路径选择、generation、`reconcile()` 的全部入口、失去焦点后路由重新出现不被抢回、失败路径不出现错误的 `ACTIVE` |
+| `UsbOutputCoordinator` | JVM 单元测试（Robolectric）。现有状态机已有 `UsbOutputCoordinatorTest`，M7-4 起增加假会话 | 路径选择、generation、`reconcile()` 的全部入口、失去焦点后路由重新出现不被抢回、失败路径不出现错误的 `ACTIVE` |
 | native core | 主机上的 C++ 单元测试，使用假传输 | **各种反馈序列下，所有媒体包的载荷按顺序拼接后与输入逐字节一致**；媒体时钟（先传 5 秒静音、暂停 10 秒、欠载、流结束、seek 时 URB 在途、同格式复用、不同格式重建）；取消和回收的故障注入；`destroy()` 与 `write()`、`readStats()` 竞争；末包失败、混合成功和失败的 URB、短包；反馈中断 |
 | 真机 | [M7 设备验收](M7_DEVICE_ACCEPTANCE.md) | 见下一节；只有外部逐样本比对才能得到 `VERIFIED` |
 
