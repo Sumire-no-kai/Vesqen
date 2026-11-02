@@ -90,7 +90,7 @@ M7 尚未开始编写产品代码，所有行均未实测。
 | 组合或项目 | 状态 | 关闭条件 |
 | --- | --- | --- |
 | iQOO 9 / Android 15 × 参考 DAC（G2） | `MISSING_DEVICE` | 44.1 kHz / 16 位、48 kHz / 24 位、96 kHz / 24 位，以及 DAC 支持时的 192 kHz / 24 位，实际显示 `BIT-PERFECT ACTIVE`。这是 2.0 开始收费的条件。 |
-| Android 16 手机 × 参考 DAC | `MISSING_DEVICE` | 同上格式。现有测试机中没有这样的手机。 |
+| Android 16 手机 × 参考 DAC | `MISSING_DEVICE` | 同上格式。手机已有，缺参考 DAC（D1 待定）。 |
 | Honor STF-AL00 / Android 9 × 参考 DAC | `MISSING_DEVICE` | 同上格式。24 位音源被拒绝并说明原因（D10）。 |
 | 16 位音源送入只提供 24 位格式的 DAC（#65） | `NOT_TESTED` | 补零后高位与源样本一致，低 8 位为 0。JBL Flip 7 只报告 24 位 / 48 kHz，可以先行测试。 |
 | 插拔 50 次 | `NOT_TESTED` | 没有崩溃和错误的 `ACTIVE`，每次都能恢复。 |
