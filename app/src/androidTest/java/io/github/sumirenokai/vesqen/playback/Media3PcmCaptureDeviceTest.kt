@@ -23,6 +23,7 @@ import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.audio.AudioOutput
 import androidx.media3.exoplayer.audio.AudioOutputProvider
+import androidx.media3.exoplayer.audio.ForwardingAudioOutputProvider
 import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.ForwardingAudioSink
@@ -42,6 +43,7 @@ import kotlin.math.abs
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -223,7 +225,7 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
     @Test
     fun progressFollowsTheSource() {
         val fixture = PcmFixture(PcmContainer.WAV, 48_000, 16, DURATION_MS, seed = 1)
-        capture { session ->
+        capture(progressOptions(fixture)) { session ->
             session.play(fixture.write(directory))
             session.awaitOutputPosition(PROGRESS_SAMPLE_US)
             session.pauseAndSettle()
@@ -235,7 +237,7 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
     fun progressFollowsTheSourceAfterSeek() {
         for (container in PcmContainer.entries) {
             val fixture = PcmFixture(container, 48_000, 16, DURATION_MS, seed = 1)
-            capture { session ->
+            capture(progressOptions(fixture)) { session ->
                 session.play(fixture.write(directory))
                 session.awaitCapturedFrames(fixture.sampleRateHz / 4L)
                 val before = session.outputs.size
@@ -291,7 +293,7 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
                     probeFrame = fadeFrames(fixture.sampleRateHz).toInt() * 2,
                 )
                 report("stall", fixture, comparison)
-                assertEquals("The rebuilt output starts with faded source frames", 0, comparison.firstMismatchFrame)
+                assertFadeBaseline(comparison, fadeFrames(fixture.sampleRateHz).toInt(), "stall")
             }
         }
     }
@@ -310,6 +312,93 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
         val provider = CapturingAudioOutputProvider(context, CaptureOptions(answersFormats = true))
         val rejected = runCatching { StrictPcmAudioSink(provider).configure(AudioSink.AudioSinkConfig.Builder(format).build()) }
         assertTrue("Strict output must reject what it does not trim", rejected.exceptionOrNull() is AudioSink.ConfigurationException)
+    }
+
+    /** The output decides what a volume means: the official path fails closed, D11 ignores it. */
+    @Test
+    fun volumeReachesTheOutput() {
+        assumeTrue("Applies to strict output only", guard == PcmGuard.STRICT_SINK)
+        val provider = CapturingAudioOutputProvider(context, CaptureOptions(answersFormats = true))
+        val sink = StrictPcmAudioSink(provider)
+        sink.setVolume(0.5f)
+        sink.configure(strictSinkConfig())
+        assertTrue(sink.handleBuffer(silence(), 0, 1))
+        assertEquals("Set before the output existed", 0.5f, provider.outputs.single().lastVolume)
+        sink.setVolume(0.2f)
+        assertEquals("Set on the running output", 0.2f, provider.outputs.single().lastVolume)
+    }
+
+    /** R2-05: the official path has to keep failing closed once it uses the strict sink. */
+    @Test
+    fun aNonNeutralVolumeStillClosesTheOfficialGate() {
+        assumeTrue("Applies to strict output only", guard == PcmGuard.STRICT_SINK)
+        val capturing = CapturingAudioOutputProvider(context, CaptureOptions(answersFormats = true))
+        val violations = mutableListOf<Float>()
+        var gate: StrictGatedAudioOutput? = null
+        val sink = StrictPcmAudioSink(
+            object : ForwardingAudioOutputProvider(capturing) {
+                override fun getAudioOutput(config: AudioOutputProvider.OutputConfig) =
+                    StrictGatedAudioOutput(super.getAudioOutput(config), onNonNeutralVolume = violations::add)
+                        .also { gate = it }
+            },
+        )
+        sink.configure(strictSinkConfig())
+        sink.play()
+        val first = silence()
+        assertFalse("The gate starts closed", sink.handleBuffer(first, 0, 1))
+        assertTrue(checkNotNull(gate).activate())
+        assertTrue(sink.handleBuffer(first, 0, 1))
+
+        sink.setVolume(0.2f)
+
+        assertEquals(listOf(0.2f), violations)
+        assertFalse("The gate should close at once", sink.handleBuffer(silence(), 0, 1))
+    }
+
+    /** All the data has arrived, but ending now would drop what the output has not played. */
+    @Test
+    fun endWaitsForTheOutputToDrain() {
+        val fixture = PcmFixture(PcmContainer.WAV, 48_000, 16, DURATION_MS, seed = 1)
+        val heldFrames = fixture.sampleRateHz / 10
+        capture(CaptureOptions(holdClockAtFrames = (fixture.frameCount - heldFrames).toLong())) { session ->
+            session.play(fixture.write(directory))
+            session.awaitCapturedFrames(fixture.frameCount.toLong())
+            session.assertNotEndedFor(DRAIN_WAIT_MS)
+            session.outputs.single().releaseClock()
+            session.awaitEnded()
+            session.assertEndedAt(fixture.durationUs, "drain")
+        }
+    }
+
+    /** The baseline has to notice an upgrade that changes the fade, whichever way it changes. */
+    @Test
+    fun aDifferentFadeIsCaught() {
+        assumeTrue("Needs no playback, so one mode is enough", guard == PcmGuard.STRICT_SINK)
+        val fade = fadeFrames(48_000).toInt()
+        assertFadeBaseline(fadeResult(first = 0, last = fade - 1, mismatched = fade), fade, "the current fade")
+        listOf(
+            "15 ms" to fadeResult(first = 0, last = fade * 3 / 4 - 1, mismatched = fade * 3 / 4),
+            "25 ms" to fadeResult(first = 0, last = fade * 5 / 4 - 1, mismatched = fade * 5 / 4),
+            "first frame only" to fadeResult(first = 0, last = 0, mismatched = 1),
+            "no fade" to fadeResult(first = -1, last = -1, mismatched = 0),
+            "changes after the fade" to fadeResult(first = 0, last = fade * 2, mismatched = fade + 1),
+            "gaps inside the fade" to fadeResult(first = 0, last = fade - 1, mismatched = fade / 2),
+        ).forEach { (name, result) ->
+            assertThrows(name, AssertionError::class.java) { assertFadeBaseline(result, fade, name) }
+        }
+    }
+
+    /** Ending early would also leave the position short of the source. */
+    @Test
+    fun anEndPositionOffTheSourceIsCaught() {
+        assumeTrue("Needs no playback, so one mode is enough", guard == PcmGuard.STRICT_SINK)
+        val durationUs = 2_000_000L
+        assertEndPosition(durationUs, durationUs, "the end of the source")
+        listOf(0L, 1_000_000L, -1L, durationUs - 10_000, durationUs + 10_000).forEach { reachedUs ->
+            assertThrows("$reachedUs", AssertionError::class.java) {
+                assertEndPosition(reachedUs, durationUs, "$reachedUs")
+            }
+        }
     }
 
     /** A capture is aligned by content, so losing the head of the source shows only here. */
@@ -338,11 +427,7 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
         when (guard) {
             PcmGuard.NONE -> {
                 assertEquals("$label: extra frames before the source", 0, result.leadingFrames)
-                assertEquals("$label: the first frame should be faded", 0, result.firstMismatchFrame)
-                assertTrue(
-                    "$label: changes beyond the $fadeFrames-frame fade, last at ${result.lastMismatchFrame}",
-                    result.lastMismatchFrame in 0 until fadeFrames,
-                )
+                assertFadeBaseline(result, fadeFrames, label)
             }
             PcmGuard.STRICT_SINK -> {
                 assertEquals("$label: ${result.mismatchedFrames} frames differ from the source", 0, result.mismatchedFrames)
@@ -351,6 +436,25 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
             }
         }
     }
+
+    /**
+     * The clock holds still at the sample point. Running at 4x, it moves 4 ms for every real
+     * millisecond between the player reading its position and the output pausing.
+     */
+    private fun progressOptions(fixture: PcmFixture) = CaptureOptions(
+        holdClockAtFrames = Util.durationUsToSampleCount(PROGRESS_SAMPLE_US, fixture.sampleRateHz),
+    )
+
+    private fun strictSinkConfig() = AudioSink.AudioSinkConfig.Builder(
+        Format.Builder()
+            .setSampleMimeType(MimeTypes.AUDIO_RAW)
+            .setPcmEncoding(C.ENCODING_PCM_16BIT)
+            .setChannelCount(PcmFixture.CHANNELS)
+            .setSampleRate(48_000)
+            .build(),
+    ).build()
+
+    private fun silence(): ByteBuffer = ByteBuffer.allocate(4 * PcmFixture.CHANNELS).order(ByteOrder.nativeOrder())
 
     private val PcmFixture.durationUs get() = Util.sampleCountToDurationUs(frameCount.toLong(), sampleRateHz)
 
@@ -401,11 +505,38 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
         private const val SHORT_DURATION_MS = 10
         private const val SEEK_POSITION_MS = 1_000
         private const val PROGRESS_SAMPLE_US = 300_000L
+        private const val DRAIN_WAIT_MS = 500L
     }
 }
 
 private const val TIMEOUT_SECONDS = 60L
 private const val FADE_US = 20_000L
+private const val PROGRESS_TOLERANCE_US = 3_000L
+
+private fun assertFadeBaseline(result: PcmComparison, fadeFrames: Int, label: String) {
+    assertEquals("$label: the first frame should be faded", 0, result.firstMismatchFrame)
+    assertEquals("$label: the fade should end at frame ${fadeFrames - 1}", fadeFrames - 1, result.lastMismatchFrame)
+    assertEquals("$label: every frame of the fade should change", fadeFrames, result.mismatchedFrames)
+}
+
+private fun assertEndPosition(reachedUs: Long, durationUs: Long, label: String) {
+    assertTrue(
+        "$label: position reached $reachedUs us, the source lasts $durationUs us",
+        abs(reachedUs - durationUs) <= PROGRESS_TOLERANCE_US,
+    )
+}
+
+private fun fadeResult(first: Int, last: Int, mismatched: Int) = PcmComparison(
+    capturedFrames = 96_000,
+    notExactSamples = 0,
+    leadingFrames = 0,
+    referenceStartFrame = 0,
+    mismatchedFrames = mismatched,
+    firstMismatchFrame = first,
+    lastMismatchFrame = last,
+    missingTailFrames = 0,
+    trailingFrames = 0,
+)
 
 /** Mirrors `DefaultAudioSink.maybeRampUpVolume()`. */
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -502,11 +633,11 @@ private class CaptureSession(
     fun assertEndedAt(durationUs: Long, label: String) {
         val probe = probe ?: return
         assertTrue("$label: the sink still had pending data at the end", probe.endedWithoutPendingData)
-        val reachedUs = probe.lastPositionUs - probe.firstBufferUs
-        assertTrue(
-            "$label: position reached $reachedUs us, the source lasts $durationUs us",
-            reachedUs <= durationUs + PROGRESS_TOLERANCE_US,
-        )
+        assertEndPosition(probe.endPositionUs - probe.firstBufferUs, durationUs, label)
+    }
+
+    fun assertNotEndedFor(millis: Long) {
+        assertFalse("Ended with audio still in the output", ended.await(millis, TimeUnit.MILLISECONDS))
     }
 
     override fun close() {
@@ -531,14 +662,14 @@ private class CaptureSession(
 
     private companion object {
         const val SETTLE_MS = 300L
-        const val PROGRESS_TOLERANCE_US = 3_000L
     }
 }
 
 /** Records what the renderer saw from the sink under test. */
 @androidx.annotation.OptIn(UnstableApi::class)
 private class PositionProbeAudioSink(sink: AudioSink) : ForwardingAudioSink(sink) {
-    @Volatile var lastPositionUs = 0L
+    /** Read when the sink reports its end: the renderer stops asking for the position after that. */
+    @Volatile var endPositionUs = AudioSink.CURRENT_POSITION_NOT_SET
         private set
 
     @Volatile var endedWithoutPendingData = false
@@ -558,27 +689,27 @@ private class PositionProbeAudioSink(sink: AudioSink) : ForwardingAudioSink(sink
         return super.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
     }
 
-    override fun getCurrentPositionUs(sourceEnded: Boolean): Long =
-        super.getCurrentPositionUs(sourceEnded).also {
-            if (it != AudioSink.CURRENT_POSITION_NOT_SET) lastPositionUs = it
-        }
-
     override fun isEnded(): Boolean = super.isEnded().also {
-        if (it) endedWithoutPendingData = !hasPendingData()
+        if (it) {
+            endedWithoutPendingData = !hasPendingData()
+            endPositionUs = getCurrentPositionUs(true)
+        }
     }
 }
 
 /**
  * M7 D9, still a prototype: it moves to production code in M7-4.
  * PCM goes straight to the output with no processing, so there is nothing to undo.
- * Strict mode already requires neutral volume, speed and skip-silence, and rejects what would
- * need trimming, so those parts of the `AudioSink` contract have nothing to do here.
+ * Strict mode already requires neutral speed and skip-silence, and rejects what would need
+ * trimming, so those parts of the `AudioSink` contract have nothing to do here. Volume goes to the
+ * output, which decides: the official path fails closed, and the direct path ignores it (D11).
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 private class StrictPcmAudioSink(private val provider: AudioOutputProvider) : AudioSink {
     private var listener: AudioSink.Listener? = null
     private var audioAttributes = AudioAttributes.DEFAULT
     private var audioSessionId = C.AUDIO_SESSION_ID_UNSET
+    private var volume = 1f
     private var playing = false
     private var configuration: Configuration? = null
     private var pendingConfiguration: Configuration? = null
@@ -644,6 +775,7 @@ private class StrictPcmAudioSink(private val provider: AudioOutputProvider) : Au
         val active = checkNotNull(configuration) { "handleBuffer before configure" }
         val currentOutput = output ?: provider.getAudioOutput(active.outputConfig).also {
             output = it
+            it.setVolume(volume)
             if (playing) it.play()
         }
         if (startNeedsInit) {
@@ -752,8 +884,11 @@ private class StrictPcmAudioSink(private val provider: AudioOutputProvider) : Au
 
     override fun disableTunneling() = Unit
 
-    /** Only the focus duck factor can arrive here, since strict mode pins the user volume (D11). */
-    override fun setVolume(volume: Float) = Unit
+    /** Only the focus duck factor can differ from 1, since strict mode pins the user volume. */
+    override fun setVolume(volume: Float) {
+        this.volume = volume
+        output?.setVolume(volume)
+    }
 
     private companion object {
         const val MAX_TIMESTAMP_DRIFT_US = 200_000L
