@@ -133,7 +133,7 @@ Vesqen 1.x 免费。曲库、播放和链路功能永久免费。严格 USB 输�
 
 - 产品：[PRODUCT.md](PRODUCT.md)、[需求文档](docs/PRD.md)、[里程碑概览](docs/ROADMAP.md)
 - 设计：[DESIGN.md](DESIGN.md)、[视觉识别](docs/brand/VISUAL_IDENTITY.md)、[重设计方向](docs/redesign/README.md)
-- 工程：[架构审查](docs/ARCHITECTURE_REVIEW.md)、[工程案例](docs/ENGINEERING_CASEBOOK.md)、[开发日志](docs/DEVELOPMENT_LOG.md)
+- 工程：[架构审查](docs/ARCHITECTURE_REVIEW.md)、[工程案例](docs/ENGINEERING_CASEBOOK.md)、[开发日志](docs/DEVELOPMENT_LOG.md)、[Media3 淡入测试报告](docs/MEDIA3_FADE_IN_STUDY.zh-CN.md)
 - 发布：[发布路线与排期](docs/LAUNCH_BACKLOG.md)、[测试版检查表](docs/M4_BETA_RELEASE.md)、[设备验收](docs/M4_DEVICE_ACCEPTANCE.md)
 
 ## 参与贡献与许可证

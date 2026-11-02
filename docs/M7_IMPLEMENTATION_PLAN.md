@@ -30,7 +30,7 @@
 - **传输上限。** 单个等时 URB 最多 128 个包（内核 `USBDEVFS_SUBMITURB`）。
 - **音量键。** Player 报告 `DeviceInfo.PLAYBACK_TYPE_REMOTE` 时，Media3 把媒体会话设为远程音量（`MediaSessionLegacyStub.createVolumeProviderCompat()`）。
 - **现有数据。** 使用统计已经发送 `bitPerfectMixer` 及手机型号和 ROM；设备报告的音频能力部分已经包含 VID/PID 和接口协议，可以看出 UAC 版本。
-- **Media3 淡入。** `DefaultAudioSink` 在每次新建输出或 flush 后，对前 20 ms 的 PCM 做线性淡入，没有开关（1.11.0 源码，1.11.1 所属的上游 main 分支相同）。
+- **Media3 淡入。** `DefaultAudioSink` 在每次新建输出或 flush 后，对前 20 ms 的 PCM 做线性淡入，没有开关（1.11.0 源码，1.11.1 和上游 main 分支相同）。
 - **输出生命周期。** `DefaultAudioSink.flush()` 调用 `AudioOutput.release()`，不调用 `AudioOutput.flush()`；输出报告卡住时，它会在 `handleBuffer()` 内部 flush 并重建。
 - **运行时能力。** UAC2 的采样率和 UAC1、UAC2 的音量范围须经控制请求取得，只能在声明接口后读取。固定频率的 UAC2 时钟可以不支持 `SET`。
 - **逐包状态。** 等时 URB 的总状态不能代替每个包的 `status` 和 `actual_length`。高速端点的服务间隔取决于 `bInterval`。
@@ -50,7 +50,7 @@
 | D7 | 是否增加"这台手机是否开放官方通道"的数据 | 2026-11-02 关闭：不增加。使用统计已经发送 `bitPerfectMixer`，隐私政策已写明；设备报告的音频能力部分已经包含 VID/PID 和接口协议。原记录中"设备报告只记录失败原因"有误，在此更正。 |
 | D8 | USB 授权的持久方式 | 2026-11-02 决定：把匹配音频类设备的 `USB_DEVICE_ATTACHED` 过滤器放在默认禁用的 Activity 上，用户开启严格模式时启用，切回系统输出时禁用。系统授权框由此提供"始终使用"选项（AOSP `canBeDefault()`），代价是启用后插入 DAC 时系统会询问是否打开 Vesqen（待实测）。限制：带麦克风输入的 DAC，在应用没有录音权限时系统不显示该选项（`UsbPermissionActivity`），这类设备每次插入都须授权一次。Vesqen 不为此申请录音权限。 |
 | D9 | 严格模式的样本完整性 | 2026-11-02 决定：用捕获测试比较静音前导（方案 A）和严格 PCM Sink（方案 B），不修改 Media3 源码。比较已完成，两者都通过全部用例，差别见[架构设计](M7_USB_ARCHITECTURE.md)"样本完整性"。**所有者决定采用方案 B。** |
-| D10 | 严格输出的承诺 | 2026-11-02 决定：保持原文件的无损 PCM。解码器输出精度低于源文件时拒绝。第一版支持 16 位和 24 位无损音源；20 位、32 位、浮点 WAV、有损格式和位深未知的音源拒绝并说明原因。Android 9 的 OMX 解码器只输出 16 位，这些设备上的 24 位音源会被拒绝。 |
+| D10 | 严格输出的承诺 | 2026-11-02 决定：保持原文件的无损 PCM。解码器输出精度低于源文件时拒绝。第一版支持 16 位和 24 位无损音源；20 位、32 位、浮点 WAV、有损格式和位深未知的音源拒绝并说明原因。Android 9 上 Vesqen 不向 OMX 解码器请求 float（#107），解码输出为 16 位，这些设备上的 24 位音源会被拒绝。 |
 | D11 | 音频焦点 | 2026-11-02 决定：继续使用 Media3 的自动焦点管理。失去焦点时释放 DAC，暂时失去焦点恢复后重新接管，路由增加不能单独触发接管。duck 时继续播放，不暂停，不缩放 PCM（待实测）。 |
 | D12 | G1 的标准 | 2026-11-02 决定：G1 包含最小的 Media3 到 USB 完整链路，见 M7-2 的完成条件。JBL Flip 7 不能证明的 UAC2 异步反馈和多采样率切换，留给参考 DAC 和 G2。 |
 

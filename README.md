@@ -133,7 +133,7 @@ Keep `app/build/outputs/mapping/<variant>/mapping.txt` with any optimized APK so
 
 - Product: [PRODUCT.md](PRODUCT.md), [requirements](docs/PRD.md), [milestone overview](docs/ROADMAP.md)
 - Design: [DESIGN.md](DESIGN.md), [visual identity](docs/brand/VISUAL_IDENTITY.md), [redesign direction](docs/redesign/README.md)
-- Engineering: [architecture review](docs/ARCHITECTURE_REVIEW.md), [engineering casebook](docs/ENGINEERING_CASEBOOK.md), [development log](docs/DEVELOPMENT_LOG.md)
+- Engineering: [architecture review](docs/ARCHITECTURE_REVIEW.md), [engineering casebook](docs/ENGINEERING_CASEBOOK.md), [development log](docs/DEVELOPMENT_LOG.md), [Media3 fade-in study](docs/MEDIA3_FADE_IN_STUDY.md)
 - Releases: [release roadmap and schedule](docs/LAUNCH_BACKLOG.md), [beta checklist](docs/M4_BETA_RELEASE.md), [device acceptance](docs/M4_DEVICE_ACCEPTANCE.md)
 
 ## Contributing and license

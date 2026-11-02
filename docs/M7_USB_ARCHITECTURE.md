@@ -70,7 +70,7 @@ flowchart TD
 
 ## 样本完整性
 
-Media3 1.11.0 的 `DefaultAudioSink` 会对写入帧数不足 20 ms 的 PCM 做线性淡入（`maybeRampUpVolume()`）。它只判断是否为 PCM 和已写入帧数，没有开关。每次新建输出或 flush 后计数归零。1.11.1 所属的上游 main 分支仍然如此。淡入发生在 `AudioOutput` 之前，输出端无法还原。
+Media3 1.11.0 的 `DefaultAudioSink` 会对写入帧数不足 20 ms 的 PCM 做线性淡入（`maybeRampUpVolume()`）。它只判断是否为 PCM 和已写入帧数，没有开关。每次新建输出或 flush 后计数归零。Media3 1.11.1 和上游 main 分支仍然如此。淡入发生在 `AudioOutput` 之前，输出端无法还原。
 
 捕获测试（`Media3PcmCaptureDeviceTest`）放在 `androidTest`，把 `AudioOutput.write()` 收到的内容保存到内存，与参考 PCM 逐字节比较，不需要 DAC。它只验证到交给输出端的数据，不代表 DAC 收到的内容。音源为 16 位和 24 位的 WAV 与 FLAC。2026-11-02 测得的现状：
 
@@ -98,7 +98,7 @@ Media3 1.11.0 的 `DefaultAudioSink` 会对写入帧数不足 20 ms 的 PCM 做�
 
 不采用的做法：修改 Media3 源码；在输出端反向增益（第一帧已被乘以零，无法还原）；`setAudioProcessors()`（这个入口的处理器只在 int16 路径上执行，float 路径不经过它们）。
 
-这个测试保留为 Media3 升级时的回归测试。已发布版本受到的影响和处理见开发清单的 M7-0。
+这个测试保留为 Media3 升级时的回归测试。已发布版本受到的影响和处理见开发清单的 M7-0。完整的方法和数据见[捕获测试报告](MEDIA3_FADE_IN_STUDY.zh-CN.md)。
 
 ## 接入 Media3
 
