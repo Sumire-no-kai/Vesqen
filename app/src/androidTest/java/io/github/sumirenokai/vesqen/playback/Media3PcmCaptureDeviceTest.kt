@@ -33,6 +33,7 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
@@ -40,6 +41,7 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -79,7 +81,7 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
                 val comparison = output.compareWith(fixture.samples, fixture)
                 report("whole", fixture, comparison)
                 assertStartAsExpected(fixture, comparison, "whole ${fixture.name}")
-                assertEquals("Lost frames at the end of ${fixture.name}", 0, comparison.missingTailFrames)
+                assertWholeSource(comparison, "whole ${fixture.name}")
                 session.assertEndedAt(fixture.durationUs, "whole ${fixture.name}")
             }
         }
@@ -121,7 +123,7 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
                 val comparison = output.compareWith(fixture.samples, fixture)
                 report("prepare", fixture, comparison)
                 assertStartAsExpected(fixture, comparison, "prepare ${fixture.name}")
-                assertEquals("Lost frames at the end of ${fixture.name}", 0, comparison.missingTailFrames)
+                assertWholeSource(comparison, "prepare ${fixture.name}")
             }
         }
     }
@@ -137,8 +139,7 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
                 val comparison = output.compareWith(first.samples + second.samples, first)
                 report("same-format", first, comparison)
                 assertStartAsExpected(first, comparison, "same-format ${first.name}")
-                assertEquals("Lost frames across ${first.name}", 0, comparison.missingTailFrames)
-                assertEquals("Extra frames after ${first.name}", 0, comparison.trailingFrames)
+                assertWholeSource(comparison, "same-format ${first.name}")
             }
         }
     }
@@ -161,8 +162,7 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
                 val comparison = output.compareWith(reference, second)
                 report("mixed-depth", second, comparison)
                 assertStartAsExpected(second, comparison, "mixed-depth")
-                assertEquals("Lost frames across the depth change", 0, comparison.missingTailFrames)
-                assertEquals("Extra frames across the depth change", 0, comparison.trailingFrames)
+                assertWholeSource(comparison, "mixed-depth")
             }
         }
     }
@@ -179,18 +179,15 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
             capture { session ->
                 session.play(*tracks.map { it.write(directory) }.toTypedArray())
                 session.awaitEnded()
-                val checked = tracks.zip(session.outputs).filterNot { (fixture, output) ->
+                // Neighbouring tracks differ in sample rate, so this holds whatever the decoder delivers.
+                assertEquals("Every format change should open one output", tracks.size, session.outputs.size)
+                tracks.zip(session.outputs).filterNot { (fixture, output) ->
                     output.lostPrecision(fixture, "format-change")
-                }
-                // Android 9 decodes 24-bit FLAC to 16 bits, which merges neighbouring formats.
-                if (checked.size == tracks.size) {
-                    assertEquals("Every format change should open one output", tracks.size, session.outputs.size)
-                }
-                checked.forEach { (fixture, output) ->
+                }.forEach { (fixture, output) ->
                     val comparison = output.compareWith(fixture.samples, fixture)
                     report("format-change", fixture, comparison)
                     assertStartAsExpected(fixture, comparison, "format-change ${fixture.name}")
-                    assertEquals("Lost frames at the end of ${fixture.name}", 0, comparison.missingTailFrames)
+                    assertWholeSource(comparison, "format-change ${fixture.name}")
                 }
             }
         }
@@ -266,7 +263,7 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
                 val comparison = output.compareWith(fixture.samples, fixture)
                 report("partial", fixture, comparison)
                 assertStartAsExpected(fixture, comparison, "partial ${fixture.name}")
-                assertEquals("Lost frames at the end of ${fixture.name}", 0, comparison.missingTailFrames)
+                assertWholeSource(comparison, "partial ${fixture.name}")
                 session.assertEndedAt(fixture.durationUs, "partial ${fixture.name}")
             }
         }
@@ -286,7 +283,7 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
                 val comparison = session.outputs.single().compareWith(fixture.samples, fixture)
                 report("stall", fixture, comparison)
                 assertStartAsExpected(fixture, comparison, "stall")
-                assertEquals("Lost frames after the stall", 0, comparison.missingTailFrames)
+                assertWholeSource(comparison, "stall")
             } else {
                 assertEquals("The stall should rebuild the output", 2, session.outputs.size)
                 val comparison = compareCapturedPcm(
@@ -313,6 +310,27 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
         val provider = CapturingAudioOutputProvider(context, CaptureOptions(answersFormats = true))
         val rejected = runCatching { StrictPcmAudioSink(provider).configure(AudioSink.AudioSinkConfig.Builder(format).build()) }
         assertTrue("Strict output must reject what it does not trim", rejected.exceptionOrNull() is AudioSink.ConfigurationException)
+    }
+
+    /** A capture is aligned by content, so losing the head of the source shows only here. */
+    @Test
+    fun aCaptureMissingItsFirstFrameIsCaught() {
+        assumeTrue("Needs no playback, so one mode is enough", guard == PcmGuard.STRICT_SINK)
+        val fixture = PcmFixture(PcmContainer.WAV, 48_000, 16, DURATION_MS / 2, seed = 1)
+        val bytes = ByteBuffer.allocate((fixture.samples.size - PcmFixture.CHANNELS) * 2).order(ByteOrder.LITTLE_ENDIAN)
+        fixture.samples.drop(PcmFixture.CHANNELS).forEach { bytes.putShort(it.toShort()) }
+        val capture = CapturedPcm(C.ENCODING_PCM_16BIT, PcmFixture.CHANNELS, bytes.array())
+        val comparison = compareCapturedPcm(capture, fixture.samples, fixture.bitDepth, probeFrame = 256)
+        assertEquals("Content alone cannot see the loss", 0, comparison.mismatchedFrames)
+        assertEquals(1, comparison.referenceStartFrame)
+        assertThrows(AssertionError::class.java) { assertWholeSource(comparison, "missing first frame") }
+    }
+
+    /** For captures of a whole source: nothing lost at either end, nothing added after it. */
+    private fun assertWholeSource(result: PcmComparison, label: String) {
+        assertEquals("$label: does not start at the first source frame", 0, result.referenceStartFrame)
+        assertEquals("$label: lost frames at the end", 0, result.missingTailFrames)
+        assertEquals("$label: extra frames after the end", 0, result.trailingFrames)
     }
 
     private fun assertStartAsExpected(fixture: PcmFixture, result: PcmComparison, label: String) {
