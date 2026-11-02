@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-**M7 尚未开始编写代码。** 分支 `feature/usb-host-output` 及其 worktree `.claude/worktrees/usb-host-output` 于 2026-10-26 从 `master` 建立，目前没有自己的提交。M7-1 和 M7-2 在这个分支上开发，何时合入 `master` 见 D6。
+**M7-0 已完成（D1 的设备待定），M7 的产品代码尚未开始。** 分支 `feature/usb-host-output` 及其 worktree `.claude/worktrees/usb-host-output` 于 2026-10-26 从 `master` 建立，目前没有自己的提交。M7-1 和 M7-2 在这个分支上开发，何时合入 `master` 见 D6。
 
 可直接复用的部分：
 
@@ -66,9 +66,9 @@
 - [x] 所有者确定 D9（2026-11-02，方案 B）。
 - [x] 把捕获测试合入 `master`（PR #241），只含测试代码；方案 A 已从测试中移除。合入版本在模拟器（Android 16）上连续 2 轮、Honor（Android 9）上 1 轮通过。
 - [x] 决定已发布版本问题的处理（2026-11-02 所有者）：官方路径的 `ACTIVE` 和链路页的"未改动音频"在起播和 seek 后的前 20 ms 并不成立。1.2.0 改文案（#242），2.0 随 M7-4 修复严格模式。
-- [ ] M7-1 开始前，按 D6 把 `feature/usb-host-output` 更新到最新的 `master`。
+- [x] 把 `feature/usb-host-output` 更新到最新的 `master`（2026-11-02，此后按 D6 继续同步）。
 - [x] 建立 [M7 设备验收](M7_DEVICE_ACCEPTANCE.md)，记录方式沿用 [M4 设备验收](M4_DEVICE_ACCEPTANCE.md)。目前没有实测记录。
-- [x] 在修改 `UsbOutputCoordinator` 之前补齐其单元测试：`UsbOutputCoordinatorTest` 使用真实的 `ExoPlayer` 和 Robolectric 模拟的平台，Robolectric 只用于测试，不进入 APK。这些测试保护现有行为，不能证明真实平台和 DAC 的行为，后者以 [M7 设备验收](M7_DEVICE_ACCEPTANCE.md)为准。
+- [x] 在修改 `UsbOutputCoordinator` 之前补齐其单元测试：`UsbOutputCoordinatorTest`（PR #244）使用真实的 `ExoPlayer` 和 Robolectric 模拟的平台，Robolectric 只用于测试，不进入 APK。这些测试保护现有行为，不能证明真实平台和 DAC 的行为，后者以 [M7 设备验收](M7_DEVICE_ACCEPTANCE.md)为准。
 
 ### M7-1 描述符读取（只读）
 
