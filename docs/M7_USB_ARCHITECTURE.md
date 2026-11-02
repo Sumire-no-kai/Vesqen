@@ -16,7 +16,7 @@
 
 ```mermaid
 flowchart TD
-    Player["ExoPlayer<br/>提取、解码、队列"] --> Guard["AudioSink 层<br/>普通输出：DefaultAudioSink<br/>严格模式：StrictPcmAudioSink（D9 待确认）"]
+    Player["ExoPlayer<br/>提取、解码、队列"] --> Guard["AudioSink 层<br/>普通输出：DefaultAudioSink<br/>严格模式：StrictPcmAudioSink（D9）"]
     Guard --> Coordinator["UsbOutputCoordinator<br/>AudioOutputProvider，状态唯一所有者"]
     Coordinator -->|系统输出| Track["AudioTrack<br/>系统混音"]
     Coordinator -->|官方通道| Gated["StrictGatedAudioOutput<br/>官方 bit-perfect mixer"]
@@ -52,7 +52,7 @@ flowchart TD
 
 | 组件 | 位置 | 职责 |
 | --- | --- | --- |
-| `StrictPcmAudioSink` | `:app`，新增（D9 待确认） | 严格模式下把 PCM 不经处理写入 `AudioOutput`，避开 Media3 的淡入（见"样本完整性"）。普通输出仍使用 `DefaultAudioSink`，由一个按模式选择的外层切换，切换只发生在现有的 `stop()` 加 `prepare()` 重建时。 |
+| `StrictPcmAudioSink` | `:app`，新增（D9） | 严格模式下把 PCM 不经处理写入 `AudioOutput`，避开 Media3 的淡入（见"样本完整性"）。普通输出仍使用 `DefaultAudioSink`，由一个按模式选择的外层切换，切换只发生在现有的 `stop()` 加 `prepare()` 重建时。 |
 | `UsbOutputStrategyResolver` | `:app`，修改 | 纯策略判断。结果增加路径：官方通道或自有输出。 |
 | `UsbOutputCoordinator` | `:app`，修改 | 模式、generation、统一判定、状态发布和失败关闭。自有路径的细节委托给 `DirectUsbSession`，不继续把逻辑堆入这个类。修改前先补单元测试（M7-0）。 |
 | `DirectUsbAudioOutput` | `:app`，新增 | 实现 Media3 的 `AudioOutput`。 |
@@ -94,7 +94,7 @@ Media3 1.11.0 的 `DefaultAudioSink` 会对写入帧数不足 20 ms 的 PCM 做�
 | 时钟、流结束、格式切换 | 由 Media3 实现 | 自己实现，已由同一套用例覆盖 |
 | 原型代码量 | 约 60 行 | 约 180 行，另需按模式选择 Sink 的外层 |
 
-**建议采用方案 B（D9，待所有者确认）。** 代价是代码更多，而且时钟和流结束要自己负责。换来的是严格模式的正确性不再依赖 Media3 的内部行为，也不向输出插入任何额外内容。普通输出继续使用 `DefaultAudioSink`。
+**2026-11-02 所有者决定采用方案 B（D9）。** 代价是代码更多，而且时钟和流结束要自己负责。换来的是严格模式的正确性不再依赖 Media3 的内部行为，也不向输出插入任何额外内容。普通输出继续使用 `DefaultAudioSink`。原型目前在测试代码中，M7-4 移入产品代码。
 
 不采用的做法：修改 Media3 源码；在输出端反向增益（第一帧已被乘以零，无法还原）；`setAudioProcessors()`（这个入口的处理器只在 int16 路径上执行，float 路径不经过它们）。
 
@@ -470,7 +470,7 @@ app/src/main/java/.../playback/
   DirectUsbAudioOutput.kt       新增
   ExactPcmConverter.kt          新增
   UsbAttachActivity.kt          新增
-  StrictPcmAudioSink.kt         新增（D9 待确认）
+  StrictPcmAudioSink.kt         新增（D9）
   UsbOutputCoordinator.kt       修改
   UsbOutputStrategyResolver.kt  修改
   UsbOutputState.kt             修改
