@@ -168,6 +168,8 @@ internal data class CaptureOptions(
     val maxFramesPerWrite: Int = Int.MAX_VALUE,
     /** The first output reports one stall after this many frames. */
     val stallAfterFrames: Long? = null,
+    /** The clock stops here until [CapturingAudioOutput.releaseClock], so data stays unplayed. */
+    val holdClockAtFrames: Long? = null,
 )
 
 /** Answers format questions like the real provider, but keeps what Media3 writes. */
@@ -196,6 +198,7 @@ internal class CapturingAudioOutputProvider(
         config,
         options.maxFramesPerWrite,
         options.stallAfterFrames.takeIf { outputs.isEmpty() },
+        options.holdClockAtFrames,
     ).also(outputs::add)
 }
 
@@ -205,6 +208,7 @@ internal class CapturingAudioOutput(
     private val config: AudioOutputProvider.OutputConfig,
     private val maxFramesPerWrite: Int = Int.MAX_VALUE,
     private var stallAfterFrames: Long? = null,
+    private var holdClockAtFrames: Long? = null,
 ) : AudioOutput {
     private val channelCount = Integer.bitCount(config.channelMask)
     private val frameSize = Util.getPcmFrameSize(config.encoding, channelCount)
@@ -221,6 +225,12 @@ internal class CapturingAudioOutput(
     val capturedFrames: Long get() = synchronized(lock) { writtenFrames }
     val isPlaying: Boolean get() = synchronized(lock) { playStartedNanos != NOT_PLAYING }
 
+    @Volatile
+    var lastVolume = 1f
+        private set
+
+    fun releaseClock() = synchronized(lock) { holdClockAtFrames = null }
+
     fun capturedPcm() = CapturedPcm(config.encoding, channelCount, synchronized(lock) { captured.toByteArray() })
 
     private fun consumedFrames(): Long {
@@ -229,7 +239,7 @@ internal class CapturingAudioOutput(
         } else {
             (SystemClock.elapsedRealtimeNanos() - playStartedNanos) * config.sampleRate * CLOCK_SPEED / 1_000_000_000L
         }
-        return min(consumedAtPlay + running, writtenFrames)
+        return min(min(consumedAtPlay + running, writtenFrames), holdClockAtFrames ?: Long.MAX_VALUE)
     }
 
     override fun play() = synchronized(lock) {
@@ -261,7 +271,9 @@ internal class CapturingAudioOutput(
         listeners.forEach(AudioOutput.Listener::onReleased)
     }
 
-    override fun setVolume(volume: Float) = Unit
+    override fun setVolume(volume: Float) {
+        lastVolume = volume
+    }
 
     override fun isOffloadedPlayback() = false
 

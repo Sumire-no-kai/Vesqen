@@ -102,7 +102,7 @@
 
 ### M7-4 接入播放服务
 
-- [ ] 按 D9 把 `StrictPcmAudioSink` 从测试移入产品代码并接入 `VesqenAudioRenderersFactory`，增加按模式选择 Sink 的外层。普通输出不变，切换只发生在现有的 `stop()` 加 `prepare()` 重建时。官方路径同样改用它，修复已发布版本中 `ACTIVE` 的前 20 ms 淡入。普通输出的淡入保留，链路页的说法随之保留这一点。
+- [ ] 按 D9 把 `StrictPcmAudioSink` 从测试移入产品代码并接入 `VesqenAudioRenderersFactory`，增加按模式选择 Sink 的外层。普通输出不变，切换只发生在现有的 `stop()` 加 `prepare()` 重建时。官方路径同样改用它，修复已发布版本中 `ACTIVE` 的前 20 ms 淡入。Sink 把音量转交给输出，由输出决定处理方式：官方路径失败关闭，自有路径按 D11 记录后忽略。普通输出的淡入保留，链路页的说法随之保留这一点。
 - [ ] `UsbOutputStrategyResolver` 增加自有输出候选：官方通道不可用、用户已开启严格模式、已授予 USB 权限、描述符确认支持当前源格式。路径按 USB 连接选择，不按曲目切换。由 `vesqen.directUsb` 构建开关控制，到 2.0.0-beta.1 时开启。
 - [ ] 建立统一判定 `reconcile()`：服务启动、模式切换、权限结果、USB 插拔广播、`UsbAttachActivity` 和路由变化都进入这一流程。路由增加只更新事实。
 - [ ] `UsbOutputCoordinator.getAudioOutput()` 为自有输出返回 `DirectUsbAudioOutput`，覆盖播放、暂停、flush、seek、切歌、格式变化和服务重建。

@@ -91,8 +91,9 @@ On Android 9, 24-bit FLAC reaches the output with only 16 bits. To avoid the cra
 | Comparison (baseline, A, B) | Honor | 36 | 2 | All passed, 1 skipped by design |
 | Merged (baseline, B) | Emulator | 26 | 2 | All passed, 2 skipped by design |
 | Merged (baseline, B) | Honor | 26 | 1 | All passed, 2 skipped by design |
+| After tightening the assertions (baseline, B) | Emulator | 36 | 3 | All passed, 6 skipped by design |
 
-The skipped cases apply to strict mode only, not to the baseline.
+The skipped cases apply to strict mode only, or need no playback and run once. After tightening the assertions, the suite was not rerun on the Honor.
 
 ## 5. Discussion
 
@@ -102,7 +103,7 @@ The skipped cases apply to strict mode only, not to the baseline.
 
 **About Media3.** This study does not consider the fade a defect in Media3, which is a general-purpose library that makes no promise of sample identity. It also does not assess how the fade sounds in normal playback.
 
-**A flaw in the test itself.** The comparison aligns by content, so a capture that lost its first frames could originally pass. Automated code review found this. Whole-source captures must now start at the first frame, with a regression test.
+**A flaw in the test itself.** The comparison aligns by content, so a capture that lost its first frames could originally pass. Automated code review found this. Whole-source captures must now start at the first frame, with a regression test. A later independent review found two loose assertions: the end-of-stream check had only an upper bound on the position, and the baseline only limited the fade to at most 20 ms, so a 15 ms fade would also pass. Both are now tightened, with regression tests. Separately, a progress case was sensitive to timing under the 4x simulated clock and failed occasionally; it now freezes the clock at its sample point.
 
 ## 6. Limitations
 
