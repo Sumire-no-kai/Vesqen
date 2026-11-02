@@ -218,7 +218,9 @@ JNI 接口保持很小：`create(fd, config)`、`start()`、`write(directBuffer,
 
 - 只有用户操作才弹出系统授权框。服务启动和恢复队列时没有权限，只显示状态（沿用 #34 的规则）。拒绝授权时报告 `USB_PERMISSION_DENIED`。
 - 用户关闭麦克风访问时，系统会拒绝带麦克风输入的设备的 USB 权限。应用无法区分这种情况和普通拒绝，因此失败说明须同时提到这一可能。
-- 授权的持久方式见 [D8](M7_IMPLEMENTATION_PLAN.md#决定事项)。
+- 按 D8，清单声明 `UsbAttachActivity`，带 `USB_DEVICE_ATTACHED` 过滤器（`<usb-device class="1" />`，系统也会匹配接口类别，因此复合设备同样适用）。它默认禁用，用户开启严格模式时启用，切回系统输出时禁用，未开启严格模式的用户插入 DAC 时不受打扰。
+- 用户选择"始终使用"后，系统在插入时直接授权并启动这个 Activity。它不显示界面，也不读取任何参数，立即结束；重新判定由现有的 `onAudioDevicesAdded()` 触发。
+- 带麦克风输入的 DAC 是例外：应用没有录音权限时，系统不显示"始终使用"（`UsbPermissionActivity`），这类设备每次插入都须授权一次。Vesqen 不为此申请录音权限。
 
 ## 状态与失败原因
 
@@ -247,6 +249,7 @@ JNI 接口保持很小：`create(fd, config)`、`start()`、`write(directBuffer,
 
 - 描述符解析使用带边界检查的 Kotlin 代码。长度异常或拓扑不完整时报告 `DESCRIPTOR_UNSUPPORTED`，不崩溃。
 - native 层再次校验配置：包长不超过 `wMaxPacketSize`，反馈值限制在范围内，`actual_length` 不超过缓冲区。
+- `UsbAttachActivity` 必须导出才能接收系统启动，因此不读取 Intent，不显示界面，也不执行其他操作。
 - 不新增网络传输。使用统计已经发送 `bitPerfectMixer`，设备报告的音频能力部分已经包含 VID/PID 和接口协议（D7）。
 - 本机新增保存：按 VID/PID 记录的音量和固定音量确认，以及接管标记。隐私政策须在 2.0 发布前写明。
 
@@ -298,5 +301,6 @@ app/src/debug/                  M7-1 的描述符读取入口和 M7-2 的技术�
 | 进程被结束后可以经重新声明和释放恢复驱动 | M7-2 | 在说明中提示重新插拔 |
 | 接管期间没有系统音频，息屏后 ROM 不会冻结进程 | M7-2，息屏播放 30 分钟 | 评估另开一条送往手机扬声器的静音 `AudioTrack`，它不接触 USB 数据 |
 | 高优先级和当前缓冲参数足以避免欠载 | M7-2 | 增大 URB 数量和环形缓冲 |
+| Activity 禁用时插入 DAC 不出现询问；启用后授权框提供"始终使用"，选择后下次插入自动授权 | M7-2 | 不声明过滤器，改为每次插入后由系统授权框询问一次 |
 | JBL Flip 7 的 UAC 版本、反馈方式和 Feature Unit | M7-1 | 影响开发顺序，不影响 D3 的范围 |
 | 音量键能经远程音量接口到达 Vesqen（vivo ROM） | M7-5 | 只在应用内和 DAC 上调节音量，并在说明中写明 |
