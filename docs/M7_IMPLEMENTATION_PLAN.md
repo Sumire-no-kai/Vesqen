@@ -64,7 +64,7 @@
 - [ ] D1 的设备在具备购买条件后确定，不阻挡 M7-1 和 M7-2。
 - [x] 写 Media3 到 PCM 的捕获测试（[架构设计](M7_USB_ARCHITECTURE.md)"样本完整性"），确认现状并比较方案 A 和 B。模拟器（Android 16）连续 5 轮、Honor（Android 9）连续 2 轮通过；Honor 上的 24 位 FLAC 因解码为 16 位而没有做字节比较。
 - [x] 所有者确定 D9（2026-11-02，方案 B）。
-- [ ] 把捕获测试合入 `master`，只含测试代码；方案 A 已从测试中移除。
+- [x] 把捕获测试合入 `master`（PR #241），只含测试代码；方案 A 已从测试中移除。合入版本在模拟器（Android 16）上连续 2 轮、Honor（Android 9）上 1 轮通过。
 - [ ] 按捕获测试的结果处理已发布版本的问题：官方路径的 `ACTIVE` 和链路页的"未改动音频"在起播和 seek 后的前 20 ms 并不成立，`AppSegmentAssessment` 中"Vesqen 没有淡入"的注释也须更正。修复进入 1.x 还是 2.0，由所有者决定。
 - [ ] M7-1 开始前，按 D6 把 `feature/usb-host-output` 更新到最新的 `master`。
 - [ ] 开始真机测试前建立 `docs/M7_DEVICE_ACCEPTANCE.md`，记录格式沿用 [M4 设备验收](M4_DEVICE_ACCEPTANCE.md)。
