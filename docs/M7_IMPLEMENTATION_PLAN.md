@@ -65,7 +65,7 @@
 - [x] 写 Media3 到 PCM 的捕获测试（[架构设计](M7_USB_ARCHITECTURE.md)"样本完整性"），确认现状并比较方案 A 和 B。模拟器（Android 16）连续 5 轮、Honor（Android 9）连续 2 轮通过；Honor 上的 24 位 FLAC 因解码为 16 位而没有做字节比较。
 - [x] 所有者确定 D9（2026-11-02，方案 B）。
 - [x] 把捕获测试合入 `master`（PR #241），只含测试代码；方案 A 已从测试中移除。合入版本在模拟器（Android 16）上连续 2 轮、Honor（Android 9）上 1 轮通过。
-- [ ] 按捕获测试的结果处理已发布版本的问题：官方路径的 `ACTIVE` 和链路页的"未改动音频"在起播和 seek 后的前 20 ms 并不成立，`AppSegmentAssessment` 中"Vesqen 没有淡入"的注释也须更正。修复进入 1.x 还是 2.0，由所有者决定。
+- [x] 决定已发布版本问题的处理（2026-11-02 所有者）：官方路径的 `ACTIVE` 和链路页的"未改动音频"在起播和 seek 后的前 20 ms 并不成立。1.2.0 改文案（#242），2.0 随 M7-4 修复严格模式。
 - [ ] M7-1 开始前，按 D6 把 `feature/usb-host-output` 更新到最新的 `master`。
 - [ ] 开始真机测试前建立 `docs/M7_DEVICE_ACCEPTANCE.md`，记录格式沿用 [M4 设备验收](M4_DEVICE_ACCEPTANCE.md)。
 - [ ] 在修改 `UsbOutputCoordinator` 之前补齐其单元测试（[发布待办](LAUNCH_BACKLOG.md)"1.1.0 之后、2.0 之前"中的遗留项）。
@@ -102,7 +102,7 @@
 
 ### M7-4 接入播放服务
 
-- [ ] 按 D9 把 `StrictPcmAudioSink` 从测试移入产品代码并接入 `VesqenAudioRenderersFactory`，增加按模式选择 Sink 的外层。普通输出不变，切换只发生在现有的 `stop()` 加 `prepare()` 重建时。
+- [ ] 按 D9 把 `StrictPcmAudioSink` 从测试移入产品代码并接入 `VesqenAudioRenderersFactory`，增加按模式选择 Sink 的外层。普通输出不变，切换只发生在现有的 `stop()` 加 `prepare()` 重建时。官方路径同样改用它，修复已发布版本中 `ACTIVE` 的前 20 ms 淡入。普通输出的淡入保留，链路页的说法随之保留这一点。
 - [ ] `UsbOutputStrategyResolver` 增加自有输出候选：官方通道不可用、用户已开启严格模式、已授予 USB 权限、描述符确认支持当前源格式。路径按 USB 连接选择，不按曲目切换。由 `vesqen.directUsb` 构建开关控制，到 2.0.0-beta.1 时开启。
 - [ ] 建立统一判定 `reconcile()`：服务启动、模式切换、权限结果、USB 插拔广播、`UsbAttachActivity` 和路由变化都进入这一流程。路由增加只更新事实。
 - [ ] `UsbOutputCoordinator.getAudioOutput()` 为自有输出返回 `DirectUsbAudioOutput`，覆盖播放、暂停、flush、seek、切歌、格式变化和服务重建。
