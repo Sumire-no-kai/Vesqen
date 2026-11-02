@@ -15,6 +15,7 @@ The normative scope, acceptance criteria, and product boundaries live in [PRD.md
 - **M7 — Vesqen's own USB output (required for 2.0):** strict USB output on phones without the official bit-perfect mixer path, selected by the same strategy resolver.
   - [Implementation plan](M7_IMPLEMENTATION_PLAN.md): verified platform facts, owner decisions, and phased work. No code has been written yet.
   - [Architecture](M7_USB_ARCHITECTURE.md): how the USB engine connects to Media3, the takeover lifecycle, the data path, and the assumptions the spike must verify.
+  - [Architecture review](M7_USB_ARCHITECTURE_REVIEW.md): nine findings and how each was resolved.
 
 A build, passing test, implemented API call, or matching DAC display does not by itself complete an audio-verification milestone. Completion requires the corresponding PRD acceptance evidence.
 
