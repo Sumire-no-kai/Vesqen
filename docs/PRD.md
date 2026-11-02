@@ -384,7 +384,7 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 
 长期候选目标是在 Android 8–13 上通过 USB Host API 直接管理 UAC 设备，包括权限、interface、endpoint、连接、异步传输、格式协商和时钟行为。
 
-该模块具有显著兼容性和维护成本，只有在 Android 14+ 路径完成、设备矩阵成熟且用户价值被验证后才启动。初始实验应先限定 UAC1 PCM，之后再评估 UAC2、异步反馈、DSD/DoP 和多声道。
+该模块具有显著兼容性和维护成本，只有在 Android 14+ 路径完成、设备矩阵成熟且用户价值被验证后才启动。第一版范围为 UAC1 和 UAC2 双声道 PCM，包含异步反馈（2026-11-02 决定，见 M7）；之后再评估 DSD/DoP 和多声道。
 
 ### F11：轻量端侧音频智能（实验性可选模块）
 
@@ -711,15 +711,17 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 
 候选范围：
 
-- 实现与 M3 相同 USB 输出 Interface 的 `DirectUsbHostAdapter`，由同一个 `UsbOutputStrategyResolver` 选择。
+- 实现自有输出，由同一个 `UsbOutputStrategyResolver` 选择。本文其他章节的 `DirectUsbHostAdapter` 在架构设计中对应 `DirectUsbAudioOutput` 和 `:usb-engine` 模块。
 - USB Host 权限和设备生命周期。
-- UAC1 PCM 格式协商与传输。
+- UAC1 和 UAC2 双声道 PCM 的格式协商与传输，包含异步反馈（2026-11-02 决定）。
 - 缓冲、时钟、反馈、错误恢复和热插拔。
-- 后续再评估 UAC2、异步传输、多声道与 DSD/DoP。
+- 后续再评估多声道与 DSD/DoP。
 
 该阶段原为实验性能力。2026-10-01 所有者决定 M7 必须做，目标是 2.0：测过的 Android 14+ 手机（vivo、iQOO，Android 15 和 16）都没有开放官方 bit-perfect 通道。它不阻挡 1.0。
 
-实施清单、已核实的平台事实和待定事项见 [M7 开发清单](M7_IMPLEMENTATION_PLAN.md)（2026-10-30）。
+完成条件（2026-11-02 所有者决定，#71）：严格 USB 输出失败时，必须说明卡在哪个环节。复用官方路径的失败原因机制，不使用笼统的"播放失败"，至少覆盖 USB Host 权限、设备枚举与生命周期（含拔出和热插拔）、UAC 版本与接口和 endpoint 选择、格式协商、传输与缓冲错误、时钟与反馈，以及设备组合不在支持范围内。失败原因同时出现在播放界面、链路页和设备报告中；原因只陈述实际观察到的情况，无法确定环节时明确说明；失败时停止播放，不自动切换回系统输出，也不提升状态。
+
+架构见 [M7 架构设计](M7_USB_ARCHITECTURE.md)；实施清单、已核实的平台事实和决定事项见 [M7 开发清单](M7_IMPLEMENTATION_PLAN.md)。
 
 ### M8：端侧音频智能（可选）
 

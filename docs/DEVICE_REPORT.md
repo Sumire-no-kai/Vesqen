@@ -169,8 +169,9 @@ Basic Build strings are checked separately; filtered values are null. As in usag
 self-built ROM's `eng.`/`userdebug.` builder login is dropped from the build name. They are not
 cross-checked against route names: the built-in speaker route is named after the
 phone model. USB inventory
-keeps numeric capabilities and per-report ordinals, without device identifiers or
-names. Filenames are never emitted when their option is off.
+keeps vendor and product IDs, audio interface class numbers, numeric capabilities and
+per-report ordinals, without names or serial numbers. Filenames are never emitted when
+their option is off.
 
 The Bluetooth codec Android reports (#73, source `android.bluetooth_codec_report`)
 is exported as `route.bluetooth_codec`, only when the name is in
