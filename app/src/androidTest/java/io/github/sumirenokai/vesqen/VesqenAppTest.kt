@@ -3699,6 +3699,30 @@ class VesqenAppTest {
     }
 
     @Test
+    fun compact_navigation_keeps_its_height_and_selection_mark_at_default_text() =
+        assertCompactNavigationHoldsItsContent(fontScale = 1f)
+
+    @Test
+    fun compact_navigation_keeps_its_height_and_selection_mark_at_120_percent_text() =
+        assertCompactNavigationHoldsItsContent(fontScale = 1.2f)
+
+    @Test
+    fun compact_navigation_keeps_its_height_and_selection_mark_at_200_percent_text() =
+        assertCompactNavigationHoldsItsContent(fontScale = 2f)
+
+    private fun assertCompactNavigationHoldsItsContent(fontScale: Float) {
+        render(state = grantedState(), containerWidth = 360.dp, containerHeight = 720.dp, fontScale = fontScale)
+
+        composeRule.onNodeWithTag("vesqen.navigation.compact").assertHeightIsEqualTo(56.dp)
+        val bar = composeRule.onNodeWithTag("vesqen.navigation.compact").fetchSemanticsNode().boundsInRoot
+        val mark = composeRule.onNodeWithTag("vesqen.nav.settings.mark", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val label = composeRule.onNodeWithText(context.getString(R.string.destination_settings), useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue("The selection mark must stay inside the bar: bar=$bar, mark=$mark", mark.bottom <= bar.bottom)
+        assertTrue("The mark must stay under its label: label=$label, mark=$mark", label.bottom <= mark.top)
+    }
+
+    @Test
     fun compact_navigation_labels_keep_bottom_breathing_room() {
         render(
             state = grantedState(),
