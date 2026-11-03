@@ -87,7 +87,10 @@ private val transitionEvents = setOf(
  *   before the AudioTrack is Vesqen's; AAC is the exception, as SBR/PS change both in the codec.
  * - Audio-focus ducking is not a condition: on Android 8+ Media3 does not pause music for
  *   ducking, so the system ducks it in its mixer, after this segment (owner decision 2026-10-04).
- * - Vesqen has no fade feature; crossfade is covered by its processing flag.
+ * - Vesqen adds no fade of its own; crossfade is covered by its processing flag. Media3's
+ *   DefaultAudioSink fades in the first 20 ms after a start, seek, re-prepare or format change
+ *   with no switch to turn it off, and telemetry does not observe samples. It is therefore not a
+ *   condition here, and the verdict text states it instead (#242).
  */
 internal fun assessAppSegment(
     snapshot: TelemetrySnapshot,

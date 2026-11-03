@@ -304,7 +304,7 @@
     <string name="chain_strict_applying_title">厳格 USB 出力を準備中</string>
     <string name="chain_strict_applying_body">Vesqen は Media3 の AudioTrack を再作成し、ミキサー設定の読み戻し結果と実際の出力先を確認しています。</string>
     <string name="chain_strict_active_title">厳格 USB 出力が有効</string>
-    <string name="chain_strict_active_body">%1$s は %2$s を使用中で、AudioTrack、ミキサーの優先設定、出力先が一致しています。出力信号の外部検証は、これとは別の根拠です。</string>
+    <string name="chain_strict_active_body">%1$s は %2$s を使用中で、AudioTrack、ミキサーの優先設定、出力先が一致しています。再生開始、シーク、形式の切り替えの直後 20 ミリ秒にはフェードインが入ります。出力信号の外部検証は、これとは別の根拠です。</string>
     <string name="chain_verified_title">外部で検証済みの出力</string>
     <string name="chain_verified_body">記録 %1$s は、このアプリのビルド、スマートフォンと ROM、DAC、ソース形式、出力形式がすべて一致する構成での検証結果です。検証方法：%2$s。</string>
     <string name="chain_strict_failed_title">再生を停止しました</string>
@@ -849,9 +849,9 @@
     <string name="chain_segment_app">Vesqen の部分</string>
     <string name="chain_segment_system">システムの部分</string>
     <string name="chain_segment_waiting">データを待っています</string>
-    <string name="chain_segment_unchanged_lossless">音声は変更していません。ロスレスです。</string>
-    <string name="chain_segment_unchanged_lossy">音声に追加の変更は加えていません。</string>
-    <string name="chain_segment_unchanged">音声は変更していません。</string>
+    <string name="chain_segment_unchanged_lossless">再生開始、シーク、形式の切り替えの直後 20 ミリ秒のフェードインを除き、音声は変更していません。ロスレスです。</string>
+    <string name="chain_segment_unchanged_lossy">再生開始、シーク、形式の切り替えの直後 20 ミリ秒のフェードインを除き、音声に追加の変更は加えていません。</string>
+    <string name="chain_segment_unchanged">再生開始、シーク、形式の切り替えの直後 20 ミリ秒のフェードインを除き、音声は変更していません。</string>
     <string name="chain_segment_modified">音声を変更しています（%1$s）。</string>
     <string name="chain_segment_unknown">まだ判断できません（%1$s）。</string>
     <string name="chain_segment_reason_transition">曲の切り替えか出力の再起動の直後</string>

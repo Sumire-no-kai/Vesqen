@@ -311,7 +311,7 @@
     <string name="chain_strict_applying_title">Preparing strict USB output</string>
     <string name="chain_strict_applying_body">Vesqen is rebuilding the Media3 AudioTrack and checking the mixer readback and actual route.</string>
     <string name="chain_strict_active_title">Strict USB output active</string>
-    <string name="chain_strict_active_body">%1$s is using %2$s with a matching AudioTrack, mixer preference and route. External signal verification remains separate.</string>
+    <string name="chain_strict_active_body">%1$s is using %2$s with a matching AudioTrack, mixer preference and route. The first 20 ms after starting, seeking or changing format are faded in. External signal verification remains separate.</string>
     <string name="chain_verified_title">Externally verified output</string>
     <string name="chain_verified_body">Record %1$s verifies this exact app build, phone/ROM, DAC, source format and sink format. Method: %2$s.</string>
     <string name="chain_strict_failed_title">Playback stopped</string>
@@ -875,9 +875,9 @@
     <string name="chain_segment_app">Vesqen’s part</string>
     <string name="chain_segment_system">The system’s part</string>
     <string name="chain_segment_waiting">Waiting for data</string>
-    <string name="chain_segment_unchanged_lossless">Audio unchanged, lossless.</string>
-    <string name="chain_segment_unchanged_lossy">No further changes to the audio.</string>
-    <string name="chain_segment_unchanged">Audio unchanged.</string>
+    <string name="chain_segment_unchanged_lossless">Audio unchanged and lossless, except for a 20 ms fade-in after starting, seeking or changing format.</string>
+    <string name="chain_segment_unchanged_lossy">No further changes to the audio, except for a 20 ms fade-in after starting, seeking or changing format.</string>
+    <string name="chain_segment_unchanged">Audio unchanged, except for a 20 ms fade-in after starting, seeking or changing format.</string>
     <string name="chain_segment_modified">Audio changed: %1$s.</string>
     <string name="chain_segment_unknown">Not yet determined: %1$s.</string>
     <string name="chain_segment_reason_transition">a track change or output restart is in progress</string>
