@@ -152,6 +152,7 @@ Vesqen 的长期差异化来自“可验证的播放链路”，而不只是格�
 - 无损：FLAC、ALAC、WAV、AIFF。
 - 常用有损：MP3、AAC/M4A、Ogg Vorbis、Opus（以平台和所选解码器支持为准）。
 - PCM：16-bit、24-bit、32-bit integer；浮点 PCM 作为后续兼容项。
+- AIFF 由 Vesqen 自带的解析器读取（Media3 没有，#268），样本转换为小端后走 WAV 的同一路径。支持 AIFF 和 AIFF-C 的 `NONE`、`twos`、`in24`、`in32`、`sowt`；8 位、浮点、A-law 和 µ-law 不支持。
 - 采样率：按解码器、系统输出设备和 DAC 实际能力协商，不宣传固定上限。
 
 元数据目标：

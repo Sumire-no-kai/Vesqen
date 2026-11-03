@@ -52,6 +52,31 @@ class SourceAudioHeaderTest {
         assertEquals(SourceAudioHeader(48_000, 2, 24), readSourceAudioHeader(input))
     }
 
+    @Test fun aiffReadsItsFactsAndDurationFromBigEndianChunks() {
+        val aiff = form("AIFF", beChunk("NAME", byteArrayOf(65)) + beChunk("COMM", comm(24, 96_000, 192_000)))
+        assertEquals(SourceAudioHeader(96_000, 2, 24, durationMs = 2_000), read(aiff))
+        val aifc = form("AIFC", beChunk("COMM", comm(16, 44_100, 0) + "sowt".toByteArray()))
+        assertEquals(SourceAudioHeader(44_100, 2, 16), read(aifc))
+    }
+
+    @Test fun aiffVesqenCannotPlayOrCutFilesAreUnknown() {
+        assertNull(read(form("AIFC", beChunk("COMM", comm(32, 48_000, 10) + "fl32".toByteArray()))))
+        assertNull(read(form("AIFF", beChunk("COMM", comm(8, 48_000, 10)))))
+        assertNull(read(form("AIFF", beChunk("COMM", ByteArray(4)))))
+        assertNull(read(form("AIFF", beChunk("SSND", ByteArray(16)) + beChunk("COMM", comm(16, 48_000, 10)))))
+        val valid = form("AIFF", beChunk("COMM", comm(16, 48_000, 10)))
+        for (length in 0 until valid.size) assertNull(read(valid.copyOf(length)))
+    }
+
+    private fun comm(bits: Int, rate: Int, frames: Int): ByteArray {
+        val exponent = 31 - Integer.numberOfLeadingZeros(rate)
+        return ByteBuffer.allocate(18).putShort(2).putInt(frames).putShort(bits.toShort())
+            .putShort((16383 + exponent).toShort()).putLong(rate.toLong() shl (63 - exponent)).array()
+    }
+    private fun beChunk(id: String, bytes: ByteArray) =
+        id.toByteArray() + ByteBuffer.allocate(4).putInt(bytes.size).array() + bytes + ByteArray(bytes.size % 2)
+    private fun form(type: String, chunks: ByteArray) =
+        "FORM".toByteArray() + ByteBuffer.allocate(4).putInt(chunks.size + 4).array() + type.toByteArray() + chunks
     private fun read(bytes: ByteArray) = readSourceAudioHeader(bytes.inputStream())
     private fun pcmFormat(code: Int, bits: Int) = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
         .putShort(code.toShort()).putShort(2).putInt(48_000).putInt(48_000 * 2 * bits / 8)

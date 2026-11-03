@@ -246,7 +246,7 @@ class PlaybackService : MediaSessionService() {
         val telemetry = (application as VesqenApplication).telemetryRuntime
         val dataSourceFactory = DefaultDataSource.Factory(this)
             .setTransferListener(telemetry.transferListener)
-        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory, VesqenExtractorsFactory())
         val outputStateRepository = (application as VesqenApplication).usbOutputStateRepository
         val outputCoordinator = UsbOutputCoordinator(
             this,

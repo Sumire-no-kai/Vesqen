@@ -35,7 +35,7 @@ internal class LocalAudioMetadataReader(private val context: Context) {
             title = tagMetadata.title.ifBlank { candidate.title },
             artist = tagMetadata.artist.ifBlank { candidate.artist },
             album = tagMetadata.album.ifBlank { candidate.album },
-            durationMs = tagMetadata.durationMs.takeIf { it > 0 } ?: candidate.durationMs,
+            durationMs = tagMetadata.durationMs.takeIf { it > 0 } ?: sourceHeader?.durationMs ?: candidate.durationMs,
             mimeType = resolvedMime,
             albumArtist = tagMetadata.albumArtist.ifBlank { candidate.albumArtist },
             trackNumber = tagMetadata.trackNumber ?: candidate.trackNumber,
