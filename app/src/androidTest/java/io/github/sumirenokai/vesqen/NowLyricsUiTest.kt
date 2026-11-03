@@ -155,15 +155,19 @@ class NowLyricsUiTest {
     }
 
     @Test
-    fun accessibilityServicesReachTheCoverSwitchAndEachLine() {
+    fun theMoreMenuNamesTheSwitchAndAccessibilityServicesCanClickEachLine() {
+        var shown by mutableStateOf(true)
         var toggles = 0
         val seeks = mutableListOf<Long>()
-        setNow(onToggleLyrics = { toggles++ }, onSeek = { seeks += it })
+        setNow(lyricsShown = { shown }, onToggleLyrics = { toggles++; shown = !shown }, onSeek = { seeks += it })
 
-        compose.onNodeWithTag("vesqen.now.lyrics.show-cover")
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf(context.getString(R.string.lyrics_show_cover))))
-            .performSemanticsAction(SemanticsActions.OnClick)
-        compose.runOnIdle { assertEquals(1, toggles) }
+        compose.onNodeWithTag("vesqen.now.more").performClick()
+        compose.onNodeWithTag("vesqen.now.toggle-lyrics").assert(hasText(context.getString(R.string.lyrics_show_cover))).performClick()
+        compose.onNodeWithTag("vesqen.now.artwork-stage").assertIsDisplayed()
+        compose.onNodeWithTag("vesqen.now.more").performClick()
+        compose.onNodeWithTag("vesqen.now.toggle-lyrics").assert(hasText(context.getString(R.string.lyrics_show))).performClick()
+        compose.onNodeWithTag("vesqen.now.lyrics").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(2, toggles) }
 
         val goToLine = context.getString(R.string.lyrics_play_from_line)
         compose.onNodeWithTag("vesqen.now.lyrics.line.2").assert(
@@ -173,7 +177,7 @@ class NowLyricsUiTest {
         compose.onNodeWithTag("vesqen.now.lyrics.line.0").performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle {
             assertEquals(listOf(9_000L, 1_000L), seeks)
-            assertEquals(1, toggles)
+            assertEquals(2, toggles)
         }
     }
 

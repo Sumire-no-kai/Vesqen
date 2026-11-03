@@ -56,6 +56,7 @@ import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
@@ -816,6 +817,13 @@ private fun NowMoreMenu(actions: NowActions, isLandscape: Boolean) {
             Icon(Icons.Filled.MoreVert, stringResource(R.string.now_more_options))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            // #209: the switch for accessibility services and keyboards, which cannot use the tap.
+            DropdownMenuItem(
+                text = { Text(stringResource(if (actions.lyricsShown) R.string.lyrics_show_cover else R.string.lyrics_show)) },
+                leadingIcon = { Icon(Icons.Filled.Lyrics, null) },
+                onClick = { expanded = false; actions.onToggleLyrics() },
+                modifier = Modifier.testTag("vesqen.now.toggle-lyrics"),
+            )
             actions.onImportLyrics?.let { importLyrics ->
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.lyrics_import)) },

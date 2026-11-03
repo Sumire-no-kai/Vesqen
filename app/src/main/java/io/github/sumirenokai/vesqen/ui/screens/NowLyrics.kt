@@ -3,11 +3,9 @@ package io.github.sumirenokai.vesqen.ui.screens
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -52,8 +50,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
@@ -122,8 +118,9 @@ internal fun rememberTrackLyrics(
  * the lyrics and the playback position, so a track change elsewhere recomposes nothing here (#51).
  *
  * A tap anywhere brings the cover back, in every state (#209). The tap waits for what is inside:
- * a scroll or a button consumes the touch first, so neither switches the view. Lines stay separate
- * for TalkBack, so the switch is its own node behind them instead of a click on the whole pane.
+ * a scroll or a button consumes the touch first, so neither switches the view. It has no semantics:
+ * lines stay separate for TalkBack, and accessibility services switch through Now's More menu. A
+ * node behind the lyrics would not do, because Android's tree leaves out a node covered by the list.
  */
 @Composable
 internal fun NowLyricsPane(
@@ -143,20 +140,6 @@ internal fun NowLyricsPane(
             .pointerInput(onShowCover) { detectTapGestures(onTap = { onShowCover() }) }
             .testTag("vesqen.now.lyrics"),
     ) {
-        val showCover = stringResource(R.string.lyrics_show_cover)
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    role = Role.Button,
-                    onClickLabel = showCover,
-                    onClick = onShowCover,
-                )
-                .semantics { contentDescription = showCover }
-                .testTag("vesqen.now.lyrics.show-cover"),
-        )
         when (lyrics) {
             // A quiet pane while the file is read; the track's own controls stay usable.
             null -> Unit
