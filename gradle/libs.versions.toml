@@ -42,6 +42,7 @@ androidx-benchmark-macro-junit4 = { group = "androidx.benchmark", name = "benchm
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
 android-test = { id = "com.android.test", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 baselineprofile = { id = "androidx.baselineprofile", version.ref = "benchmark" }

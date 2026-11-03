@@ -2,6 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application>
+        <!-- M7-1: reads a USB audio device's descriptors, started over adb. It claims no interface
+             and sends no audio. -->
+        <activity
+            android:name="io.github.sumirenokai.vesqen.usb.UsbDescriptorDumpActivity"
+            android:exported="true"
+            android:label="USB descriptors" />
         <!-- Device tests only: a documents provider whose answers the test sets (#191 D3, D13). It
              has no roots, so the system file picker lists nothing from it. -->
         <provider

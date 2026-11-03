@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 rootProject.name = "Vesqen"
 include(":app")
 include(":baselineprofile")
+include(":usb-engine")
