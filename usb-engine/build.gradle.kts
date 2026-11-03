@@ -10,8 +10,18 @@ android {
         version = release(36)
     }
 
+    // CI installs the same versions (.github/workflows/android.yml).
+    ndkVersion = "30.0.16248370"
+
     defaultConfig {
         minSdk = 28
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "4.1.2"
+        }
     }
 
     compileOptions {

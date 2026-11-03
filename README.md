@@ -114,7 +114,7 @@ Each release lists its own limitations in the release notes, and the [changelog]
 
 ## Building from source
 
-You need JDK 25 and Android SDK Platform 36. The Gradle wrapper provides Gradle 9.5.0 and Android Gradle Plugin 9.3.2. `minSdk` is 28, `compileSdk` and `targetSdk` are 36, and the application ID is `io.github.sumirenokai.vesqen`.
+You need JDK 25, Android SDK Platform 36, NDK 30.0.16248370 and CMake 4.1.2. The Gradle wrapper provides Gradle 9.5.0 and Android Gradle Plugin 9.3.2. `minSdk` is 28, `compileSdk` and `targetSdk` are 36, and the application ID is `io.github.sumirenokai.vesqen`.
 
 ```bash
 ./gradlew :app:testDebugUnitTest :usb-engine:testDebugUnitTest :app:lintDebug :app:assembleDebug

@@ -8,6 +8,12 @@
             android:name="io.github.sumirenokai.vesqen.usb.UsbDescriptorDumpActivity"
             android:exported="true"
             android:label="USB descriptors" />
+        <!-- M7-2: claims a USB audio device and, only when asked for play, sends a test signal.
+             Started over adb. -->
+        <activity
+            android:name="io.github.sumirenokai.vesqen.usb.UsbStreamProbeActivity"
+            android:exported="true"
+            android:label="USB probe" />
         <!-- Device tests only: a documents provider whose answers the test sets (#191 D3, D13). It
              has no roots, so the system file picker lists nothing from it. -->
         <provider
