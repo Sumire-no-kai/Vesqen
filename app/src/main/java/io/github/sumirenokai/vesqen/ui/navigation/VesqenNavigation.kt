@@ -57,16 +57,21 @@ import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 
 /** The compact bar height before the system navigation inset is applied. */
-internal val CompactNavigationBarContentHeight = 60.dp
+internal val CompactNavigationBarContentHeight = 56.dp
 
 /** The rail beside wide windows; destination layouts measure the width left beside it. */
 internal val NavigationRailWidth = 96.dp
 
 private val NavigationSelectionEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
-// The item's natural top-icon layout is taller than the 60 dp bar. Lifting the label and its mark
+// The item's natural top-icon layout is taller than the 56 dp bar. Lifting the label and its mark
 // keeps breathing room above the bottom edge when there is no gesture inset below the bar.
-private val CompactNavigationLabelOffset = (-4).dp
+private val CompactNavigationLabelOffset = (-6).dp
+
+// #212: the 56 dp bar holds an icon, one label line and its mark up to 120 % text. Larger settings
+// keep the label at that size instead of cutting off the mark, and a larger label lifts a little more.
+private const val CompactNavigationLabelMaxFontScale = 1.2f
+private val CompactNavigationLabelLift = 10.dp
 
 // B · Paper & Sound §5: paper-nav ground with a top hairline, line icons, the selected item in
 // ink at weight 600 with a 16 × 2 dp Moss mark under its label, and no pill indicator.
@@ -148,19 +153,19 @@ private fun DestinationShortBarItem(
             )
         },
         label = {
+            val fontScale = LocalDensity.current.fontScale
+            val labelFontScale = minOf(fontScale, CompactNavigationLabelMaxFontScale)
             Column(
-                modifier = Modifier.offset(y = CompactNavigationLabelOffset),
+                modifier = Modifier.offset(y = CompactNavigationLabelOffset - CompactNavigationLabelLift * (labelFontScale - 1f)),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
-                // #35: the 60 dp bar holds an icon and one label line up to 130 % text. Larger
-                // settings keep the label at that size instead of cutting it off at the bottom.
-                val labelScale = minOf(LocalDensity.current.fontScale, 1.3f) / LocalDensity.current.fontScale
+                val labelScale = labelFontScale / fontScale
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelMedium.copy(
                         fontSize = (12 * labelScale).sp,
-                        lineHeight = (16 * labelScale).sp,
+                        lineHeight = (14 * labelScale).sp,
                         letterSpacing = 0.sp,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                     ),
@@ -168,7 +173,12 @@ private fun DestinationShortBarItem(
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Box(Modifier.size(width = 16.dp, height = 2.dp).background(mark, RoundedCornerShape(1.dp)))
+                Box(
+                    Modifier
+                        .size(width = 16.dp, height = 2.dp)
+                        .background(mark, RoundedCornerShape(1.dp))
+                        .testTag("${destination.testTag}.mark"),
+                )
             }
         },
         iconPosition = NavigationItemIconPosition.Top,

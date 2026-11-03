@@ -80,7 +80,7 @@ components:
     rounded: "{rounded.mini-player}"
     elevation: "6dp warm shadow, 1dp hairline"
   compact-navigation:
-    height: "60dp plus the system inset"
+    height: "56dp plus the system inset"
     backgroundColor: "{colors.paper-nav} / {colors.night-nav}"
     selection: "ink label at 600 with a 16 x 2dp Moss mark, no pill"
   touch-target:
@@ -241,7 +241,7 @@ Header, mark, one plain sentence about the app, a facts card (version, developer
 
 ## Navigation
 
-- Compact windows: a 60 dp bar plus the system inset with Library, Now, Chain and Settings. Labels stay on one line and scale with system text up to 130 %, then stop growing so they are never cut off; every item keeps a 48 dp target.
+- Compact windows: a 56 dp bar plus the system inset with Library, Now, Chain and Settings (#212, 60 dp before 1.2.0). Labels stay on one line and scale with system text up to 120 %, then stop growing so neither they nor the mark are cut off; every item keeps a 48 dp target.
 - Windows 600 dp and wider use a rail in the same order.
 - Now with a track yields both the bar and the rail. Chain is a tab; opened in context from Settings it shows a back arrow.
 - Cold start opens Library.
