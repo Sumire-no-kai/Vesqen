@@ -139,6 +139,7 @@ import io.github.sumirenokai.vesqen.ui.screens.AboutScreen
 import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
 import io.github.sumirenokai.vesqen.ui.screens.CrashPromptDialog
 import io.github.sumirenokai.vesqen.ui.screens.DeviceReportScreen
+import io.github.sumirenokai.vesqen.ui.screens.LibraryProjections
 import io.github.sumirenokai.vesqen.ui.screens.LibraryScreen
 import io.github.sumirenokai.vesqen.ui.screens.LicensesScreen
 import io.github.sumirenokai.vesqen.ui.screens.NowLyricsState
@@ -561,6 +562,7 @@ fun VesqenAppContent(
         InMemoryChainDashboardPreferencesRepository()
     }
     val destinationStateHolder = rememberSaveableStateHolder()
+    val libraryProjections = remember { LibraryProjections() }
     var destinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
     var returnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
     var playerReturnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
@@ -857,6 +859,7 @@ fun VesqenAppContent(
                 state = state,
                 destination = destination,
                 destinationStateHolder = destinationStateHolder,
+                libraryProjections = libraryProjections,
                 showNavigation = false,
                 chainOpenedInContext = chainOpenedInContext,
                 settingsUnderneath = settingsUnderneath,
@@ -937,6 +940,7 @@ fun VesqenAppContent(
             state = state,
             destination = destination,
             destinationStateHolder = destinationStateHolder,
+            libraryProjections = libraryProjections,
             showNavigation = true,
             chainOpenedInContext = chainOpenedInContext,
             settingsUnderneath = settingsUnderneath,
@@ -1213,6 +1217,7 @@ private fun VesqenDestinationFrame(
     state: VesqenUiState,
     destination: VesqenDestination,
     destinationStateHolder: SaveableStateHolder,
+    libraryProjections: LibraryProjections,
     showNavigation: Boolean,
     chainOpenedInContext: Boolean,
     settingsUnderneath: Boolean,
@@ -1414,6 +1419,7 @@ private fun VesqenDestinationFrame(
                         key = VesqenDestination.LIBRARY.name,
                     ) {
                         LibraryScreen(
+                            projections = libraryProjections,
                             onPageBackgroundChange = { libraryPageBackground = it },
                             state = state.library,
                             playback = state.playback,
