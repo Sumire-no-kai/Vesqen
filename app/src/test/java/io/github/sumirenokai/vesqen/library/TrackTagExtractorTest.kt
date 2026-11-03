@@ -2,6 +2,7 @@ package io.github.sumirenokai.vesqen.library
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.util.Base64
@@ -191,6 +192,45 @@ class TrackTagExtractorTest {
         assertEquals("FLAC", tags.container)
         assertEquals("From ID3", tags.composer)
         assertEquals("From comments", tags.lyricist)
+    }
+
+    @Test
+    fun theAudioAfterAnId3TagNamesTheContainer() {
+        val tag = id3(3, frame3("TIT2", utf8Frame("Title")))
+        val audio = ByteArray(32)
+        fun after(first: Int, second: Int) =
+            extract(tag + byteArrayOf(first.toByte(), second.toByte()) + audio).container
+
+        assertEquals("ADTS", after(0xff, 0xf1))
+        assertEquals("MPEG Audio", after(0xff, 0xfb))
+        assertEquals("What follows is not known audio", null, after(0x12, 0x34))
+    }
+
+    @Test
+    fun repeatedCommentCreditsAreAllKept() {
+        val tags = extract(
+            "fLaC".toByteArray() + flacBlock(
+                4,
+                true,
+                comments(
+                    "vendor",
+                    "COMPOSER=Bach", "composer=Handel", "COMPOSER=Bach",
+                    "LYRICIST=Picander", "LYRICIST=Henrici",
+                    "ISRC=AAAAA0000001", "ISRC=BBBBB0000002",
+                ),
+            ) + ByteArray(128),
+        )
+        assertEquals("Bach, Handel", tags.composer)
+        assertEquals("Picander, Henrici", tags.lyricist)
+        assertEquals("A track has one code, so the first stays", "AAAAA0000001", tags.isrc)
+    }
+
+    @Test
+    fun repeatedCreditsStayWithinTheTextLimit() {
+        val entries = List(2_000) { "COMPOSER=${it.toString().padEnd(100, 'x')}" }.toTypedArray()
+        val tags = extract("fLaC".toByteArray() + flacBlock(4, true, comments("vendor", *entries)) + ByteArray(128))
+        assertTrue(tags.composer!!.length <= 8 * 1024)
+        assertTrue(tags.composer!!.startsWith("0"))
     }
 
     @Test
