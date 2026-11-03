@@ -107,17 +107,16 @@ internal class LocalLyricsResolver(
         // A source that should be there but failed for now leaves the result uncached. Kept, the
         // result of a lower-priority source would hide that source until the next completed refresh.
         var complete = true
-        val folderUri = if (DocumentsContract.isTreeUri(uri)) {
-            uri
-        } else {
-            coveringFolderUri(uri, onFailure = { complete = false })
+        // Asked only when the sources before it had nothing, so imported lyrics need no lookup.
+        val folderUri by lazy(LazyThreadSafetyMode.NONE) {
+            if (DocumentsContract.isTreeUri(uri)) uri else coveringFolderUri(uri, onFailure = { complete = false })
         }
         val picked = pickLyrics { source ->
             val read = when (source) {
                 LyricsSource.Imported -> readImported(track.id) ?: SourceLyrics.Unreadable(UnreadableReason.ReadFailed)
-                LyricsSource.SameNameFile -> when (folderUri) {
+                LyricsSource.SameNameFile -> when (val folder = folderUri) {
                     null -> SourceLyrics.Absent
-                    else -> readSameNameFile(folderUri, track.fileName) ?: SourceLyrics.Absent.also { complete = false }
+                    else -> readSameNameFile(folder, track.fileName) ?: SourceLyrics.Absent.also { complete = false }
                 }
                 LyricsSource.Embedded -> readEmbedded(uri, track.fileSizeBytes)
             }
