@@ -1,8 +1,11 @@
 package io.github.sumirenokai.vesqen.lyrics
 
 import android.content.ContentResolver
+import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.util.LruCache
 import androidx.core.net.toUri
 import io.github.sumirenokai.vesqen.library.AudioTrack
@@ -22,8 +25,8 @@ sealed interface TrackLyrics {
     data class Found(val source: LyricsSource, val lyrics: Lyrics) : TrackLyrics
 
     /**
-     * No source has lyrics. [folderHint]: the track is known only through MediaStore, where Android
-     * shows an app no file beside it, so same-name `.lrc` files are not read (owner decision 5).
+     * No source has lyrics. [folderHint]: the track is known only through MediaStore and no added
+     * folder covers it, so Android shows the app no file beside it (owner decision 5, #208).
      */
     data class None(val folderHint: Boolean) : TrackLyrics
 
@@ -54,7 +57,8 @@ internal fun AudioTrack.lyricsKey(importRevision: Long) = LyricsTrackKey(
 
 /**
  * Finds a track's lyrics only when they are asked for (owner decision 12): the import, then a
- * same-name `.lrc` in an added music folder, then the file's own tags. Results are cached per
+ * same-name `.lrc` in an added music folder, including for a MediaStore track that such a folder
+ * covers (#208), then the file's own tags. Results are cached per
  * [LyricsTrackKey]; a completed Library refresh clears the cache, since editing a `.lrc` beside a
  * track sends no signal. Read failures stay out of error history and device reports.
  */
@@ -62,6 +66,8 @@ internal fun AudioTrack.lyricsKey(importRevision: Long) = LyricsTrackKey(
 internal class LocalLyricsResolver(
     private val contentResolver: ContentResolver,
     private val store: LyricsStore,
+    /** The same file inside an added folder, for a track that has no folder URI of its own (#208). */
+    private val coveringDocumentUri: (Uri) -> Uri? = { null },
 ) {
     private val results = LruCache<LyricsTrackKey, TrackLyrics>(RESULT_CACHE_SIZE)
     private val folderLyricsFiles = LruCache<String, List<LyricsFileCandidate>>(FOLDER_CACHE_SIZE)
@@ -98,16 +104,20 @@ internal class LocalLyricsResolver(
 
     private fun resolve(track: AudioTrack): ResolvedLyrics {
         val uri = track.contentUri.toUri()
-        val inAddedFolder = DocumentsContract.isTreeUri(uri)
         // A source that should be there but failed for now leaves the result uncached. Kept, the
         // result of a lower-priority source would hide that source until the next completed refresh.
         var complete = true
+        val folderUri = if (DocumentsContract.isTreeUri(uri)) {
+            uri
+        } else {
+            coveringFolderUri(uri, onFailure = { complete = false })
+        }
         val picked = pickLyrics { source ->
             val read = when (source) {
                 LyricsSource.Imported -> readImported(track.id) ?: SourceLyrics.Unreadable(UnreadableReason.ReadFailed)
-                LyricsSource.SameNameFile -> when {
-                    !inAddedFolder -> SourceLyrics.Absent
-                    else -> readSameNameFile(uri, track.fileName) ?: SourceLyrics.Absent.also { complete = false }
+                LyricsSource.SameNameFile -> when (folderUri) {
+                    null -> SourceLyrics.Absent
+                    else -> readSameNameFile(folderUri, track.fileName) ?: SourceLyrics.Absent.also { complete = false }
                 }
                 LyricsSource.Embedded -> readEmbedded(uri, track.fileSizeBytes)
             }
@@ -116,10 +126,24 @@ internal class LocalLyricsResolver(
         }
         val lyrics = when (picked) {
             is PickedLyrics.Found -> TrackLyrics.Found(picked.source, picked.lyrics)
-            PickedLyrics.Absent -> TrackLyrics.None(folderHint = !inAddedFolder)
+            PickedLyrics.Absent -> TrackLyrics.None(folderHint = folderUri == null)
             is PickedLyrics.Unreadable -> TrackLyrics.Unreadable(picked.reason)
         }
         return ResolvedLyrics(lyrics, complete)
+    }
+
+    /**
+     * Null when no added folder covers the file, which Android says with a SecurityException. Any
+     * other failure may pass, so it is also null for now, the embedded tags are still read, and
+     * [onFailure] keeps the result from being cached.
+     */
+    private fun coveringFolderUri(uri: Uri, onFailure: () -> Unit): Uri? = try {
+        coveringDocumentUri(uri)?.takeIf(DocumentsContract::isTreeUri)
+    } catch (_: SecurityException) {
+        null
+    } catch (_: RuntimeException) {
+        onFailure()
+        null
     }
 
     /** Null when the stored file could not be read now. */
@@ -220,6 +244,18 @@ internal class LocalLyricsResolver(
         const val FOLDER_CACHE_SIZE = 4
     }
 }
+
+/**
+ * The document URI of a MediaStore item under an added folder. Android finds it from the persisted
+ * grants, so no document ID is guessed and a track outside the grants stays out (#208). Android 9
+ * has no such call: there, same-name files are read only for tracks found through an added folder.
+ */
+internal fun mediaStoreCoveringDocumentUri(context: Context, uri: Uri): Uri? =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && uri.authority == MediaStore.AUTHORITY) {
+        MediaStore.getDocumentUri(context, uri)
+    } else {
+        null
+    }
 
 /** [complete]: every source that should be there was read, so the result may be kept. */
 private class ResolvedLyrics(val lyrics: TrackLyrics, val complete: Boolean)
