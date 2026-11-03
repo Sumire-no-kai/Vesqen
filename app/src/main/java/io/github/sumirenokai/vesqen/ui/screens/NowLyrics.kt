@@ -88,7 +88,6 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
-import kotlin.math.abs
 
 /** What Now and the track details need to show lyrics (#169). */
 data class NowLyricsState(
@@ -297,15 +296,29 @@ private fun SyncedLyrics(
     }
 }
 
-/** The line nearest the middle of the list, skipping the pauses between lines, which show nothing. */
+/** The line under the middle of the list, skipping the pauses between lines, which show nothing. */
 private fun LazyListState.centeredLineIndex(lyrics: Lyrics.Synced): Int? {
     val viewportCenter = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
     // Item 0 is the leading spacer.
-    return layoutInfo.visibleItemsInfo
+    val rows = layoutInfo.visibleItemsInfo
         .filter { lyrics.lines.getOrNull(it.index - 1)?.text?.isNotEmpty() == true }
-        .minByOrNull { abs(it.offset + it.size / 2 - viewportCenter) }
-        ?.let { it.index - 1 }
+        .map { LyricRowBounds(it.index - 1, it.offset, it.size) }
+    return lineIndexAtMarker(viewportCenter, rows)
 }
+
+internal class LyricRowBounds(val lineIndex: Int, val offset: Int, val size: Int)
+
+/**
+ * The row the marker is on, however tall, or else the nearest one. Comparing row midpoints would
+ * pick a short row beside a tall row that the marker is still on.
+ */
+internal fun lineIndexAtMarker(marker: Int, rows: List<LyricRowBounds>): Int? = rows.minByOrNull { row ->
+    when {
+        marker < row.offset -> row.offset - marker
+        marker >= row.offset + row.size -> marker - (row.offset + row.size) + 1
+        else -> 0
+    }
+}?.lineIndex
 
 /**
  * The current line comes from the last reported position. While playing, the leaf wakes once per
