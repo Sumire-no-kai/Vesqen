@@ -10,7 +10,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** What the Full information section of track details shows beyond the catalog (#240). */
-data class TrackFullInfo(val tags: TrackTags = TrackTags(), val channelLayout: String? = null)
+data class TrackFullInfo(
+    val tags: TrackTags = TrackTags(),
+    val channelLayout: String? = null,
+    val lossless: Boolean? = null,
+)
 
 /**
  * Reads the file when the section opens, so these fields cost nothing during a scan and need no
@@ -20,7 +24,7 @@ internal class TrackInfoReader(context: Context) {
     private val appContext = context.applicationContext
 
     suspend fun read(track: AudioTrack): TrackFullInfo = withContext(Dispatchers.IO) {
-        TrackFullInfo(readTags(track), readChannelLayout(track))
+        readAudioFormat(track).copy(tags = readTags(track))
     }
 
     private fun readTags(track: AudioTrack): TrackTags = try {
@@ -37,23 +41,40 @@ internal class TrackInfoReader(context: Context) {
         TrackTags()
     }
 
-    private fun readChannelLayout(track: AudioTrack): String? {
+    private fun readAudioFormat(track: AudioTrack): TrackFullInfo {
         val extractor = MediaExtractor()
         return try {
             extractor.setDataSource(appContext, track.contentUri.toUri(), null)
-            (0 until extractor.trackCount)
+            val format = (0 until extractor.trackCount)
                 .map(extractor::getTrackFormat)
                 .firstOrNull { it.getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
-                ?.takeIf { it.containsKey(MediaFormat.KEY_CHANNEL_MASK) }
-                ?.let { channelLayoutLabel(it.getInteger(MediaFormat.KEY_CHANNEL_MASK)) }
+            TrackFullInfo(
+                channelLayout = format
+                    ?.takeIf { it.containsKey(MediaFormat.KEY_CHANNEL_MASK) }
+                    ?.let { channelLayoutLabel(it.getInteger(MediaFormat.KEY_CHANNEL_MASK)) },
+                lossless = codecIsLossless(format?.getString(MediaFormat.KEY_MIME)),
+            )
         } catch (_: IOException) {
-            null
+            TrackFullInfo()
         } catch (_: RuntimeException) {
-            null
+            TrackFullInfo()
         } finally {
             extractor.release()
         }
     }
+}
+
+/**
+ * From the codec the system reports for this file. A file type cannot say: a WAV can hold A-law, and
+ * an .m4a either ALAC or AAC. Null for a codec not listed here: the row stays hidden rather than guessing.
+ */
+internal fun codecIsLossless(mimeType: String?): Boolean? = when (mimeType?.lowercase()) {
+    "audio/raw", "audio/flac", "audio/alac" -> true
+    "audio/mpeg", "audio/mpeg-l1", "audio/mpeg-l2", "audio/mp4a-latm", "audio/vorbis", "audio/opus",
+    "audio/g711-alaw", "audio/g711-mlaw", "audio/gsm", "audio/3gpp", "audio/amr-wb",
+    "audio/ac3", "audio/eac3", "audio/ac4",
+    -> false
+    else -> null
 }
 
 /** Null for a mask without a common name: the row stays hidden rather than guessing. */

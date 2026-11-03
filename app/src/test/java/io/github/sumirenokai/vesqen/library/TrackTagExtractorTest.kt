@@ -315,6 +315,16 @@ class TrackTagExtractorTest {
     }
 
     @Test
+    fun compressionFollowsTheCodecAndAnUnknownOneStaysHidden() {
+        listOf("audio/raw", "audio/flac", "audio/alac", "AUDIO/FLAC").forEach { assertEquals(it, true, codecIsLossless(it)) }
+        listOf("audio/mpeg", "audio/mp4a-latm", "audio/vorbis", "audio/opus", "audio/g711-alaw").forEach {
+            assertEquals(it, false, codecIsLossless(it))
+        }
+        assertNull(codecIsLossless("audio/something-new"))
+        assertNull(codecIsLossless(null))
+    }
+
+    @Test
     fun channelLayoutsWithoutACommonNameStayHidden() {
         assertEquals("L R", channelLayoutLabel(12))
         assertEquals("5.1", channelLayoutLabel(252))

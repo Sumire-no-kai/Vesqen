@@ -109,6 +109,7 @@ class TrackFullInfoUiTest {
                     coverIsFront = true,
                 ),
                 channelLayout = "L R",
+                lossless = true,
             ),
         )
         open()
@@ -139,6 +140,7 @@ class TrackFullInfoUiTest {
 
         listOf(
             R.string.detail_container,
+            R.string.detail_compression,
             R.string.detail_channel_layout,
             R.string.detail_encoder,
             R.string.detail_replay_gain_track,
@@ -147,8 +149,46 @@ class TrackFullInfoUiTest {
             R.string.full_info_tags,
             R.string.detail_composer,
         ).forEach { compose.onAllNodesWithText(context.getString(it)).assertCountEquals(0) }
-        // Worked out from the catalog, so these still show.
-        compose.onNode(hasText(context.getString(R.string.detail_compression))).assertExists()
+        // Worked out from the catalog, so this still shows.
+        compose.onNode(hasText(context.getString(R.string.detail_average_bitrate))).assertExists()
+    }
+
+    @Test
+    fun aLossyCodecSaysSo() {
+        show(TrackFullInfo(lossless = false))
+        open()
+
+        assertRow(R.string.detail_compression, context.getString(R.string.compression_lossy))
+    }
+
+    @Test
+    fun compressionComesFromTheCodecInTheFileAndNotItsType() = runBlocking {
+        val reader = TrackInfoReader(context)
+        fun wav(formatTag: Int, bitsPerSample: Int): TrackFullInfo = runBlocking {
+            val file = File(context.cacheDir, "full-info-${System.nanoTime()}.wav")
+            try {
+                val blockAlign = bitsPerSample / 8
+                val data = ByteArray(8_000 * blockAlign)
+                val fmt = le16(formatTag) + le16(1) + le(8_000) + le(8_000 * blockAlign) + le16(blockAlign) + le16(bitsPerSample)
+                file.writeBytes(
+                    "RIFF".toByteArray() + le(4 + 8 + fmt.size + 8 + data.size) + "WAVE".toByteArray() +
+                        "fmt ".toByteArray() + le(fmt.size) + fmt + "data".toByteArray() + le(data.size) + data,
+                )
+                reader.read(
+                    track.copy(
+                        contentUri = Uri.fromFile(file).toString(),
+                        mimeType = "audio/wav",
+                        fileName = "fixture.wav",
+                        fileSizeBytes = file.length(),
+                    ),
+                )
+            } finally {
+                file.delete()
+            }
+        }
+
+        assertEquals("PCM", true, wav(formatTag = 1, bitsPerSample = 16).lossless)
+        assertEquals("A-law, in the same file type", false, wav(formatTag = 6, bitsPerSample = 8).lossless)
     }
 
     @Test
@@ -173,6 +213,8 @@ class TrackFullInfoUiTest {
             file.delete()
         }
     }
+
+    private fun le16(value: Int) = byteArrayOf(value.toByte(), (value shr 8).toByte())
 
     private fun le(value: Int) = byteArrayOf(value.toByte(), (value shr 8).toByte(), (value shr 16).toByte(), (value shr 24).toByte())
 }

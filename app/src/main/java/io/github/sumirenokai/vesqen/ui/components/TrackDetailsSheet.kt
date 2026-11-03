@@ -51,7 +51,6 @@ import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.library.TrackFullInfo
 import io.github.sumirenokai.vesqen.library.TrackInfoReader
-import io.github.sumirenokai.vesqen.library.m1FormatFor
 import io.github.sumirenokai.vesqen.lyrics.LyricsSource
 import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
@@ -371,8 +370,8 @@ private fun FullInfoRows(track: AudioTrack, info: TrackFullInfo) {
     val tags = info.tags
     val audio = buildList {
         tags.container?.let { add(stringResource(R.string.detail_container) to it) }
-        m1FormatFor(track.mimeType, track.fileName)?.let { format ->
-            add(stringResource(R.string.detail_compression) to stringResource(if (format.lossless) R.string.compression_lossless else R.string.compression_lossy))
+        info.lossless?.let { lossless ->
+            add(stringResource(R.string.detail_compression) to stringResource(if (lossless) R.string.compression_lossless else R.string.compression_lossy))
         }
         if (track.fileSizeBytes > 0 && track.durationMs > 0) {
             add(stringResource(R.string.detail_average_bitrate) to stringResource(R.string.bitrate_value, (track.fileSizeBytes * 8 / track.durationMs).toInt()))
