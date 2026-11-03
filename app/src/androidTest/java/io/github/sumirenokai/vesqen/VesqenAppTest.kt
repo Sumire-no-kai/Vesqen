@@ -266,6 +266,35 @@ class VesqenAppTest {
     }
 
     @Test
+    fun a_failed_undo_of_the_mixer_setting_says_how_to_retry_and_reappears() {
+        val failure = UsbOutputStatus(
+            mode = UsbOutputMode.STRICT_BIT_PERFECT,
+            phase = UsbOutputPhase.FAILED,
+            failure = UsbOutputFailure.MIXER_CLEAR_FAILED,
+            generation = 1,
+            failureOrigin = UsbOutputFailureOrigin.USER_MODE_CHANGE,
+        )
+        var state by mutableStateOf(activePlaybackState().let {
+            it.copy(playback = it.playback.copy(usbOutputStatus = failure))
+        })
+        val modes = mutableListOf<UsbOutputMode>()
+        render(state, stateProvider = { state }, onSetUsbOutputMode = { modes += it })
+        val reason = context.getString(R.string.usb_failure_clear)
+        composeRule.onNodeWithText(reason).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.player_strict_failure_body, reason)).assertDoesNotExist()
+        composeRule.onNodeWithTag("vesqen.output.use-system").assertIsEnabled().performClick()
+        composeRule.runOnIdle { assertEquals(listOf(UsbOutputMode.SYSTEM), modes) }
+        composeRule.onNodeWithTag("vesqen.output.keep-strict").performClick()
+        composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertDoesNotExist()
+        // A retry that fails again has a new generation, so the explanation returns.
+        composeRule.runOnIdle {
+            state = state.copy(playback = state.playback.copy(usbOutputStatus = failure.copy(generation = 3)))
+        }
+        composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertIsDisplayed()
+        composeRule.onNodeWithText(reason).assertIsDisplayed()
+    }
+
+    @Test
     fun turning_strict_output_on_explains_pro_features_once() {
         val premium = PremiumAccess(MemoryPremiumStore(), enforced = false)
         val modes = mutableListOf<UsbOutputMode>()

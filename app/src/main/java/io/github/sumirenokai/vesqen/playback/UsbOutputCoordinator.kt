@@ -993,6 +993,8 @@ internal class UsbOutputCoordinator(
                 device = oldState.device,
                 sink = oldState.sink,
                 attemptMixerCleanup = false,
+                // Only requestMode() gets here, and it does not update configurationOrigin (#245).
+                origin = UsbOutputFailureOrigin.USER_MODE_CHANGE,
             )
             return
         }
