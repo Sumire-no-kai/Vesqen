@@ -304,7 +304,7 @@
     <string name="chain_strict_applying_title">正在準備嚴格 USB 輸出</string>
     <string name="chain_strict_applying_body">Vesqen 正在重建 Media3 AudioTrack，並核對 mixer 讀回值與實際路由。</string>
     <string name="chain_strict_active_title">嚴格 USB 輸出已生效</string>
-    <string name="chain_strict_active_body">%1$s 正在使用 %2$s，AudioTrack、mixer preference 與路由一致；外部訊號驗證仍是獨立的證據。</string>
+    <string name="chain_strict_active_body">%1$s 正在使用 %2$s，AudioTrack、mixer preference 與路由一致。開始播放、定位或切換格式後的前 20 毫秒存在淡入。外部訊號驗證仍是獨立的證據。</string>
     <string name="chain_verified_title">輸出已通過外部驗證</string>
     <string name="chain_verified_body">記錄 %1$s 精確驗證了目前的應用程式版本、手機/ROM、DAC、來源格式與輸出格式。方法：%2$s。</string>
     <string name="chain_strict_failed_title">播放已停止</string>
@@ -849,9 +849,9 @@
     <string name="chain_segment_app">Vesqen 這一段</string>
     <string name="chain_segment_system">系統這一段</string>
     <string name="chain_segment_waiting">等待資料</string>
-    <string name="chain_segment_unchanged_lossless">沒有改動音訊，無損。</string>
-    <string name="chain_segment_unchanged_lossy">沒有再改動音訊。</string>
-    <string name="chain_segment_unchanged">沒有改動音訊。</string>
+    <string name="chain_segment_unchanged_lossless">除開始播放、定位或切換格式後的前 20 毫秒淡入外，未改動音訊，無損。</string>
+    <string name="chain_segment_unchanged_lossy">除開始播放、定位或切換格式後的前 20 毫秒淡入外，未進一步改動音訊。</string>
+    <string name="chain_segment_unchanged">除開始播放、定位或切換格式後的前 20 毫秒淡入外，未改動音訊。</string>
     <string name="chain_segment_modified">改動了音訊：%1$s。</string>
     <string name="chain_segment_unknown">暫時無法判斷：%1$s。</string>
     <string name="chain_segment_reason_transition">正在切換曲目或重新開啟輸出</string>

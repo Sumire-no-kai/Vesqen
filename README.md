@@ -93,7 +93,8 @@ Playback and your library never use the network, and your library, playlists and
 - In strict USB mode, there is a short gap between tracks, even on gapless albums.
 - Same-name `.lrc` lyrics files are read only in folders added with Add music folder, not for songs that Vesqen finds through Android's media library.
 - On Android 9, folders with the same path on the phone and on an SD card are still shown as one folder.
-- Bluetooth is never bit-perfect. The Chain page can say that Vesqen's part left the audio unchanged; the phone still re-encodes it for Bluetooth.
+- Bluetooth is never bit-perfect. The Chain page can say that Vesqen's part left the audio unchanged, except for a 20 ms fade-in after starting, seeking or changing format; the phone still re-encodes it for Bluetooth.
+- Media3 fades in the first 20 ms after starting, seeking or changing format, including on strict USB output. A fix for strict output is planned for 2.0.
 - If Android stops Vesqen in the background, the queue comes back when you open the app again. Resuming straight from headphone buttons doesn't work on the phones we tested, which pass those buttons only to music apps on a list built into the system. On Android 13 and later, the Play button in the notification shade and on the lock screen can't restart it either.
 - On vivo phones, Vesqen's playback controls show on the lock screen only after you turn on Lock screen notifications for Vesqen in the phone's notification settings.
 - Some phone makers' systems pause music on their own. On our vivo test phone, the system paused Vesqen about three minutes after the media volume was turned all the way down with the volume keys.
