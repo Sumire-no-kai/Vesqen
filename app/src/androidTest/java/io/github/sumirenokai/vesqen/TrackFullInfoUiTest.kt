@@ -117,7 +117,7 @@ class TrackFullInfoUiTest {
         assertRow(R.string.detail_container, "FLAC")
         assertRow(R.string.detail_compression, context.getString(R.string.compression_lossless))
         // 25 000 000 bytes over 200 s.
-        assertRow(R.string.detail_average_bitrate, context.getString(R.string.bitrate_value, 1000))
+        assertRow(R.string.detail_overall_bitrate, context.getString(R.string.bitrate_value, 1000))
         assertRow(R.string.detail_channel_layout, "L R")
         assertRow(R.string.detail_encoder, "libFLAC 1.4.3")
         val peak = context.getString(R.string.replay_gain_peak_value, "0.98")
@@ -150,7 +150,7 @@ class TrackFullInfoUiTest {
             R.string.detail_composer,
         ).forEach { compose.onAllNodesWithText(context.getString(it)).assertCountEquals(0) }
         // Worked out from the catalog, so this still shows.
-        compose.onNode(hasText(context.getString(R.string.detail_average_bitrate))).assertExists()
+        compose.onNode(hasText(context.getString(R.string.detail_overall_bitrate))).assertExists()
     }
 
     @Test

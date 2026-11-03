@@ -67,7 +67,7 @@
     <string name="settings_system_output">システム出力</string>
     <string name="settings_system_output_body">Android の通常の再生経路を使います。システム側でミキシングやリサンプリングが行われることがあり、端末の音量も通常どおり調節できます。</string>
     <string name="settings_strict_usb_output">厳格 USB 出力</string>
-    <string name="settings_strict_usb_output_body">音声データを変更せずに、対応する USB DAC にのみ出力します。Android 14 以降が必要です。条件を満たさない場合は再生を停止します。</string>
+    <string name="settings_strict_usb_output_body">対応する USB DAC にのみ音声を出力します。再生開始、シーク、形式の切り替えの直後 20 ミリ秒のフェードインを除き、音声は変更しません。Android 14 以降が必要です。条件を満たさない場合は再生を停止します。</string>
     <string name="settings_strict_usb_waiting">再生を始めるときに、このスマートフォンと USB DAC が厳格出力に対応しているかを Vesqen が確認します。</string>
     <string name="settings_strict_usb_platform_unavailable">このスマートフォンの Android %1$s（API %2$d）には、公式の bit-perfect 出力機能がありません。タップすると詳しい理由を表示します。</string>
     <string name="strict_usb_unavailable_title">厳格 USB は使用できません</string>
@@ -395,7 +395,7 @@
     <string name="detail_compression">圧縮方式</string>
     <string name="compression_lossless">ロスレス</string>
     <string name="compression_lossy">非可逆</string>
-    <string name="detail_average_bitrate">平均ビットレート</string>
+    <string name="detail_overall_bitrate">全体ビットレート</string>
     <string name="detail_channel_layout">チャンネル配置</string>
     <string name="detail_encoder">エンコーダー</string>
     <string name="detail_replay_gain_track">ReplayGain（曲）</string>

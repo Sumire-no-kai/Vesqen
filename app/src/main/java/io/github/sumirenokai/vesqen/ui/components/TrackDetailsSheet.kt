@@ -374,7 +374,7 @@ private fun FullInfoRows(track: AudioTrack, info: TrackFullInfo) {
             add(stringResource(R.string.detail_compression) to stringResource(if (lossless) R.string.compression_lossless else R.string.compression_lossy))
         }
         if (track.fileSizeBytes > 0 && track.durationMs > 0) {
-            add(stringResource(R.string.detail_average_bitrate) to stringResource(R.string.bitrate_value, (track.fileSizeBytes * 8 / track.durationMs).toInt()))
+            add(stringResource(R.string.detail_overall_bitrate) to stringResource(R.string.bitrate_value, (track.fileSizeBytes * 8 / track.durationMs).toInt()))
         }
         info.channelLayout?.let { add(stringResource(R.string.detail_channel_layout) to it) }
         tags.encoder?.let { add(stringResource(R.string.detail_encoder) to it) }
