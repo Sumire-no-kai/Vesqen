@@ -10,10 +10,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
@@ -26,6 +28,9 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
@@ -194,6 +199,25 @@ class NowLyricsUiTest {
         compose.waitForIdle()
         assertTrue(isBold("Morning light"))
         assertFalse(isBold("Over the hill"))
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun aKeyboardGoesToTheFocusedLineAndATouchStillSwitches() {
+        var toggles = 0
+        val seeks = mutableListOf<Long>()
+        setNow(onToggleLyrics = { toggles++ }, onSeek = { seeks += it })
+
+        compose.onNodeWithTag("vesqen.now.lyrics.line.2").requestFocus().performKeyInput { pressKey(Key.Enter) }
+        compose.runOnIdle {
+            assertEquals(listOf(9_000L), seeks)
+            assertEquals(0, toggles)
+        }
+        compose.onNodeWithTag("vesqen.now.lyrics.line.0").performClick()
+        compose.runOnIdle {
+            assertEquals(listOf(9_000L), seeks)
+            assertEquals(1, toggles)
+        }
     }
 
     @Test

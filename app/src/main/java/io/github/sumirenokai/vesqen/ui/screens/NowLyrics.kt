@@ -3,9 +3,12 @@ package io.github.sumirenokai.vesqen.ui.screens
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -31,6 +34,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -45,6 +49,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -353,12 +362,24 @@ private fun LyricLineRow(
     }
     val color = if (current || targeted) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
     val goToLine = stringResource(R.string.lyrics_play_from_line)
+    val interactionSource = remember { MutableInteractionSource() }
     Column(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
                 if (canSeek) onClick(label = goToLine) { onSeek(); true }
             }
+            // A keyboard still goes to the line. Neither of these takes a touch, which switches the view.
+            .onKeyEvent { event ->
+                if (canSeek && event.type == KeyEventType.KeyUp && event.key in LineKeys) {
+                    onSeek()
+                    true
+                } else {
+                    false
+                }
+            }
+            .indication(interactionSource, ripple())
+            .focusable(enabled = canSeek, interactionSource = interactionSource)
             .heightIn(min = 48.dp)
             .padding(horizontal = gutter, vertical = VesqenSpacing.xs),
         verticalArrangement = Arrangement.Center,
@@ -464,5 +485,6 @@ private fun rememberTouchExplorationEnabled(): Boolean {
 }
 
 private const val FOLLOW_PAUSE_MILLIS = 4_000L
+private val LineKeys = setOf(Key.Enter, Key.NumPadEnter, Key.Spacebar, Key.DirectionCenter)
 private val SEEK_LINE_GUTTER = 40.dp
 private val SEEK_LINE_MARK = 20.dp
