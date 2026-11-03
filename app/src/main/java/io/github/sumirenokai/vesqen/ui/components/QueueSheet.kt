@@ -295,7 +295,8 @@ private fun QueueList(
                     // Rows follow the play order; edits name the player's list index (#158).
                     onPlay = { onPlayItem(item.listIndex) },
                     // The row's own merged node carries the moves, which TalkBack and other services reach.
-                    moves = if (!enabled) emptyList() else buildList {
+                    // Its neighbors below are the queue's, so a shown order that differs offers none.
+                    moves = if (!enabled || preview != null) emptyList() else buildList {
                         if (index > 0) {
                             add(CustomAccessibilityAction(upLabel) { onMoveItem(item.listIndex, queue[index - 1].listIndex); true })
                         }

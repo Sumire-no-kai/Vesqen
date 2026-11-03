@@ -5,7 +5,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -206,6 +208,27 @@ class QueueDragUiTest {
         liftAndDrag(row = 0, rows = 1f)
         drop()
         compose.runOnIdle { assertEquals(listOf(1 to 3, 0 to 1), moved) }
+    }
+
+    @Test
+    fun aRowOffersNoMovesWhileAMoveWaitsForTheQueue() {
+        show(listOf(item(1, 0), item(2, 1), item(3, 2), item(4, 3)))
+        fun moves(row: Int) = compose.onNodeWithTag("vesqen.queue.item.$row").fetchSemanticsNode()
+            .config.getOrNull(SemanticsActions.CustomActions).orEmpty()
+        assertEquals(2, moves(1).size)
+
+        liftAndDrag(row = 1, rows = 2f)
+        compose.onNodeWithTag("vesqen.queue.list").performTouchInput { up() }
+        repeat(5) { compose.mainClock.advanceTimeByFrame() }
+        assertEquals("Track 3", rowTitle(1))
+        assertEquals(emptyList<Any>(), moves(1))
+
+        // The queue's own order is back, and each move names the row beside it again.
+        compose.mainClock.advanceTimeBy(1_000)
+        assertEquals("Track 2", rowTitle(1))
+        val moveDown = moves(1).also { assertEquals(2, it.size) }[1]
+        compose.runOnIdle { moveDown.action() }
+        assertEquals(listOf(1 to 3, 1 to 2), moved)
     }
 
     @Test
