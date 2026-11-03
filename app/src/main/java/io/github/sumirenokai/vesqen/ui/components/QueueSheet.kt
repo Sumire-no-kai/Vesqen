@@ -1,7 +1,14 @@
 package io.github.sumirenokai.vesqen.ui.components
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.VisibilityThreshold
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,10 +21,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.ButtonDefaults
@@ -30,27 +36,50 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.playback.PlaybackQueueItem
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
+import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
+import kotlinx.coroutines.delay
+import kotlin.math.abs
 
-/** B · Paper & Sound queue: one card of hairline rows; tap a row to play it, edit it in place. */
+/** B · Paper & Sound queue: one card of hairline rows; tap a row to play it, long-press to move it. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QueueSheet(
@@ -94,28 +123,192 @@ fun QueueSheet(
                 )
             }
             PaperCard(Modifier.padding(top = VesqenSpacing.sm)) {
-                LazyColumn(modifier = Modifier.heightIn(max = 520.dp)) {
-                    itemsIndexed(
-                        items = snapshot.queue,
-                        key = { index, item -> "${item.trackId}:$index" },
-                    ) { index, item ->
-                        if (index > 0) PaperDivider()
-                        QueueRow(
-                            index = index,
-                            item = item,
-                            enabled = snapshot.isControllerReady,
-                            isLast = index == snapshot.queue.lastIndex,
-                            isPlaying = snapshot.isPlaying,
-                            // Rows follow the play order; edits name the player's list index (#158).
-                            onPlay = { onPlayItem(item.listIndex) },
-                            onMove = { to -> onMoveItem(item.listIndex, snapshot.queue[to].listIndex) },
-                            onRemove = { onRemoveItem(item.listIndex) },
-                        )
-                    }
-                }
+                QueueList(snapshot, onPlayItem, onRemoveItem, onMoveItem)
             }
         }
     }
+}
+
+/**
+ * The rows in play order. A long press picks a row up and it follows the finger; the others make
+ * room in a preview, and only the drop edits the queue (#211). The queue owns the order: a change
+ * to it during a drag ends the drag without moving anything, so a drop never lands on another entry.
+ */
+@Composable
+private fun QueueList(
+    snapshot: PlaybackSnapshot,
+    onPlayItem: (Int) -> Unit,
+    onRemoveItem: (Int) -> Unit,
+    onMoveItem: (Int, Int) -> Unit,
+) {
+    val queue = snapshot.queue
+    val enabled = snapshot.isControllerReady
+    val rowKeys = remember(queue) { queueRowKeys(queue) }
+    val rowsByKey = remember(queue, rowKeys) { rowKeys.zip(queue).toMap() }
+    val currentQueue by rememberUpdatedState(queue)
+    val currentKeys by rememberUpdatedState(rowKeys)
+    val moveItem by rememberUpdatedState(onMoveItem)
+    val listState = rememberLazyListState()
+    val haptics = LocalHapticFeedback.current
+    val motionPolicy = rememberVesqenMotionPolicy()
+    var dragged by remember { mutableStateOf<String?>(null) }
+    var dragY by remember { mutableFloatStateOf(0f) }
+    // The order shown while dragging, and after a drop until the queue arrives in that order.
+    var preview by remember { mutableStateOf<List<String>?>(null) }
+    var reorderViewport by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    val density = LocalDensity.current
+    val edgePx = with(density) { 48.dp.toPx() }
+    val speedPx = with(density) { 1000.dp.toPx() }
+    val removeAreaPx = with(density) { 48.dp.toPx() }
+    val liftPx = with(density) { 6.dp.toPx() }
+    val upLabel = stringResource(R.string.move_up)
+    val downLabel = stringResource(R.string.move_down)
+    val shownKeys = preview ?: rowKeys
+
+    LaunchedEffect(rowKeys) {
+        dragged = null
+        preview = null
+    }
+    // A refused move leaves the queue as it was, so the preview cannot wait for it forever.
+    LaunchedEffect(preview, dragged) {
+        if (preview == null || dragged != null) return@LaunchedEffect
+        delay(MOVE_CONFIRM_TIMEOUT_MILLIS)
+        preview = null
+    }
+    SideEffect {
+        reorderViewport?.let { (index, offset) ->
+            // After the new order is composed; keyed rows would otherwise pull the list along.
+            listState.requestScrollToItem(index, offset)
+            reorderViewport = null
+        }
+    }
+    LaunchedEffect(dragged) {
+        val key = dragged ?: return@LaunchedEffect
+        var previousFrame = withFrameNanos { it }
+        while (dragged == key) {
+            val frame = withFrameNanos { it }
+            val seconds = ((frame - previousFrame) / 1_000_000_000f).coerceAtMost(.05f)
+            previousFrame = frame
+            val layout = listState.layoutInfo
+            val edgeFraction = when {
+                dragY < layout.viewportStartOffset + edgePx ->
+                    -((layout.viewportStartOffset + edgePx - dragY) / edgePx).coerceIn(0f, 1f)
+                dragY > layout.viewportEndOffset - edgePx ->
+                    ((dragY - layout.viewportEndOffset + edgePx) / edgePx).coerceIn(0f, 1f)
+                else -> 0f
+            }
+            if (edgeFraction != 0f) listState.scrollBy(edgeFraction * speedPx * seconds)
+            val target = listState.layoutInfo.visibleItemsInfo
+                .minByOrNull { abs(it.offset + it.size / 2f - dragY) }?.index ?: continue
+            val order = preview ?: continue
+            val from = order.indexOf(key)
+            if (from >= 0 && from != target && target in order.indices) {
+                reorderViewport = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+                preview = order.toMutableList().apply { add(target, removeAt(from)) }
+            }
+        }
+    }
+    LazyColumn(
+        state = listState,
+        modifier = Modifier
+            .heightIn(max = 520.dp)
+            .testTag("vesqen.queue.list")
+            .pointerInput(enabled, removeAreaPx) {
+                if (enabled) awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    // The trailing button keeps its own press.
+                    if (down.position.x >= size.width - removeAreaPx) return@awaitEachGesture
+                    // A scroll consumes the move first and ends the wait; a tap ends it too.
+                    awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
+                    val y = down.position.y + listState.layoutInfo.viewportStartOffset
+                    val item = listState.layoutInfo.visibleItemsInfo
+                        .firstOrNull { y >= it.offset && y < it.offset + it.size } ?: return@awaitEachGesture
+                    val key = item.key as? String ?: return@awaitEachGesture
+                    val origin = item.offset + item.size / 2f
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    dragY = origin
+                    preview = currentKeys
+                    dragged = key
+                    var dropped = false
+                    try {
+                        while (true) {
+                            // First in line: neither the row's click nor the sheet's drag sees it.
+                            val change = awaitPointerEvent(PointerEventPass.Initial).changes
+                                .firstOrNull { it.id == down.id } ?: break
+                            change.consume()
+                            if (!change.pressed) {
+                                dropped = true
+                                break
+                            }
+                            dragY = origin + change.position.y - down.position.y
+                        }
+                    } finally {
+                        // Still this drag only if the queue did not change under it.
+                        val order = preview
+                        val from = currentKeys.indexOf(key)
+                        val to = order?.indexOf(key) ?: -1
+                        val moved = dropped && dragged == key && from >= 0 && to >= 0 && from != to
+                        if (moved) {
+                            moveItem(currentQueue[from].listIndex, currentQueue[to].listIndex)
+                        } else if (dragged == key) {
+                            preview = null
+                        }
+                        dragged = null
+                    }
+                }
+            },
+    ) {
+        itemsIndexed(items = shownKeys, key = { _, key -> key }) { index, key ->
+            val item = rowsByKey[key] ?: return@itemsIndexed
+            val lifted = dragged == key
+            Column(
+                Modifier
+                    .zIndex(if (lifted) 1f else 0f)
+                    .animateItem(
+                        fadeInSpec = null,
+                        fadeOutSpec = null,
+                        placementSpec = if (lifted || motionPolicy.reduceMotion) null else spring(
+                            stiffness = Spring.StiffnessMediumLow,
+                            visibilityThreshold = IntOffset.VisibilityThreshold,
+                        ),
+                    )
+                    .graphicsLayer {
+                        if (lifted) {
+                            translationY = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key }
+                                ?.let { dragY - it.offset - it.size / 2f } ?: 0f
+                            shadowElevation = liftPx
+                        }
+                    }
+                    .background(if (lifted) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent),
+            ) {
+                if (index > 0 && !lifted) PaperDivider()
+                QueueRow(
+                    index = index,
+                    item = item,
+                    enabled = enabled,
+                    isPlaying = snapshot.isPlaying,
+                    // Rows follow the play order; edits name the player's list index (#158).
+                    onPlay = { onPlayItem(item.listIndex) },
+                    // The row's own merged node carries the moves, which TalkBack and other services reach.
+                    moves = if (!enabled) emptyList() else buildList {
+                        if (index > 0) {
+                            add(CustomAccessibilityAction(upLabel) { onMoveItem(item.listIndex, queue[index - 1].listIndex); true })
+                        }
+                        if (index < queue.lastIndex) {
+                            add(CustomAccessibilityAction(downLabel) { onMoveItem(item.listIndex, queue[index + 1].listIndex); true })
+                        }
+                    },
+                    onRemove = { onRemoveItem(item.listIndex) },
+                )
+            }
+        }
+    }
+}
+
+/** Entry ids stay with a row as the queue moves. A queue restored without them falls back to positions. */
+internal fun queueRowKeys(queue: List<PlaybackQueueItem>): List<String> {
+    val ids = queue.map(PlaybackQueueItem::entryId)
+    return if (ids.none(String::isEmpty) && ids.distinct().size == ids.size) ids else queue.map { "list:${it.listIndex}" }
 }
 
 /**
@@ -171,10 +364,9 @@ private fun QueueRow(
     index: Int,
     item: PlaybackQueueItem,
     enabled: Boolean,
-    isLast: Boolean,
     isPlaying: Boolean,
     onPlay: () -> Unit,
-    onMove: (Int) -> Unit,
+    moves: List<CustomAccessibilityAction>,
     onRemove: () -> Unit,
 ) {
     // The current row says whether it plays or is paused, like the library's rows (#35).
@@ -189,6 +381,7 @@ private fun QueueRow(
                 onClick = onPlay,
             )
             .then(if (item.isCurrent) Modifier.semantics { stateDescription = playbackState } else Modifier)
+            .semantics { customActions = moves }
             .heightIn(min = 56.dp)
             .padding(start = VesqenSpacing.md, end = VesqenSpacing.xxs)
             .testTag("vesqen.queue.item.$index"),
@@ -226,13 +419,11 @@ private fun QueueRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        QueueEditButton(Icons.Filled.ArrowUpward, R.string.move_up, enabled && index > 0) { onMove(index - 1) }
-        QueueEditButton(Icons.Filled.ArrowDownward, R.string.move_down, enabled && !isLast) { onMove(index + 1) }
         QueueEditButton(Icons.Outlined.Delete, R.string.remove_from_queue, enabled, onRemove)
     }
 }
 
-/** Editing stays one tap away but quiet: muted icons after the title, still 48 dp to touch. */
+/** Removal stays one tap away but quiet: a muted icon after the title, still 48 dp to touch. */
 @Composable
 private fun QueueEditButton(icon: ImageVector, label: Int, enabled: Boolean, onClick: () -> Unit) {
     IconButton(
@@ -245,3 +436,5 @@ private fun QueueEditButton(icon: ImageVector, label: Int, enabled: Boolean, onC
         Icon(icon, contentDescription = stringResource(label), modifier = Modifier.size(20.dp))
     }
 }
+
+private const val MOVE_CONFIRM_TIMEOUT_MILLIS = 1_000L
