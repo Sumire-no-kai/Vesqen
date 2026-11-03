@@ -176,13 +176,23 @@ data class UacEndpoint(
     /** Bits 11 and 12 of wMaxPacketSize: extra high-speed transactions per interval. */
     val additionalTransactions: Int,
     val interval: Int,
+    /** UAC1's bRefresh as declared. UAC2 has no such field: [interval] alone paces its feedback. */
+    val refresh: Int?,
     /** UAC1's standard endpoint names its feedback endpoint here; 0 means none. */
     val synchAddress: Int,
 ) {
     val isOutToDevice: Boolean get() = address and 0x80 == 0
+
+    /** How often a UAC1 feedback endpoint has a new value: 2^bRefresh ms, with 1 to 9 allowed. */
+    val refreshPeriodMs: Int? get() = refresh?.takeIf { it in 1..9 }?.let { 1 shl it }
+
+    /** Matches by endpoint number: like Linux, this accepts a [synchAddress] without its direction bit. */
+    fun names(other: UacEndpoint): Boolean =
+        synchAddress != 0 && other.isOutToDevice != isOutToDevice && (synchAddress xor other.address) and 0x7F == 0
 }
 
 data class UacAltSetting(
+    val version: UacVersion,
     val alternateSetting: Int,
     val terminalLink: Int?,
     val format: UacFormat?,
@@ -218,11 +228,38 @@ data class UacAltSetting(
                 if (endpoint.usage == UacEndpointUsage.IMPLICIT_FEEDBACK_DATA) {
                     add(UacStreamingBlocker.IMPLICIT_FEEDBACK)
                 }
-                if (endpoint.syncType == UacSyncType.ASYNCHRONOUS && feedbackEndpoint == null) {
-                    add(UacStreamingBlocker.ASYNCHRONOUS_WITHOUT_FEEDBACK)
+                if (endpoint.syncType == UacSyncType.ASYNCHRONOUS) {
+                    val feedback = feedbackEndpoint
+                    if (feedback == null) {
+                        add(UacStreamingBlocker.ASYNCHRONOUS_WITHOUT_FEEDBACK)
+                    } else {
+                        addAll(feedbackBlockers(endpoint, feedback))
+                    }
                 }
             }
         }
+
+    /**
+     * What the descriptors alone can hold against a feedback endpoint. Whatever depends on the bus
+     * speed waits for StreamingPlan: four feedback bytes at high speed, and how long an interval lasts.
+     */
+    private fun feedbackBlockers(data: UacEndpoint, feedback: UacEndpoint) = buildSet {
+        if (feedback.isOutToDevice == data.isOutToDevice) add(UacStreamingBlocker.FEEDBACK_WRONG_DIRECTION)
+        if (!feedback.isIsochronous) add(UacStreamingBlocker.FEEDBACK_NOT_ISOCHRONOUS)
+        // UAC1 reserves the usage bits, so a feedback endpoint named by address may leave them at DATA.
+        if (feedback.usage != UacEndpointUsage.DATA && feedback.usage != UacEndpointUsage.FEEDBACK) {
+            add(UacStreamingBlocker.FEEDBACK_NOT_EXPLICIT)
+        }
+        if (feedback.maxPacketBytes < MIN_FEEDBACK_BYTES) add(UacStreamingBlocker.FEEDBACK_TOO_SMALL)
+        if (feedback.additionalTransactions != 0) add(UacStreamingBlocker.FEEDBACK_MULTIPLE_TRANSACTIONS)
+        if (feedback.interval !in 1..16) add(UacStreamingBlocker.FEEDBACK_BAD_INTERVAL)
+        if (version == UacVersion.UAC1 && feedback.refreshPeriodMs == null) {
+            add(UacStreamingBlocker.FEEDBACK_BAD_REFRESH)
+        }
+        if (feedback.synchAddress != 0 || (data.synchAddress != 0 && !data.names(feedback))) {
+            add(UacStreamingBlocker.FEEDBACK_BAD_REFERENCE)
+        }
+    }
 }
 
 enum class UacStreamingBlocker {
@@ -237,6 +274,17 @@ enum class UacStreamingBlocker {
     EMPTY_PACKETS,
     IMPLICIT_FEEDBACK,
     ASYNCHRONOUS_WITHOUT_FEEDBACK,
+    FEEDBACK_WRONG_DIRECTION,
+    FEEDBACK_NOT_ISOCHRONOUS,
+    FEEDBACK_NOT_EXPLICIT,
+    FEEDBACK_TOO_SMALL,
+    FEEDBACK_MULTIPLE_TRANSACTIONS,
+    FEEDBACK_BAD_INTERVAL,
+    FEEDBACK_BAD_REFRESH,
+    FEEDBACK_BAD_REFERENCE,
 }
 
 internal const val USB_STREAMING_TERMINAL = 0x0101
+
+/** Full speed sends feedback in 3 bytes, high speed in 4. */
+private const val MIN_FEEDBACK_BYTES = 3

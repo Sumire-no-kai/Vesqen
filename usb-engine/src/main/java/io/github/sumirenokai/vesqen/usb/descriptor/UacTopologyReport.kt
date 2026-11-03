@@ -38,7 +38,7 @@ private fun StringBuilder.describe(function: UacFunction, alt: UacAltSetting) {
         )
     }
     alt.dataEndpoint?.let { appendLine("        Data ${describe(it)}") }
-    alt.feedbackEndpoint?.let { appendLine("        Feedback ${describe(it)}") }
+    alt.feedbackEndpoint?.let { appendLine("        Feedback ${describe(it)}${describeRefresh(it)}") }
     if (alt.endpointSetsSampleRate) appendLine("        The endpoint accepts a sampling frequency request")
     val link = alt.terminalLink ?: return
     if (alt.isPlayback) {
@@ -69,3 +69,8 @@ private fun describe(endpoint: UacEndpoint) =
         endpoint.additionalTransactions,
         endpoint.interval,
     )
+
+private fun describeRefresh(feedback: UacEndpoint): String {
+    val refresh = feedback.refresh ?: return ""
+    return ", bRefresh $refresh (${feedback.refreshPeriodMs?.let { "$it ms" } ?: "not allowed"})"
+}

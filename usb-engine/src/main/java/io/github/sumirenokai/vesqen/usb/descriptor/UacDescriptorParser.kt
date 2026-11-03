@@ -222,9 +222,10 @@ private class ControlBuilder(val interfaceNumber: Int, private val protocol: Int
                 d.requireLength(9, "UAC1 output terminal")
                 outputTerminals += UacOutputTerminal(d.u8(3), d.u16(4), d.u8(7), clockId = null)
             }
-            0x04, 0x05 -> otherUnits += unitWithPins(d, idAt = 3, countAt = 4, "UAC1 mixer or selector unit")
+            0x04 -> otherUnits += unitWithPins(d, idAt = 3, countAt = 4, trailing = 5, "UAC1 mixer unit")
+            0x05 -> otherUnits += unitWithPins(d, idAt = 3, countAt = 4, trailing = 1, "UAC1 selector unit")
             0x06 -> featureUnits += uac1FeatureUnit(d)
-            0x07, 0x08 -> otherUnits += unitWithPins(d, idAt = 3, countAt = 6, "UAC1 processing or extension unit")
+            0x07, 0x08 -> otherUnits += uac1ProcessingUnit(d)
         }
     }
 
@@ -238,13 +239,18 @@ private class ControlBuilder(val interfaceNumber: Int, private val protocol: Int
                 d.requireLength(12, "UAC2 output terminal")
                 outputTerminals += UacOutputTerminal(d.u8(3), d.u16(4), d.u8(7), clockId = d.u8(8))
             }
-            0x04, 0x05 -> otherUnits += unitWithPins(d, idAt = 3, countAt = 4, "UAC2 mixer or selector unit")
+            0x04 -> otherUnits += unitWithPins(d, idAt = 3, countAt = 4, trailing = 8, "UAC2 mixer unit")
+            0x05 -> otherUnits += unitWithPins(d, idAt = 3, countAt = 4, trailing = 2, "UAC2 selector unit")
             0x06 -> featureUnits += uac2FeatureUnit(d)
             0x07 -> {
-                d.requireLength(7, "UAC2 effect unit")
+                // Room for the master controls and iEffects. The spec's table contradicts itself on
+                // the channel offsets, so this takes its lowest reading rather than refuse a device.
+                d.requireLength(12, "UAC2 effect unit")
                 otherUnits += UacOtherUnit(d.u8(3), listOf(d.u8(6)))
             }
-            0x08, 0x09 -> otherUnits += unitWithPins(d, idAt = 3, countAt = 6, "UAC2 processing or extension unit")
+            // The spec's offsets give 16+p and its formula 17+p; this takes the lower one.
+            0x08 -> otherUnits += unitWithPins(d, idAt = 3, countAt = 6, trailing = 9, "UAC2 processing unit")
+            0x09 -> otherUnits += unitWithPins(d, idAt = 3, countAt = 6, trailing = 8, "UAC2 extension unit")
             0x0A -> {
                 d.requireLength(8, "UAC2 clock source")
                 clockEntities += UacClockEntity.Source(
@@ -271,11 +277,22 @@ private class ControlBuilder(val interfaceNumber: Int, private val protocol: Int
         }
     }
 
-    private fun unitWithPins(d: Descriptor, idAt: Int, countAt: Int, name: String): UacOtherUnit {
+    /** [trailing] is how many bytes the unit's layout requires after its source IDs. */
+    private fun unitWithPins(d: Descriptor, idAt: Int, countAt: Int, trailing: Int, name: String): UacOtherUnit {
         d.requireLength(countAt + 1, name)
         val pins = d.u8(countAt)
-        d.requireLength(countAt + 1 + pins, "$name with $pins inputs")
+        d.requireLength(countAt + 1 + pins + trailing, "$name with $pins inputs")
         return UacOtherUnit(d.u8(idAt), d.bytes(countAt + 1, pins))
+    }
+
+    /** UAC1 states the size of bmControls inside the descriptor, so its length is known in two steps. */
+    private fun uac1ProcessingUnit(d: Descriptor): UacOtherUnit {
+        val name = "UAC1 processing or extension unit"
+        val unit = unitWithPins(d, idAt = 3, countAt = 6, trailing = 5, name)
+        val pins = unit.sourceIds.size
+        val controlSize = d.u8(11 + pins)
+        d.requireLength(13 + pins + controlSize, "$name with $controlSize control bytes")
+        return unit
     }
 
     private fun uac1FeatureUnit(d: Descriptor): UacFeatureUnit {
@@ -440,6 +457,7 @@ private class AltBuilder(private val alternate: Int, protocol: Int) {
             maxPacketBytes = maxPacket and 0x7FF,
             additionalTransactions = (maxPacket shr 11) and 0b11,
             interval = d.u8(6),
+            refresh = if (version == UacVersion.UAC1 && d.length >= 9) d.u8(7) else null,
             synchAddress = if (d.length >= 9) d.u8(8) else 0,
         )
     }
@@ -451,11 +469,11 @@ private class AltBuilder(private val alternate: Int, protocol: Int) {
     }
 
     fun build(): UacAltSetting {
-        val named = endpoints.mapNotNull { it.synchAddress.takeIf { address -> address != 0 } }
         val isFeedback = { endpoint: UacEndpoint ->
-            endpoint.usage == UacEndpointUsage.FEEDBACK || endpoint.address in named
+            endpoint.usage == UacEndpointUsage.FEEDBACK || endpoints.any { it.names(endpoint) }
         }
         return UacAltSetting(
+            version = version,
             alternateSetting = alternate,
             terminalLink = terminalLink,
             format = format?.let { parsed ->
