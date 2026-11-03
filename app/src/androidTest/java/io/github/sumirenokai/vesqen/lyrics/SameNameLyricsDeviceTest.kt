@@ -1,6 +1,8 @@
 package io.github.sumirenokai.vesqen.lyrics
 
+import android.os.Build
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import androidx.core.net.toUri
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.library.AndroidLibraryCatalog
@@ -21,6 +23,8 @@ import org.junit.Test
  * The folder's audio files say what they expect by name: `sidecar-*` has a same-name `.lrc` (any
  * case of the extension), `unreadable-*` has one in an encoding Vesqen does not read and no tags,
  * and `none-*` has neither. Every file is checked; the results are written next to the app's files.
+ * #208: the same files, found through MediaStore while the added folder covers them, read the same
+ * way through Android's own lookup, from Android 10 on.
  */
 class SameNameLyricsDeviceTest {
     @Test
@@ -51,6 +55,27 @@ class SameNameLyricsDeviceTest {
                 }
             }
             assertTrue("The QA folder has no sidecar-* file", results.keys.any { it.startsWith("sidecar-") })
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                catalog.refresh(includeDeviceLibrary = true, onProgress = {})
+                val covering = LocalLyricsResolver(app.contentResolver, LyricsStore(lyricsDirectory)) {
+                    mediaStoreCoveringDocumentUri(app, it)
+                }
+                val mediaStoreTracks = catalog.snapshot(includeDeviceLibrary = true).tracks
+                    .filter { it.contentUri.toUri().authority == MediaStore.AUTHORITY }
+                val fromMediaStore = mediaStoreTracks.filter { it.fileName.startsWith("sidecar-") }
+                assertTrue("MediaStore has no sidecar-* file; let it scan the QA folder", fromMediaStore.isNotEmpty())
+                fromMediaStore.forEach { track ->
+                    assertEquals(track.fileName, LyricsSource.SameNameFile, (covering.load(track) as? TrackLyrics.Found)?.source)
+                }
+                // Android refuses a file outside the added folder, and the app says where to add one.
+                val qaNames = tracks.map { it.fileName }.toSet()
+                mediaStoreTracks.firstOrNull { it.fileName !in qaNames }?.let { outside ->
+                    val lyrics = covering.load(outside)
+                    if (lyrics is TrackLyrics.None) assertTrue(outside.fileName, lyrics.folderHint)
+                    assertTrue(outside.fileName, (lyrics as? TrackLyrics.Found)?.source != LyricsSource.SameNameFile)
+                }
+            }
         } finally {
             catalog.close()
             lyricsDirectory.deleteRecursively()

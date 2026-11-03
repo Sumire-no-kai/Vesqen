@@ -11,6 +11,7 @@ import io.github.sumirenokai.vesqen.library.AndroidLibraryRebuildNotice
 import io.github.sumirenokai.vesqen.library.LibraryCatalogStore
 import io.github.sumirenokai.vesqen.library.TrackMergeFollowers
 import io.github.sumirenokai.vesqen.lyrics.LocalLyricsResolver
+import io.github.sumirenokai.vesqen.lyrics.mediaStoreCoveringDocumentUri
 import io.github.sumirenokai.vesqen.lyrics.LyricsStore
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryRecorder
 import io.github.sumirenokai.vesqen.playback.PlaybackStateStore
@@ -128,7 +129,9 @@ class VesqenApplication : Application() {
     /** #169: imported lyrics, kept with the other private data that is never backed up. */
     internal val lyricsStore by lazy { LyricsStore(File(noBackupFilesDir, "lyrics")) }
 
-    internal val lyricsResolver by lazy { LocalLyricsResolver(contentResolver, lyricsStore) }
+    internal val lyricsResolver by lazy {
+        LocalLyricsResolver(contentResolver, lyricsStore) { mediaStoreCoveringDocumentUri(this, it) }
+    }
 
     /** #165: says once that a corrupt catalog was rebuilt and what was lost with it. */
     internal val libraryRebuildNotice by lazy { AndroidLibraryRebuildNotice(this) }

@@ -23,6 +23,8 @@ data class PlaybackQueueItem(
     val artist: String,
     val isCurrent: Boolean,
     val listIndex: Int,
+    /** Stays with the entry when the queue moves, unlike [listIndex]; see [queueEntryId]. */
+    val entryId: String = "",
 )
 
 /**

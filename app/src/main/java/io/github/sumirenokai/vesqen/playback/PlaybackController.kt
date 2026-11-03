@@ -593,6 +593,7 @@ class PlaybackController(
                 artist = queueTrack?.artist ?: queueItem.mediaMetadata.artist?.toString().orEmpty(),
                 isCurrent = index == currentIndex,
                 listIndex = index,
+                entryId = queueItem.queueEntryId(),
             )
         }
         return PlaybackQueueCache(

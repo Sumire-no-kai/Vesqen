@@ -2,28 +2,39 @@ package io.github.sumirenokai.vesqen.ui.screens
 
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityManager
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -38,14 +49,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.max
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -59,6 +81,9 @@ import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.lyrics.UnreadableReason
 import io.github.sumirenokai.vesqen.lyrics.lineIndexAt
 import io.github.sumirenokai.vesqen.lyrics.lyricsKey
+import io.github.sumirenokai.vesqen.ui.formatDuration
+import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
+import io.github.sumirenokai.vesqen.ui.theme.VesqenDataStyle
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import kotlinx.coroutines.delay
@@ -99,6 +124,11 @@ internal fun rememberTrackLyrics(
 /**
  * Takes the cover's place on Now. Only this region scrolls; the page itself never does. Reads only
  * the lyrics and the playback position, so a track change elsewhere recomposes nothing here (#51).
+ *
+ * A tap anywhere brings the cover back, in every state (#209). The tap waits for what is inside:
+ * a scroll or a button consumes the touch first, so neither switches the view. It has no semantics:
+ * lines stay separate for TalkBack, and accessibility services switch through Now's More menu. A
+ * node behind the lyrics would not do, because Android's tree leaves out a node covered by the list.
  */
 @Composable
 internal fun NowLyricsPane(
@@ -110,9 +140,14 @@ internal fun NowLyricsPane(
     motionPolicy: VesqenMotionPolicy,
     onSeek: (Long) -> Unit,
     onImportLyrics: (() -> Unit)?,
+    onShowCover: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier.testTag("vesqen.now.lyrics")) {
+    Box(
+        modifier = modifier
+            .pointerInput(onShowCover) { detectTapGestures(onTap = { onShowCover() }) }
+            .testTag("vesqen.now.lyrics"),
+    ) {
         when (lyrics) {
             // A quiet pane while the file is read; the track's own controls stay usable.
             null -> Unit
@@ -186,6 +221,11 @@ private fun SyncedLyrics(
         // Following resumes at the current line, not at the next line change.
         followPaused = false
     }
+    val seekLineShown = followPaused && canSeek && !touchExploration
+    val targetIndex by remember(lyrics, listState, seekLineShown) {
+        derivedStateOf { if (seekLineShown) listState.centeredLineIndex(lyrics) else null }
+    }
+    fun seekTo(line: LyricLine) = onSeek(line.timeMs.coerceIn(0L, durationMs.takeIf { it > 0 } ?: Long.MAX_VALUE))
     var positioned by remember(lyrics) { mutableStateOf(false) }
     // TalkBack users move through the lines themselves; following would pull the focus away.
     LaunchedEffect(lyrics, currentIndex, touchExploration, followPaused) {
@@ -202,6 +242,18 @@ private fun SyncedLyrics(
     }
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val edge = maxHeight / 2
+        // Room for the seek line's time and button, so they do not cover a full line of text.
+        val gutter = max(SEEK_LINE_GUTTER, with(LocalDensity.current) { SEEK_LINE_GUTTER.value.sp.toDp() })
+        if (seekLineShown) {
+            // Two short marks instead of one line across: a line through the text reads as struck out.
+            val hairline = LocalVesqenColors.current.hairline
+            Row(
+                modifier = Modifier.align(Alignment.Center).fillMaxWidth().padding(horizontal = gutter),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                repeat(2) { Box(Modifier.size(SEEK_LINE_MARK, 1.dp).background(hairline)) }
+            }
+        }
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().testTag("vesqen.now.lyrics.lines"),
@@ -212,15 +264,61 @@ private fun SyncedLyrics(
                 LyricLineRow(
                     line = line,
                     current = index == currentIndex,
+                    targeted = index == targetIndex,
                     canSeek = canSeek,
-                    onSeek = { onSeek(line.timeMs.coerceIn(0L, durationMs.takeIf { it > 0 } ?: Long.MAX_VALUE)) },
+                    gutter = gutter,
+                    onSeek = { seekTo(line) },
                     modifier = Modifier.testTag("vesqen.now.lyrics.line.$index"),
                 )
             }
             item(key = "end") { Spacer(Modifier.height(edge)) }
         }
+        targetIndex?.let { index ->
+            val line = lyrics.lines[index]
+            Text(
+                text = formatDuration(line.timeMs),
+                style = VesqenDataStyle.copy(fontSize = 12.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                modifier = Modifier.align(Alignment.CenterStart).testTag("vesqen.now.lyrics.seek-time"),
+            )
+            IconButton(
+                onClick = {
+                    seekTo(line)
+                    // Following returns to the new position at once instead of after the pause.
+                    followPaused = false
+                },
+                modifier = Modifier.align(Alignment.CenterEnd).size(48.dp).testTag("vesqen.now.lyrics.seek"),
+            ) {
+                Icon(Icons.Filled.PlayArrow, stringResource(R.string.lyrics_play_from_line))
+            }
+        }
     }
 }
+
+/** The line under the middle of the list, skipping the pauses between lines, which show nothing. */
+private fun LazyListState.centeredLineIndex(lyrics: Lyrics.Synced): Int? {
+    val viewportCenter = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
+    // Item 0 is the leading spacer.
+    val rows = layoutInfo.visibleItemsInfo
+        .filter { lyrics.lines.getOrNull(it.index - 1)?.text?.isNotEmpty() == true }
+        .map { LyricRowBounds(it.index - 1, it.offset, it.size) }
+    return lineIndexAtMarker(viewportCenter, rows)
+}
+
+internal class LyricRowBounds(val lineIndex: Int, val offset: Int, val size: Int)
+
+/**
+ * The row the marker is on, however tall, or else the nearest one. Comparing row midpoints would
+ * pick a short row beside a tall row that the marker is still on.
+ */
+internal fun lineIndexAtMarker(marker: Int, rows: List<LyricRowBounds>): Int? = rows.minByOrNull { row ->
+    when {
+        marker < row.offset -> row.offset - marker
+        marker >= row.offset + row.size -> marker - (row.offset + row.size) + 1
+        else -> 0
+    }
+}?.lineIndex
 
 /**
  * The current line comes from the last reported position. While playing, the leaf wakes once per
@@ -256,14 +354,17 @@ private fun rememberCurrentLyricLine(lyrics: Lyrics.Synced, positionMs: Long, is
 /**
  * Body sans, centred like the title. The current line is set in the body colour and bold, the others
  * in the secondary colour at the same size, so the highlight never relies on colour alone (owner
- * decision 2). Each line with its translations is one TalkBack stop, read in order; nothing is
- * announced when the line changes.
+ * decision 2). The line under the seek line takes the body colour too, at its usual weight. Each
+ * line with its translations is one TalkBack stop, read in order; nothing is announced when the
+ * line changes. A touch does not seek (#209), but accessibility services can still click a line.
  */
 @Composable
 private fun LyricLineRow(
     line: LyricLine,
     current: Boolean,
+    targeted: Boolean,
     canSeek: Boolean,
+    gutter: Dp,
     onSeek: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -272,13 +373,28 @@ private fun LyricLineRow(
         Spacer(modifier.height(VesqenSpacing.lg))
         return
     }
-    val color = if (current) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+    val color = if (current || targeted) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+    val goToLine = stringResource(R.string.lyrics_play_from_line)
+    val interactionSource = remember { MutableInteractionSource() }
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(enabled = canSeek, onClickLabel = stringResource(R.string.lyrics_play_from_line), onClick = onSeek)
+            .semantics(mergeDescendants = true) {
+                if (canSeek) onClick(label = goToLine) { onSeek(); true }
+            }
+            // A keyboard still goes to the line. Neither of these takes a touch, which switches the view.
+            .onKeyEvent { event ->
+                if (canSeek && event.type == KeyEventType.KeyUp && event.key in LineKeys) {
+                    onSeek()
+                    true
+                } else {
+                    false
+                }
+            }
+            .indication(interactionSource, ripple())
+            .focusable(enabled = canSeek, interactionSource = interactionSource)
             .heightIn(min = 48.dp)
-            .padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.xs),
+            .padding(horizontal = gutter, vertical = VesqenSpacing.xs),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -382,3 +498,6 @@ private fun rememberTouchExplorationEnabled(): Boolean {
 }
 
 private const val FOLLOW_PAUSE_MILLIS = 4_000L
+private val LineKeys = setOf(Key.Enter, Key.NumPadEnter, Key.Spacebar, Key.DirectionCenter)
+private val SEEK_LINE_GUTTER = 40.dp
+private val SEEK_LINE_MARK = 20.dp

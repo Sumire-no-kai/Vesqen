@@ -1011,9 +1011,9 @@
     <string name="unmatched_record_discard_confirm_title">Discard the record of “%1$s”?</string>
     <string name="unmatched_record_discard_confirm_body">Its favorite, play count, places in playlists and imported lyrics will be deleted and cannot be restored. Your music files are not affected.</string>
     <!-- #169 local lyrics -->
-    <string name="lyrics">Lyrics</string>
     <string name="now_more_options">More options</string>
     <string name="lyrics_show">Show lyrics</string>
+    <string name="lyrics_show_cover">Show cover</string>
     <string name="lyrics_import">Import lyrics</string>
     <string name="lyrics_remove">Remove lyrics</string>
     <string name="lyrics_remove_confirm_title">Remove the imported lyrics?</string>
