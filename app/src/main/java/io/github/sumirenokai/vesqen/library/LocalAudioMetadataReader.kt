@@ -178,7 +178,9 @@ internal fun codecLabel(mimeType: String, fileName: String): String {
             "wav" -> "WAV"
             "aif", "aiff" -> "AIFF"
             "mp3" -> "MP3"
-            "aac", "m4a" -> "AAC"
+            "aac" -> "AAC"
+            // The container alone: an .m4a holds AAC or ALAC, and the system has not said which.
+            "m4a" -> "M4A"
             "ogg" -> "Ogg Vorbis"
             "opus" -> "Opus"
             else -> normalizedMime.substringAfter('/', "").uppercase()
