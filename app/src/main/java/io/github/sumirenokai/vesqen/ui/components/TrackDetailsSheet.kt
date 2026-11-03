@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -24,20 +26,31 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.library.TrackFullInfo
+import io.github.sumirenokai.vesqen.library.TrackInfoReader
 import io.github.sumirenokai.vesqen.lyrics.LyricsSource
 import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
@@ -71,7 +84,11 @@ fun TrackDetailsSheet(
     onImportLyrics: (() -> Unit)? = null,
     /** Only for lyrics the listener imported. */
     onRemoveLyrics: (() -> Unit)? = null,
+    /** Reads the file when Full information opens (#240). */
+    loadFullInfo: (suspend (AudioTrack) -> TrackFullInfo)? = null,
 ) {
+    val context = LocalContext.current
+    val fullInfoLoader = loadFullInfo ?: remember(context) { TrackInfoReader(context)::read }
     ModalBottomSheet(
         modifier = Modifier.testTag("vesqen.track-details"),
         onDismissRequest = onDismiss,
@@ -153,6 +170,7 @@ fun TrackDetailsSheet(
                     onRemoveLyrics = onRemoveLyrics,
                 )
                 TrackFacts(track, lyrics)
+                FullInfoSection(track, fullInfoLoader)
                 if (track.playCount > 0) {
                     Text(
                         text = pluralStringResource(R.plurals.play_count_value, track.playCount, track.playCount),
@@ -310,6 +328,104 @@ private fun TrackFacts(track: AudioTrack, lyrics: TrackLyrics?) {
         }
     }
 }
+
+/**
+ * Collapsed by default, so the sheet's actions stay near the top. The file is read when the section
+ * opens, and only rows with a value show: audio first, then tags (#240).
+ */
+@Composable
+private fun FullInfoSection(track: AudioTrack, load: suspend (AudioTrack) -> TrackFullInfo) {
+    var expanded by rememberSaveable(track.id) { mutableStateOf(false) }
+    val stateText = stringResource(if (expanded) R.string.now_notes_expanded else R.string.now_notes_collapsed)
+    val turn by animateFloatAsState(if (expanded) 180f else 0f, label = "vesqen.track-details.full-info-turn")
+    Column(verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xs)) {
+        PaperCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(role = Role.Button) { expanded = !expanded }
+                    .semantics { stateDescription = stateText }
+                    .heightIn(min = 52.dp)
+                    .padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.xs)
+                    .testTag("vesqen.track-details.full-info"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.full_info_title),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(Icons.Filled.KeyboardArrowDown, null, Modifier.graphicsLayer { rotationZ = turn })
+            }
+        }
+        if (expanded) {
+            val info by produceState<TrackFullInfo?>(null, track.id, track.contentUri) { value = load(track) }
+            info?.let { FullInfoRows(track, it) }
+        }
+    }
+}
+
+@Composable
+private fun FullInfoRows(track: AudioTrack, info: TrackFullInfo) {
+    val tags = info.tags
+    val audio = buildList {
+        tags.container?.let { add(stringResource(R.string.detail_container) to it) }
+        info.lossless?.let { lossless ->
+            add(stringResource(R.string.detail_compression) to stringResource(if (lossless) R.string.compression_lossless else R.string.compression_lossy))
+        }
+        if (track.fileSizeBytes > 0 && track.durationMs > 0) {
+            add(stringResource(R.string.detail_average_bitrate) to stringResource(R.string.bitrate_value, (track.fileSizeBytes * 8 / track.durationMs).toInt()))
+        }
+        info.channelLayout?.let { add(stringResource(R.string.detail_channel_layout) to it) }
+        tags.encoder?.let { add(stringResource(R.string.detail_encoder) to it) }
+        replayGainText(tags.replayGainTrackGain, tags.replayGainTrackPeak)?.let { add(stringResource(R.string.detail_replay_gain_track) to it) }
+        replayGainText(tags.replayGainAlbumGain, tags.replayGainAlbumPeak)?.let { add(stringResource(R.string.detail_replay_gain_album) to it) }
+        tags.coverMimeType?.let { mime ->
+            val format = mime.substringAfter('/').uppercase().let { if (it == "JPG") "JPEG" else it }
+            add(stringResource(R.string.detail_cover) to if (tags.coverIsFront) stringResource(R.string.cover_front_value, format) else format)
+        }
+    }
+    val tagRows = buildList {
+        tags.composer?.let { add(stringResource(R.string.detail_composer) to it) }
+        tags.lyricist?.let { add(stringResource(R.string.detail_lyricist) to it) }
+        tags.trackTotal?.let { add(stringResource(R.string.detail_track_total) to it.toString()) }
+        tags.discTotal?.let { add(stringResource(R.string.detail_disc_total) to it.toString()) }
+        tags.isrc?.let { add(stringResource(R.string.detail_isrc) to it) }
+    }
+    FullInfoGroup(stringResource(R.string.full_info_audio), audio)
+    if (tags.replayGainTrackGain != null || tags.replayGainAlbumGain != null) {
+        // Showing the values must not suggest that they are applied.
+        Text(
+            text = stringResource(R.string.replay_gain_not_applied),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    if (tagRows.isNotEmpty()) FullInfoGroup(stringResource(R.string.full_info_tags), tagRows)
+}
+
+@Composable
+private fun FullInfoGroup(title: String, rows: List<Pair<String, String>>) {
+    if (rows.isEmpty()) return
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.semantics { heading() },
+    )
+    PaperCard {
+        rows.forEachIndexed { index, (label, value) ->
+            if (index > 0) PaperDivider()
+            DetailLine(label, value)
+        }
+    }
+}
+
+@Composable
+private fun replayGainText(gain: String?, peak: String?): String? =
+    listOfNotNull(gain, peak?.let { stringResource(R.string.replay_gain_peak_value, it) })
+        .takeIf(List<String>::isNotEmpty)
+        ?.joinToString(stringResource(R.string.chain_segment_list_separator))
 
 @Composable
 private fun lyricsSourceLabel(lyrics: TrackLyrics): String = stringResource(

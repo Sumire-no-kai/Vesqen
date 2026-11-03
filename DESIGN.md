@@ -228,6 +228,7 @@ Header, mark, one plain sentence about the app, a facts card (version, developer
 
 ### Sheets and dialogs
 
+- Track details keep the listening facts visible. Full information, collapsed by default, reads the file when opened and shows audio facts and then tags, each row only with a value (#240). ReplayGain values are shown and not applied.
 - Queue and track details are bottom sheets that wrap their content. Queue rows play on tap and mark the current track with a Moss dot. A long press lifts a row with a brief haptic, the row follows the finger, the others make room, and the list scrolls near its edges; the drop moves the entry (#211). Rows have no arrow buttons; TalkBack and other services use Move up and Move down actions.
 - The queue's title shares its line with Clear queue and Close while it fits whole. Otherwise Clear queue moves to the line below, its label under the title, as the count has its own line (#35, #165).
 - Clear queue takes one tap. A snackbar where the mini-player was then offers Undo, which puts back the queue, its current track, position and shuffled order, paused. Owner decision, 2026-10-29 (#165).
