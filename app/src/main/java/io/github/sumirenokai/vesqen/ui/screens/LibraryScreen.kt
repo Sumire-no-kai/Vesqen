@@ -110,6 +110,7 @@ import io.github.sumirenokai.vesqen.library.libraryTitleKeys
 import io.github.sumirenokai.vesqen.ui.components.ConfirmDestructiveDialog
 import io.github.sumirenokai.vesqen.ui.components.LibraryAlphabetIndex
 import io.github.sumirenokai.vesqen.ui.components.LibraryTrackList
+import io.github.sumirenokai.vesqen.ui.components.SheetWithoutNavigationBand
 import io.github.sumirenokai.vesqen.ui.components.rememberTwinPathsPainter
 import io.github.sumirenokai.vesqen.ui.components.hairlineBelow
 import androidx.activity.compose.BackHandler
@@ -1901,6 +1902,7 @@ private fun LibrarySourcesSheet(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag("vesqen.library.source-manager"),
     ) {
+        SheetWithoutNavigationBand()
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1983,6 +1985,7 @@ private fun UnmatchedRecordsSheet(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag("vesqen.library.unmatched-records"),
     ) {
+        SheetWithoutNavigationBand()
         UnmatchedRecordsList(records, playlists, onAssign, onDiscard = { pendingDiscard = it })
     }
 }

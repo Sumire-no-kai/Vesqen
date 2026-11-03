@@ -1,8 +1,11 @@
 package io.github.sumirenokai.vesqen
 
 import android.content.Intent
+import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
@@ -20,7 +23,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableVesqenEdgeToEdge()
         if (savedInstanceState == null) takePremiumRequest(intent)
         setContent {
             VesqenTheme {
@@ -44,4 +47,10 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_OPEN_PREMIUM = "io.github.sumirenokai.vesqen.OPEN_PREMIUM"
     }
+}
+
+/** Three-button navigation otherwise sits on Android's white band instead of the page's own color. */
+internal fun ComponentActivity.enableVesqenEdgeToEdge() {
+    enableEdgeToEdge(navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT))
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) window.isNavigationBarContrastEnforced = false
 }

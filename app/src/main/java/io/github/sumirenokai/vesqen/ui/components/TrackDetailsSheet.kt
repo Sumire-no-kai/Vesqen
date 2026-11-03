@@ -94,6 +94,7 @@ fun TrackDetailsSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
+        SheetWithoutNavigationBand()
         Column(
             modifier = Modifier
                 .fillMaxWidth()

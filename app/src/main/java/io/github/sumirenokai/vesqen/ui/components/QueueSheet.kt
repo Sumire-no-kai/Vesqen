@@ -99,6 +99,7 @@ fun QueueSheet(
         // Half open, the list's end is off the screen, where no drag can reach the edge that scrolls it.
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
+        SheetWithoutNavigationBand()
         Column(
             modifier = Modifier
                 .fillMaxWidth()
