@@ -74,6 +74,7 @@ class UacRealDeviceDescriptorTest {
         maxPacketBytes = maxPacketBytes,
         additionalTransactions = 0,
         interval = 1,
+        refresh = 0,
         synchAddress = 0,
     )
 

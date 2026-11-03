@@ -3,6 +3,7 @@ package io.github.sumirenokai.vesqen.usb.descriptor
 import kotlin.random.Random
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -507,6 +508,291 @@ class UacDescriptorParserTest {
         }
     }
 
+    /** The two samples differ in this one byte, so nothing else can tell the refresh periods apart. */
+    @Test
+    fun `uac1 feedback endpoints that differ only in bRefresh stay distinguishable`() {
+        fun fixture(refresh: Int) = parsed(
+            uac1With(NAMES_FEEDBACK + endpoint(0x81, 0x01, 3, 1, refresh = refresh, synchAddress = 0)),
+        )
+
+        assertNotEquals(fixture(5), fixture(9))
+        assertTrue("bRefresh 5 (32 ms)" in fixture(5).describe())
+        assertTrue("bRefresh 9 (512 ms)" in fixture(9).describe())
+    }
+
+    @Test
+    fun `uac1 feedback keeps its refresh period apart from its interval`() {
+        mapOf(1 to 2, 5 to 32, 9 to 512).forEach { (refresh, periodMs) ->
+            val alt = onlyPlayback(
+                uac1With(NAMES_FEEDBACK + endpoint(0x81, 0x01, 3, 1, refresh = refresh, synchAddress = 0)),
+            )
+
+            assertEquals(refresh, alt.feedbackEndpoint!!.refresh)
+            assertEquals(periodMs, alt.feedbackEndpoint!!.refreshPeriodMs)
+            assertEquals(1, alt.feedbackEndpoint!!.interval)
+            assertTrue(alt.streamingBlockers.isEmpty())
+        }
+    }
+
+    @Test
+    fun `an illegal uac1 refresh is kept as declared and blocks streaming`() {
+        listOf(0, 10, 255).forEach { refresh ->
+            val raw = uac1With(NAMES_FEEDBACK + endpoint(0x81, 0x01, 3, 1, refresh = refresh, synchAddress = 0))
+            val alt = onlyPlayback(raw)
+
+            assertEquals(refresh, alt.feedbackEndpoint!!.refresh)
+            assertNull(alt.feedbackEndpoint!!.refreshPeriodMs)
+            assertEquals(setOf(UacStreamingBlocker.FEEDBACK_BAD_REFRESH), alt.streamingBlockers)
+            assertTrue("bRefresh $refresh (not allowed)" in parsed(raw).describe())
+        }
+    }
+
+    @Test
+    fun `a uac1 feedback endpoint without the refresh byte blocks streaming`() {
+        val alt = onlyPlayback(uac1With(NAMES_FEEDBACK + endpoint(0x81, 0x01, 3, 1)))
+
+        assertNull(alt.feedbackEndpoint!!.refresh)
+        assertEquals(setOf(UacStreamingBlocker.FEEDBACK_BAD_REFRESH), alt.streamingBlockers)
+    }
+
+    @Test
+    fun `uac2 feedback has no refresh rule to break`() {
+        val data = endpoint(0x01, ISO_ASYNC, 1024, 1)
+        listOf(
+            endpoint(0x81, ISO_FEEDBACK, 4, 4),
+            endpoint(0x81, ISO_FEEDBACK, 4, 4, refresh = 12, synchAddress = 0),
+        ).forEach { feedback ->
+            val raw = uac2With(data + feedback)
+            val alt = onlyPlayback(raw)
+
+            assertNull(alt.feedbackEndpoint!!.refresh)
+            assertNull(alt.feedbackEndpoint!!.refreshPeriodMs)
+            assertEquals(4, alt.feedbackEndpoint!!.interval)
+            assertTrue(alt.streamingBlockers.isEmpty())
+            assertFalse("bRefresh" in parsed(raw).describe())
+        }
+    }
+
+    @Test
+    fun `a feedback candidate that cannot do the job blocks an asynchronous endpoint`() {
+        listOf(
+            endpoint(0x81, 0x02, 3, 1, refresh = 5, synchAddress = 0) to
+                setOf(UacStreamingBlocker.FEEDBACK_NOT_ISOCHRONOUS),
+            endpoint(0x02, ISO_FEEDBACK, 3, 1, refresh = 5, synchAddress = 0) to
+                setOf(UacStreamingBlocker.FEEDBACK_WRONG_DIRECTION, UacStreamingBlocker.FEEDBACK_BAD_REFERENCE),
+            endpoint(0x81, 0x01, 0, 1, refresh = 5, synchAddress = 0) to setOf(UacStreamingBlocker.FEEDBACK_TOO_SMALL),
+            endpoint(0x81, 0x01, 2, 1, refresh = 5, synchAddress = 0) to setOf(UacStreamingBlocker.FEEDBACK_TOO_SMALL),
+            endpoint(0x81, 0x01, 0x0800 or 4, 1, refresh = 5, synchAddress = 0) to
+                setOf(UacStreamingBlocker.FEEDBACK_MULTIPLE_TRANSACTIONS),
+            endpoint(0x81, 0x01, 3, 0, refresh = 5, synchAddress = 0) to setOf(UacStreamingBlocker.FEEDBACK_BAD_INTERVAL),
+            endpoint(0x81, 0x01, 3, 17, refresh = 5, synchAddress = 0) to setOf(UacStreamingBlocker.FEEDBACK_BAD_INTERVAL),
+            endpoint(0x81, 0x21, 3, 1, refresh = 5, synchAddress = 0) to setOf(UacStreamingBlocker.FEEDBACK_NOT_EXPLICIT),
+            endpoint(0x81, 0x31, 3, 1, refresh = 5, synchAddress = 0) to setOf(UacStreamingBlocker.FEEDBACK_NOT_EXPLICIT),
+            endpoint(0x81, 0x01, 3, 1, refresh = 5, synchAddress = 0x02) to
+                setOf(UacStreamingBlocker.FEEDBACK_BAD_REFERENCE),
+        ).forEachIndexed { index, (candidate, blockers) ->
+            assertEquals("Case $index", blockers, onlyPlayback(uac1With(NAMES_FEEDBACK + candidate)).streamingBlockers)
+        }
+    }
+
+    @Test
+    fun `the same faults block a uac2 asynchronous endpoint`() {
+        val data = endpoint(0x01, ISO_ASYNC, 1024, 1)
+        listOf(
+            endpoint(0x81, 0x12, 4, 4) to setOf(UacStreamingBlocker.FEEDBACK_NOT_ISOCHRONOUS),
+            endpoint(0x02, ISO_FEEDBACK, 4, 4) to setOf(UacStreamingBlocker.FEEDBACK_WRONG_DIRECTION),
+            endpoint(0x81, ISO_FEEDBACK, 0, 4) to setOf(UacStreamingBlocker.FEEDBACK_TOO_SMALL),
+            endpoint(0x81, ISO_FEEDBACK, 0x0800 or 4, 4) to setOf(UacStreamingBlocker.FEEDBACK_MULTIPLE_TRANSACTIONS),
+            endpoint(0x81, ISO_FEEDBACK, 4, 0) to setOf(UacStreamingBlocker.FEEDBACK_BAD_INTERVAL),
+        ).forEachIndexed { index, (candidate, blockers) ->
+            assertEquals("Case $index", blockers, onlyPlayback(uac2With(data + candidate)).streamingBlockers)
+        }
+    }
+
+    @Test
+    fun `feedback at the edge of what is allowed passes`() {
+        listOf(
+            endpoint(0x81, 0x01, 3, 1, refresh = 1, synchAddress = 0),
+            endpoint(0x81, 0x01, 4, 16, refresh = 9, synchAddress = 0),
+        ).forEach { candidate ->
+            assertTrue(onlyPlayback(uac1With(NAMES_FEEDBACK + candidate)).streamingBlockers.isEmpty())
+        }
+    }
+
+    @Test
+    fun `a data endpoint naming a different endpoint does not get this feedback`() {
+        val namesAnother = endpoint(0x01, ISO_ASYNC, 196, 1, refresh = 0, synchAddress = 0x82)
+
+        assertEquals(
+            setOf(UacStreamingBlocker.FEEDBACK_BAD_REFERENCE),
+            onlyPlayback(
+                uac1With(namesAnother + endpoint(0x81, ISO_FEEDBACK, 3, 1, refresh = 5, synchAddress = 0)),
+            ).streamingBlockers,
+        )
+        assertEquals(setOf(UacStreamingBlocker.ASYNCHRONOUS_WITHOUT_FEEDBACK), onlyPlayback(uac1With(namesAnother)).streamingBlockers)
+    }
+
+    /** Linux accepts this form. Matched by exact address, the setting was read as a capture stream. */
+    @Test
+    fun `a synch address without its direction bit still finds the feedback endpoint`() {
+        val alt = onlyPlayback(
+            uac1With(
+                endpoint(0x01, ISO_ASYNC, 196, 1, refresh = 0, synchAddress = 0x01) +
+                    endpoint(0x81, 0x01, 3, 1, refresh = 5, synchAddress = 0),
+            ),
+        )
+
+        assertTrue(alt.isPlayback)
+        assertEquals(0x01, alt.dataEndpoint!!.address)
+        assertEquals(0x81, alt.feedbackEndpoint!!.address)
+        assertTrue(alt.streamingBlockers.isEmpty())
+    }
+
+    @Test
+    fun `an endpoint naming its own direction has no feedback`() {
+        val alt = onlyPlayback(uac1With(endpoint(0x01, ISO_ASYNC, 196, 1, refresh = 0, synchAddress = 0x01)))
+
+        assertEquals(0x01, alt.dataEndpoint!!.address)
+        assertNull(alt.feedbackEndpoint)
+        assertEquals(setOf(UacStreamingBlocker.ASYNCHRONOUS_WITHOUT_FEEDBACK), alt.streamingBlockers)
+    }
+
+    @Test
+    fun `a capture endpoint can name an out endpoint for its sync`() {
+        val alt = onlyPlayback(
+            uac1With(
+                endpoint(0x81, ISO_ADAPTIVE, 96, 1, refresh = 0, synchAddress = 0x02) +
+                    endpoint(0x02, 0x01, 3, 1, refresh = 5, synchAddress = 0),
+            ),
+        )
+
+        assertTrue(alt.isCapture)
+        assertEquals(0x81, alt.dataEndpoint!!.address)
+        assertEquals(0x02, alt.feedbackEndpoint!!.address)
+    }
+
+    @Test
+    fun `feedback found by its usage alone is accepted and an unmarked one is not guessed`() {
+        val unnamed = endpoint(0x01, ISO_ASYNC, 196, 1, refresh = 0, synchAddress = 0)
+
+        assertTrue(
+            onlyPlayback(
+                uac1With(unnamed + endpoint(0x81, ISO_FEEDBACK, 3, 1, refresh = 5, synchAddress = 0)),
+            ).streamingBlockers.isEmpty(),
+        )
+        assertEquals(
+            setOf(UacStreamingBlocker.ASYNCHRONOUS_WITHOUT_FEEDBACK),
+            onlyPlayback(
+                uac1With(unnamed + endpoint(0x81, 0x01, 3, 1, refresh = 5, synchAddress = 0)),
+            ).streamingBlockers,
+        )
+        // A synch address of 0 means none, not endpoint number 0.
+        assertNull(
+            onlyPlayback(
+                uac1With(unnamed + endpoint(0x80, 0x01, 3, 1, refresh = 5, synchAddress = 0)),
+            ).feedbackEndpoint,
+        )
+    }
+
+    /** Only an asynchronous endpoint depends on it, and Linux ignores it for the others as well. */
+    @Test
+    fun `an adaptive endpoint does not depend on a broken feedback candidate`() {
+        val alt = onlyPlayback(
+            uac1With(endpoint(0x01, ISO_ADAPTIVE, 192, 1) + endpoint(0x81, 0x12, 0, 0)),
+        )
+
+        assertEquals(UacSyncType.ADAPTIVE, alt.dataEndpoint!!.syncType)
+        assertTrue(alt.streamingBlockers.isEmpty())
+    }
+
+    @Test
+    fun `the report states why a feedback endpoint cannot be used`() {
+        val report = parsed(
+            uac1With(NAMES_FEEDBACK + endpoint(0x81, 0x02, 3, 1, refresh = 5, synchAddress = 0)),
+        ).describe()
+
+        assertTrue("FEEDBACK_NOT_ISOCHRONOUS" in report)
+    }
+
+    @Test
+    fun `a selector on the path without its trailing field is refused`() {
+        fun device(selector: ByteArray) = device(0x0200) + configuration() +
+            interfaceOf(0, 0, SUBCLASS_CONTROL) + uac1Header(1) +
+            classInterface(2, 1, *le16(0x0101), 0, 2, 0, 0, 0, 0) +
+            classInterface(6, 2, 1, 1, 0b10, 0) +
+            selector +
+            classInterface(3, 3, *le16(0x0301), 0, 4, 0)
+
+        assertTrue(UacDescriptorParser.parse(device(classInterface(5, 4, 1, 2))) is UacParseResult.Malformed)
+        assertEquals(
+            listOf(2),
+            parsed(device(classInterface(5, 4, 1, 2, 0))).functions.single().featureUnitsAfter(1).map(UacFeatureUnit::id),
+        )
+    }
+
+    @Test
+    fun `uac1 units need every field after their source ids`() {
+        val control = device(0x0110) + configuration() + interfaceOf(0, 0, SUBCLASS_CONTROL)
+        listOf(1, 2, 3).forEach { pins ->
+            val sources = IntArray(pins) { it + 10 }
+            // Mixer: bNrChannels, wChannelConfig, iChannelNames, iMixer.
+            assertTrailingFieldsRequired(control, 4, 5, sources, 4, pins, *sources, 2, *le16(3), 0, 0)
+            // Selector: iSelector.
+            assertTrailingFieldsRequired(control, 5, 1, sources, 4, pins, *sources, 0)
+            // Processing and extension: bNrChannels, wChannelConfig, iChannelNames, bControlSize, bmControls, iName.
+            listOf(7, 8).forEach { subtype ->
+                listOf(0, 1, 3).forEach { controlSize ->
+                    assertTrailingFieldsRequired(
+                        control, subtype, 6 + controlSize, sources,
+                        4, *le16(1), pins, *sources, 2, *le16(3), 0, controlSize, *IntArray(controlSize), 0,
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `uac2 units need every field after their source ids`() {
+        val control = device(0x0200) + configuration() + interfaceOf(0, 0, SUBCLASS_CONTROL, protocol = 0x20)
+        listOf(1, 2, 3).forEach { pins ->
+            val sources = IntArray(pins) { it + 10 }
+            // Mixer: bNrChannels, bmChannelConfig, iChannelNames, bmControls, iMixer.
+            assertTrailingFieldsRequired(control, 4, 8, sources, 4, pins, *sources, 2, *le32(3), 0, 0, 0)
+            // Selector: bmControls, iSelector.
+            assertTrailingFieldsRequired(control, 5, 2, sources, 4, pins, *sources, 0, 0)
+            // Processing: bNrChannels, bmChannelConfig, iChannelNames, two bytes of bmControls, iProcessing.
+            assertTrailingFieldsRequired(control, 8, 9, sources, 4, *le16(1), pins, *sources, 2, *le32(3), 0, *le16(0), 0)
+            // Extension: the same with one byte of bmControls.
+            assertTrailingFieldsRequired(control, 9, 8, sources, 4, *le16(1), pins, *sources, 2, *le32(3), 0, 0, 0)
+        }
+        // Effect: the master controls and iEffects.
+        assertTrailingFieldsRequired(control, 7, 5, intArrayOf(2), 4, *le16(1), 2, *le32(0), 0)
+    }
+
+    @Test
+    fun `a unit may carry more than its minimum layout`() {
+        val uac1 = device(0x0110) + configuration() + interfaceOf(0, 0, SUBCLASS_CONTROL)
+        val uac2 = device(0x0200) + configuration() + interfaceOf(0, 0, SUBCLASS_CONTROL, protocol = 0x20)
+        listOf(
+            uac1 + classInterface(4, 4, 1, 2, 2, *le16(3), 0, 0xFF, 0xFF, 0),
+            uac1 + classInterface(7, 4, *le16(1), 1, 2, 2, *le16(3), 0, 1, 0, 0, 9, 9),
+            uac2 + classInterface(4, 4, 1, 2, 2, *le32(3), 0, 0xFF, 0xFF, 0, 0),
+            uac2 + classInterface(7, 4, *le16(1), 2, *le32(0), *le32(0), *le32(0), 0),
+            uac2 + classInterface(8, 4, *le16(1), 1, 2, 2, *le32(3), 0, *le16(0), 0, 9, 9),
+        ).forEachIndexed { index, raw ->
+            assertEquals("Case $index", listOf(2), parsed(raw).functions.single().otherUnits.single().sourceIds)
+        }
+    }
+
+    @Test
+    fun `subtypes this parser does not know stay skipped however short`() {
+        val uac1 = device(0x0110) + configuration() + interfaceOf(0, 0, SUBCLASS_CONTROL)
+        val uac2 = device(0x0200) + configuration() + interfaceOf(0, 0, SUBCLASS_CONTROL, protocol = 0x20)
+
+        assertTrue(parsed(uac1 + classInterface(0x09, 4)).functions.single().otherUnits.isEmpty())
+        assertTrue(parsed(uac2 + classInterface(0x0E, 4)).functions.single().otherUnits.isEmpty())
+    }
+
     /** The bytes fit the buffer, but the leftover would otherwise be dropped without a word. */
     @Test
     fun `a feature unit with a partial control entry is refused`() {
@@ -522,7 +808,7 @@ class UacDescriptorParserTest {
 
     @Test
     fun `every truncation of a real layout is handled`() {
-        listOf(uac1Device(), uac2Device()).forEach { whole ->
+        listOf(uac1Device(), uac2Device(), uac1EveryUnit(), uac2EveryUnit()).forEach { whole ->
             (0 until whole.size).forEach { size ->
                 // Cutting at a descriptor boundary is a shorter valid dump; the rest must be refused.
                 UacDescriptorParser.parse(whole.copyOf(size))
@@ -535,7 +821,7 @@ class UacDescriptorParserTest {
     @Test
     fun `corrupted descriptors never crash the parser`() {
         val random = Random(71)
-        val samples = listOf(uac1Device(), uac2Device())
+        val samples = listOf(uac1Device(), uac2Device(), uac1EveryUnit(), uac2EveryUnit())
         repeat(20_000) {
             val raw = samples.random(random).copyOf()
             repeat(random.nextInt(1, 8)) { raw[random.nextInt(raw.size)] = random.nextInt(256).toByte() }
@@ -583,12 +869,52 @@ class UacDescriptorParserTest {
     private fun onlyPlayback(raw: ByteArray): UacAltSetting =
         parsed(raw).functions.single().streamingInterfaces.single().alternateSettings.single()
 
+    /** [complete] is the body of a unit with ID 4, and its last [trailing] bytes come after the source IDs. */
+    private fun assertTrailingFieldsRequired(
+        control: ByteArray,
+        subtype: Int,
+        trailing: Int,
+        sources: IntArray,
+        vararg complete: Int,
+    ) {
+        val unit = parsed(control + classInterface(subtype, *complete)).functions.single().otherUnits.single()
+        assertEquals(UacOtherUnit(4, sources.toList()), unit)
+        (1..trailing).forEach { missing ->
+            val raw = control + classInterface(subtype, *complete.copyOf(complete.size - missing))
+            assertTrue(
+                "Subtype $subtype with ${sources.size} inputs, $missing bytes short",
+                UacDescriptorParser.parse(raw) is UacParseResult.Malformed,
+            )
+        }
+    }
+
     private fun uac1With(
         endpoints: ByteArray,
         general: ByteArray = uac1General(1),
         format: ByteArray = uac1Format(),
     ) = device(0x0110) + configuration() + uac1Control() +
         interfaceOf(1, 1, SUBCLASS_STREAMING) + general + format + endpoints
+
+    private fun uac2With(endpoints: ByteArray) = device(0x0200) + configuration() +
+        interfaceOf(0, 0, SUBCLASS_CONTROL, protocol = 0x20) +
+        interfaceOf(1, 1, SUBCLASS_STREAMING, protocol = 0x20) +
+        classInterface(1, 1, 0, 1, *le32(1), 2, *le32(3), 0) +
+        classInterface(2, 1, 3, 24) +
+        endpoints
+
+    private fun uac1EveryUnit() = device(0x0110) + configuration() + uac1Control() +
+        classInterface(4, 4, 2, 1, 2, 2, *le16(3), 0, 0xFF, 0) +
+        classInterface(5, 5, 2, 1, 2, 0) +
+        classInterface(7, 6, *le16(1), 2, 1, 2, 2, *le16(3), 0, 2, 0, 0, 0) +
+        classInterface(8, 7, *le16(1), 2, 1, 2, 2, *le16(3), 0, 1, 0, 0)
+
+    private fun uac2EveryUnit() = device(0x0200) + configuration() +
+        interfaceOf(0, 0, SUBCLASS_CONTROL, protocol = 0x20) +
+        classInterface(4, 4, 2, 1, 2, 2, *le32(3), 0, 0xFF, 0, 0) +
+        classInterface(5, 5, 2, 1, 2, 0, 0) +
+        classInterface(7, 6, *le16(1), 1, *le32(0), *le32(0), 0) +
+        classInterface(8, 7, *le16(1), 2, 1, 2, 2, *le32(3), 0, *le16(0), 0) +
+        classInterface(9, 8, *le16(1), 2, 1, 2, 2, *le32(3), 0, 0, 0)
 
     private fun uac1Device() = device(0x0110) + configuration() +
         interfaceOf(0, 0, SUBCLASS_CONTROL) + uac1Header(1, 2) +
@@ -657,6 +983,9 @@ class UacDescriptorParserTest {
         const val ISO_ASYNC = 0x05
         const val ISO_ADAPTIVE = 0x09
         const val ISO_FEEDBACK = 0x11
+
+        /** An asynchronous UAC1 data endpoint that points at a feedback endpoint 0x81. */
+        val NAMES_FEEDBACK = endpoint(0x01, ISO_ASYNC, 196, 1, refresh = 0, synchAddress = 0x81)
 
         fun le16(value: Int) = intArrayOf(value and 0xFF, value shr 8 and 0xFF)
 
