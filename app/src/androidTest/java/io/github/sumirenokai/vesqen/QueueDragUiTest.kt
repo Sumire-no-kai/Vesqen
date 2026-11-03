@@ -155,6 +155,31 @@ class QueueDragUiTest {
     }
 
     @Test
+    fun aChangeBehindPositionKeysStillEndsADragAndAPreview() {
+        // The same track twice without occurrence ids: the rows fall back to position keys.
+        fun positions(vararg tracks: Long) = tracks.mapIndexed { index, track -> item(track, index, entry = "same-$track") }
+        show(positions(1, 1, 2))
+
+        liftAndDrag(row = 0, rows = 2f)
+        snapshot = snapshot.copy(queue = positions(3, 3, 4))
+        compose.mainClock.advanceTimeBy(100)
+        drop()
+
+        compose.runOnIdle { assertTrue("The drag belonged to the old queue", moved.isEmpty()) }
+        assertEquals("Track 3", rowTitle(0))
+
+        // A drop that the queue confirms shows the queue's own order at once.
+        liftAndDrag(row = 0, rows = 2f)
+        drop()
+        compose.runOnIdle { assertEquals(listOf(0 to 2), moved) }
+        snapshot = snapshot.copy(queue = positions(3, 4, 3))
+        compose.waitForIdle()
+        assertEquals("Track 3", rowTitle(0))
+        assertEquals("Track 4", rowTitle(1))
+        assertEquals("Track 3", rowTitle(2))
+    }
+
+    @Test
     fun aDropOnTheSamePlaceMovesNothing() {
         show(listOf(item(1, 0), item(2, 1), item(3, 2)))
 

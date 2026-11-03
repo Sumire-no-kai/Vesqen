@@ -144,6 +144,8 @@ private fun QueueList(
     val queue = snapshot.queue
     val enabled = snapshot.isControllerReady
     val rowKeys = remember(queue) { queueRowKeys(queue) }
+    // Position keys stay the same when entries change places, so the keys alone cannot show a change.
+    val queueContent = remember(queue) { queue.map { Triple(it.listIndex, it.trackId, it.entryId) } }
     val rowsByKey = remember(queue, rowKeys) { rowKeys.zip(queue).toMap() }
     val currentQueue by rememberUpdatedState(queue)
     val currentKeys by rememberUpdatedState(rowKeys)
@@ -165,7 +167,7 @@ private fun QueueList(
     val downLabel = stringResource(R.string.move_down)
     val shownKeys = preview ?: rowKeys
 
-    LaunchedEffect(rowKeys) {
+    LaunchedEffect(queueContent) {
         dragged = null
         preview = null
     }
