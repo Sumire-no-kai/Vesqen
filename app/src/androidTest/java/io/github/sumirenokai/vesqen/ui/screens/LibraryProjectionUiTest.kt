@@ -3,6 +3,8 @@ package io.github.sumirenokai.vesqen.ui.screens
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasScrollAction
@@ -250,6 +252,37 @@ class LibraryProjectionUiTest {
             compose.onAllNodesWithTag("vesqen.library.save-order").fetchSemanticsNodes().isEmpty()
         }
         assertEquals(listOf(2L, 1L), projections.shown?.favoriteVisibleTracks?.map(AudioTrack::id))
+    }
+
+    @Test fun orderEditingWaitsForTheListItWouldStartFrom() {
+        tracks.value = listOf(
+            track(1, "Bell", favoritePosition = 1),
+            track(2, "Alder", favoritePosition = 2),
+        )
+        showLibrary()
+        settle()
+        compose.onNodeWithTag("vesqen.library.favorites").performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithTag("vesqen.library.edit-order").fetchSemanticsNodes().size == 1
+        }
+        compose.onNodeWithTag("vesqen.library.sort").performClick()
+        compose.onNodeWithText(compose.activity.getString(R.string.sort_title)).performClick()
+        compose.waitUntil(5_000) { projections.shown?.input?.favoriteCustomOrder == false }
+        compose.waitForIdle()
+        assertEquals(listOf(2L, 1L), projections.shown?.favoriteVisibleTracks?.map(AudioTrack::id))
+
+        gate.hold()
+        compose.onNodeWithTag("vesqen.library.sort").performClick()
+        compose.onNodeWithText(compose.activity.getString(R.string.custom_track_order)).performClick()
+        compose.waitForIdle()
+        // Still the title order on screen: editing from it would save it over the custom order.
+        compose.onNodeWithTag("vesqen.library.edit-order").assertIsNotEnabled()
+
+        gate.release()
+        compose.waitUntil(5_000) { projections.shown?.input?.favoriteCustomOrder == true }
+        compose.waitForIdle()
+        compose.onNodeWithTag("vesqen.library.edit-order").assertIsEnabled()
+        assertEquals(listOf(1L, 2L), projections.shown?.favoriteVisibleTracks?.map(AudioTrack::id))
     }
 
     private fun track(id: Long, title: String, favoritePosition: Long? = null) = AudioTrack(

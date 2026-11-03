@@ -508,7 +508,9 @@ fun LibraryScreen(
                             orderSaveFailed = false
                             orderTarget = selectedCollection?.let { it.playlistId to it.tracks } ?: (null to visibleTracks)
                         },
-                        enabled = query.isBlank() && shownQuery.isBlank() && (!favoritesOnly || favoriteCustomOrder),
+                        // The editor starts from the rows on screen, and saving it replaces the stored order, so
+                        // those rows must already be the ones asked for.
+                        enabled = projectionSettled && query.isBlank() && (!favoritesOnly || favoriteCustomOrder),
                         modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.library.edit-order"),
                     ) { Text(stringResource(R.string.edit_track_order)) }
                 } else {
