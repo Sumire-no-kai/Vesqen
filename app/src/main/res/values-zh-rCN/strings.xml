@@ -16,7 +16,6 @@
     <string name="notifications_disabled_compact">播放通知已关闭</string>
     <string name="device_music_access_compact">允许访问设备音乐</string>
     <string name="device_music_access_body">授予 Android 媒体访问权限即可纳入系统已索引的音乐。你仍可以在下方单独添加文件夹。</string>
-    <string name="music_sources">音乐来源</string>
     <string name="add_music_folder">添加音乐文件夹</string>
     <string name="manage_music_sources">管理音乐来源</string>
     <plurals name="imported_folders_count">

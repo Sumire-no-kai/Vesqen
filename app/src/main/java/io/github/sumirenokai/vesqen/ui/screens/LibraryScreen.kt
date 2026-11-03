@@ -1,11 +1,14 @@
 package io.github.sumirenokai.vesqen.ui.screens
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -52,6 +55,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -430,8 +434,8 @@ fun LibraryScreen(
         LaunchedEffect(state.unmatchedRecords.isEmpty()) {
             if (state.unmatchedRecords.isEmpty()) showUnmatchedRecords = false
         }
-        // #191 C2: the access notice and the sources card take at most half the height under the
-        // title and scroll inside it. At 320 x 533 dp and 2.0x text the card with the unmatched-records
+        // #191 C2: the access notice and, further down, the sources card take at most half the height
+        // left and scroll inside it. At 320 x 533 dp and 2.0x text the card with the unmatched-records
         // line otherwise left the songs no height. A scanning card can reach the limit at normal text
         // on a small phone too, so the two short notices below stay outside, always in view (R3-C2).
         Column(
@@ -447,22 +451,6 @@ fun LibraryScreen(
                     denied = state.musicAccess == MusicAccess.DENIED,
                     onRequestMusicAccess = onRequestMusicAccess,
                     onOpenAppSettings = onOpenAppSettings,
-                )
-            }
-            if (
-                state.sources.any { it.kind == LibrarySourceKind.FOLDER } ||
-                state.scanProgress != null ||
-                state.sources.any { it.scanState == LibraryScanState.FAILED } ||
-                state.promptsUnmatchedRecords
-            ) {
-                LibrarySourcesCard(
-                    state = state,
-                    onAddLibraryFolder = onAddLibraryFolder,
-                    onRemoveLibraryFolder = onRemoveLibraryFolder,
-                    onPauseLibraryScan = onPauseLibraryScan,
-                    onResumeLibraryScan = onResumeLibraryScan,
-                    onReviewUnmatchedRecords = { showUnmatchedRecords = true },
-                    onDismissUnmatchedRecords = onDismissUnmatchedRecords,
                 )
             }
         }
@@ -538,6 +526,40 @@ fun LibraryScreen(
                 stringResource(R.string.track_order_save_failed), Modifier.padding(horizontal = 16.dp),
                 color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
             )
+        }
+        // About the whole library, so it follows the tabs on the root lists. A folder, an album or
+        // favorites starts with its own back row instead.
+        val cardMillis = if (appliedMotionPolicy.reduceMotion) appliedMotionPolicy.stateChangeMillis else 180
+        AnimatedVisibility(
+            visible = contentView == LibraryContentView.Root && (
+                state.sources.any { it.kind == LibrarySourceKind.FOLDER } ||
+                    state.scanProgress != null ||
+                    state.sources.any { it.scanState == LibraryScanState.FAILED } ||
+                    state.promptsUnmatchedRecords
+                ),
+            modifier = Modifier.atMostShareOfRemainingHeight(HeaderNoticesShare),
+            enter = if (appliedMotionPolicy.reduceMotion) {
+                fadeIn(tween(cardMillis))
+            } else {
+                fadeIn(tween(cardMillis)) + expandVertically(tween(cardMillis, easing = LibraryHierarchyEasing))
+            },
+            exit = if (appliedMotionPolicy.reduceMotion) {
+                fadeOut(tween(cardMillis))
+            } else {
+                fadeOut(tween(cardMillis)) + shrinkVertically(tween(cardMillis, easing = LibraryHierarchyEasing))
+            },
+        ) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                LibrarySourcesCard(
+                    state = state,
+                    onAddLibraryFolder = onAddLibraryFolder,
+                    onRemoveLibraryFolder = onRemoveLibraryFolder,
+                    onPauseLibraryScan = onPauseLibraryScan,
+                    onResumeLibraryScan = onResumeLibraryScan,
+                    onReviewUnmatchedRecords = { showUnmatchedRecords = true },
+                    onDismissUnmatchedRecords = onDismissUnmatchedRecords,
+                )
+            }
         }
         Box(modifier = Modifier.weight(1f)) {
             AnimatedContent(
@@ -1727,8 +1749,8 @@ private fun LibrarySourcesCard(
         shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
         color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
-        Column(modifier = Modifier.padding(VesqenSpacing.md)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.padding(start = VesqenSpacing.sm, end = VesqenSpacing.xxs)) {
+            val folderCount: @Composable RowScope.() -> Unit = {
                 Icon(
                     imageVector = Icons.Filled.FolderOpen,
                     contentDescription = null,
@@ -1736,10 +1758,17 @@ private fun LibrarySourcesCard(
                 )
                 Spacer(Modifier.width(VesqenSpacing.xs))
                 Text(
-                    text = stringResource(R.string.music_sources),
-                    style = MaterialTheme.typography.titleSmall,
+                    text = pluralStringResource(
+                        R.plurals.imported_folders_count,
+                        folders.size,
+                        folders.size,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
+            }
+            val sourcesButton: @Composable () -> Unit = {
                 TextButton(
                     onClick = if (folders.isEmpty()) {
                         onAddLibraryFolder
@@ -1762,18 +1791,26 @@ private fun LibrarySourcesCard(
                     )
                 }
             }
-            Text(
-                text = pluralStringResource(
-                    R.plurals.imported_folders_count,
-                    folders.size,
-                    folders.size,
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            BoxWithConstraints {
+                // Beside a long button, narrow or large text would leave the count a letter per line.
+                if (maxWidth < 300.dp || LocalDensity.current.fontScale > 1.3f) {
+                    Column {
+                        Row(
+                            modifier = Modifier.padding(top = VesqenSpacing.xs),
+                            verticalAlignment = Alignment.CenterVertically,
+                            content = folderCount,
+                        )
+                        Box(Modifier.align(Alignment.End)) { sourcesButton() }
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        folderCount()
+                        sourcesButton()
+                    }
+                }
+            }
             val progress = state.scanProgress
             if (progress != null) {
-                Spacer(Modifier.height(VesqenSpacing.xs))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = if (state.isScanPaused) {
@@ -1816,6 +1853,7 @@ private fun LibrarySourcesCard(
                     text = stringResource(R.string.library_source_scan_failed),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(bottom = VesqenSpacing.xs),
                 )
             }
             if (folders.any { !it.isAvailable }) {
@@ -1823,6 +1861,7 @@ private fun LibrarySourcesCard(
                     text = stringResource(R.string.library_folder_access_needs_renewal),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(bottom = VesqenSpacing.xs),
                 )
             }
             if (state.promptsUnmatchedRecords) {

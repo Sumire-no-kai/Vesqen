@@ -16,7 +16,6 @@
     <string name="notifications_disabled_compact">Playback notifications are off</string>
     <string name="device_music_access_compact">Allow access to device music</string>
     <string name="device_music_access_body">Grant Android media access to include music indexed by this device. You can still add individual folders below.</string>
-    <string name="music_sources">Music sources</string>
     <string name="add_music_folder">Add music folder</string>
     <string name="manage_music_sources">Manage music sources</string>
     <plurals name="imported_folders_count">

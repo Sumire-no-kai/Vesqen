@@ -16,7 +16,6 @@
     <string name="notifications_disabled_compact">再生の通知がオフです</string>
     <string name="device_music_access_compact">端末の音楽へのアクセスを許可</string>
     <string name="device_music_access_body">音楽へのアクセスを許可すると、Android が認識している端末内の音楽をライブラリに表示できます。下の項目からフォルダを個別に追加することもできます。</string>
-    <string name="music_sources">音楽ソース</string>
     <string name="add_music_folder">音楽フォルダを追加</string>
     <string name="manage_music_sources">音楽ソースを管理</string>
     <plurals name="imported_folders_count">
