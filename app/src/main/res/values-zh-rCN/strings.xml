@@ -369,7 +369,7 @@
     <string name="move_down">下移</string>
     <string name="retry_playback">重试播放</string>
     <string name="playback_problem_source">音频来源已不可访问。</string>
-    <string name="playback_problem_format">当前 Android 解码器不支持此文件格式。</string>
+    <string name="playback_problem_format">无法播放此文件：格式不受支持，或文件已损坏。</string>
     <string name="playback_problem_decoder">Android 无法解码或输出这首曲目。</string>
     <string name="playback_problem_unknown">播放因意外错误而停止。</string>
     <string name="detail_album_artist">专辑艺术家</string>

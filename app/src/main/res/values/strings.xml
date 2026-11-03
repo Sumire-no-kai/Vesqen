@@ -375,7 +375,7 @@
     <string name="move_down">Move down</string>
     <string name="retry_playback">Retry playback</string>
     <string name="playback_problem_source">The audio source is no longer available.</string>
-    <string name="playback_problem_format">This file format is not supported by the current Android decoder.</string>
+    <string name="playback_problem_format">This file can\'t be played. Its format isn\'t supported, or the file is damaged.</string>
     <string name="playback_problem_decoder">Android could not decode or output this track.</string>
     <string name="playback_problem_unknown">Playback stopped because of an unexpected error.</string>
     <string name="detail_album_artist">Album artist</string>

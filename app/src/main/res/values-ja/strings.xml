@@ -369,7 +369,7 @@
     <string name="move_down">下へ移動</string>
     <string name="retry_playback">再生をやり直す</string>
     <string name="playback_problem_source">音楽ファイルにアクセスできなくなりました。</string>
-    <string name="playback_problem_format">このファイル形式は、現在の Android のデコーダーでは再生できません。</string>
+    <string name="playback_problem_format">このファイルを再生できません。形式に対応していないか、ファイルが破損しています。</string>
     <string name="playback_problem_decoder">Android がこの曲をデコードまたは出力できませんでした。</string>
     <string name="playback_problem_unknown">予期しないエラーのため、再生を停止しました。</string>
     <string name="detail_album_artist">アルバムアーティスト</string>
