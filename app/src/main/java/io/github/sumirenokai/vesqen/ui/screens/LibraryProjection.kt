@@ -62,6 +62,7 @@ internal class LibraryProjection(
     val searchedTracks: List<AudioTrack>,
     val favoriteTracks: List<AudioTrack>,
     val rootVisibleTracks: List<AudioTrack>,
+    val sortedSongs: List<AudioTrack>?,
     val favoriteVisibleTracks: List<AudioTrack>,
     val collections: List<LibraryCollection>,
     val albumShelf: List<LibraryCollection>,
@@ -138,15 +139,19 @@ internal fun projectLibrary(
     val sameSearchAndTitle = sameSearch?.takeIf { it.input.title === input.title }
 
     val favoriteTracks = sameSearch?.favoriteTracks ?: searchedTracks.filter(AudioTrack::isFavorite)
-    val rootVisibleTracks = sameSearchAndTitle
+    // Only Songs shows this order, and a grouped mode reads only whether anything was found. The sorted
+    // list stays through a look at a grouped mode, so going back to Songs costs nothing.
+    val sortedSongs = sameSearchAndTitle
         ?.takeIf { it.input.rootSortOrder == input.rootSortOrder }
-        ?.rootVisibleTracks
+        ?.sortedSongs
         ?: when {
+            input.browseMode != LibraryBrowseMode.SONGS -> null
             input.rootSortOrder == LibrarySortOrder.TITLE && titleOrder != null ->
                 projectLibraryTitleOrder(titleOrder, searchedTracks)
             input.rootSortOrder == LibrarySortOrder.TITLE -> searchedTracks
             else -> sortLibraryTracks(searchedTracks, input.rootSortOrder, nameOrder)
         }
+    val rootVisibleTracks = sortedSongs?.takeIf { input.browseMode == LibraryBrowseMode.SONGS } ?: searchedTracks
     val favoriteVisibleTracks = sameSearchAndTitle
         ?.takeIf {
             it.input.favoriteSortOrder == input.favoriteSortOrder &&
@@ -193,6 +198,7 @@ internal fun projectLibrary(
         searchedTracks = searchedTracks,
         favoriteTracks = favoriteTracks,
         rootVisibleTracks = rootVisibleTracks,
+        sortedSongs = sortedSongs,
         favoriteVisibleTracks = favoriteVisibleTracks,
         collections = collections,
         albumShelf = albumShelf,

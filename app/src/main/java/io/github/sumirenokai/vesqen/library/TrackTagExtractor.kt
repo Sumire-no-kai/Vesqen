@@ -75,8 +75,8 @@ private fun frameSyncContainer(header: ByteArray): String? {
 
 private class TagCollector {
     var container: String? = null
-    var composer: String? = null
-    var lyricist: String? = null
+    val composers = Credits()
+    val lyricists = Credits()
     var encoder: String? = null
     var vendor: String? = null
     var isrc: String? = null
@@ -91,7 +91,8 @@ private class TagCollector {
 
     /** The first picture counts, or the first front cover if one comes later. */
     fun offerCover(mimeType: String?, front: Boolean) {
-        val mime = mimeType?.trim()?.lowercase()?.takeIf(String::isNotEmpty) ?: return
+        // The ID3 link form "-->" names no embedded picture, and a long value is not a format.
+        val mime = mimeType?.trim()?.lowercase()?.takeIf(COVER_MIME::matches) ?: return
         if (coverMimeType == null || (front && !coverIsFront)) {
             coverMimeType = mime
             coverIsFront = front
@@ -101,8 +102,8 @@ private class TagCollector {
     /** ReplayGain has the same names in ID3 TXXX, Vorbis comments and MP4 freeform atoms. */
     fun offerNamed(name: String, value: String) {
         when (name.uppercase()) {
-            "COMPOSER" -> composer = composer.withCredit(value)
-            "LYRICIST" -> lyricist = lyricist.withCredit(value)
+            "COMPOSER" -> composers.add(value)
+            "LYRICIST" -> lyricists.add(value)
             "ENCODER", "ENCODED-BY", "ENCODEDBY" -> encoder = encoder ?: value
             "ISRC" -> isrc = isrc ?: value
             "TRACKTOTAL", "TOTALTRACKS" -> trackTotal = trackTotal ?: value.positiveNumber()
@@ -118,8 +119,8 @@ private class TagCollector {
 
     fun result() = TrackTags(
         container = container,
-        composer = composer,
-        lyricist = lyricist,
+        composer = composers.joined(),
+        lyricist = lyricists.joined(),
         encoder = encoder ?: vendor,
         isrc = isrc,
         trackTotal = trackTotal,
@@ -134,10 +135,15 @@ private class TagCollector {
 }
 
 /** Vorbis comments hold several credits by repeating the field. A file can repeat it freely, so the text is capped. */
-private fun String?.withCredit(value: String): String = when {
-    this == null -> value
-    value in split(CREDIT_SEPARATOR) || length + value.length > MAX_TAG_TEXT_BYTES -> this
-    else -> this + CREDIT_SEPARATOR + value
+private class Credits {
+    private val values = LinkedHashSet<String>()
+    private var length = 0
+
+    fun add(value: String) {
+        if (length + value.length <= MAX_TAG_TEXT_BYTES && values.add(value)) length += value.length + CREDIT_SEPARATOR.length
+    }
+
+    fun joined(): String? = values.takeIf(Set<String>::isNotEmpty)?.joinToString(CREDIT_SEPARATOR)
 }
 
 private fun String.positiveNumber(): Int? = trim().toIntOrNull()?.takeIf { it > 0 }
@@ -235,8 +241,8 @@ private fun readId3Text(frameId: String, frame: ByteArray, tags: TagCollector) {
     when (frameId) {
         // The description comes first, and the value after it.
         "TXXX", "TXX" -> if (values.size >= 2) tags.offerNamed(values[0], values[1])
-        "TCOM", "TCM" -> tags.composer = tags.composer ?: values.joinToString(CREDIT_SEPARATOR)
-        "TEXT", "TXT" -> tags.lyricist = tags.lyricist ?: values.joinToString(CREDIT_SEPARATOR)
+        "TCOM", "TCM" -> values.forEach(tags.composers::add)
+        "TEXT", "TXT" -> values.forEach(tags.lyricists::add)
         "TSSE", "TSS" -> tags.encoder = tags.encoder ?: values.first()
         "TSRC", "TRC" -> tags.isrc = tags.isrc ?: values.first()
         "TRCK", "TRK" -> tags.trackTotal = tags.trackTotal ?: values.first().totalAfterSlash()
@@ -471,7 +477,8 @@ private fun readMp4Cover(input: InputStream, tags: TagCollector) {
         MP4_TYPE_PNG -> "image/png"
         else -> return
     }
-    tags.offerCover(mime, front = true)
+    // Unlike ID3 and FLAC, covr does not declare what the picture shows.
+    tags.offerCover(mime, front = false)
 }
 
 private fun readMp4Item(atomType: String, body: ByteArray, tags: TagCollector) {
@@ -510,7 +517,7 @@ private fun readMp4Data(atomType: String, name: String?, data: ByteArray, tags: 
         else -> null
     }?.trim()?.takeIf(String::isNotEmpty) ?: return
     when (atomType) {
-        "©wrt" -> tags.composer = tags.composer ?: text
+        "©wrt" -> tags.composers.add(text)
         "©too" -> tags.encoder = tags.encoder ?: text
         "----" -> name?.let { tags.offerNamed(it, text) }
     }
@@ -518,6 +525,7 @@ private fun readMp4Data(atomType: String, name: String?, data: ByteArray, tags: 
 
 private const val MAX_TAG_TEXT_BYTES = 8 * 1024
 private const val CREDIT_SEPARATOR = ", "
+private val COVER_MIME = Regex("(image/)?[a-z0-9.+-]{1,32}")
 private const val MAX_PICTURE_PREFIX_BYTES = 512
 private const val MAX_PICTURE_BASE64_PREFIX_BYTES = 512
 private const val MAX_MIME_BYTES = 64L

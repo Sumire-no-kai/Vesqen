@@ -5,6 +5,8 @@ import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.indication
@@ -54,6 +56,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -160,6 +163,7 @@ internal fun NowLyricsPane(
                     canSeek = canSeek,
                     motionPolicy = motionPolicy,
                     onSeek = onSeek,
+                    onShowCover = onShowCover,
                 )
                 is Lyrics.Plain -> PlainLyrics(content)
             }
@@ -192,6 +196,7 @@ private fun SyncedLyrics(
     canSeek: Boolean,
     motionPolicy: VesqenMotionPolicy,
     onSeek: (Long) -> Unit,
+    onShowCover: () -> Unit,
 ) {
     val currentIndex = rememberCurrentLyricLine(lyrics, positionMs, isPlaying)
     val listState = rememberLazyListState()
@@ -240,7 +245,7 @@ private fun SyncedLyrics(
         }
         positioned = true
     }
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().tapWhileFollowing({ following }, onShowCover)) {
         val edge = maxHeight / 2
         // Room for the seek line's time and button, so they do not cover a full line of text.
         val gutter = max(SEEK_LINE_GUTTER, with(LocalDensity.current) { SEEK_LINE_GUTTER.value.sp.toDp() })
@@ -291,6 +296,30 @@ private fun SyncedLyrics(
                 modifier = Modifier.align(Alignment.CenterEnd).size(48.dp).testTag("vesqen.now.lyrics.seek"),
             ) {
                 Icon(Icons.Filled.PlayArrow, stringResource(R.string.lyrics_play_from_line))
+            }
+        }
+    }
+}
+
+/**
+ * The list takes a touch while it scrolls, so the pane's own tap never sees it. That suits a fling,
+ * where the touch stops the listener's scroll. Following is not the listener's scroll, so a tap during
+ * it still counts (#261 V2).
+ */
+private fun Modifier.tapWhileFollowing(isFollowing: () -> Boolean, onTap: () -> Unit): Modifier = pointerInput(onTap) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        if (!isFollowing()) return@awaitEachGesture
+        // The same event, after the list had its turn. If it left the touch alone, the pane's tap has it.
+        val taken = awaitPointerEvent(PointerEventPass.Final).changes.any { it.id == down.id && it.isConsumed }
+        if (!taken) return@awaitEachGesture
+        while (true) {
+            val change = awaitPointerEvent(PointerEventPass.Final).changes
+                .firstOrNull { it.id == down.id } ?: return@awaitEachGesture
+            if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) return@awaitEachGesture
+            if (!change.pressed) {
+                onTap()
+                return@awaitEachGesture
             }
         }
     }

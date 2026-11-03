@@ -1,20 +1,25 @@
 package io.github.sumirenokai.vesqen
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.playback.PlaybackQueueItem
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.components.QueueSheet
@@ -39,28 +44,33 @@ class QueueDragUiTest {
     private fun item(track: Long, listIndex: Int, entry: String = "entry-$listIndex") =
         PlaybackQueueItem(track, "Track $track", "Artist", isCurrent = false, listIndex = listIndex, entryId = entry)
 
-    private fun show(queue: List<PlaybackQueueItem>) {
+    private fun show(queue: List<PlaybackQueueItem>, direction: LayoutDirection = LayoutDirection.Ltr) {
         snapshot = PlaybackSnapshot(isControllerReady = true, queue = queue)
         compose.setContent {
             VesqenTheme {
-                QueueSheet(
-                    snapshot = snapshot,
-                    onDismiss = { dismissed = true },
-                    onPlayItem = { played += it },
-                    onRemoveItem = { removed += it },
-                    onMoveItem = { from, to -> moved += from to to },
-                    onClearQueue = {},
-                )
+                CompositionLocalProvider(LocalLayoutDirection provides direction) {
+                    QueueSheet(
+                        snapshot = snapshot,
+                        onDismiss = { dismissed = true },
+                        onPlayItem = { played += it },
+                        onRemoveItem = { removed += it },
+                        onMoveItem = { from, to -> moved += from to to },
+                        onClearQueue = {},
+                    )
+                }
             }
         }
         compose.onNodeWithTag("vesqen.queue.sheet").assertIsDisplayed()
     }
 
     /** Presses a row until it lifts, drags it by [rows] row heights, and leaves the finger down. */
-    private fun liftAndDrag(row: Int, rows: Float) {
+    private fun liftAndDrag(row: Int, rows: Float, pressX: Float? = null) {
         val node = compose.onNodeWithTag("vesqen.queue.item.$row").fetchSemanticsNode()
         val list = compose.onNodeWithTag("vesqen.queue.list").fetchSemanticsNode().boundsInRoot
-        val start = Offset(node.boundsInRoot.center.x - node.boundsInRoot.width / 4, node.boundsInRoot.center.y) - list.topLeft
+        val start = Offset(
+            pressX ?: (node.boundsInRoot.center.x - node.boundsInRoot.width / 4 - list.left),
+            node.boundsInRoot.center.y - list.top,
+        )
         val height = node.boundsInRoot.height
         compose.mainClock.autoAdvance = false
         compose.onNodeWithTag("vesqen.queue.list").performTouchInput { down(start) }
@@ -247,6 +257,85 @@ class QueueDragUiTest {
         drop()
 
         compose.runOnIdle { assertTrue("A still finger moves nothing: $moved", moved.isEmpty()) }
+    }
+
+    @Test
+    fun theSheetOpensWholeSoADragCanReachTheEndOfTheList() {
+        show((0 until 60).map { item(it.toLong(), it) })
+        val height = compose.activity.resources.displayMetrics.heightPixels
+        val list = compose.onNodeWithTag("vesqen.queue.list").fetchSemanticsNode().boundsInWindow
+        val row = compose.onNodeWithTag("vesqen.queue.item.1").fetchSemanticsNode().boundsInWindow
+        val start = Offset(row.center.x - row.width / 4 - list.left, row.center.y - list.top)
+        // The lowest place a finger can reach: the list's end, or the screen's if that comes first.
+        val end = Offset(start.x, minOf(list.bottom, height.toFloat()) - 2f - list.top)
+
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("vesqen.queue.list").performTouchInput { down(start) }
+        compose.mainClock.advanceTimeBy(800)
+        repeat(30) { step ->
+            compose.onNodeWithTag("vesqen.queue.list").performTouchInput {
+                moveTo(start + (end - start) * ((step + 1) / 30f))
+            }
+            compose.mainClock.advanceTimeByFrame()
+        }
+        repeat(180) { compose.mainClock.advanceTimeByFrame() }
+        drop()
+
+        compose.runOnIdle { assertTrue("The list scrolled under the finger: $moved", moved.single().second > 20) }
+    }
+
+    @Test
+    fun aRowIgnoresTapsWhileAMoveWaitsForTheQueue() {
+        show(listOf(item(1, 0), item(2, 1), item(3, 2), item(4, 3)))
+        liftAndDrag(row = 1, rows = 2f)
+        compose.onNodeWithTag("vesqen.queue.list").performTouchInput { up() }
+        repeat(5) { compose.mainClock.advanceTimeByFrame() }
+
+        // The queue has not answered, so a list index here can already name another entry.
+        compose.onNodeWithTag("vesqen.queue.item.0").performClick()
+        val remove = compose.activity.getString(R.string.remove_from_queue)
+        compose.onAllNodesWithContentDescription(remove)[0].performClick()
+        repeat(5) { compose.mainClock.advanceTimeByFrame() }
+        assertTrue("Nothing plays: $played", played.isEmpty())
+        assertTrue("Nothing goes: $removed", removed.isEmpty())
+
+        // The wait ends, and the rows spring back to the queue's order.
+        compose.mainClock.advanceTimeBy(3_000)
+        compose.onNodeWithTag("vesqen.queue.item.0").performClick()
+        compose.onAllNodesWithContentDescription(remove)[1].performClick()
+        repeat(5) { compose.mainClock.advanceTimeByFrame() }
+        assertEquals(listOf(0), played)
+        assertEquals(listOf(1), removed)
+    }
+
+    @Test
+    fun rowsKeyedByPositionFollowANewQueueInTheSameFrame() {
+        fun positions(vararg tracks: Long) = tracks.mapIndexed { index, track -> item(track, index, entry = "") }
+        show(positions(1, 2, 3, 4))
+        liftAndDrag(row = 0, rows = 2f)
+        compose.onNodeWithTag("vesqen.queue.list").performTouchInput { up() }
+        repeat(5) { compose.mainClock.advanceTimeByFrame() }
+        assertEquals("Track 2", rowTitle(0))
+
+        snapshot = snapshot.copy(queue = positions(2, 3, 1, 4))
+        compose.mainClock.advanceTimeByFrame()
+
+        assertEquals(listOf("Track 2", "Track 3", "Track 1", "Track 4"), (0..3).map(::rowTitle))
+    }
+
+    @Test
+    fun theRemoveButtonKeepsItsPressOnTheOtherSideInARightToLeftLayout() {
+        show(listOf(item(1, 0), item(2, 1), item(3, 2), item(4, 3)), LayoutDirection.Rtl)
+        val width = compose.onNodeWithTag("vesqen.queue.list").fetchSemanticsNode().boundsInRoot.width
+        val buttonWidth = with(compose.density) { 24.dp.toPx() }
+
+        liftAndDrag(row = 0, rows = 2f, pressX = buttonWidth)
+        drop()
+        compose.runOnIdle { assertTrue("The button side does not lift: $moved", moved.isEmpty()) }
+
+        liftAndDrag(row = 0, rows = 2f, pressX = width - buttonWidth)
+        drop()
+        compose.runOnIdle { assertEquals(listOf(0 to 2), moved) }
     }
 
     @Test

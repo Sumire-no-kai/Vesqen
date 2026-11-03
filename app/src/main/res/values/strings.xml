@@ -70,7 +70,7 @@
     <string name="settings_system_output">System output</string>
     <string name="settings_system_output_body">Plays through Android’s normal playback path. The system may mix and resample the audio, and the phone’s volume controls work as usual.</string>
     <string name="settings_strict_usb_output">Strict USB output</string>
-    <string name="settings_strict_usb_output_body">Sends unaltered audio to a compatible USB DAC only. Needs Android 14 or later. If a condition fails, playback stops.</string>
+    <string name="settings_strict_usb_output_body">Sends audio to a compatible USB DAC only, unaltered except for a 20 ms fade-in after starting, seeking or changing format. Needs Android 14 or later. If a condition fails, playback stops.</string>
     <string name="settings_strict_usb_waiting">When playback starts, Vesqen checks whether this phone and the USB DAC support strict output.</string>
     <string name="settings_strict_usb_platform_unavailable">This phone runs Android %1$s (API %2$d), which has no official bit-perfect interface. Tap for details.</string>
     <string name="strict_usb_unavailable_title">Strict USB output unavailable</string>
@@ -402,7 +402,7 @@
     <string name="detail_compression">Compression</string>
     <string name="compression_lossless">Lossless</string>
     <string name="compression_lossy">Lossy</string>
-    <string name="detail_average_bitrate">Average bitrate</string>
+    <string name="detail_overall_bitrate">Overall bitrate</string>
     <string name="detail_channel_layout">Channel layout</string>
     <string name="detail_encoder">Encoder</string>
     <string name="detail_replay_gain_track">ReplayGain, track</string>

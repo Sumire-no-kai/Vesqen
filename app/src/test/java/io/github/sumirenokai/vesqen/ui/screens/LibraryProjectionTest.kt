@@ -116,19 +116,34 @@ class LibraryProjectionTest {
         val albums = project(songs.input.copy(browseMode = LibraryBrowseMode.ALBUMS), songs)
         assertSame(songs.searchedTracks, albums.searchedTracks)
         assertSame(songs.favoriteTracks, albums.favoriteTracks)
-        assertSame(songs.rootVisibleTracks, albums.rootVisibleTracks)
         assertSame(songs.favoriteVisibleTracks, albums.favoriteVisibleTracks)
 
         val resorted = project(albums.input.copy(rootSortOrder = LibrarySortOrder.MOST_PLAYED), albums)
         assertSame(albums.searchedTracks, resorted.searchedTracks)
         assertSame(albums.favoriteVisibleTracks, resorted.favoriteVisibleTracks)
-        assertNotSame(albums.rootVisibleTracks, resorted.rootVisibleTracks)
         assertNotSame(albums.collections, resorted.collections)
 
         val favoritesResorted = project(resorted.input.copy(favoriteCustomOrder = false), resorted)
-        assertSame(resorted.rootVisibleTracks, favoritesResorted.rootVisibleTracks)
         assertSame(resorted.collections, favoritesResorted.collections)
         assertSame(resorted.albumShelf, favoritesResorted.albumShelf)
+    }
+
+    @Test fun `only songs are sorted for the songs list and the sorted list survives a look at a grouped mode`() {
+        val songs = project(input.copy(rootSortOrder = LibrarySortOrder.ARTIST))
+        assertEquals(listOf(3L, 1L, 2L), songs.rootVisibleTracks.map(AudioTrack::id))
+
+        val albums = project(songs.input.copy(browseMode = LibraryBrowseMode.ALBUMS), songs)
+        assertSame("A grouped mode reads only whether anything was found", albums.searchedTracks, albums.rootVisibleTracks)
+
+        val back = project(albums.input.copy(browseMode = LibraryBrowseMode.SONGS), albums)
+        assertSame("Nothing it depends on changed", songs.rootVisibleTracks, back.rootVisibleTracks)
+
+        val played = tracks.map { it.copy(playCount = 7) }
+        val groupedAfterPlay = project(albums.input.copy(tracks = played), albums)
+        assertSame(groupedAfterPlay.searchedTracks, groupedAfterPlay.rootVisibleTracks)
+        val songsAfterPlay = project(groupedAfterPlay.input.copy(browseMode = LibraryBrowseMode.SONGS), groupedAfterPlay)
+        assertEquals(listOf(3L, 1L, 2L), songsAfterPlay.rootVisibleTracks.map(AudioTrack::id))
+        assertEquals(7, songsAfterPlay.rootVisibleTracks.first().playCount)
     }
 
     @Test fun `new tracks a new query or a new title order are worked out again`() {

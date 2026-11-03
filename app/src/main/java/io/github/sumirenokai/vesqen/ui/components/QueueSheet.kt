@@ -35,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -70,6 +71,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import io.github.sumirenokai.vesqen.R
@@ -94,6 +96,8 @@ fun QueueSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag("vesqen.queue.sheet"),
+        // Half open, the list's end is off the screen, where no drag can reach the edge that scrolls it.
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
         Column(
             modifier = Modifier
@@ -150,6 +154,7 @@ private fun QueueList(
     val rowsByKey = remember(queue, rowKeys) { rowKeys.zip(queue).toMap() }
     val currentQueue by rememberUpdatedState(queue)
     val currentKeys by rememberUpdatedState(rowKeys)
+    val currentContent by rememberUpdatedState(queueContent)
     val moveItem by rememberUpdatedState(onMoveItem)
     val listState = rememberLazyListState()
     val haptics = LocalHapticFeedback.current
@@ -159,6 +164,8 @@ private fun QueueList(
     var liftY by remember { mutableFloatStateOf(0f) }
     // The order shown while dragging, and after a drop until the queue arrives in that order.
     var preview by remember { mutableStateOf<List<String>?>(null) }
+    // What the preview rearranges. Position keys would apply it to other rows once the queue changes.
+    var previewContent by remember { mutableStateOf(queueContent) }
     var reorderViewport by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     val density = LocalDensity.current
     val edgePx = with(density) { 48.dp.toPx() }
@@ -168,7 +175,8 @@ private fun QueueList(
     val touchSlop = LocalViewConfiguration.current.touchSlop
     val upLabel = stringResource(R.string.move_up)
     val downLabel = stringResource(R.string.move_down)
-    val shownKeys = preview ?: rowKeys
+    val shownKeys = preview?.takeIf { previewContent == queueContent } ?: rowKeys
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
 
     LaunchedEffect(queueContent) {
         dragged = null
@@ -220,11 +228,12 @@ private fun QueueList(
         modifier = Modifier
             .heightIn(max = 520.dp)
             .testTag("vesqen.queue.list")
-            .pointerInput(enabled, removeAreaPx) {
+            .pointerInput(enabled, removeAreaPx, rtl) {
                 if (enabled) awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     // The trailing button keeps its own press.
-                    if (down.position.x >= size.width - removeAreaPx) return@awaitEachGesture
+                    val onRemoveButton = if (rtl) down.position.x <= removeAreaPx else down.position.x >= size.width - removeAreaPx
+                    if (onRemoveButton) return@awaitEachGesture
                     // A scroll consumes the move first and ends the wait; a tap ends it too.
                     awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
                     // A dropped row still waits for its move. Going back to the queue's order here would
@@ -248,6 +257,7 @@ private fun QueueList(
                     dragY = origin
                     liftY = origin
                     preview = currentKeys
+                    previewContent = currentContent
                     dragged = key
                     var dropped = false
                     try {
@@ -308,7 +318,8 @@ private fun QueueList(
                     enabled = enabled,
                     isPlaying = snapshot.isPlaying,
                     // Rows follow the play order; edits name the player's list index (#158).
-                    onPlay = { onPlayItem(item.listIndex) },
+                    // Until the queue answers a drop, a list index may already name another entry.
+                    onPlay = { if (preview == null) onPlayItem(item.listIndex) },
                     // The row's own merged node carries the moves, which TalkBack and other services reach.
                     // Its neighbors below are the queue's, so a shown order that differs offers none.
                     moves = if (!enabled || preview != null) emptyList() else buildList {
@@ -319,7 +330,7 @@ private fun QueueList(
                             add(CustomAccessibilityAction(downLabel) { onMoveItem(item.listIndex, queue[index + 1].listIndex); true })
                         }
                     },
-                    onRemove = { onRemoveItem(item.listIndex) },
+                    onRemove = { if (preview == null) onRemoveItem(item.listIndex) },
                 )
             }
         }

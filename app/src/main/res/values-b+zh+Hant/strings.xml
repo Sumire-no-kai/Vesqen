@@ -67,7 +67,7 @@
     <string name="settings_system_output">系統輸出</string>
     <string name="settings_system_output_body">依 Android 的一般方式播放。系統可能混音、重新取樣，手機音量照常可調。</string>
     <string name="settings_strict_usb_output">嚴格 USB 輸出</string>
-    <string name="settings_strict_usb_output_body">只把未經改動的音訊交給相容的 USB DAC。需要 Android 14 以上版本；條件不符時停止播放。</string>
+    <string name="settings_strict_usb_output_body">只把音訊交給相容的 USB DAC，除開始播放、定位或切換格式後的前 20 毫秒淡入外不作改動。需要 Android 14 以上版本；條件不符時停止播放。</string>
     <string name="settings_strict_usb_waiting">開始播放時，Vesqen 會檢查這支手機和 USB DAC 能否嚴格輸出。</string>
     <string name="settings_strict_usb_platform_unavailable">這支手機執行 Android %1$s（API %2$d），系統沒有提供官方通道。輕觸查看原因。</string>
     <string name="strict_usb_unavailable_title">無法使用嚴格 USB</string>
@@ -395,7 +395,7 @@
     <string name="detail_compression">壓縮方式</string>
     <string name="compression_lossless">無損</string>
     <string name="compression_lossy">有損</string>
-    <string name="detail_average_bitrate">平均位元率</string>
+    <string name="detail_overall_bitrate">整體位元率</string>
     <string name="detail_channel_layout">聲道配置</string>
     <string name="detail_encoder">編碼器</string>
     <string name="detail_replay_gain_track">ReplayGain（單曲）</string>
