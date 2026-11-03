@@ -507,6 +507,19 @@ class UacDescriptorParserTest {
         }
     }
 
+    /** The bytes fit the buffer, but the leftover would otherwise be dropped without a word. */
+    @Test
+    fun `a feature unit with a partial control entry is refused`() {
+        val uac1 = device(0x0110) + configuration() + interfaceOf(0, 0, SUBCLASS_CONTROL) +
+            classInterface(6, 2, 1, 2, 3, 0, 2, 0)
+        val uac2 = device(0x0200) + configuration() + interfaceOf(0, 0, SUBCLASS_CONTROL, protocol = 0x20) +
+            classInterface(6, 2, 1, *le32(0b1111), 0, 0)
+
+        listOf(uac1, uac2).forEach { raw ->
+            assertTrue(UacDescriptorParser.parse(raw) is UacParseResult.Malformed)
+        }
+    }
+
     @Test
     fun `every truncation of a real layout is handled`() {
         listOf(uac1Device(), uac2Device()).forEach { whole ->

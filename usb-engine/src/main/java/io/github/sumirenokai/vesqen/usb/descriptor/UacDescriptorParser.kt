@@ -282,6 +282,9 @@ private class ControlBuilder(val interfaceNumber: Int, private val protocol: Int
         d.requireLength(7, "UAC1 feature unit")
         val controlSize = d.u8(5)
         if (controlSize == 0) throw MalformedDescriptor(d.offset, "UAC1 feature unit with empty controls")
+        if ((d.length - 7) % controlSize != 0) {
+            throw MalformedDescriptor(d.offset, "UAC1 feature unit with a partial control entry")
+        }
         val entries = (d.length - 7) / controlSize
         if (entries < 1) throw MalformedDescriptor(d.offset, "UAC1 feature unit without master controls")
         fun controls(entry: Int) = d.u8(6 + entry * controlSize)
@@ -298,6 +301,9 @@ private class ControlBuilder(val interfaceNumber: Int, private val protocol: Int
 
     private fun uac2FeatureUnit(d: Descriptor): UacFeatureUnit {
         d.requireLength(10, "UAC2 feature unit")
+        if ((d.length - 6) % 4 != 0) {
+            throw MalformedDescriptor(d.offset, "UAC2 feature unit with a partial control entry")
+        }
         val entries = (d.length - 6) / 4
         fun controls(entry: Int) = d.u32(5 + entry * 4).toInt()
         return UacFeatureUnit(
