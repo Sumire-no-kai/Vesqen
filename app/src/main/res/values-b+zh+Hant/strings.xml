@@ -958,9 +958,9 @@
     <string name="unmatched_record_discard_confirm_title">捨棄「%1$s」的記錄？</string>
     <string name="unmatched_record_discard_confirm_body">這首歌曲的收藏、播放次數、在播放清單中的位置和匯入的歌詞將被刪除，且無法復原。音樂檔案不受影響。</string>
     <!-- #169 local lyrics -->
-    <string name="lyrics">歌詞</string>
     <string name="now_more_options">更多選項</string>
     <string name="lyrics_show">顯示歌詞</string>
+    <string name="lyrics_show_cover">顯示封面</string>
     <string name="lyrics_import">匯入歌詞</string>
     <string name="lyrics_remove">移除歌詞</string>
     <string name="lyrics_remove_confirm_title">移除匯入的歌詞？</string>

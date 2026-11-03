@@ -10,10 +10,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
@@ -26,9 +28,16 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
@@ -43,17 +52,19 @@ import io.github.sumirenokai.vesqen.lyrics.LyricsSource
 import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.lyrics.UnreadableReason
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import io.github.sumirenokai.vesqen.ui.formatDuration
 import io.github.sumirenokai.vesqen.ui.screens.NowLyricsState
 import io.github.sumirenokai.vesqen.ui.screens.NowScreen
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
+import kotlinx.coroutines.awaitCancellation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
-/** Lyrics on Now (#169): the stage switch, the states, the highlight and tap-to-seek. */
+/** Lyrics on Now (#169, #209): the stage switch, the states, the highlight and the seek line. */
 class NowLyricsUiTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
@@ -77,20 +88,102 @@ class NowLyricsUiTest {
     )
 
     @Test
-    fun theCoverAndTheSwitchToggleBetweenCoverAndLyrics() {
+    fun aTapOnTheCoverOrTheLyricsSwitchesBetweenThem() {
         var shown by mutableStateOf(false)
         setNow(lyricsShown = { shown }, onToggleLyrics = { shown = !shown })
 
+        compose.onAllNodesWithTag("vesqen.now.lyrics-toggle").assertCountEquals(0)
         compose.onNodeWithTag("vesqen.now.artwork-stage").assertIsDisplayed()
         compose.onAllNodesWithTag("vesqen.now.lyrics").assertCountEquals(0)
         compose.onNodeWithTag("vesqen.now.artwork-stage").performClick()
         compose.onNodeWithTag("vesqen.now.lyrics").assertIsDisplayed()
         compose.onAllNodesWithTag("vesqen.now.artwork-stage").assertCountEquals(0)
-        compose.onNodeWithTag("vesqen.now.lyrics-toggle")
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On))
-        compose.onNodeWithTag("vesqen.now.lyrics-toggle").performClick()
+        compose.onNodeWithTag("vesqen.now.lyrics").performClick()
         compose.onNodeWithTag("vesqen.now.artwork-stage").assertIsDisplayed()
         assertFalse(shown)
+    }
+
+    @Test
+    fun theStageAroundTheCoverCountsAndTheControlsKeepTheirActions() {
+        var toggles = 0
+        val beside = with(compose.density) { 8.dp.toPx() }
+        fun tapPage(position: (cover: Rect) -> Offset) {
+            val page = compose.onNodeWithTag("vesqen.now.player-page").fetchSemanticsNode().boundsInRoot
+            val cover = compose.onNodeWithTag("vesqen.now.artwork-stage").fetchSemanticsNode().boundsInRoot
+            compose.onNodeWithTag("vesqen.now.player-page").performTouchInput {
+                click(position(cover) - page.topLeft)
+            }
+        }
+        // A tall page leaves room above the cover, a short one beside it.
+        setNow(lyricsShown = { false }, onToggleLyrics = { toggles++ }, width = 360.dp, height = 700.dp)
+        tapPage { cover -> Offset(cover.center.x, cover.top - beside) }
+        compose.runOnIdle { assertEquals(1, toggles) }
+        setNow(lyricsShown = { false }, onToggleLyrics = { toggles++ }, width = 360.dp, height = 480.dp)
+        tapPage { cover -> Offset(cover.left - beside, cover.center.y) }
+        compose.runOnIdle { assertEquals(2, toggles) }
+
+        compose.onNodeWithTag("vesqen.now.progress").performClick()
+        compose.onNodeWithTag("vesqen.now.playback-order").performClick()
+        compose.onNodeWithTag("vesqen.now.back").performClick()
+        compose.runOnIdle { assertEquals(2, toggles) }
+    }
+
+    @Test
+    fun aTapBringsTheCoverBackInEveryLyricsState() {
+        listOf(
+            TrackLyrics.Found(LyricsSource.Embedded, Lyrics.Plain(listOf("Plain line"))),
+            TrackLyrics.None(folderHint = true),
+            TrackLyrics.Unreadable(UnreadableReason.Encoding),
+        ).forEach { state ->
+            var toggles = 0
+            setNow(lyrics = state, onToggleLyrics = { toggles++ })
+            compose.onNodeWithTag("vesqen.now.lyrics").performClick()
+            compose.runOnIdle { assertEquals(state.toString(), 1, toggles) }
+        }
+        var toggles = 0
+        setNow(neverLoads = true, onToggleLyrics = { toggles++ })
+        compose.onNodeWithTag("vesqen.now.lyrics").performClick()
+        compose.runOnIdle { assertEquals("while loading", 1, toggles) }
+    }
+
+    @Test
+    fun theImportButtonDoesNotSwitchTheView() {
+        var toggles = 0
+        val imports = mutableListOf<Long>()
+        setNow(lyrics = TrackLyrics.None(folderHint = false), onToggleLyrics = { toggles++ }, onImportLyrics = { imports += it.id })
+
+        compose.onNodeWithTag("vesqen.now.lyrics.import").performClick()
+        compose.runOnIdle {
+            assertEquals(listOf(track.id), imports)
+            assertEquals(0, toggles)
+        }
+    }
+
+    @Test
+    fun theMoreMenuNamesTheSwitchAndAccessibilityServicesCanClickEachLine() {
+        var shown by mutableStateOf(true)
+        var toggles = 0
+        val seeks = mutableListOf<Long>()
+        setNow(lyricsShown = { shown }, onToggleLyrics = { toggles++; shown = !shown }, onSeek = { seeks += it })
+
+        compose.onNodeWithTag("vesqen.now.more").performClick()
+        compose.onNodeWithTag("vesqen.now.toggle-lyrics").assert(hasText(context.getString(R.string.lyrics_show_cover))).performClick()
+        compose.onNodeWithTag("vesqen.now.artwork-stage").assertIsDisplayed()
+        compose.onNodeWithTag("vesqen.now.more").performClick()
+        compose.onNodeWithTag("vesqen.now.toggle-lyrics").assert(hasText(context.getString(R.string.lyrics_show))).performClick()
+        compose.onNodeWithTag("vesqen.now.lyrics").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(2, toggles) }
+
+        val goToLine = context.getString(R.string.lyrics_play_from_line)
+        compose.onNodeWithTag("vesqen.now.lyrics.line.2").assert(
+            SemanticsMatcher("Clicks with a named action") { it.config[SemanticsActions.OnClick].label == goToLine },
+        )
+        compose.onNodeWithTag("vesqen.now.lyrics.line.2").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag("vesqen.now.lyrics.line.0").performSemanticsAction(SemanticsActions.OnClick)
+        compose.runOnIdle {
+            assertEquals(listOf(9_000L, 1_000L), seeks)
+            assertEquals(2, toggles)
+        }
     }
 
     @Test
@@ -108,14 +201,109 @@ class NowLyricsUiTest {
         assertFalse(isBold("Over the hill"))
     }
 
+    @OptIn(ExperimentalTestApi::class)
     @Test
-    fun tappingALineSeeksToItsTime() {
+    fun aKeyboardGoesToTheFocusedLineAndATouchStillSwitches() {
+        var toggles = 0
         val seeks = mutableListOf<Long>()
-        setNow(onSeek = { seeks += it })
+        setNow(onToggleLyrics = { toggles++ }, onSeek = { seeks += it })
+
+        compose.onNodeWithTag("vesqen.now.lyrics.line.2").requestFocus().performKeyInput { pressKey(Key.Enter) }
+        compose.runOnIdle {
+            assertEquals(listOf(9_000L), seeks)
+            assertEquals(0, toggles)
+        }
+        compose.onNodeWithTag("vesqen.now.lyrics.line.0").performClick()
+        compose.runOnIdle {
+            assertEquals(listOf(9_000L), seeks)
+            assertEquals(1, toggles)
+        }
+    }
+
+    @Test
+    fun aTapOnALineSwitchesTheViewAndDoesNotSeek() {
+        var toggles = 0
+        val seeks = mutableListOf<Long>()
+        setNow(onToggleLyrics = { toggles++ }, onSeek = { seeks += it })
 
         compose.onNodeWithTag("vesqen.now.lyrics.line.2").performClick()
-        compose.onNodeWithTag("vesqen.now.lyrics.line.0").performClick()
-        assertEquals(listOf(9_000L, 1_000L), seeks)
+        compose.runOnIdle {
+            assertEquals(1, toggles)
+            assertTrue(seeks.isEmpty())
+        }
+    }
+
+    @Test
+    fun scrollingByTouchShowsTheSeekLineWithoutSwitching() {
+        val long = Lyrics.Synced((0 until 40).map { LyricLine(it * 5_000L, "Line $it") })
+        var toggles = 0
+        setNow(lyrics = TrackLyrics.Found(LyricsSource.Embedded, long), positionMs = { 30 * 5_000L + 100 }, onToggleLyrics = { toggles++ })
+        compose.onAllNodesWithTag("vesqen.now.lyrics.seek").assertCountEquals(0)
+
+        compose.onNodeWithTag("vesqen.now.lyrics.lines").performTouchInput { swipeDown() }
+        compose.onNodeWithTag("vesqen.now.lyrics.seek").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, toggles) }
+    }
+
+    @Test
+    fun theSeekButtonGoesToTheTimeItShowsAndFollowingResumes() {
+        val long = Lyrics.Synced((0 until 40).map { LyricLine(it * 5_000L, "Line $it") })
+        var toggles = 0
+        val seeks = mutableListOf<Long>()
+        setNow(
+            lyrics = TrackLyrics.Found(LyricsSource.Embedded, long),
+            positionMs = { 30 * 5_000L + 100 },
+            onToggleLyrics = { toggles++ },
+            onSeek = { seeks += it },
+        )
+
+        // Still, so the time read below is the one the button uses.
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("vesqen.now.lyrics.lines").performScrollToIndex(10)
+        compose.mainClock.advanceTimeBy(1_000)
+        val shownTime = compose.onNodeWithTag("vesqen.now.lyrics.seek-time")
+            .fetchSemanticsNode().config[SemanticsProperties.Text].single().text
+        compose.onNodeWithTag("vesqen.now.lyrics.seek").performClick()
+        compose.mainClock.advanceTimeBy(100)
+        assertEquals(shownTime, formatDuration(seeks.single()))
+        assertEquals(0, toggles)
+        // The list goes straight back to following, well before the pause would have ended.
+        compose.onAllNodesWithTag("vesqen.now.lyrics.seek").assertCountEquals(0)
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test
+    fun theSeekLineLeavesWhenFollowingResumesAndATapStillSwitches() {
+        val long = Lyrics.Synced((0 until 40).map { LyricLine(it * 5_000L, "Line $it") })
+        var toggles = 0
+        setNow(lyrics = TrackLyrics.Found(LyricsSource.Embedded, long), positionMs = { 30 * 5_000L + 100 }, onToggleLyrics = { toggles++ })
+
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("vesqen.now.lyrics.lines").performScrollToIndex(1)
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.onNodeWithTag("vesqen.now.lyrics.seek").assertIsDisplayed()
+        compose.onNodeWithTag("vesqen.now.lyrics").performTouchInput { click(topCenter + Offset(0f, 4f)) }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.runOnIdle { assertEquals(1, toggles) }
+        compose.mainClock.advanceTimeBy(3_500)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        compose.onAllNodesWithTag("vesqen.now.lyrics.seek").assertCountEquals(0)
+    }
+
+    @Test
+    fun aTapDuringAFlingOnlyStopsIt() {
+        val long = Lyrics.Synced((0 until 40).map { LyricLine(it * 5_000L, "Line $it") })
+        var toggles = 0
+        setNow(lyrics = TrackLyrics.Found(LyricsSource.Embedded, long), onToggleLyrics = { toggles++ })
+
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("vesqen.now.lyrics.lines").performTouchInput { swipeUp(durationMillis = 80) }
+        compose.mainClock.advanceTimeBy(50)
+        compose.onNodeWithTag("vesqen.now.lyrics.lines").performTouchInput { click() }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.mainClock.autoAdvance = true
+        compose.runOnIdle { assertEquals(0, toggles) }
     }
 
     @Test
@@ -308,18 +496,24 @@ class NowLyricsUiTest {
 
     @Test
     fun landscapePutsTheLyricsInTheLeftPane() {
-        setNow(width = 640.dp, height = 320.dp, landscape = true)
+        var shown by mutableStateOf(true)
+        setNow(lyricsShown = { shown }, onToggleLyrics = { shown = !shown }, width = 640.dp, height = 320.dp, landscape = true)
 
         compose.onNodeWithTag("vesqen.now.landscape-player").assertIsDisplayed()
         compose.onNodeWithTag("vesqen.now.lyrics").assertIsDisplayed()
         compose.onNodeWithTag("vesqen.now.player-page")
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange))
+        compose.onNodeWithTag("vesqen.now.lyrics").performClick()
+        compose.onNodeWithTag("vesqen.now.artwork-stage").assertIsDisplayed()
+        compose.onNodeWithTag("vesqen.now.artwork-stage").performClick()
+        compose.onNodeWithTag("vesqen.now.lyrics").assertIsDisplayed()
     }
 
     private fun setNow(
         lyricsShown: () -> Boolean = { true },
         lyrics: TrackLyrics = TrackLyrics.Found(LyricsSource.SameNameFile, synced),
         loader: (() -> TrackLyrics)? = null,
+        neverLoads: Boolean = false,
         sourcesRevision: () -> Long = { 0L },
         imported: Set<Long> = emptySet(),
         currentTrack: () -> AudioTrack = { track },
@@ -373,7 +567,10 @@ class NowLyricsUiTest {
                             imported = ImportedLyrics(imported, revision = 1),
                             sourcesRevision = sourcesRevision(),
                         ),
-                        loadLyrics = { loader?.invoke() ?: lyrics },
+                        loadLyrics = {
+                            if (neverLoads) awaitCancellation()
+                            loader?.invoke() ?: lyrics
+                        },
                         onToggleLyrics = onToggleLyrics,
                         onImportLyrics = onImportLyrics,
                         onRemoveLyrics = onRemoveLyrics,

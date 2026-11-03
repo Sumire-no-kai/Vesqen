@@ -4,7 +4,9 @@ import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.test.platform.app.InstrumentationRegistry
@@ -27,9 +29,9 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * #169 PRD 完成条件: tapping a lyric line moves the real player to that line's time. The tap goes
- * through the app's own wiring, Now's actions to the view model's seek, with playback paused first
- * so that only the seek can reach the line's time.
+ * #169 PRD 完成条件: going to a lyric line moves the real player to that line's time. The click, as
+ * an accessibility service sends it (#209), goes through the app's own wiring, Now's actions to the
+ * view model's seek, with playback paused first so that only the seek can reach the line's time.
  */
 class LyricsSeekDeviceTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
@@ -37,7 +39,7 @@ class LyricsSeekDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
 
     @Test
-    fun tappingALineMovesThePlayerToItsTime() = runBlocking {
+    fun goingToALineMovesThePlayerToItsTime() = runBlocking {
         val app = isolatedPlaybackTestApplication()
         val file = File(File(app.cacheDir, FIXTURE_DIR), "VESQEN_QA_PRIVATE_lyrics.wav").also { writeSilentWav(it, durationMs = 20_000) }
         val track = AudioTrack(-2_001, file.toURI().toString(), "Lyrics seek", "", "", 20_000,
@@ -78,7 +80,7 @@ class LyricsSeekDeviceTest {
                 }
             }
             compose.onNodeWithTag("vesqen.mini-player.open-now").performClick()
-            compose.onNodeWithTag("vesqen.now.lyrics.line.2").performClick()
+            compose.onNodeWithTag("vesqen.now.lyrics.line.2").performSemanticsAction(SemanticsActions.OnClick)
 
             // Paused near the start, the player reaches 14 s only through the seek, at once.
             awaitPlayback(viewModel, 2_000) { !it.isPlaying && it.positionMs >= 14_000 }

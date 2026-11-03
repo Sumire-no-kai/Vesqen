@@ -958,9 +958,9 @@
     <string name="unmatched_record_discard_confirm_title">「%1$s」の記録を破棄しますか？</string>
     <string name="unmatched_record_discard_confirm_body">お気に入り、再生回数、プレイリスト内の位置、インポートした歌詞が削除され、元に戻せません。音楽ファイルには影響しません。</string>
     <!-- #169 local lyrics -->
-    <string name="lyrics">歌詞</string>
     <string name="now_more_options">その他のオプション</string>
     <string name="lyrics_show">歌詞を表示</string>
+    <string name="lyrics_show_cover">アートワークを表示</string>
     <string name="lyrics_import">歌詞をインポート</string>
     <string name="lyrics_remove">歌詞を削除</string>
     <string name="lyrics_remove_confirm_title">インポートした歌詞を削除しますか？</string>
