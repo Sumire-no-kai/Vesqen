@@ -10,6 +10,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -201,6 +202,7 @@ class QueueDragUiTest {
         compose.onNodeWithTag("vesqen.queue.list").performTouchInput { up() }
         repeat(5) { compose.mainClock.advanceTimeByFrame() }
         assertEquals(listOf(1 to 3), moved)
+        assertTrue("The refused hold does not play the row either", played.isEmpty())
 
         // Once the wait is over, the queue's own order is back and a row can be lifted again.
         compose.mainClock.advanceTimeBy(1_000)
@@ -229,6 +231,22 @@ class QueueDragUiTest {
         val moveDown = moves(1).also { assertEquals(2, it.size) }[1]
         compose.runOnIdle { moveDown.action() }
         assertEquals(listOf(1 to 3, 1 to 2), moved)
+    }
+
+    @Test
+    fun aRowLiftedBesideTheEdgeStaysUntilTheFingerMoves() {
+        show((0 until 60).map { item(it.toLong(), it) })
+        val list = compose.onNodeWithTag("vesqen.queue.list").fetchSemanticsNode().boundsInRoot
+        val lastWhole = (0 until 60).last { row ->
+            compose.onAllNodesWithTag("vesqen.queue.item.$row").fetchSemanticsNodes().firstOrNull()
+                ?.let { it.boundsInRoot.bottom <= list.bottom + 1 } == true
+        }
+
+        liftAndDrag(row = lastWhole, rows = 0f)
+        repeat(120) { compose.mainClock.advanceTimeByFrame() }
+        drop()
+
+        compose.runOnIdle { assertTrue("A still finger moves nothing: $moved", moved.isEmpty()) }
     }
 
     @Test

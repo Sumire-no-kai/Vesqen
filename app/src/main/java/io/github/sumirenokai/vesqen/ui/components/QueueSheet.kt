@@ -57,6 +57,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -155,6 +156,7 @@ private fun QueueList(
     val motionPolicy = rememberVesqenMotionPolicy()
     var dragged by remember { mutableStateOf<String?>(null) }
     var dragY by remember { mutableFloatStateOf(0f) }
+    var liftY by remember { mutableFloatStateOf(0f) }
     // The order shown while dragging, and after a drop until the queue arrives in that order.
     var preview by remember { mutableStateOf<List<String>?>(null) }
     var reorderViewport by remember { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -163,6 +165,7 @@ private fun QueueList(
     val speedPx = with(density) { 1000.dp.toPx() }
     val removeAreaPx = with(density) { 48.dp.toPx() }
     val liftPx = with(density) { 6.dp.toPx() }
+    val touchSlop = LocalViewConfiguration.current.touchSlop
     val upLabel = stringResource(R.string.move_up)
     val downLabel = stringResource(R.string.move_down)
     val shownKeys = preview ?: rowKeys
@@ -192,10 +195,12 @@ private fun QueueList(
             val seconds = ((frame - previousFrame) / 1_000_000_000f).coerceAtMost(.05f)
             previousFrame = frame
             val layout = listState.layoutInfo
+            // A row lifted beside an edge stays until the finger moves toward that edge: a still
+            // finger must not scroll rows past it and reorder the queue.
             val edgeFraction = when {
-                dragY < layout.viewportStartOffset + edgePx ->
+                dragY < layout.viewportStartOffset + edgePx && dragY < liftY - touchSlop ->
                     -((layout.viewportStartOffset + edgePx - dragY) / edgePx).coerceIn(0f, 1f)
-                dragY > layout.viewportEndOffset - edgePx ->
+                dragY > layout.viewportEndOffset - edgePx && dragY > liftY + touchSlop ->
                     ((dragY - layout.viewportEndOffset + edgePx) / edgePx).coerceIn(0f, 1f)
                 else -> 0f
             }
@@ -223,8 +228,17 @@ private fun QueueList(
                     // A scroll consumes the move first and ends the wait; a tap ends it too.
                     awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
                     // A dropped row still waits for its move. Going back to the queue's order here would
-                    // put another row under the finger and move it with no drag at all.
-                    if (preview != null) return@awaitEachGesture
+                    // put another row under the finger and move it with no drag at all. The hold does
+                    // nothing, so its release must not reach the row's click and play it.
+                    if (preview != null) {
+                        while (true) {
+                            val change = awaitPointerEvent(PointerEventPass.Initial).changes
+                                .firstOrNull { it.id == down.id } ?: break
+                            change.consume()
+                            if (!change.pressed) break
+                        }
+                        return@awaitEachGesture
+                    }
                     val y = down.position.y + listState.layoutInfo.viewportStartOffset
                     val item = listState.layoutInfo.visibleItemsInfo
                         .firstOrNull { y >= it.offset && y < it.offset + it.size } ?: return@awaitEachGesture
@@ -232,6 +246,7 @@ private fun QueueList(
                     val origin = item.offset + item.size / 2f
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     dragY = origin
+                    liftY = origin
                     preview = currentKeys
                     dragged = key
                     var dropped = false
