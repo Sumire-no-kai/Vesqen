@@ -30,6 +30,12 @@ class StrictUsbFailurePolicyTest {
         assertFalse(UsbOutputStatus(failureOrigin = UsbOutputFailureOrigin.USER_PLAYBACK).failureInterruptsUser())
     }
 
+    @Test fun `only a failed undo of the mixer setting leaves out the generic advice`() {
+        UsbOutputFailure.entries.forEach { failure ->
+            assertEquals(failure.name, failure != UsbOutputFailure.MIXER_CLEAR_FAILED, failure.dialogAddsGenericAdvice())
+        }
+    }
+
     @Test fun `a saved strict mode turns off even where it can never turn on`() {
         assertTrue(strictUsbSwitchEnabled(canSetMode = true, platformUnavailable = true, strictOn = true))
         assertFalse(strictUsbSwitchEnabled(canSetMode = true, platformUnavailable = true, strictOn = false))

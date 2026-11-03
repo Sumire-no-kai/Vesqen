@@ -89,7 +89,7 @@
     <string name="usb_failure_no_bit_perfect">多くのスマートフォンと同じく、この機種は USB DAC への bit-perfect 出力を提供していません。</string>
     <string name="usb_failure_request">Android が bit-perfect 出力のリクエストを拒否しました。</string>
     <string name="usb_failure_readback">Android が bit-perfect 出力の設定を保持しませんでした。</string>
-    <string name="usb_failure_clear">Android が bit-perfect の設定を元に戻せなかったため、再生は止まったままです。</string>
+    <string name="usb_failure_clear">Android が bit-perfect の設定を元に戻せなかったため、再生は停止したままです。再度システム出力に切り替えると、再試行できます。</string>
     <string name="usb_failure_track_format">実際に送られた音声の形式が、DAC の bit-perfect 出力形式と一致しません。</string>
     <string name="usb_failure_preferred_device">選択した USB デバイスに、Android が音声を出力しませんでした。</string>
     <string name="usb_failure_route_unavailable">音声の実際の出力先を、制限時間内に Android から確認できませんでした。</string>

@@ -891,7 +891,11 @@ class UsbOutputCoordinatorTest {
         coordinator.requestMode(UsbOutputMode.SYSTEM)
         idle()
 
-        assertFailedAfterActive(UsbOutputFailure.MIXER_CLEAR_FAILED, "strict_usb.mixer_clear_failed", origin = null)
+        assertFailedAfterActive(
+            UsbOutputFailure.MIXER_CLEAR_FAILED,
+            "strict_usb.mixer_clear_failed",
+            UsbOutputFailureOrigin.USER_MODE_CHANGE,
+        )
         assertEquals(UsbOutputMode.STRICT_BIT_PERFECT, status().mode)
         assertEquals(1, status().mixerCleanup.pendingCount)
         assertEquals(UsbOutputMode.STRICT_BIT_PERFECT.name, preferences.getString(MODE_KEY, null))
@@ -904,6 +908,35 @@ class UsbOutputCoordinatorTest {
         assertEquals(UsbOutputPhase.SYSTEM, status().phase)
         assertEquals(0, status().mixerCleanup.pendingCount)
         assertEquals(UsbOutputMode.SYSTEM.name, preferences.getString(MODE_KEY, null))
+    }
+
+    @Test
+    fun `a failed switch to system output is the user's whatever attempt came before it`() {
+        // The last attempt is a queue restore, whose failures do not interrupt with a dialog.
+        prepareStrictPlan(play = false)
+        player.setMediaItem(mediaItem(mediaId = "next"))
+        idle()
+        strictOutput()
+        idle()
+        mixer.clearResult = Result.success(false)
+
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        idle()
+
+        assertFailedAfterActive(
+            UsbOutputFailure.MIXER_CLEAR_FAILED,
+            "strict_usb.mixer_clear_failed",
+            UsbOutputFailureOrigin.USER_MODE_CHANGE,
+        )
+        val firstFailure = status()
+
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        idle()
+
+        // The dialog keys on the generation, so a failed retry shows it again.
+        assertEquals(UsbOutputFailure.MIXER_CLEAR_FAILED, status().failure)
+        assertEquals(UsbOutputFailureOrigin.USER_MODE_CHANGE, status().failureOrigin)
+        assertTrue(status().generation > firstFailure.generation)
     }
 
     @Test
@@ -930,8 +963,11 @@ class UsbOutputCoordinatorTest {
         player.setMediaItem(mediaItem(mediaId = "next"))
         idle()
 
-        assertEquals(UsbOutputFailure.MIXER_CLEAR_FAILED, status().failure)
-        assertEquals("strict_usb.mixer_clear_failed", status().decisionCode)
+        assertFailedAfterActive(
+            UsbOutputFailure.MIXER_CLEAR_FAILED,
+            "strict_usb.mixer_clear_failed",
+            UsbOutputFailureOrigin.TRACK_TRANSITION,
+        )
         assertFalse(realPlayer.playWhenReady)
     }
 

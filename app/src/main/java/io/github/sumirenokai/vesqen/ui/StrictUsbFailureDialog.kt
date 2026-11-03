@@ -54,7 +54,7 @@ internal fun StrictUsbUnavailableDialog(
 
 /**
  * #34: a failure interrupts with a dialog only when it blocked something the user asked for:
- * pressing play, the next track of a queue they started, or turning strict output on. Failures
+ * pressing play, the next track of a queue they started, or changing the output mode. Failures
  * from startup, queue restore, route or processing changes and service stop stay non-modal;
  * the Now status chip and output dialog, Chain and Settings show the reason.
  */
@@ -71,6 +71,9 @@ internal fun UsbOutputStatus.failureInterruptsUser(): Boolean = failure != null 
     null,
     -> false
 }
+
+/** #245: another DAC does not undo the setting, and the reason already says how to retry. */
+internal fun UsbOutputFailure.dialogAddsGenericAdvice(): Boolean = this != UsbOutputFailure.MIXER_CLEAR_FAILED
 
 /** The app shell owns feedback, including failures started from Library or the mini-player. */
 @Composable
@@ -93,11 +96,13 @@ internal fun StrictUsbFailureDialog(
         onDismissRequest = { dismissedFailure = failureKey },
         title = { Text(stringResource(R.string.chain_strict_failed_title)) },
         text = {
+            val reason = strictUsbFailureLabel(failure, status.decisionCode)
             Text(
-                stringResource(
-                    if (openPremium != null) R.string.player_trial_ended_body else R.string.player_strict_failure_body,
-                    strictUsbFailureLabel(failure, status.decisionCode),
-                ),
+                when {
+                    openPremium != null -> stringResource(R.string.player_trial_ended_body, reason)
+                    failure.dialogAddsGenericAdvice() -> stringResource(R.string.player_strict_failure_body, reason)
+                    else -> reason
+                },
                 modifier = Modifier.verticalScroll(rememberScrollState()),
             )
         },
