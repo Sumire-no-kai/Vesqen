@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen.library
 
 import android.os.Build
+import android.util.Log
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.ui.screens.filterTracks
 import java.io.File
@@ -12,8 +13,10 @@ import org.junit.Test
 
 /**
  * The numbers behind #223 and #224, not a pass or fail: run with `-e measure true`, then read
- * `library-performance.txt` from the app's files. The test build is debuggable, so compare within a
- * run and do not read the times as Release times. Synthetic data leaves out tag reading on purpose.
+ * `library-performance-compute.txt` and `library-performance-sqlite.txt` from the app's files, or
+ * the `LibraryPerformance` lines in logcat when the target is not debuggable. The test build is
+ * debuggable, so compare within a run and do not read those times as Release times. Synthetic data
+ * leaves out tag reading on purpose.
  */
 class LibraryPerformanceMeasurementTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -25,7 +28,10 @@ class LibraryPerformanceMeasurementTest {
         report.appendLine("${Build.MANUFACTURER} ${Build.MODEL}, API ${Build.VERSION.SDK_INT}")
     }
 
-    private fun write(name: String) = File(context.filesDir, name).writeText(report.toString())
+    private fun write(name: String) {
+        File(context.filesDir, name).writeText(report.toString())
+        report.lineSequence().forEach { Log.i("LibraryPerformance", it) }
+    }
 
     private fun syntheticTracks(count: Int): List<AudioTrack> = List(count) { index ->
         val album = index / 12
