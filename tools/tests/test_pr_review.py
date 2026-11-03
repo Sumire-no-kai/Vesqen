@@ -357,6 +357,20 @@ class ProviderAndValidationTests(unittest.TestCase):
         self.assertEqual("2023-06-01", headers["anthropic-version"])
         self.assertEqual("json_schema", payload["output_config"]["format"]["type"])
         self.assertNotIn("tools", payload)
+        self.assertEqual(16000, payload["max_tokens"])
+
+    def test_anthropic_failure_names_only_the_plain_stop_reason(self):
+        cases = [({"stop_reason": "max_tokens", "content": []}, "(max_tokens)"),
+                 ({"stop_reason": "refusal", "stop_details": {"category": "cyber", "explanation": "prompt text"}},
+                  "(refusal/cyber)"),
+                 ({"stop_reason": "prompt text with spaces", "stop_details": "prompt text"}, "(unknown)"),
+                 ({"content": []}, "(unknown)")]
+        for response, reason in cases:
+            with self.subTest(response=response), patch.object(review, "request_json", return_value=response):
+                with self.assertRaises(review.ReviewError) as failure:
+                    review.Model("anthropic", "test-model", ENV).generate("Review", {}, review.DISCOVERY_SCHEMA)
+                self.assertIn(reason, str(failure.exception))
+                self.assertNotIn("prompt text", str(failure.exception))
 
     def test_custom_https_gateway_and_model_configuration(self):
         model = review.Model("openai", "test-model", {"OPENAI_API_KEY": "test-only-not-a-credential",
