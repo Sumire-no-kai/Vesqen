@@ -23,6 +23,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,7 +56,6 @@ import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
@@ -96,6 +96,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -589,32 +590,36 @@ private fun NowPortraitPage(
                             motionPolicy = motionPolicy,
                             onSeek = { actions.onSeek(it, snapshot.queueEntryId) },
                             onImportLyrics = actions.onImportLyrics,
+                            onShowCover = actions.onToggleLyrics,
                             modifier = stage.fillMaxWidth(),
                         )
                     }
                     when {
                         !notesOpen && layout.artwork > 0.dp -> pane(Modifier.weight(1f))
                         notesOpen && artworkSize > 0.dp -> {
-                            Spacer(Modifier.weight(1f))
+                            Spacer(Modifier.weight(1f).fillMaxWidth().stageTap(actions.onToggleLyrics))
                             pane(Modifier.height(artworkSize))
-                            Spacer(Modifier.weight(1f))
+                            Spacer(Modifier.weight(1f).fillMaxWidth().stageTap(actions.onToggleLyrics))
                         }
                         else -> Spacer(Modifier.weight(1f))
                     }
                 } else {
                     // Tall phones have height the cover cannot use; share it around the cover so the
                     // controls and the liner notes sit at the bottom instead of leaving a gap there.
-                    Spacer(Modifier.weight(1f))
+                    val stageTap = if (artworkSize > 0.dp) Modifier.stageTap(actions.onToggleLyrics) else Modifier
+                    Spacer(Modifier.weight(1f).fillMaxWidth().then(stageTap))
                     if (artworkSize > 0.dp) {
-                        NowCover(
-                            presentation = presentation,
-                            size = artworkSize,
-                            isPlaying = snapshot.isPlaying,
-                            motionPolicy = motionPolicy,
-                            onClick = actions.onToggleLyrics,
-                        )
+                        Box(Modifier.fillMaxWidth().then(stageTap), contentAlignment = Alignment.Center) {
+                            NowCover(
+                                presentation = presentation,
+                                size = artworkSize,
+                                isPlaying = snapshot.isPlaying,
+                                motionPolicy = motionPolicy,
+                                onClick = actions.onToggleLyrics,
+                            )
+                        }
                     }
-                    Spacer(Modifier.weight(1f))
+                    Spacer(Modifier.weight(1f).fillMaxWidth().then(stageTap))
                 }
                 NowTrackIdentity(
                     presentation = presentation,
@@ -673,6 +678,7 @@ private fun NowLandscapePage(
             modifier = Modifier
                 .weight(.43f)
                 .fillMaxHeight()
+                .then(if (notesOpen || actions.lyricsShown) Modifier else Modifier.stageTap(actions.onToggleLyrics))
                 .padding(VesqenSpacing.lg),
             contentAlignment = Alignment.Center,
         ) {
@@ -691,6 +697,7 @@ private fun NowLandscapePage(
                     motionPolicy = motionPolicy,
                     onSeek = { actions.onSeek(it, snapshot.queueEntryId) },
                     onImportLyrics = actions.onImportLyrics,
+                    onShowCover = actions.onToggleLyrics,
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
@@ -761,18 +768,6 @@ private fun NowTopBar(
                     .testTag("vesqen.now.back"),
             ) {
                 Icon(Icons.Filled.KeyboardArrowDown, stringResource(R.string.collapse_player))
-            }
-            // Owner decision 1: the lyrics switch sits beside collapse. Its state is read out and the
-            // stage itself shows it, so the Moss tint is not the only cue.
-            IconToggleButton(
-                checked = actions.lyricsShown,
-                onCheckedChange = { actions.onToggleLyrics() },
-                colors = IconButtonDefaults.iconToggleButtonColors(
-                    checkedContentColor = MaterialTheme.colorScheme.primary,
-                ),
-                modifier = Modifier.size(48.dp).testTag("vesqen.now.lyrics-toggle"),
-            ) {
-                Icon(Icons.Filled.Lyrics, stringResource(R.string.lyrics))
             }
         }
         // Landscape gives the title row's height to the controls; the page header stays portrait-only.
@@ -858,6 +853,9 @@ private fun NowMoreMenu(actions: NowActions, isLandscape: Boolean) {
     }
 }
 
+/** The empty stage around the cover or lyrics: a tap here counts as one on them, and it has nothing to read (#209). */
+private fun Modifier.stageTap(onTap: () -> Unit): Modifier = pointerInput(onTap) { detectTapGestures(onTap = { onTap() }) }
+
 @Composable
 private fun NowCover(
     presentation: NowTrackPresentation,
@@ -877,7 +875,7 @@ private fun NowCover(
     )
     val latest = rememberUpdatedState(presentation)
     val showLyrics = stringResource(R.string.lyrics_show)
-    // Tapping the cover shows the lyrics (owner decision 1). The handler and the stage tag sit
+    // Tapping the cover shows the lyrics (#209). The handler and the stage tag sit
     // outside the cover change, which holds two covers while one track's gives way to the next;
     // the button merges what is inside it, so a tag there would not be found.
     Box(

@@ -1880,7 +1880,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.progress").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.playback-order").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.now.notes-toggle").assertIsDisplayed()
-        composeRule.onNodeWithTag("vesqen.now.lyrics-toggle").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.now.lyrics-toggle").assertDoesNotExist()
         // #169: the orientation toggle moved into the "more" menu (owner decision 1).
         composeRule.onNodeWithTag("vesqen.now.more").performClick()
         composeRule.onNodeWithTag("vesqen.now.orientation-toggle").assertIsDisplayed()
