@@ -55,7 +55,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -366,6 +365,9 @@ fun LibraryScreen(
     val contentView = selectedCollection?.let { LibraryContentView.Collection(it.key) }
         ?: if (isFavoriteList) LibraryContentView.Favorites else LibraryContentView.Root
 
+    val folderSources = state.sources.filter { it.kind == LibrarySourceKind.FOLDER }
+    var showSourceManager by rememberSaveable { mutableStateOf(false) }
+
     Column(modifier = modifier.fillMaxSize()) {
         AnimatedContent(
             targetState = favoritesOnly,
@@ -425,6 +427,7 @@ fun LibraryScreen(
                     }
                 },
                 onAddLibraryFolder = onAddLibraryFolder,
+                onManageSources = if (folderSources.isEmpty()) null else ({ showSourceManager = true }),
                 onRescan = onRescan,
                 sourceActionsEnabled = !state.isLoading && orderTarget == null,
             )
@@ -459,6 +462,21 @@ fun LibraryScreen(
         }
         if (state.catalogMutationFailed) {
             LibraryMutationFailureNotice()
+        }
+        if (showSourceManager) {
+            LibrarySourcesSheet(
+                folders = folderSources,
+                scanInProgress = state.isLoading,
+                onDismiss = { showSourceManager = false },
+                onAddLibraryFolder = {
+                    showSourceManager = false
+                    onAddLibraryFolder()
+                },
+                onRemove = { sourceId ->
+                    onRemoveLibraryFolder(sourceId)
+                    if (folderSources.size == 1) showSourceManager = false
+                },
+            )
         }
         // Kept outside the card: the sheet lists every record, and it stays open while the user works
         // through them, even once the card has nothing else to show.
@@ -527,14 +545,15 @@ fun LibraryScreen(
                 color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
             )
         }
-        // About the whole library, so it follows the tabs on the root lists. A folder, an album or
-        // favorites starts with its own back row instead.
+        // Only for something that needs the listener, and managing folders otherwise lives in the menu.
+        // It is about the whole library, so it follows the tabs on the root lists: a folder, an album
+        // or favorites starts with its own back row instead.
         val cardMillis = if (appliedMotionPolicy.reduceMotion) appliedMotionPolicy.stateChangeMillis else 180
         AnimatedVisibility(
             visible = contentView == LibraryContentView.Root && (
-                state.sources.any { it.kind == LibrarySourceKind.FOLDER } ||
-                    state.scanProgress != null ||
+                state.scanProgress != null ||
                     state.sources.any { it.scanState == LibraryScanState.FAILED } ||
+                    folderSources.any { !it.isAvailable } ||
                     state.promptsUnmatchedRecords
                 ),
             modifier = Modifier.atMostShareOfRemainingHeight(HeaderNoticesShare),
@@ -552,8 +571,7 @@ fun LibraryScreen(
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 LibrarySourcesCard(
                     state = state,
-                    onAddLibraryFolder = onAddLibraryFolder,
-                    onRemoveLibraryFolder = onRemoveLibraryFolder,
+                    onManageSources = { showSourceManager = true },
                     onPauseLibraryScan = onPauseLibraryScan,
                     onResumeLibraryScan = onResumeLibraryScan,
                     onReviewUnmatchedRecords = { showUnmatchedRecords = true },
@@ -1545,6 +1563,7 @@ private fun LibraryHeader(
     onOpenFavorites: () -> Unit,
     onBack: () -> Unit,
     onAddLibraryFolder: () -> Unit,
+    onManageSources: (() -> Unit)?,
     onRescan: () -> Unit,
     sourceActionsEnabled: Boolean,
 ) {
@@ -1609,6 +1628,14 @@ private fun LibraryHeader(
                             onClick = { showLibraryMenu = false; onAddLibraryFolder() },
                             modifier = Modifier.testTag("vesqen.library.add-folder"),
                         )
+                        onManageSources?.let { manage ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.manage_music_sources)) },
+                                leadingIcon = { Icon(Icons.Filled.FolderOpen, null) },
+                                onClick = { showLibraryMenu = false; manage() },
+                                modifier = Modifier.testTag("vesqen.library.manage-sources"),
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.rescan_library)) },
                             leadingIcon = { Icon(Icons.Filled.Refresh, null) },
@@ -1732,14 +1759,12 @@ private const val HeaderNoticesShare = 0.5f
 @Composable
 private fun LibrarySourcesCard(
     state: LibraryUiState,
-    onAddLibraryFolder: () -> Unit,
-    onRemoveLibraryFolder: (String) -> Unit,
+    onManageSources: () -> Unit,
     onPauseLibraryScan: () -> Unit,
     onResumeLibraryScan: () -> Unit,
     onReviewUnmatchedRecords: () -> Unit,
     onDismissUnmatchedRecords: () -> Unit,
 ) {
-    var showSourceManager by rememberSaveable { mutableStateOf(false) }
     val folders = state.sources.filter { it.kind == LibrarySourceKind.FOLDER }
     Surface(
         modifier = Modifier
@@ -1750,65 +1775,6 @@ private fun LibrarySourcesCard(
         color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Column(modifier = Modifier.padding(start = VesqenSpacing.sm, end = VesqenSpacing.xxs)) {
-            val folderCount: @Composable RowScope.() -> Unit = {
-                Icon(
-                    imageVector = Icons.Filled.FolderOpen,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(Modifier.width(VesqenSpacing.xs))
-                Text(
-                    text = pluralStringResource(
-                        R.plurals.imported_folders_count,
-                        folders.size,
-                        folders.size,
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            val sourcesButton: @Composable () -> Unit = {
-                TextButton(
-                    onClick = if (folders.isEmpty()) {
-                        onAddLibraryFolder
-                    } else {
-                        { showSourceManager = true }
-                    },
-                    enabled = !state.isLoading,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag(
-                        if (folders.isEmpty()) {
-                            "vesqen.library.sources.add"
-                        } else {
-                            "vesqen.library.sources.manage"
-                        },
-                    ),
-                ) {
-                    Text(
-                        stringResource(
-                            if (folders.isEmpty()) R.string.add_music_folder else R.string.manage_music_sources,
-                        ),
-                    )
-                }
-            }
-            BoxWithConstraints {
-                // Beside a long button, narrow or large text would leave the count a letter per line.
-                if (maxWidth < 300.dp || LocalDensity.current.fontScale > 1.3f) {
-                    Column {
-                        Row(
-                            modifier = Modifier.padding(top = VesqenSpacing.xs),
-                            verticalAlignment = Alignment.CenterVertically,
-                            content = folderCount,
-                        )
-                        Box(Modifier.align(Alignment.End)) { sourcesButton() }
-                    }
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        folderCount()
-                        sourcesButton()
-                    }
-                }
-            }
             val progress = state.scanProgress
             if (progress != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1848,21 +1814,35 @@ private fun LibrarySourcesCard(
                     }
                 }
             }
-            if (state.sources.any { it.scanState == LibraryScanState.FAILED }) {
+            val scanFailed = state.sources.any { it.scanState == LibraryScanState.FAILED }
+            val accessLost = folders.any { !it.isAvailable }
+            if (scanFailed) {
                 Text(
                     text = stringResource(R.string.library_source_scan_failed),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(bottom = VesqenSpacing.xs),
+                    modifier = Modifier.padding(vertical = VesqenSpacing.xs),
                 )
             }
-            if (folders.any { !it.isAvailable }) {
+            if (accessLost) {
                 Text(
                     text = stringResource(R.string.library_folder_access_needs_renewal),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(bottom = VesqenSpacing.xs),
+                    modifier = Modifier.padding(vertical = VesqenSpacing.xs),
                 )
+            }
+            if ((scanFailed || accessLost) && folders.isNotEmpty()) {
+                TextButton(
+                    onClick = onManageSources,
+                    enabled = !state.isLoading,
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .heightIn(min = 48.dp)
+                        .testTag("vesqen.library.sources.manage"),
+                ) {
+                    Text(stringResource(R.string.manage_music_sources))
+                }
             }
             if (state.promptsUnmatchedRecords) {
                 Spacer(Modifier.height(VesqenSpacing.xs))
@@ -1891,21 +1871,6 @@ private fun LibrarySourcesCard(
                 }
             }
         }
-    }
-    if (showSourceManager) {
-        LibrarySourcesSheet(
-            folders = folders,
-            scanInProgress = state.isLoading,
-            onDismiss = { showSourceManager = false },
-            onAddLibraryFolder = {
-                showSourceManager = false
-                onAddLibraryFolder()
-            },
-            onRemove = { sourceId ->
-                onRemoveLibraryFolder(sourceId)
-                if (folders.size == 1) showSourceManager = false
-            },
-        )
     }
 }
 

@@ -18,9 +18,6 @@
     <string name="device_music_access_body">授予 Android 媒體存取權限，即可納入系統已建立索引的音樂。你仍可以在下方另外加入資料夾。</string>
     <string name="add_music_folder">加入音樂資料夾</string>
     <string name="manage_music_sources">管理音樂來源</string>
-    <plurals name="imported_folders_count">
-        <item quantity="other">已匯入 %1$d 個資料夾</item>
-    </plurals>
     <string name="remove_music_folder">移除</string>
     <string name="library_scanning_source">正在掃描 %1$s…</string>
     <plurals name="library_scan_paused">

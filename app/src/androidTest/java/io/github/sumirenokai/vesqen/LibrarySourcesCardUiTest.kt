@@ -15,8 +15,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.height
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.library.LibraryScanProgress
 import io.github.sumirenokai.vesqen.library.LibraryScanState
 import io.github.sumirenokai.vesqen.library.LibrarySource
 import io.github.sumirenokai.vesqen.library.LibrarySourceKind
@@ -29,7 +29,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
-/** The sources card speaks for the whole library, so it stays out of a folder's page. */
+/** The sources card appears only when something needs the listener, and only on the root lists. */
 class LibrarySourcesCardUiTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
@@ -38,21 +38,23 @@ class LibrarySourcesCardUiTest {
     }
 
     private val track = AudioTrack(11, "content://media/external/audio/media/11", "Aira", "Artist", "Album A", 1_000)
-    private val state = LibraryUiState(
+    private val folder = LibrarySource(
+        id = "tree:test",
+        kind = LibrarySourceKind.FOLDER,
+        displayName = "Quiet Rooms",
+        scanState = LibraryScanState.IDLE,
+        trackCount = 1,
+    )
+    private val quiet = LibraryUiState(
         musicAccess = MusicAccess.GRANTED,
         tracks = listOf(track.copy(folderName = "Music/Quiet Rooms/")),
-        sources = listOf(
-            LibrarySource(
-                id = "tree:test",
-                kind = LibrarySourceKind.FOLDER,
-                displayName = "Quiet Rooms",
-                scanState = LibraryScanState.IDLE,
-                trackCount = 1,
-            ),
-        ),
+        sources = listOf(folder),
+    )
+    private val scanning = quiet.copy(
+        scanProgress = LibraryScanProgress(sourceId = folder.id, sourceName = folder.displayName, scannedTrackCount = 3),
     )
 
-    private fun show() = compose.setContent {
+    private fun show(state: LibraryUiState) = compose.setContent {
         VesqenTheme {
             LibraryScreen(
                 state = state,
@@ -63,19 +65,29 @@ class LibrarySourcesCardUiTest {
     }
 
     @Test
-    fun onARootListItFollowsTheTabsAndStaysOneRowHigh() {
-        show()
+    fun aQuietLibraryShowsNoCardAndTheListFollowsTheTabs() {
+        show(quiet)
+        compose.onNodeWithTag("vesqen.library.track.11").assertIsDisplayed()
+        compose.onNodeWithTag("vesqen.library.sources").assertDoesNotExist()
+        val tabs = compose.onNodeWithTag("vesqen.library.mode.songs").getUnclippedBoundsInRoot()
+        val row = compose.onNodeWithTag("vesqen.library.track.11").getUnclippedBoundsInRoot()
+        assertTrue("The list at ${row.top} should sit right under the tabs at ${tabs.bottom}", row.top - tabs.bottom < 24.dp)
+    }
+
+    @Test
+    fun aScanShowsTheCardUnderTheTabs() {
+        show(scanning)
         val tabs = compose.onNodeWithTag("vesqen.library.mode.songs").getUnclippedBoundsInRoot()
         val card = compose.onNodeWithTag("vesqen.library.sources").getUnclippedBoundsInRoot()
         val row = compose.onNodeWithTag("vesqen.library.track.11").getUnclippedBoundsInRoot()
+        compose.onNodeWithTag("vesqen.library.pause-scan").assertIsDisplayed()
         assertTrue("The card at ${card.top} should be under the tabs ending at ${tabs.bottom}", card.top >= tabs.bottom)
         assertTrue("The list at ${row.top} should be under the card ending at ${card.bottom}", row.top >= card.bottom)
-        assertTrue("The card should be one row, and is ${card.height} high", card.height <= 56.dp)
     }
 
     @Test
     fun aFolderPageGoesWithoutItAndComesBackToIt() {
-        show()
+        show(scanning)
         compose.onNodeWithTag("vesqen.library.mode.folders").performClick()
         compose.onNodeWithTag("vesqen.library.sources").assertIsDisplayed()
         compose.onNodeWithText("Quiet Rooms").performClick()
@@ -87,21 +99,59 @@ class LibrarySourcesCardUiTest {
 
     @Test
     fun favoritesGoWithoutIt() {
-        show()
+        show(scanning)
         compose.onNodeWithTag("vesqen.library.favorites").performClick()
         compose.onNodeWithTag("vesqen.library.title.favorites").assertIsDisplayed()
         compose.onNodeWithTag("vesqen.library.sources").assertDoesNotExist()
     }
 
     @Test
-    fun largeTextOnANarrowPhoneKeepsTheCountReadable() {
+    fun theMenuManagesFoldersOnceThereAreAny() {
+        show(quiet)
+        compose.onNodeWithTag("vesqen.library.menu").performClick()
+        compose.onNodeWithTag("vesqen.library.manage-sources").performClick()
+        compose.onNodeWithTag("vesqen.library.source-manager").assertIsDisplayed()
+    }
+
+    @Test
+    fun theMenuHasNothingToManageWithoutFolders() {
+        show(quiet.copy(sources = emptyList()))
+        compose.onNodeWithTag("vesqen.library.menu").performClick()
+        compose.onNodeWithTag("vesqen.library.add-folder").assertIsDisplayed()
+        compose.onNodeWithTag("vesqen.library.manage-sources").assertDoesNotExist()
+    }
+
+    @Test
+    fun aFolderThatLostItsAccessLeadsToManagingIt() {
+        show(quiet.copy(sources = listOf(folder.copy(isAvailable = false))))
+        compose.onNodeWithText(compose.activity.getString(R.string.library_folder_access_needs_renewal)).assertIsDisplayed()
+        compose.onNodeWithTag("vesqen.library.sources.manage").performClick()
+        compose.onNodeWithTag("vesqen.library.source-manager").assertIsDisplayed()
+    }
+
+    @Test
+    fun aFailedSourceSaysSoWithoutAButtonForDeviceMusic() {
+        val device = LibrarySource(
+            id = "media:external",
+            kind = LibrarySourceKind.DEVICE,
+            displayName = "Device music",
+            scanState = LibraryScanState.FAILED,
+            trackCount = 1,
+        )
+        show(quiet.copy(sources = listOf(device)))
+        compose.onNodeWithText(compose.activity.getString(R.string.library_source_scan_failed)).assertIsDisplayed()
+        compose.onNodeWithTag("vesqen.library.sources.manage").assertDoesNotExist()
+    }
+
+    @Test
+    fun largeTextOnANarrowPhoneKeepsTheMessageAndItsButton() {
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
                 Box(Modifier.size(320.dp, 533.dp)) {
                     VesqenTheme {
                         LibraryScreen(
-                            state = state,
+                            state = quiet.copy(sources = listOf(folder.copy(isAvailable = false))),
                             playback = PlaybackSnapshot(), onRequestMusicAccess = {}, onOpenAppSettings = {},
                             onOpenNotificationSettings = {}, onRescan = {}, onTrackSelected = {},
                         )
@@ -109,9 +159,10 @@ class LibrarySourcesCardUiTest {
                 }
             }
         }
-        val count = compose.activity.resources.getQuantityString(R.plurals.imported_folders_count, 1, 1)
-        val text = compose.onNodeWithText(count).assertIsDisplayed().getUnclippedBoundsInRoot()
-        assertTrue("\"$count\" should not wrap to several lines, and is ${text.height} high", text.height <= 48.dp)
-        compose.onNodeWithTag("vesqen.library.sources.manage").assertIsDisplayed()
+        val button = compose.onNodeWithTag("vesqen.library.sources.manage").getUnclippedBoundsInRoot()
+        val text = compose.onNodeWithText(compose.activity.getString(R.string.library_folder_access_needs_renewal))
+            .getUnclippedBoundsInRoot()
+        assertTrue("The message should span the card, and is ${text.right - text.left} wide", text.right - text.left > 200.dp)
+        assertTrue("The button should follow the message", button.top >= text.bottom)
     }
 }

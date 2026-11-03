@@ -18,10 +18,6 @@
     <string name="device_music_access_body">Grant Android media access to include music indexed by this device. You can still add individual folders below.</string>
     <string name="add_music_folder">Add music folder</string>
     <string name="manage_music_sources">Manage music sources</string>
-    <plurals name="imported_folders_count">
-        <item quantity="one">%1$d imported folder</item>
-        <item quantity="other">%1$d imported folders</item>
-    </plurals>
     <string name="remove_music_folder">Remove</string>
     <string name="library_scanning_source">Scanning %1$s…</string>
     <plurals name="library_scan_paused">

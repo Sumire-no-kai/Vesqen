@@ -857,7 +857,8 @@ class VesqenAppTest {
             onRemoveLibraryFolder = { removedSourceId = it },
         )
 
-        composeRule.onNodeWithTag("vesqen.library.sources.manage").performClick()
+        composeRule.onNodeWithTag("vesqen.library.menu").performClick()
+        composeRule.onNodeWithTag("vesqen.library.manage-sources").performClick()
         composeRule.onNodeWithTag("vesqen.library.source-manager").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.library.source.tree:test.remove").performClick()
         // Removing a folder forgets its favorites, play counts and playlist entries, so it asks first.
