@@ -27,6 +27,10 @@ import org.junit.Test
 class LibraryRefreshUiTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
+    init {
+        compose.registerIdlingResource(LibraryProjectionIdling)
+    }
+
     @Test fun historyAndFavoriteUpdatesKeepTheScrolledTrackVisible() {
         val tracks = mutableStateOf((0L..149L).map {
             AudioTrack(it, "content://fixture/$it", "Track ${it.toString().padStart(3, '0')}", "", "", 1000)

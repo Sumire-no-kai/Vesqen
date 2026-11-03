@@ -208,6 +208,10 @@ class VesqenAppTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
+    init {
+        composeRule.registerIdlingResource(LibraryProjectionIdling)
+    }
+
     private lateinit var fixtureDensity: Density
 
     private val context
