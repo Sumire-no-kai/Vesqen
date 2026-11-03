@@ -31,6 +31,7 @@ import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
 import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
 import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import java.nio.ByteBuffer
@@ -557,18 +558,22 @@ private class CaptureSession(
     private var ended = CountDownLatch(1)
 
     private val player: ExoPlayer = onPlayer {
-        ExoPlayer.Builder(context, factory).setLooper(thread.looper).build().also { player ->
-            player.addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_ENDED) ended.countDown()
-                }
+        ExoPlayer.Builder(context, factory)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(context, VesqenExtractorsFactory()))
+            .setLooper(thread.looper)
+            .build()
+            .also { player ->
+                player.addListener(object : Player.Listener {
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_ENDED) ended.countDown()
+                    }
 
-                override fun onPlayerError(error: PlaybackException) {
-                    failure.set(error)
-                    ended.countDown()
-                }
-            })
-        }
+                    override fun onPlayerError(error: PlaybackException) {
+                        failure.set(error)
+                        ended.countDown()
+                    }
+                })
+            }
     }
 
     val outputs get() = provider.outputs
