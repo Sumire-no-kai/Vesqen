@@ -190,13 +190,14 @@ class QueueDragUiTest {
         assertEquals("Track 3", rowTitle(1))
 
         val node = compose.onNodeWithTag("vesqen.queue.item.1").fetchSemanticsNode().boundsInRoot
-        val hold = Offset(node.center.x - node.width / 4, node.center.y)
+        val list = compose.onNodeWithTag("vesqen.queue.list").fetchSemanticsNode().boundsInRoot
+        val hold = Offset(node.center.x - node.width / 4, node.center.y) - list.topLeft
         compose.onNodeWithTag("vesqen.queue.list").performTouchInput { down(hold) }
         compose.mainClock.advanceTimeBy(600)
         repeat(10) { compose.mainClock.advanceTimeByFrame() }
         assertEquals("The held row stays where it was shown", "Track 3", rowTitle(1))
         compose.onNodeWithTag("vesqen.queue.list").performTouchInput { up() }
-        compose.mainClock.advanceTimeByFrame()
+        repeat(5) { compose.mainClock.advanceTimeByFrame() }
         assertEquals(listOf(1 to 3), moved)
 
         // Once the wait is over, the queue's own order is back and a row can be lifted again.
