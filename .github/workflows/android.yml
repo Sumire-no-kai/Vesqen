@@ -39,7 +39,7 @@ jobs:
       # its own, so it compiles them and runs only the license catalog test, whose input is the
       # flavor's own dependency list. Lint, both APKs and both instrumentation APKs still cover it.
       - name: Verify debug and tests
-        run: ./gradlew testGithubDebugUnitTest testPlayDebugUnitTest --tests 'io.github.sumirenokai.vesqen.licenses.ThirdPartyLicensesTest' lintDebug assembleDebug assembleDeviceTest assembleDeviceTestAndroidTest --no-daemon
+        run: ./gradlew testGithubDebugUnitTest :usb-engine:testDebugUnitTest testPlayDebugUnitTest --tests 'io.github.sumirenokai.vesqen.licenses.ThirdPartyLicensesTest' lintDebug assembleDebug assembleDeviceTest assembleDeviceTestAndroidTest --no-daemon
 
       - name: Assemble Profile
         run: ./gradlew assembleProfile --no-daemon

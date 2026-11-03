@@ -117,7 +117,7 @@ Each release lists its own limitations in the release notes, and the [changelog]
 You need JDK 25 and Android SDK Platform 36. The Gradle wrapper provides Gradle 9.5.0 and Android Gradle Plugin 9.3.2. `minSdk` is 28, `compileSdk` and `targetSdk` are 36, and the application ID is `io.github.sumirenokai.vesqen`.
 
 ```bash
-./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+./gradlew :app:testDebugUnitTest :usb-engine:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
 On Windows, use `.\gradlew.bat` instead. Debug APKs are written to `app/build/outputs/apk/github/debug/` and `app/build/outputs/apk/play/debug/`, one per build flavor (see [versioning](docs/VERSIONING.md#build-flavors-and-channels)).

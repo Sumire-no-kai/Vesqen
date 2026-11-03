@@ -117,7 +117,7 @@ Vesqen 1.x 免费。曲库、播放和链路功能永久免费。严格 USB 输�
 需要 JDK 25 和 Android SDK Platform 36。Gradle Wrapper 会使用 Gradle 9.5.0 和 Android Gradle Plugin 9.3.2。`minSdk` 为 28，`compileSdk` 和 `targetSdk` 为 36，应用 ID 为 `io.github.sumirenokai.vesqen`。
 
 ```bash
-./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+./gradlew :app:testDebugUnitTest :usb-engine:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
 在 Windows 上请改用 `.\gradlew.bat`。Debug 安装包按构建变体分别输出到 `app/build/outputs/apk/github/debug/` 和 `app/build/outputs/apk/play/debug/`（参阅[版本管理](docs/VERSIONING.md#build-flavors-and-channels)）。
