@@ -6,6 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.ui.screens.filterTracks
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -137,13 +138,13 @@ class LibraryPerformanceMeasurementTest {
             val ids = store.readTracks(listOf(sourceId)).map(AudioTrack::id)
 
             val phases = mapOf("idle" to Latencies(), "row writes" to Latencies(), "scan completion" to Latencies())
-            var phase = "idle"
+            val phase = AtomicReference("idle")
             val stop = AtomicBoolean(false)
             val foreground = thread(name = "foreground-edits") {
                 var at = 0
                 while (!stop.get()) {
                     val id = ids[at++ % ids.size]
-                    val latencies = phases.getValue(phase)
+                    val latencies = phases.getValue(phase.get())
                     var began = System.nanoTime()
                     store.recordPlayback(id, System.currentTimeMillis())
                     latencies.add((System.nanoTime() - began) / 1_000_000.0)
@@ -157,12 +158,12 @@ class LibraryPerformanceMeasurementTest {
                 }
             }
             Thread.sleep(3_000)
-            phase = "row writes"
+            phase.set("row writes")
             start = System.nanoTime()
             val second = store.beginSourceScan(sourceId)
             repeat(size) { store.upsertTrack(second, candidate(it, 2)) }
             report.appendLine("rescan writing every row: ${(System.nanoTime() - start) / 1_000_000} ms")
-            phase = "scan completion"
+            phase.set("scan completion")
             start = System.nanoTime()
             store.completeSourceScan(second)
             report.appendLine("scan completion: ${(System.nanoTime() - start) / 1_000_000} ms")
