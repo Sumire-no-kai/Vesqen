@@ -154,6 +154,14 @@ class TrackFullInfoUiTest {
     }
 
     @Test
+    fun aPeakAloneStillSaysItIsNotApplied() {
+        show(TrackFullInfo(tags = TrackTags(replayGainAlbumPeak = "0.98")))
+        open()
+
+        compose.onNodeWithText(context.getString(R.string.replay_gain_not_applied)).assertExists()
+    }
+
+    @Test
     fun aLossyCodecSaysSo() {
         show(TrackFullInfo(lossless = false))
         open()

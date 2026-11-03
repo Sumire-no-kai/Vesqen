@@ -226,6 +226,36 @@ class TrackTagExtractorTest {
     }
 
     @Test
+    fun aRepeatedCreditWithACommaInItShowsOnce() {
+        val tags = extract(
+            "fLaC".toByteArray() +
+                flacBlock(4, true, comments("vendor", "COMPOSER=Bach, J.S.", "COMPOSER=Handel", "COMPOSER=Bach, J.S.")) +
+                ByteArray(128),
+        )
+        assertEquals("Bach, J.S., Handel", tags.composer)
+    }
+
+    @Test
+    fun creditsFromBothId3FramesAreKeptInEitherOrder() {
+        val named = frame3("TXXX", utf8Frame("COMPOSER\u0000Bach"))
+        val text = frame3("TCOM", utf8Frame("Handel"))
+        assertEquals("Bach, Handel", extract(id3(3, named, text)).composer)
+        assertEquals("Handel, Bach", extract(id3(3, text, named)).composer)
+    }
+
+    @Test
+    fun aLinkedPictureIsNotACover() {
+        fun apic(mime: String, type: Int) =
+            frame3("APIC", byteArrayOf(0) + mime.toByteArray() + byteArrayOf(0, type.toByte(), 0) + ByteArray(64))
+
+        assertNull(extract(id3(3, apic("-->", 3))).coverMimeType)
+        assertNull(extract(id3(3, apic("image/" + "x".repeat(200), 3))).coverMimeType)
+        // A link does not hide a real picture after it, and old taggers write the bare format.
+        assertEquals("image/png", extract(id3(3, apic("-->", 3), apic("image/png", 3))).coverMimeType)
+        assertEquals("png", extract(id3(3, apic("PNG", 3))).coverMimeType)
+    }
+
+    @Test
     fun repeatedCreditsStayWithinTheTextLimit() {
         val entries = List(2_000) { "COMPOSER=${it.toString().padEnd(100, 'x')}" }.toTypedArray()
         val tags = extract("fLaC".toByteArray() + flacBlock(4, true, comments("vendor", *entries)) + ByteArray(128))
@@ -286,6 +316,7 @@ class TrackTagExtractorTest {
         assertEquals("MP4ISRC", tags.isrc)
         assertEquals("-3.00 dB", tags.replayGainTrackGain)
         assertEquals("image/png", tags.coverMimeType)
+        assertEquals("An MP4 cover does not declare what it shows", false, tags.coverIsFront)
     }
 
     @Test

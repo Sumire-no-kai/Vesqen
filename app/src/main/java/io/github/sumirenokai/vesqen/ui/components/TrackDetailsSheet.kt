@@ -393,7 +393,7 @@ private fun FullInfoRows(track: AudioTrack, info: TrackFullInfo) {
         tags.isrc?.let { add(stringResource(R.string.detail_isrc) to it) }
     }
     FullInfoGroup(stringResource(R.string.full_info_audio), audio)
-    if (tags.replayGainTrackGain != null || tags.replayGainAlbumGain != null) {
+    if (listOf(tags.replayGainTrackGain, tags.replayGainTrackPeak, tags.replayGainAlbumGain, tags.replayGainAlbumPeak).any { it != null }) {
         // Showing the values must not suggest that they are applied.
         Text(
             text = stringResource(R.string.replay_gain_not_applied),
