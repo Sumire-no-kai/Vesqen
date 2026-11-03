@@ -180,6 +180,34 @@ class QueueDragUiTest {
     }
 
     @Test
+    fun aHoldWhileAMoveWaitsForTheQueueMovesNothingElse() {
+        show(listOf(item(1, 0), item(2, 1), item(3, 2), item(4, 3)))
+
+        // The queue never answers here, so the dropped order stays up until the timeout.
+        liftAndDrag(row = 1, rows = 2f)
+        compose.onNodeWithTag("vesqen.queue.list").performTouchInput { up() }
+        compose.mainClock.advanceTimeByFrame()
+        assertEquals("Track 3", rowTitle(1))
+
+        val node = compose.onNodeWithTag("vesqen.queue.item.1").fetchSemanticsNode().boundsInRoot
+        val hold = Offset(node.center.x - node.width / 4, node.center.y)
+        compose.onNodeWithTag("vesqen.queue.list").performTouchInput { down(hold) }
+        compose.mainClock.advanceTimeBy(600)
+        repeat(10) { compose.mainClock.advanceTimeByFrame() }
+        assertEquals("The held row stays where it was shown", "Track 3", rowTitle(1))
+        compose.onNodeWithTag("vesqen.queue.list").performTouchInput { up() }
+        compose.mainClock.advanceTimeByFrame()
+        assertEquals(listOf(1 to 3), moved)
+
+        // Once the wait is over, the queue's own order is back and a row can be lifted again.
+        compose.mainClock.advanceTimeBy(1_000)
+        assertEquals("Track 2", rowTitle(1))
+        liftAndDrag(row = 0, rows = 1f)
+        drop()
+        compose.runOnIdle { assertEquals(listOf(1 to 3, 0 to 1), moved) }
+    }
+
+    @Test
     fun aDropOnTheSamePlaceMovesNothing() {
         show(listOf(item(1, 0), item(2, 1), item(3, 2)))
 

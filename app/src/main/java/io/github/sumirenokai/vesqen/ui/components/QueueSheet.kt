@@ -222,6 +222,9 @@ private fun QueueList(
                     if (down.position.x >= size.width - removeAreaPx) return@awaitEachGesture
                     // A scroll consumes the move first and ends the wait; a tap ends it too.
                     awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
+                    // A dropped row still waits for its move. Going back to the queue's order here would
+                    // put another row under the finger and move it with no drag at all.
+                    if (preview != null) return@awaitEachGesture
                     val y = down.position.y + listState.layoutInfo.viewportStartOffset
                     val item = listState.layoutInfo.visibleItemsInfo
                         .firstOrNull { y >= it.offset && y < it.offset + it.size } ?: return@awaitEachGesture
