@@ -104,10 +104,14 @@ internal class LocalLyricsResolver(
 
     private fun resolve(track: AudioTrack): ResolvedLyrics {
         val uri = track.contentUri.toUri()
-        val folderUri = if (DocumentsContract.isTreeUri(uri)) uri else coveringFolderUri(uri)
         // A source that should be there but failed for now leaves the result uncached. Kept, the
         // result of a lower-priority source would hide that source until the next completed refresh.
         var complete = true
+        val folderUri = if (DocumentsContract.isTreeUri(uri)) {
+            uri
+        } else {
+            coveringFolderUri(uri, onFailure = { complete = false })
+        }
         val picked = pickLyrics { source ->
             val read = when (source) {
                 LyricsSource.Imported -> readImported(track.id) ?: SourceLyrics.Unreadable(UnreadableReason.ReadFailed)
@@ -129,12 +133,16 @@ internal class LocalLyricsResolver(
     }
 
     /**
-     * Null when no added folder covers the file. Android refuses with a SecurityException when no
-     * grant does; a provider failure counts the same, because the embedded tags are still read.
+     * Null when no added folder covers the file, which Android says with a SecurityException. Any
+     * other failure may pass, so it is also null for now, the embedded tags are still read, and
+     * [onFailure] keeps the result from being cached.
      */
-    private fun coveringFolderUri(uri: Uri): Uri? = try {
+    private fun coveringFolderUri(uri: Uri, onFailure: () -> Unit): Uri? = try {
         coveringDocumentUri(uri)?.takeIf(DocumentsContract::isTreeUri)
+    } catch (_: SecurityException) {
+        null
     } catch (_: RuntimeException) {
+        onFailure()
         null
     }
 

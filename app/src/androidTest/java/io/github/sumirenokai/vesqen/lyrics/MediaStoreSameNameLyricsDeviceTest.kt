@@ -98,6 +98,23 @@ class MediaStoreSameNameLyricsDeviceTest {
     }
 
     @Test
+    fun aLookupThatFailsForNowIsTriedAgainAndARefusalIsKept() = runBlocking {
+        FakeDocumentsProvider.files["music/song.lrc"] = "[00:01.00]Beside the song".toByteArray()
+        covering = { throw IllegalStateException("The media provider restarted") }
+        assertEquals(LyricsSource.Embedded, source())
+
+        covering = { document("music/song.flac") }
+        assertEquals(LyricsSource.SameNameFile, source())
+
+        // A refusal is an answer: it stays until the next refresh, as a complete listing does.
+        resolver.clearCache()
+        covering = { throw SecurityException("No grant covers this file") }
+        assertEquals(LyricsSource.Embedded, source())
+        covering = { document("music/song.flac") }
+        assertEquals(LyricsSource.Embedded, source())
+    }
+
+    @Test
     fun aCoveredTrackWithoutLyricsHasNoHint() = runBlocking {
         audio.writeBytes(ByteArray(0))
 
