@@ -62,6 +62,8 @@ Vesqen 是一款 Android 离线音乐播放器，无需注册账号即可播放�
 
 状态仅依据证据显示，不会向更高等级提升：处于 ACTIVE 的路径不会被称为已验证，无损文件也不会被称为 bit-perfect。
 
+播放器和自研 USB 输出的工作方式，见[技术说明](docs/TECHNICAL_OVERVIEW.zh-CN.md)。
+
 ## 下载与安装
 
 - **GitHub Releases**：每个[版本](https://github.com/Sumire-no-kai/Vesqen/releases)均附有签名的 APK 及其 SHA-256，详细安装步骤请参阅官网[支持页面](https://vesqen.sumirenokai.com/zh/support/#install-title)。应用签名证书的 SHA-256 为
@@ -134,6 +136,7 @@ Vesqen 1.x 免费。曲库、播放和链路功能永久免费。严格 USB 输�
 
 - 产品：[PRODUCT.md](PRODUCT.md)、[需求文档](docs/PRD.md)、[里程碑概览](docs/ROADMAP.md)
 - 设计：[DESIGN.md](DESIGN.md)、[视觉识别](docs/brand/VISUAL_IDENTITY.md)、[重设计方向](docs/redesign/README.md)
+- 技术设计：[技术说明](docs/TECHNICAL_OVERVIEW.zh-CN.md)、[USB 架构设计](docs/M7_USB_ARCHITECTURE.md)
 - 工程：[架构审查](docs/ARCHITECTURE_REVIEW.md)、[工程案例](docs/ENGINEERING_CASEBOOK.md)、[开发日志](docs/DEVELOPMENT_LOG.md)、[Media3 淡入测试报告](docs/MEDIA3_FADE_IN_STUDY.zh-CN.md)
 - 发布：[发布路线与排期](docs/LAUNCH_BACKLOG.md)、[测试版检查表](docs/M4_BETA_RELEASE.md)、[设备验收](docs/M4_DEVICE_ACCEPTANCE.md)
 

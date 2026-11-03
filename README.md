@@ -62,6 +62,8 @@ Vesqen is an offline music player for Android. It plays the music stored on your
 
 A state is never promoted to a stronger one. An active path is not called verified, and a lossless file is not called bit-perfect.
 
+For how the player and Vesqen's own USB output work, see the [technical overview](docs/TECHNICAL_OVERVIEW.zh-CN.md) (in Chinese).
+
 ## Download and install
 
 - **GitHub Releases:** each [release](https://github.com/Sumire-no-kai/Vesqen/releases) has a signed APK and its SHA-256. The [Support page](https://vesqen.sumirenokai.com/support/#install-title) explains each install step. The application signing certificate SHA-256 is
@@ -134,6 +136,7 @@ Keep `app/build/outputs/mapping/<variant>/mapping.txt` with any optimized APK so
 
 - Product: [PRODUCT.md](PRODUCT.md), [requirements](docs/PRD.md), [milestone overview](docs/ROADMAP.md)
 - Design: [DESIGN.md](DESIGN.md), [visual identity](docs/brand/VISUAL_IDENTITY.md), [redesign direction](docs/redesign/README.md)
+- Technical design: [technical overview](docs/TECHNICAL_OVERVIEW.zh-CN.md) (in Chinese), [USB architecture](docs/M7_USB_ARCHITECTURE.md) (in Chinese)
 - Engineering: [architecture review](docs/ARCHITECTURE_REVIEW.md), [engineering casebook](docs/ENGINEERING_CASEBOOK.md), [development log](docs/DEVELOPMENT_LOG.md), [Media3 fade-in study](docs/MEDIA3_FADE_IN_STUDY.md)
 - Releases: [release roadmap and schedule](docs/LAUNCH_BACKLOG.md), [beta checklist](docs/M4_BETA_RELEASE.md), [device acceptance](docs/M4_DEVICE_ACCEPTANCE.md)
 
