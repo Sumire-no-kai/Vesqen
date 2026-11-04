@@ -389,3 +389,31 @@
   - 应用内更新器（要等发布和官网 `updates/` 上线后再测）。
   - 重启。
 - 结论：安装、versionCode 增大的同签名升级和数据保留通过（Android 15 和 Android 9 都从 GitHub 版 1.1.0 升级）。
+
+### 2026-11-04 · 1.2.0 CI 签名 APK 从 1.1.1 升级
+
+- 候选：`master` 的 `2756c197a5f9fdca471d84219da1c3a4a1c1f952`（1.2.0 / 17）推送后自动运行的 [GitHub APK release #41776600837](https://github.com/Sumire-no-kai/Vesqen/actions/runs/41776600837)。所有者批准签名后，生成草稿 `v1.2.0`。`Vesqen-1.2.0.apk` 的 SHA-256 为 `172110fc…8af3`，与 `SHA256SUMS` 和 `release-manifest.json` 一致。
+- 本机复核签名包：apksigner 的证书 SHA-256 为 `743e96fc…6293`；aapt 显示 1.2.0 / 17，包名 `io.github.sumirenokai.vesqen`。
+- iQOO 9 V2171A / Android 15（USB）：
+  - 升级前：装的是 GitHub 版 1.1.1（versionCode 16，base.apk `457cf571…eb7c`，与发布的 1.1.1 一致，备份在被忽略的 `build/qa/device-backups/2026-11-04-iqoo-1.1.1/`）。打开时显示使用统计提示，选了“不发送”。“正在播放”为第 5 / 112 首“brave heart”，暂停在 0:07 / 4:12，链路注记为 FLAC 24/192 · SYSTEM MIXED。
+  - 1.1.1 上的跳转问题（#261 V36）：在恢复的暂停队列上拖动进度条，界面显示 1:58，播放器的位置仍是 7199 毫秒，日志为 `Controller isn't allowed to call command= 5`。
+  - 升级：`adb install -r`，点过 vivo 的安装检查页。versionCode 16 → 17，firstInstallTime 不变（2026-10-13 15:37:21），lastUpdateTime 为 2026-11-04 16:28:02，设备上 base.apk 的哈希为 `172110fc…8af3`。
+  - 升级后：第 5 / 112 首、0:07 / 4:12、未收藏和链路注记都与升级前相同，仍为暂停。
+  - 跳转：同样拖动后，播放器的位置变为 118097 毫秒，保持暂停，没有丢弃命令的日志。点按播放后从 1:58 继续。
+  - 新功能：封面和歌词切换正常。两个真实音乐的 AIFF（16/44.1、24/192）正常播放。曲目详情和完整信息显示 AIFF、192.0 kHz、24-bit、无损、9216 kbps。在队列中长按拖动，把“Alive”从第 4 首移到第 6 首。
+  - 语言：用 `cmd locale` 切到日文和繁体中文，看了曲库页和设置页，包括严格 USB 的 20 毫秒淡入说明。之后恢复为跟随系统。
+- Honor STF-AL00 / Android 9（无线 adb）：
+  - 升级前：装的是 GitHub 版 1.1.1（base.apk `457cf571…eb7c`，备份在 `build/qa/device-backups/2026-11-04-honor-1.1.1/`）。第 93 / 106 首“05. 前前前世 (original ver.)”，已收藏，暂停在 1:33 / 4:37，链路注记为 WAV 24/48 · SYSTEM MIXED。
+  - 升级：`adb install -r`，versionCode 16 → 17，firstInstallTime 不变（2026-10-16 12:22:47），lastUpdateTime 为 2026-11-04 16:24:33，设备上 base.apk 的哈希为 `172110fc…8af3`。
+  - 升级后：第 93 / 106 首、1:33 / 4:37、收藏和链路注记都与升级前相同，仍为暂停。
+  - 跳转：拖动后播放器的位置变为 159469 毫秒（2:39），保持暂停，点按播放后从这里继续。点按歌词区域后回到封面。
+  - Termux：测试前后 Termux 用户下的服务进程号和启动时间都不变。结束时 Termux 回到前台，电量 38%，温度 32.0 °C。
+- 发现的问题：iQOO 上所有 ALAC 文件都放不了（#270，#261 V37）。根因是高通解码器不接受 Media3 传入的配置数据。所有者决定 1.2.0 记为已知限制，在 1.2.1 修复。
+- 同日的总回归（模拟器 `vesqen-check`，Android 16，`80c936df`）：512 项设备测试中 2 项失败，12 项按条件跳过。两项失败的原因和 V36 的修复记在 #261；`fc403e4d` 上这两项和相关测试都在新进程里单独通过，完整设备测试没有重跑。单元测试 1583 项通过，lint 0 错误。CI 在 `fc403e4d` 和发版运行上通过。
+- 没有覆盖：
+  - 签名版上的歌词定位和同名歌词（需要添加文件夹）。这两项 2026-11-03 至 11-04 在 Profile 版上检查过（#261），设备测试也覆盖，此后的代码改动不涉及。
+  - `StrictUsbStartupDeviceTest` 和 `StrictUsbSpeakerDeviceTest` 在有 USB 主机的 Android 14 及以上手机上的结果（iQOO 的测试包归 USB 开发使用）。
+  - 真实 DAC、真机 TalkBack 和真机三键导航（留作已知限制）。
+  - 应用内更新器（要等发布和官网 `updates/` 上线后再测）。
+  - 重启和蓝牙。
+- 结论：安装、versionCode 增大的同签名升级和数据保留通过（Android 15 和 Android 9 都从 GitHub 版 1.1.1 升级）。
