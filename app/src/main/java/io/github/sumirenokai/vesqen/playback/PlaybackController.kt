@@ -436,7 +436,14 @@ class PlaybackController(
     fun seekTo(positionMs: Long, queueEntryId: String? = null) {
         val activeController = controller ?: return
         if (!seekStillApplies(queueEntryId, activeController.currentMediaItem?.queueEntryId())) return
-        activeController.seekTo(positionMs.coerceAtLeast(0))
+        val target = positionMs.coerceAtLeast(0)
+        // A restored paused queue stays unprepared, so Media3 does not call its item seekable yet and
+        // drops a plain seekTo. Naming the item moves the start position without creating an output.
+        if (activeController.playbackState == Player.STATE_IDLE) {
+            activeController.seekTo(activeController.currentMediaItemIndex, target)
+        } else {
+            activeController.seekTo(target)
+        }
     }
 
     fun cyclePlaybackOrderMode() {

@@ -8,7 +8,6 @@ import io.github.sumirenokai.vesqen.VesqenApplication
 import io.github.sumirenokai.vesqen.playback.OutputDeclaration
 import io.github.sumirenokai.vesqen.playback.PlaybackController
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
-import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
@@ -54,7 +53,7 @@ class StrictUsbSpeakerDeviceTest {
                         it.usbOutputStatus.phase == UsbOutputPhase.FAILED && !it.showsPauseAction && !it.isPlaying
                 }
                 val failed = playback.get().usbOutputStatus
-                assertEquals(UsbOutputFailure.NO_USB_AUDIO_DEVICE, failed.failure)
+                assertEquals(noUsbAudioFailure(app), failed.failure)
                 assertEquals(OutputDeclaration.BIT_PERFECT_FAILED, failed.declaration)
                 assertEquals(48_000, failed.sourceFormat?.sampleRateHz)
                 assertNull(failed.sinkFormat)
@@ -64,7 +63,7 @@ class StrictUsbSpeakerDeviceTest {
                 main { controller.release() }
                 connect()
                 awaitPlayback { it.usbOutputStatus.generation >= failed.generation }
-                assertEquals(UsbOutputFailure.NO_USB_AUDIO_DEVICE, playback.get().usbOutputStatus.failure)
+                assertEquals(noUsbAudioFailure(app), playback.get().usbOutputStatus.failure)
                 main { controller.setUsbOutputMode(UsbOutputMode.SYSTEM) }
                 awaitPlayback { it.usbOutputStatus.phase == UsbOutputPhase.SYSTEM }
                 main { controller.togglePlayback() }
@@ -80,7 +79,7 @@ class StrictUsbSpeakerDeviceTest {
                 controller.setUsbOutputMode(UsbOutputMode.STRICT_BIT_PERFECT)
             }
             awaitPlayback { it.usbOutputStatus.phase == UsbOutputPhase.FAILED && !it.isPlaying }
-            assertEquals(UsbOutputFailure.NO_USB_AUDIO_DEVICE, playback.get().usbOutputStatus.failure)
+            assertEquals(noUsbAudioFailure(app), playback.get().usbOutputStatus.failure)
             assertTrue(statuses.zipWithNext().all { (before, after) -> after.generation > before.generation })
             assertFalse(statuses.any { it.phase == UsbOutputPhase.ACTIVE || it.phase == UsbOutputPhase.AVAILABLE })
         } finally {

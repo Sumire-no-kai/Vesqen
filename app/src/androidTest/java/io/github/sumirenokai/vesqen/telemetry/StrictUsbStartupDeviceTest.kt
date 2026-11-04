@@ -61,8 +61,7 @@ class StrictUsbStartupDeviceTest {
             await { it.positionMs == 15_000L }
             assertFalse(snapshots.get().isPlaying)
             assertEquals(fixture.durationMs, snapshots.get().durationMs)
-            assertEquals(if (Build.VERSION.SDK_INT >= 34) UsbOutputFailure.NO_USB_AUDIO_DEVICE
-                else UsbOutputFailure.UNSUPPORTED_ANDROID_VERSION, recovered.usbOutputStatus.failure)
+            assertEquals(noUsbAudioFailure(app), recovered.usbOutputStatus.failure)
             main { controller!!.togglePlayback() }
             await { it.usbOutputStatus.phase == UsbOutputPhase.FAILED &&
                 it.usbOutputStatus.failureOrigin == UsbOutputFailureOrigin.USER_PLAYBACK &&
