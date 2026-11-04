@@ -11,8 +11,11 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
+import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
+import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioTrack
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
@@ -43,10 +46,13 @@ import kotlin.math.sin
  * M7-2: Vesqen's own USB path without Media3. `inspect` claims the interfaces, reads what only a
  * claimed device answers, and releases them. It sends no audio. `play` also sends a quiet test
  * signal: 480 Hz left and 600 Hz right at -20 dBFS, after setting the device's volume to -30 dB.
+ * `system` sends nothing itself: it plays a very quiet tone through `AudioTrack` before, during and
+ * after the claim, to show where system audio goes around a takeover.
  *
  * ```
  * adb shell am start -n io.github.sumirenokai.vesqen.devicetest/io.github.sumirenokai.vesqen.usb.UsbStreamProbeActivity --es mode inspect
  * adb shell am start -n io.github.sumirenokai.vesqen.devicetest/io.github.sumirenokai.vesqen.usb.UsbStreamProbeActivity --es mode play --ei seconds 60 --ei bits 16
+ * adb shell am start -n io.github.sumirenokai.vesqen.devicetest/io.github.sumirenokai.vesqen.usb.UsbStreamProbeActivity --es mode system
  * adb logcat -s VesqenUsbProbe
  * ```
  */
@@ -106,7 +112,7 @@ class UsbStreamProbeActivity : Activity() {
     }
 
     private fun runOnControlThread(device: UsbDevice) {
-        val play = intent.getStringExtra(EXTRA_MODE) == MODE_PLAY
+        val mode = intent.getStringExtra(EXTRA_MODE) ?: MODE_INSPECT
         val seconds = intent.getIntExtra(EXTRA_SECONDS, 60).coerceIn(1, MAX_SECONDS)
         val bits = intent.getIntExtra(EXTRA_BITS, 16)
         thread(name = "usb-control") {
@@ -114,20 +120,37 @@ class UsbStreamProbeActivity : Activity() {
             if (connection == null) {
                 report("Could not open the device")
             } else {
+                // Stays open across the takeover, as another app's track would.
+                val background = if (mode == MODE_SYSTEM) SystemTone("Track opened before the claim", AudioAttributes.USAGE_MEDIA) else null
                 try {
-                    probe(device, connection, play, seconds, bits)
+                    probe(device, connection, mode, seconds, bits, background)
                 } finally {
                     connection.close()
                 }
                 reportRouteReturn()
+                background?.run {
+                    measure("after the release")
+                    close()
+                    SystemTone("Track opened after the release", AudioAttributes.USAGE_MEDIA).run {
+                        measure("after the release")
+                        close()
+                    }
+                }
             }
             val directory = File(filesDir, "usb-probe").apply { mkdirs() }
-            File(directory, "${device.identity()}-${if (play) MODE_PLAY else MODE_INSPECT}.txt").writeText(log.toString())
+            File(directory, "${device.identity()}-$mode.txt").writeText(log.toString())
             report("Finished")
         }
     }
 
-    private fun probe(device: UsbDevice, connection: UsbDeviceConnection, play: Boolean, seconds: Int, bits: Int) {
+    private fun probe(
+        device: UsbDevice,
+        connection: UsbDeviceConnection,
+        mode: String,
+        seconds: Int,
+        bits: Int,
+        background: SystemTone?,
+    ) {
         report("Device ${device.identity()}, USB route present: ${usbRoutePresent()}")
         val raw = connection.rawDescriptors ?: return report("No descriptors")
         val parsed = UacDescriptorParser.parse(raw)
@@ -143,6 +166,7 @@ class UsbStreamProbeActivity : Activity() {
             is StreamingPlanResult.Refused -> return report("No plan: ${result.reason}")
         }
         report("Plan: $plan")
+        background?.measure("before the claim")
 
         val claimed = mutableListOf<UsbInterface>()
         try {
@@ -156,10 +180,27 @@ class UsbStreamProbeActivity : Activity() {
             }
             SystemClock.sleep(ROUTE_SETTLE_MS)
             report("USB route present after claiming: ${usbRoutePresent()}")
-            exercise(device, connection, function, plan, play, seconds)
+            if (background != null) {
+                exerciseSystemAudio(background)
+            } else {
+                exercise(device, connection, function, plan, mode == MODE_PLAY, seconds)
+            }
         } finally {
             claimed.asReversed().forEach { usbInterface ->
                 report("Released interface ${usbInterface.id}: ${connection.releaseInterface(usbInterface)}")
+            }
+        }
+    }
+
+    private fun exerciseSystemAudio(background: SystemTone) {
+        background.measure("during the claim")
+        listOf(
+            "Media track opened during the claim" to AudioAttributes.USAGE_MEDIA,
+            "Notification track opened during the claim" to AudioAttributes.USAGE_NOTIFICATION,
+        ).forEach { (name, usage) ->
+            SystemTone(name, usage).run {
+                measure("during the claim")
+                close()
             }
         }
     }
@@ -299,6 +340,55 @@ class UsbStreamProbeActivity : Activity() {
             "silence $silenceFramesInserted, usb $usbFramesDelivered, underruns $underruns, urbs $urbsCompleted, " +
             "failed packets $packetsFailed, failure $failure ($failureErrno), nice $threadNice, policy $threadSchedulerPolicy"
 
+    /** Very quiet, because the system may send it to the phone's speaker at the media volume. */
+    private inner class SystemTone(private val name: String, usage: Int) {
+        private val track = AudioTrack.Builder()
+            .setAudioAttributes(AudioAttributes.Builder().setUsage(usage).build())
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(SAMPLE_RATE_HZ)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
+                    .build(),
+            )
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .build()
+
+        @Volatile
+        private var writing = true
+        private val writer = thread(name = "system-tone") {
+            val samples = ShortArray(LEFT_PERIOD_FRAMES * 2) { index ->
+                (Short.MAX_VALUE * SYSTEM_TONE_LEVEL * sin(2 * PI * (index / 2) / LEFT_PERIOD_FRAMES)).roundToInt().toShort()
+            }
+            track.play()
+            var offset = 0
+            while (writing) {
+                val written = track.write(samples, offset, samples.size - offset, AudioTrack.WRITE_NON_BLOCKING)
+                if (written < 0) {
+                    report("$name: write error $written")
+                    break
+                }
+                offset = (offset + written) % samples.size
+                if (written == 0) SystemClock.sleep(WRITE_RETRY_MS)
+            }
+        }
+
+        fun measure(moment: String) {
+            val before = track.playbackHeadPosition
+            SystemClock.sleep(SYSTEM_TONE_MS)
+            val advanced = track.playbackHeadPosition - before
+            val routed = track.routedDevice?.let { "type ${it.type}, ${it.productName}" }
+            report("$name, $moment: routed to $routed, head advanced $advanced frames in $SYSTEM_TONE_MS ms, USB route present ${usbRoutePresent()}")
+        }
+
+        fun close() {
+            writing = false
+            writer.join()
+            track.stop()
+            track.release()
+        }
+    }
+
     private fun reportRouteReturn() {
         val started = SystemClock.elapsedRealtime()
         while (SystemClock.elapsedRealtime() - started < ROUTE_RETURN_TIMEOUT_MS) {
@@ -334,12 +424,17 @@ class UsbStreamProbeActivity : Activity() {
         const val EXTRA_BITS = "bits"
         const val MODE_INSPECT = "inspect"
         const val MODE_PLAY = "play"
+        const val MODE_SYSTEM = "system"
         const val MAX_SECONDS = 3600
         const val SAMPLE_RATE_HZ = 48_000
 
         /** -30 dB in the spec's 1/256 dB (D4). */
         const val START_VOLUME = -30 * 256
         const val TEST_LEVEL = 0.1
+
+        /** -46 dBFS. */
+        const val SYSTEM_TONE_LEVEL = 0.005
+        const val SYSTEM_TONE_MS = 3000L
         const val LEFT_PERIOD_FRAMES = 100
         const val RIGHT_PERIOD_FRAMES = 80
         const val TEST_PERIOD_FRAMES = 400
