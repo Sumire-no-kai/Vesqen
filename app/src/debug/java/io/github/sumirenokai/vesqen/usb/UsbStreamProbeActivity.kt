@@ -1,41 +1,19 @@
 package io.github.sumirenokai.vesqen.usb
 
-import android.app.Activity
-import android.app.PendingIntent
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbInterface
-import android.hardware.usb.UsbManager
 import android.media.AudioAttributes
-import android.media.AudioDeviceInfo
 import android.media.AudioFormat
-import android.media.AudioManager
 import android.media.AudioTrack
-import android.os.Bundle
 import android.os.SystemClock
-import android.util.Log
-import android.view.WindowManager
-import android.widget.ScrollView
-import android.widget.TextView
-import androidx.core.content.ContextCompat
-import androidx.core.content.IntentCompat
 import io.github.sumirenokai.vesqen.usb.control.Uac1ControlClient
 import io.github.sumirenokai.vesqen.usb.control.UsbControlTransfer
 import io.github.sumirenokai.vesqen.usb.descriptor.UacControlAccess
-import io.github.sumirenokai.vesqen.usb.descriptor.UacDescriptorParser
 import io.github.sumirenokai.vesqen.usb.descriptor.UacFunction
-import io.github.sumirenokai.vesqen.usb.descriptor.UacParseResult
 import io.github.sumirenokai.vesqen.usb.engine.UsbStreamEngine
 import io.github.sumirenokai.vesqen.usb.engine.UsbStreamStats
 import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
-import io.github.sumirenokai.vesqen.usb.plan.StreamingPlanResult
-import io.github.sumirenokai.vesqen.usb.plan.StreamingPlanner
-import java.io.File
 import java.nio.ByteBuffer
 import kotlin.concurrent.thread
 import kotlin.math.PI
@@ -53,65 +31,20 @@ import kotlin.math.sin
  * adb shell am start -n io.github.sumirenokai.vesqen.devicetest/io.github.sumirenokai.vesqen.usb.UsbStreamProbeActivity --es mode inspect
  * adb shell am start -n io.github.sumirenokai.vesqen.devicetest/io.github.sumirenokai.vesqen.usb.UsbStreamProbeActivity --es mode play --ei seconds 60 --ei bits 16
  * adb shell am start -n io.github.sumirenokai.vesqen.devicetest/io.github.sumirenokai.vesqen.usb.UsbStreamProbeActivity --es mode system
+ * ```
+ *
+ * `--ei volume` gives the device's volume in 1/256 dB, -2560 being -10 dB. With `inspect` it is only
+ * set and read back, and stays that way. With `play` it replaces the -30 dB of the test signal.
+ *
+ * ```
+ * adb shell am start -n io.github.sumirenokai.vesqen.devicetest/io.github.sumirenokai.vesqen.usb.UsbStreamProbeActivity --es mode inspect --ei volume -2560
  * adb logcat -s VesqenUsbProbe
  * ```
  */
-class UsbStreamProbeActivity : Activity() {
-    private val usbManager by lazy { getSystemService(UsbManager::class.java) }
-    private val audioManager by lazy { getSystemService(AudioManager::class.java) }
-    private lateinit var output: TextView
-    private val log = StringBuilder()
+class UsbStreamProbeActivity : UsbProbeBaseActivity() {
+    override val logTag = "VesqenUsbProbe"
 
-    @Volatile
-    private var cancelled = false
-
-    private val permissionResult = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val device = IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-            if (device != null && usbManager.hasPermission(device)) {
-                runOnControlThread(device)
-            } else {
-                report("USB permission denied")
-            }
-        }
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        output = TextView(this).apply { setTextIsSelectable(true) }
-        setContentView(ScrollView(this).apply { addView(output) })
-        ContextCompat.registerReceiver(
-            this,
-            permissionResult,
-            IntentFilter(ACTION_PERMISSION),
-            ContextCompat.RECEIVER_NOT_EXPORTED,
-        )
-        val devices = usbManager.deviceList.values.filter { it.isAudio() }
-        when {
-            devices.isEmpty() -> report("No USB audio device attached")
-            devices.size > 1 -> report("More than one USB audio device attached")
-            usbManager.hasPermission(devices.single()) -> runOnControlThread(devices.single())
-            else -> usbManager.requestPermission(
-                devices.single(),
-                // Mutable: the system adds the device and the answer to this intent.
-                PendingIntent.getBroadcast(
-                    this,
-                    0,
-                    Intent(ACTION_PERMISSION).setPackage(packageName),
-                    PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-                ),
-            )
-        }
-    }
-
-    override fun onDestroy() {
-        cancelled = true
-        unregisterReceiver(permissionResult)
-        super.onDestroy()
-    }
-
-    private fun runOnControlThread(device: UsbDevice) {
+    override fun onDevice(device: UsbDevice) {
         val mode = intent.getStringExtra(EXTRA_MODE) ?: MODE_INSPECT
         val seconds = intent.getIntExtra(EXTRA_SECONDS, 60).coerceIn(1, MAX_SECONDS)
         val bits = intent.getIntExtra(EXTRA_BITS, 16)
@@ -137,9 +70,7 @@ class UsbStreamProbeActivity : Activity() {
                     }
                 }
             }
-            val directory = File(filesDir, "usb-probe").apply { mkdirs() }
-            File(directory, "${device.identity()}-$mode.txt").writeText(log.toString())
-            report("Finished")
+            finishReport(device, mode)
         }
     }
 
@@ -152,20 +83,7 @@ class UsbStreamProbeActivity : Activity() {
         background: SystemTone?,
     ) {
         report("Device ${device.identity()}, USB route present: ${usbRoutePresent()}")
-        val raw = connection.rawDescriptors ?: return report("No descriptors")
-        val parsed = UacDescriptorParser.parse(raw)
-        if (parsed !is UacParseResult.Parsed) return report("Descriptors refused: $parsed")
-        val function = parsed.topology.functions.firstOrNull { candidate ->
-            candidate.streamingInterfaces.any { streaming -> streaming.alternateSettings.any { it.isPlayback } }
-        } ?: return report("No playback function")
-
-        val speed = UsbStreamEngine.busSpeed(connection.fileDescriptor)
-        report("Bus speed: $speed")
-        val plan = when (val result = StreamingPlanner.plan(function, speed, SAMPLE_RATE_HZ, bits)) {
-            is StreamingPlanResult.Planned -> result.plan
-            is StreamingPlanResult.Refused -> return report("No plan: ${result.reason}")
-        }
-        report("Plan: $plan")
+        val (function, plan) = planFor(connection, bits) ?: return
         background?.measure("before the claim")
 
         val claimed = mutableListOf<UsbInterface>()
@@ -229,6 +147,12 @@ class UsbStreamProbeActivity : Activity() {
         val volumeBefore = unit?.let { control.volume(it.id, controlInterface) }
         val muteBefore = unit?.let { control.mute(it.id, controlInterface) }
         report("Feature unit ${unit?.id}: range $range, volume $volumeBefore (1/256 dB), mute $muteBefore")
+        val requestedVolume = intent.getIntExtra(EXTRA_VOLUME, NO_VOLUME)
+        if (!play && requestedVolume != NO_VOLUME && unit != null && range != null) {
+            val target = range.settingAtOrBelow(requestedVolume)
+            val set = control.setVolume(unit.id, controlInterface, target)
+            report("Volume set to $target: written $set, reads back ${control.volume(unit.id, controlInterface)}")
+        }
 
         val streaming = device.interfaceWith(plan.interfaceNumber, plan.alternateSetting)
             ?: return report("Alternate setting ${plan.alternateSetting} is missing from the Android device")
@@ -241,7 +165,7 @@ class UsbStreamProbeActivity : Activity() {
             if (play) {
                 if (rate != plan.sampleRateHz && plan.endpointSetsSampleRate) return report("Not playing: the rate reads back as $rate")
                 if (unit == null || range == null || volumeBefore == null) return report("Not playing: the volume is unknown")
-                val start = range.settingAtOrBelow(START_VOLUME)
+                val start = range.settingAtOrBelow(if (requestedVolume == NO_VOLUME) START_VOLUME else requestedVolume)
                 val set = control.setVolume(unit.id, controlInterface, start)
                 val readBack = control.volume(unit.id, controlInterface)
                 report("Start volume $start (1/256 dB): written $set, reads back $readBack")
@@ -398,35 +322,18 @@ class UsbStreamProbeActivity : Activity() {
         report("USB route not back after $ROUTE_RETURN_TIMEOUT_MS ms")
     }
 
-    private fun usbRoutePresent() = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any {
-        it.type == AudioDeviceInfo.TYPE_USB_DEVICE || it.type == AudioDeviceInfo.TYPE_USB_HEADSET
-    }
-
-    private fun report(message: String) {
-        Log.i(TAG, message)
-        log.appendLine(message)
-        runOnUiThread { output.append(message + "\n") }
-    }
-
-    private fun UsbDevice.identity() = "%04x-%04x".format(vendorId, productId)
-
-    private fun UsbDevice.isAudio() = deviceClass == UsbConstants.USB_CLASS_AUDIO ||
-        (0 until interfaceCount).any { getInterface(it).interfaceClass == UsbConstants.USB_CLASS_AUDIO }
-
-    private fun UsbDevice.interfaceWith(number: Int, alternate: Int): UsbInterface? =
-        (0 until interfaceCount).map(::getInterface).firstOrNull { it.id == number && it.alternateSetting == alternate }
-
     private companion object {
-        const val TAG = "VesqenUsbProbe"
-        const val ACTION_PERMISSION = "io.github.sumirenokai.vesqen.usb.PROBE_PERMISSION"
         const val EXTRA_MODE = "mode"
         const val EXTRA_SECONDS = "seconds"
         const val EXTRA_BITS = "bits"
+        const val EXTRA_VOLUME = "volume"
+
+        /** Outside the signed 16 bits of a volume setting. */
+        const val NO_VOLUME = Int.MIN_VALUE
         const val MODE_INSPECT = "inspect"
         const val MODE_PLAY = "play"
         const val MODE_SYSTEM = "system"
         const val MAX_SECONDS = 3600
-        const val SAMPLE_RATE_HZ = 48_000
 
         /** -30 dB in the spec's 1/256 dB (D4). */
         const val START_VOLUME = -30 * 256
