@@ -96,7 +96,7 @@ Playback and your library never use the network, and your library, playlists and
 - Same-name `.lrc` files for songs from Android's media library need an added folder that contains them, and Android 10 or later. On Android 9, only songs in added folders read them.
 - A folder that is both in Android's media library and added with Add music folder shows its songs twice ([#267](https://github.com/Sumire-no-kai/Vesqen/issues/267)).
 - AIFF files that are 8-bit, floating-point, A-law or µ-law don't play.
-- ALAC files don't play on our iQOO 9 test phone, because its Qualcomm decoder rejects the setup data Vesqen passes to it. Other phones with this decoder are probably affected. The fix is planned for the next update ([#270](https://github.com/Sumire-no-kai/Vesqen/issues/270)).
+- ALAC files don't play on our iQOO 9 test phone, because its Qualcomm decoder rejects the setup data Vesqen passes to it. Other phones with this decoder are probably affected. The fix is planned for 2.0 ([#270](https://github.com/Sumire-no-kai/Vesqen/issues/270)).
 - On Android 9, folders with the same path on the phone and on an SD card are still shown as one folder.
 - Bluetooth is never bit-perfect. The Chain page can say that Vesqen's part left the audio unchanged, except for a 20 ms fade-in after starting, seeking or changing format; the phone still re-encodes it for Bluetooth.
 - Media3 fades in the first 20 ms after starting, seeking or changing format, including on strict USB output. A fix for strict output is planned for 2.0.
