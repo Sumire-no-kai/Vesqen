@@ -85,7 +85,7 @@
 
 - [x] 固定 `ndkVersion`，CI 安装同一版本的 NDK。
 - [x] 在调试构建中实现最小的 native 等时写入：声明接口、读取时钟和音量的运行时能力、按 UAC1 的流程配置时钟、选择 alternate setting、播放测试向量、释放接口。2026-11-04 在 iQOO 9 × JBL Flip 7 上通过（见[设备验收](M7_DEVICE_ACCEPTANCE.md)）。UAC2 的流程按 D3 留到 M7-3，要等参考 DAC 才能实测。
-- [ ] 建立最小的 Media3 到 USB 完整链路：真实的 `ExoPlayer` 经调试用的 `AudioOutputProvider` 和 `DirectUsbAudioOutput` 输出，使用 `StrictPcmAudioSink`（D9）。验证起播、暂停、恢复、seek、切歌、流结束，以及暂时失去焦点后的释放和重新接管。
+- [ ] 建立最小的 Media3 到 USB 完整链路：真实的 `ExoPlayer` 经调试用的 `AudioOutputProvider` 和 `DirectUsbAudioOutput` 输出，使用 `StrictPcmAudioSink`（D9）。验证起播、暂停、恢复、seek、切歌、流结束，以及暂时失去焦点后的释放和重新接管。2026-11-04：代码完成，除真实的焦点事件外已在 iQOO 9 × JBL Flip 7 上通过（见[设备验收](M7_DEVICE_ACCEPTANCE.md)）。
 - [ ] 在 iQOO 上先以 JBL Flip 7 测试，参考 DAC 到位后逐款重复：连续播放 60 秒和 30 分钟、播放中拔出、播放中结束进程，确认释放后系统重新接管该设备。
 - [ ] 逐项验证[架构设计](M7_USB_ARCHITECTURE.md)中"待实测的设计假设"，包括接管时的 `BECOMING_NOISY`、进程被结束后的恢复和息屏 30 分钟。
 - [ ] 记录欠载次数、CPU 占用、唤醒次数和耗电，以及 native 库增加的体积（D5）。具备采集设备时完成第一次逐样本比对。
@@ -97,19 +97,19 @@
 - [ ] 开始前，按 D6 从最后一个 1.x 标签建立 `release/1.x`，把 `feature/usb-host-output` 合入 `master`。
 - [ ] 完善 `:usb-engine` 模块（M7-1 已建立，只有 Kotlin；M7-2 加入 C++），对应用只暴露小型接口，并让发布构建依赖它。应用模块也要固定 `ndkVersion`，否则打包时无法裁剪 native 库（M7-2 的测试包每个 ABI 为 560 至 658 KB，裁剪后约 73 至 128 KB）。
 - [ ] 实现 `StreamingPlan`（实际速度、服务间隔、每间隔最大载荷、反馈单位和有效期）、URB 队列、环形缓冲、按反馈调整的包长、逐包错误统计、反馈超时、时钟和 alternate setting 切换，以及只统计媒体帧的播放位置。按 D3 覆盖 UAC1 和 UAC2。
-- [ ] 实现 `DirectUsbAudioOutput`（`isStalled()` 始终为 `false`，`release()` 负责输出退休）。
-- [ ] 实现 `ExactPcmConverter` 和四层格式判断（D10）：严格模式拒绝 encoder delay 或 padding 不为 0 的音源；float 按源位深还原为整数并校验，校验失败时失败关闭；解码输出精度低于源文件时拒绝；按 #65 的规则补零。不做重采样、抖动或截断。
+- [ ] 实现 `DirectUsbAudioOutput`（`isStalled()` 始终为 `false`，`release()` 负责输出退休）。M7-2 的调试版本每个输出新建一条数据流，这里按架构设计改为会话内的 epoch，不再重建线程和 URB。
+- [ ] 完善 M7-2 已有的 `ExactPcmConverter`，实现四层格式判断（D10）：严格模式拒绝 encoder delay 或 padding 不为 0 的音源；float 按源位深还原为整数并校验，校验失败时失败关闭；解码输出精度低于源文件时拒绝；按 #65 的规则补零。不做重采样、抖动或截断。
 - [ ] native core 在主机上单元测试，其中必须验证：各种反馈序列下，所有媒体包的载荷拼接后与输入逐字节一致；媒体时钟不受静音影响；取消和回收的故障注入；单包失败和反馈中断。
 - [ ] 写明并测试输出退休和销毁的契约以及清理记录（架构设计"输出退休与销毁"）：新世代获准写入前旧世代已回收；回收确认超时时不越过安全屏障；只有确认全部接口都已释放，才清除接管标记。
 
 ### M7-4 接入播放服务
 
-- [ ] 按 D9 把 `StrictPcmAudioSink` 从测试移入产品代码并接入 `VesqenAudioRenderersFactory`，增加按模式选择 Sink 的外层。普通输出不变，切换只发生在现有的 `stop()` 加 `prepare()` 重建时。官方路径同样改用它，修复已发布版本中 `ACTIVE` 的前 20 ms 淡入。Sink 把音量转交给输出，由输出决定处理方式：官方路径失败关闭，自有路径按 D11 记录后忽略。普通输出的淡入保留，链路页的说法随之保留这一点。
+- [ ] 按 D9 把 `StrictPcmAudioSink` 从调试代码移入产品代码并接入 `VesqenAudioRenderersFactory`，增加按模式选择 Sink 的外层。普通输出不变，切换只发生在现有的 `stop()` 加 `prepare()` 重建时。官方路径同样改用它，修复已发布版本中 `ACTIVE` 的前 20 ms 淡入。Sink 把音量转交给输出，由输出决定处理方式：官方路径失败关闭，自有路径按 D11 记录后忽略。普通输出的淡入保留，链路页的说法随之保留这一点。
 - [ ] `UsbOutputStrategyResolver` 增加自有输出候选：官方通道不可用、用户已开启严格模式、已授予 USB 权限、描述符确认支持当前源格式。路径按 USB 连接选择，不按曲目切换。由 `vesqen.directUsb` 构建开关控制，到 2.0.0-beta.1 时开启。
 - [ ] 建立统一判定 `reconcile()`：服务启动、模式切换、权限结果、USB 插拔广播、`UsbAttachActivity` 和路由变化都进入这一流程。路由增加只更新事实。
 - [ ] `UsbOutputCoordinator.getAudioOutput()` 为自有输出返回 `DirectUsbAudioOutput`，覆盖播放、暂停、flush、seek、切歌、格式变化和服务重建。
 - [ ] 区分主动接管与设备拔出：接管期间关闭 `BECOMING_NOISY` 处理，拔出由 `ACTION_USB_DEVICE_DETACHED` 和 URB 错误判断。拔出、端点出错、权限撤销和描述符不匹配时失败关闭并撤销 `ACTIVE`。
-- [ ] 按 D11 处理音频焦点：监听 `onPlaybackSuppressionReasonChanged()`，暂时失去焦点时释放接口，恢复时重新接管；duck 时继续播放，不缩放 PCM。官方路径遇到非中性音量时现有的失败关闭不改动，实测 duck 系数是否会到达官方路径，两条路径分开测试。
+- [ ] 按 D11 处理音频焦点：监听 `onPlaybackSuppressionReasonChanged()`，暂时失去焦点时释放接口，恢复时重新接管；duck 时继续播放，不缩放 PCM。iQOO 9 不发出焦点丢失事件（架构设计"音频焦点"），因此另外监听通话状态，来电时同样释放接口，并在有 SIM 卡的手机上实测。官方路径遇到非中性音量时现有的失败关闭不改动，实测 duck 系数是否会到达官方路径，两条路径分开测试。
 - [ ] 增加与已声明接口对应的清理记录，确保任何失败路径都会释放接口。
 - [ ] 处理进程异常退出后的恢复：接管标记保存 `UsbDevice.getDeviceId()` 和接管前音量，读取音量后更新。下次启动时重新声明并释放接口以恢复声卡；设备 ID 相同才写回音量，设备已重新插入时不写回，改按 D4 处理；写回失败进入清理记录。JVM 测试覆盖 ID 相同、ID 不同和写回失败，并在 iQOO 上实测结束进程后声卡和音量都恢复。
 - [ ] 同格式曲目之间连续播放；格式变化需要切换 alternate setting 时的停顿如实列为限制。
@@ -118,6 +118,7 @@
 ### M7-5 音量、界面与链路页
 
 - [ ] 按 D4 实现硬件音量和音量键：确认存在可写的 Volume Control，第一个样本之前设置起始音量并读回，失败时失败关闭。
+- [ ] 增加应用内音量条（2026-11-04 所有者决定）：只在自有输出时显示，调节 DAC 的硬件音量，范围和步长按设备实际报告，并显示当前音量。没有可写 Volume Control 的设备不显示音量条，只说明音量由设备调节，不用软件音量代替。系统音量条对这条路径不起作用（iQOO 9 上已确认），说明中写明。位置和文案由所有者确认。
 - [ ] 按 D8 实现 USB 授权：`UsbAttachActivity` 随严格模式启用和禁用，不显示界面，立即结束。
 - [ ] 设置、Now 和链路页显示"Vesqen 直接输出到 DAC"及实际格式；链路页说明系统音频路由在此期间不经过该 DAC，显示本次流的连续性（欠载和传输错误的次数），并且不把 USB 交付时刻写成 DAC 呈现时刻。
 - [ ] 第一次使用时明确说明：接管期间其他应用的声音和通知音不会从该 DAC 播放，也不会改由手机扬声器播放，通常听不到；响铃和闹钟的去向按设备验收的实测结果写明，不同手机可能不同；需要 USB 授权，带麦克风输入的 DAC 每次插入都须授权；关闭麦克风访问时系统可能拒绝授权。设置和用户文档使用同样的说法。

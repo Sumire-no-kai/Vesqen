@@ -110,7 +110,7 @@ The skipped cases apply to strict mode only, or need no playback and run once. A
 - The test stops at `AudioOutput.write()` and does not show what a DAC receives. Real sample-by-sample proof needs external digital capture ([#49](https://github.com/Sumire-no-kai/Vesqen/issues/49)), and no combination has reached `BIT-PERFECT VERIFIED` yet.
 - The output's clock is simulated. Timing, underruns and feedback on real USB are for M7-2.
 - Only two devices ran the test, and the emulator stands for AOSP decoders. The iQOO, other vendors' decoders and ALAC were not tested.
-- Option B is a prototype in test code, and the app does not use it yet.
+- Option B is a prototype in debug code. Only the capture test and the M7-2 validation use it, and release builds do not contain it.
 - The test needs a device. CI compiles it but does not run it.
 
 ## 7. Conclusions
