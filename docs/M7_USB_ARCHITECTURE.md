@@ -104,7 +104,7 @@ Media3 1.11.0 的 `DefaultAudioSink` 会对写入帧数不足 20 ms 的 PCM 做�
 
 `UsbOutputCoordinator` 继续继承 `ForwardingAudioOutputProvider`。自有路径下，下列三个方法都由 Coordinator 作答：
 
-- `getFormatSupport()` 和 `getOutputConfig()`：接管后系统路由已变为手机扬声器，`AudioTrack` 的实现会按扬声器能力作答，可能错误地拒绝高采样率，因此须依据已选定的 `StreamingPlan` 作答。
+- `getFormatSupport()` 和 `getOutputConfig()`：接管后内核声卡已不存在，系统路由却可能仍指向该设备（见"接管与释放"的设计要点），`AudioTrack` 的实现不能反映实际能力，因此须依据已选定的 `StreamingPlan` 作答。
 - `getAudioOutput()`：计划有效时返回 `DirectUsbAudioOutput`。计划过期或失败时沿用现有的 `pendingStrictOutput()` 和 `mutedFailureOutput()`。
 
 `DirectUsbAudioOutput` 的行为：
@@ -191,7 +191,7 @@ Android 9 上的 OMX 解码器只输出 int16（现有的 `keepIntegerPcmForOmx(
 | 事件 | Media3 的表现 | 自有路径的处理 |
 | --- | --- | --- |
 | 长期失去焦点 | `playWhenReady` 变为 false | 立即释放 DAC，其他应用可以使用。 |
-| 暂时失去焦点（来电、语音助手） | `playWhenReady` 不变，`playbackSuppressionReason` 变为暂时失去焦点 | 经 `onPlaybackSuppressionReasonChanged()` 释放 DAC，`releaseCause` 记为暂时失去焦点。系统重新添加 USB 路由后，因不满足接管条件，不会被抢回。 |
+| 暂时失去焦点（来电、语音助手） | `playWhenReady` 不变，`playbackSuppressionReason` 变为暂时失去焦点 | 经 `onPlaybackSuppressionReasonChanged()` 释放 DAC，`releaseCause` 记为暂时失去焦点。路由变化（包括系统重新添加 USB 路由）不满足接管条件，不会被抢回。 |
 | 重新获得焦点 | `playbackSuppressionReason` 恢复为 none | `reconcile()` 重新接管，沿用现有的 `stop()` 加 `prepare()` 重建输出，然后恢复播放。在途的音频已被取消，因此不续用旧 epoch。 |
 | 可以压低音量（duck） | Android 8 起通常由系统在混音器中处理（现有 `AppSegmentAssessment` 的注释，2026-10-04 决定）；自有输出没有 `AudioTrack`，系统无从作用 | 继续播放，样本不变，`ACTIVE` 不变。如果 duck 系数到达 `setVolume()`，记录后忽略（待实测）。 |
 
@@ -233,7 +233,7 @@ sequenceDiagram
     C->>C: 内部暂停，关闭 BECOMING_NOISY 处理
     S->>S: 写入接管标记
     S->>D: 声明全部音频类接口（断开内核驱动）
-    A-->>C: USB 音频路由消失（不视为拔出）
+    A-->>C: 路由可能不变，也可能消失（都不视为拔出）
     S->>D: 读取时钟和音量的运行时能力
     S->>S: 确定 StreamingPlan
     S->>D: 保存当前音量，设置起始音量并读回
@@ -269,13 +269,14 @@ stateDiagram-v2
 设计要点：
 
 - **声明全部音频类接口。** AudioControl 和 AudioStreaming 接口都须声明。HID 接口不声明，DAC 上的按键继续由系统处理。
-- **`BECOMING_NOISY`。** AOSP 把 USB 设备列入该广播的设备集合，而 `PlaybackService` 开启了 `setHandleAudioBecomingNoisy(true)`。接管导致路由消失时，Media3 会自行暂停。因此接管前关闭这项处理，释放后恢复。此期间的真实拔出由 `ACTION_USB_DEVICE_DETACHED` 和 URB 的 `ENODEV` 判断。
+- **接管时系统路由不变（2026-11-04 在 iQOO 9 上实测，其他 ROM 待确认）。** 声明接口后内核声卡立即消失，`AudioManager` 和 `UsbAlsaManager` 却仍然列出该设备，已打开和新打开的 `AudioTrack` 都继续路由到 USB，进度照常前进，声音却没有去处。由此得出三条规则：不得用路由或 `AudioTrack` 的进度判断设备是否可用或是否出声；接管期间不得回退到系统输出，否则界面显示正在播放，实际没有声音；其他应用和通知的声音在接管期间会被吞没，只有系统策略同时包含扬声器的音频流（iQOO 上为响铃和闹钟）还可能从手机发声。
+- **`BECOMING_NOISY`。** AOSP 把 USB 设备列入该广播的设备集合，而 `PlaybackService` 开启了 `setHandleAudioBecomingNoisy(true)`。如果 ROM 在接管时移除路由，Media3 会自行暂停。iQOO 9 不移除路由，但其他 ROM 没有实测，因此接管前仍关闭这项处理，释放后恢复。此期间的真实拔出由 `ACTION_USB_DEVICE_DETACHED` 和 URB 的 `ENODEV` 判断。
 - **路由监听。** 自有路径下 `selectedDevice` 为空，`onAudioDevicesRemoved()` 不会触发失败关闭，官方路径的逻辑不需要改动。
 - **会话的生命周期长于 `AudioOutput`。** 格式变化时 Media3 会释放旧输出、创建新输出，会话保持接管状态，只重新配置时钟和 alternate setting。设置采样率和切换 alternate setting 的先后顺序按协议版本处理，由 M7-2 实测确认。
 - **释放时机。** 切回系统输出、暂停超过 30 秒（默认值，待实测）、失去音频焦点、服务停止、发生失败。短暂暂停时持续发送静音，避免切换带来的爆音。
 - **释放顺序。** 停止接收旧 epoch 的数据、停止重新提交、取消并回收全部在途 URB、native 确认静止、切回 alternate setting 0、恢复接管前的音量、释放全部接口、关闭连接、清除接管标记、恢复 `BECOMING_NOISY` 处理。Android 的 `releaseInterface()` 成功后会请求内核重新连接驱动。
 - **清理记录和安全屏障。** 清理步骤分两类。恢复音量这类步骤失败时，写入清理记录并继续，保留第一个失败原因。native 静止是安全屏障：确认全部在途 URB 都已回收之前，不得销毁 native 资源、关闭文件描述符、释放接口或开始下一次接管（见"输出退休与销毁"）。**只有确认全部接口都已释放，才清除接管标记。**
-- **进程异常退出。** 内核关闭文件描述符时只释放接口（`usbdev_release`），不会重新绑定驱动，DAC 可能需要重新插拔才能被系统使用。下次启动时如果发现接管标记，且设备仍连接并有权限，就重新声明再释放一次，由 `releaseInterface()` 触发重新连接（待实测）。
+- **进程异常退出。** 内核关闭文件描述符时只释放接口（`usbdev_release`），不会重新绑定驱动，DAC 在重新插拔前不能被系统使用。下次启动时如果发现接管标记，且设备仍连接并有权限，就重新声明再释放一次，由 `releaseInterface()` 触发重新连接（2026-11-04 在 iQOO 9 上确认：声卡节点在释放的同一时刻重建）。硬件音量会停留在接管时的值，内核不会恢复。因此接管标记须同时保存 `UsbDevice.getDeviceId()` 和接管前的音量（读取后更新标记）；恢复时设备 ID 相同才写回音量，设备重新插入后 ID 会变，不写回。
 
 ## 数据面
 
@@ -486,14 +487,14 @@ app/src/debug/                  M7-1 的描述符读取入口和 M7-2 的技术�
 | --- | --- | --- |
 | 方案 B 的时钟和流结束在真实 USB 上与捕获测试一致 | M7-2 | 修正 `StrictPcmAudioSink`，必要时重新评估方案 A |
 | 真实的 ALAC 文件 encoder delay 为 0 | M7-2 | 这些文件在严格模式下被拒绝并说明原因，由所有者决定是否实现裁剪 |
-| iQOO 的 ROM 允许强制声明接口并提交等时 URB | M7-2 | G1 不通过，由所有者重新评估范围 |
+| iQOO 的 ROM 允许强制声明接口并提交等时 URB | M7-2。2026-11-04 已确认：JBL Flip 7 上 16 位和 24 位都能连续传输 | G1 不通过，由所有者重新评估范围 |
 | 关闭 `BECOMING_NOISY` 处理后，接管不会导致暂停 | M7-2 | 接管完成后再恢复播放 |
 | 释放接口后系统恢复使用该设备 | M7-2 | G1 不通过 |
 | 暂时失去焦点时释放 DAC，恢复后重新接管，路由变化不会提前抢回 | M7-2 | G1 不通过 |
 | duck 不影响自有输出的样本，也不引发暂停 | M7-2 | 按实测结果修订"音频焦点" |
-| 进程被结束后可以经重新声明和释放恢复驱动 | M7-2 | 在说明中提示重新插拔 |
-| 接管期间没有系统音频，息屏后 ROM 不会冻结进程 | M7-2，息屏播放 30 分钟 | 评估另开一条送往手机扬声器的静音 `AudioTrack`，它不接触 USB 数据 |
+| 进程被结束后可以经重新声明和释放恢复驱动 | M7-2。2026-11-04 已在测试向量路径上确认，硬件音量不会恢复（见"进程异常退出"） | 在说明中提示重新插拔 |
+| 接管期间没有系统音频，息屏后 ROM 不会冻结进程 | M7-2，息屏播放 30 分钟 | 评估另开一条送往手机扬声器的静音 `AudioTrack`，它不接触 USB 数据。须用 `setPreferredDevice()` 指定扬声器，否则仍会路由到 USB |
 | 高优先级和当前缓冲参数足以避免欠载 | M7-2 | 增大 URB 数量和环形缓冲 |
 | Activity 禁用时插入 DAC 不出现询问；启用后授权框提供"始终使用"，选择后下次插入自动授权 | M7-2 | 不声明过滤器，改为每次插入后由系统授权框询问一次 |
-| JBL Flip 7 的 UAC 版本、反馈方式和 Feature Unit | 2026-11-03 已确认：UAC1，自适应同步，没有反馈端点，Feature Unit 有主音量和静音（是否可写在 M7-2 确认）。总线速度和运行时能力在 M7-2 | 影响开发顺序，不影响 D3 的范围 |
+| JBL Flip 7 的 UAC 版本、反馈方式和 Feature Unit | 2026-11-03 已确认：UAC1，自适应同步，没有反馈端点，Feature Unit 有主音量和静音。2026-11-04 已确认：全速，主音量可写，范围 -60.16 至 0 dB，步长约 0.6 dB，采样率读回 48000 | 影响开发顺序，不影响 D3 的范围 |
 | 音量键能经远程音量接口到达 Vesqen（vivo ROM） | M7-5 | 只在应用内和 DAC 上调节音量，并在说明中写明 |

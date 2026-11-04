@@ -83,8 +83,8 @@
 
 ### M7-2 技术验证
 
-- [ ] 固定 `ndkVersion`，CI 安装同一版本的 NDK。
-- [ ] 在调试构建中实现最小的 native 等时写入：声明接口、读取时钟和音量的运行时能力、按 UAC1 或 UAC2 的流程配置时钟（固定频率或只读的时钟读回一致即通过）、选择 alternate setting、播放测试向量、释放接口。
+- [x] 固定 `ndkVersion`，CI 安装同一版本的 NDK。
+- [x] 在调试构建中实现最小的 native 等时写入：声明接口、读取时钟和音量的运行时能力、按 UAC1 的流程配置时钟、选择 alternate setting、播放测试向量、释放接口。2026-11-04 在 iQOO 9 × JBL Flip 7 上通过（见[设备验收](M7_DEVICE_ACCEPTANCE.md)）。UAC2 的流程按 D3 留到 M7-3，要等参考 DAC 才能实测。
 - [ ] 建立最小的 Media3 到 USB 完整链路：真实的 `ExoPlayer` 经调试用的 `AudioOutputProvider` 和 `DirectUsbAudioOutput` 输出，使用 `StrictPcmAudioSink`（D9）。验证起播、暂停、恢复、seek、切歌、流结束，以及暂时失去焦点后的释放和重新接管。
 - [ ] 在 iQOO 上先以 JBL Flip 7 测试，参考 DAC 到位后逐款重复：连续播放 60 秒和 30 分钟、播放中拔出、播放中结束进程，确认释放后系统重新接管该设备。
 - [ ] 逐项验证[架构设计](M7_USB_ARCHITECTURE.md)中"待实测的设计假设"，包括接管时的 `BECOMING_NOISY`、进程被结束后的恢复和息屏 30 分钟。
@@ -95,7 +95,7 @@
 ### M7-3 USB 引擎
 
 - [ ] 开始前，按 D6 从最后一个 1.x 标签建立 `release/1.x`，把 `feature/usb-host-output` 合入 `master`。
-- [ ] 完善 `:usb-engine` 模块（M7-1 已建立，只有 Kotlin；M7-2 加入 C++），对应用只暴露小型接口，并让发布构建依赖它。
+- [ ] 完善 `:usb-engine` 模块（M7-1 已建立，只有 Kotlin；M7-2 加入 C++），对应用只暴露小型接口，并让发布构建依赖它。应用模块也要固定 `ndkVersion`，否则打包时无法裁剪 native 库（M7-2 的测试包每个 ABI 为 560 至 658 KB，裁剪后约 73 至 128 KB）。
 - [ ] 实现 `StreamingPlan`（实际速度、服务间隔、每间隔最大载荷、反馈单位和有效期）、URB 队列、环形缓冲、按反馈调整的包长、逐包错误统计、反馈超时、时钟和 alternate setting 切换，以及只统计媒体帧的播放位置。按 D3 覆盖 UAC1 和 UAC2。
 - [ ] 实现 `DirectUsbAudioOutput`（`isStalled()` 始终为 `false`，`release()` 负责输出退休）。
 - [ ] 实现 `ExactPcmConverter` 和四层格式判断（D10）：严格模式拒绝 encoder delay 或 padding 不为 0 的音源；float 按源位深还原为整数并校验，校验失败时失败关闭；解码输出精度低于源文件时拒绝；按 #65 的规则补零。不做重采样、抖动或截断。
