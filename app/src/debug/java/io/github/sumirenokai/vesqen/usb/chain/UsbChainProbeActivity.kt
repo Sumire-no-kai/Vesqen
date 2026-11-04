@@ -23,6 +23,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaSession
 import io.github.sumirenokai.vesqen.playback.GuardedRenderersFactory
 import io.github.sumirenokai.vesqen.playback.StrictPcmAudioSink
 import io.github.sumirenokai.vesqen.usb.UsbProbeBaseActivity
@@ -47,6 +48,9 @@ import kotlin.math.abs
  * would, and reports each minute. `--es mode file --es file <path> --ei seconds 30` plays a real file.
  * `--es mode scan --es dir <path>` claims nothing and reports the formats of the files under it.
  * `--ei volume` gives the device's volume in 1/256 dB. -15400 is the lowest on the JBL Flip 7.
+ * `--ez silentTrack true` adds [SilentSpeakerTrack] to a long run, and `--ei silentTrackLevel` gives
+ * its tone a level, 3277 being -20 dBFS and audible from the phone. `--ez session true` adds a media
+ * session, as the app has, and `--ez mediaStyle true` also shows the notification in the media style.
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 class UsbChainProbeActivity : UsbProbeBaseActivity() {
@@ -68,6 +72,9 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
 
     @Volatile
     private var deviceGone = false
+
+    @Volatile
+    private var keepsRunningWithoutActivity = false
 
     @Volatile
     private var playerError: PlaybackException? = null
@@ -216,6 +223,9 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
 
     /** One stream throughout: both tracks arrive as float, so the output carries over between them. */
     private fun longRun(tracks: List<ChainTrack>, minutes: Int) {
+        val silentTrack = if (intent.getBooleanExtra(EXTRA_SILENT_TRACK, false)) SilentSpeakerTrack(audioManager, intent.getIntExtra(EXTRA_SILENT_TRACK_LEVEL, 0)) else null
+        val mediaSession = if (intent.getBooleanExtra(EXTRA_SESSION, false)) onMain { MediaSession.Builder(this, player).build() } else null
+        UsbChainKeepAliveService.mediaStyleSession = mediaSession.takeIf { intent.getBooleanExtra(EXTRA_MEDIA_STYLE, false) }
         ContextCompat.startForegroundService(this, Intent(this, UsbChainKeepAliveService::class.java))
         onMain {
             player.setWakeMode(C.WAKE_MODE_LOCAL)
@@ -228,7 +238,9 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
         val started = now()
         val startedCpu = Process.getElapsedCpuTime()
         var minute = 0
-        while (minute < minutes && !deviceGone && playerError == null && !cancelled) {
+        // The screen going off may take the activity with it, which must not end the run.
+        keepsRunningWithoutActivity = true
+        while (minute < minutes && !deviceGone && playerError == null) {
             SystemClock.sleep(WATCH_MS)
             if (now() - started >= (minute + 1) * MINUTE_MS) {
                 minute++
@@ -236,10 +248,13 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
                 val stats = session.latestStats()
                 report(
                     "Minute $minute: ${session.totals()}, frames ${stats?.mediaFramesProcessed}, silence ${stats?.silenceFramesInserted}, " +
-                        "failure ${stats?.failure}, CPU %.1f%%, stream thread ${streamThreadSwitches()}".format(cpu),
+                        "failure ${stats?.failure}, CPU %.1f%%, stream thread ${streamThreadSwitches()}".format(cpu) +
+                        (silentTrack?.let { ", silent track ${it.describe()}" }.orEmpty()),
                 )
             }
         }
+        silentTrack?.close()
+        mediaSession?.let { session -> onMain { session.release() } }
         val elapsed = now() - started
         val totals = session.totals()
         val deliveredMs = totals.deliveredFrames / FRAMES_PER_MS
@@ -423,7 +438,7 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
     private fun waitFor(timeoutMs: Long, condition: () -> Boolean): Boolean {
         val deadline = now() + timeoutMs
         while (now() < deadline) {
-            check(!cancelled) { "The activity went away" }
+            check(!cancelled || keepsRunningWithoutActivity) { "The activity went away" }
             if (condition()) return true
             SystemClock.sleep(POLL_MS)
         }
@@ -458,6 +473,10 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
         const val EXTRA_FILE = "file"
         const val EXTRA_DIR = "dir"
         const val EXTRA_VOLUME = "volume"
+        const val EXTRA_SILENT_TRACK = "silentTrack"
+        const val EXTRA_SILENT_TRACK_LEVEL = "silentTrackLevel"
+        const val EXTRA_MEDIA_STYLE = "mediaStyle"
+        const val EXTRA_SESSION = "session"
         const val MODE_SCRIPT = "script"
         const val MODE_LONG = "long"
         const val MODE_FILE = "file"

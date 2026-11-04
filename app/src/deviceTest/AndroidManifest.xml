@@ -18,6 +18,8 @@
         <activity
             android:name="io.github.sumirenokai.vesqen.usb.chain.UsbChainProbeActivity"
             android:exported="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:label="USB chain" />
         <service
             android:name="io.github.sumirenokai.vesqen.usb.chain.UsbChainKeepAliveService"
