@@ -34,7 +34,7 @@ Vesqen 是一款 Android 离线音乐播放器，无需注册账号即可播放�
 ## 功能
 
 <p align="center">
-  <img src="docs/readme/now-zh.png" width="250" alt="正在播放：Maren Holt 的 Glass Harbor">
+  <img src="docs/readme/now-zh.png" width="250" alt="正在播放：Maren Holt 的 Glass Harbor 的歌词">
   <img src="docs/readme/chain-zh.png" width="250" alt="链路页：SYSTEM MIXED 状态和置顶指标">
   <img src="docs/readme/library-zh.png" width="250" alt="曲库：歌曲列表和字母索引">
 </p>
