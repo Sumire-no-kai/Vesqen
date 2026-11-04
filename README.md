@@ -29,7 +29,7 @@
 
 Vesqen is an offline music player for Android. It plays the music stored on your phone and needs no account. While a track plays, Vesqen records each step from the file to your headphones, and the Chain page shows where every value came from and how it was obtained.
 
-> **Current version:** `1.1.1`, released on November 1, 2026 on [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.1.1). The Google Play version is in a closed test and will get the same version once Google approves it. Read the [known limitations](#known-limitations) before relying on strict USB output.
+> **Current version:** `1.2.0`, released on November 4, 2026 on [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.2.0). The Google Play version is in a closed test and will get the same version once Google approves it. Read the [known limitations](#known-limitations) before relying on strict USB output.
 
 ## Features
 
@@ -93,7 +93,10 @@ Playback and your library never use the network, and your library, playlists and
 - Android 13 and earlier don't provide the official bit-perfect mixer API, so strict USB output isn't available there.
 - Even on phones that do offer the bit-perfect path, strict USB output currently stops for most files: Vesqen hands Android floating-point audio, and USB DACs' bit-perfect formats are integer. This is being fixed together with Vesqen's own USB output, planned for 2.0.
 - In strict USB mode, there is a short gap between tracks, even on gapless albums.
-- Same-name `.lrc` lyrics files are read only in folders added with Add music folder, not for songs that Vesqen finds through Android's media library.
+- Same-name `.lrc` files for songs from Android's media library need an added folder that contains them, and Android 10 or later. On Android 9, only songs in added folders read them.
+- A folder that is both in Android's media library and added with Add music folder shows its songs twice ([#267](https://github.com/Sumire-no-kai/Vesqen/issues/267)).
+- AIFF files that are 8-bit, floating-point, A-law or µ-law don't play.
+- ALAC files don't play on our iQOO 9 test phone, because its Qualcomm decoder rejects the setup data Vesqen passes to it. Other phones with this decoder are probably affected. The fix is planned for the next update ([#270](https://github.com/Sumire-no-kai/Vesqen/issues/270)).
 - On Android 9, folders with the same path on the phone and on an SD card are still shown as one folder.
 - Bluetooth is never bit-perfect. The Chain page can say that Vesqen's part left the audio unchanged, except for a 20 ms fade-in after starting, seeking or changing format; the phone still re-encodes it for Bluetooth.
 - Media3 fades in the first 20 ms after starting, seeking or changing format, including on strict USB output. A fix for strict output is planned for 2.0.
@@ -102,7 +105,7 @@ Playback and your library never use the network, and your library, playlists and
 - Some phone makers' systems pause music on their own. On our vivo test phone, the system paused Vesqen about three minutes after the media volume was turned all the way down with the volume keys.
 - Long listening and interruptions passed with wired headphones (8 hours on Android 9), with the screen off (4 hours on Android 15), for incoming calls (on an Android 16 emulator), for unplugging wired headphones and for disconnecting Bluetooth headphones (on Android 15).
 - Vesqen doesn't move its data to a new phone. Favorites, playlists and settings stay on the old phone.
-- Vesqen hasn't been tested on foldables, and its smoothness at high refresh rates hasn't been measured. TalkBack was checked on an Android 16 emulator, not yet on a phone.
+- Vesqen hasn't been tested on foldables, and its smoothness at high refresh rates hasn't been measured. TalkBack and three-button navigation were checked on an Android 16 emulator, not yet on a phone.
 
 Each release lists its own limitations in the release notes, and the [changelog](https://vesqen.sumirenokai.com/changelog/) summarizes every version.
 

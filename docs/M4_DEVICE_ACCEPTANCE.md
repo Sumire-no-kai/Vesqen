@@ -417,3 +417,4 @@
   - 应用内更新器（要等发布和官网 `updates/` 上线后再测）。
   - 重启和蓝牙。
 - 结论：安装、versionCode 增大的同签名升级和数据保留通过（Android 15 和 Android 9 都从 GitHub 版 1.1.1 升级）。
+- 发布后（2026-11-04 16:55，[Publish run #41782148820](https://github.com/Sumire-no-kai/Vesqen/actions/runs/41782148820)）：`v1.2.0` 为 Latest，标签指向 `2756c19`，附件 APK 的 SHA-256 为 `172110fc…8af3`。官网 `a9b3797` 推送后，更新文件来自发布运行生成的 `update-manifests-1.2.0`。
