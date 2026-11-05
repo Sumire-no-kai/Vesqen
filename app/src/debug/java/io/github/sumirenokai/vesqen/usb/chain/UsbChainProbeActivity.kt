@@ -54,7 +54,7 @@ import kotlin.math.abs
  * `--ez silentTrack true` adds [SilentSpeakerTrack] to a long run, and `--ei silentTrackLevel` gives
  * its tone a level, 3277 being -20 dBFS and audible from the phone. `--ez session true` adds a media
  * session, as the app has, and `--ez mediaStyle true` also shows the notification in the media style.
- * `--ei silentTrackHz` sets the tone's frequency and `--ei silentTrackDevice` the type of output
+ * `--ef silentTrackGain` sets the track's own volume, `--ei silentTrackHz` the tone's frequency and `--ei silentTrackDevice` the type of output
  * it prefers, from [AudioDeviceInfo]. `--es mode battery` asks the system to stop
  * optimizing this app's battery use, which the person holding the phone answers.
  * `--ez connectedDevice true` adds that foreground service type.
@@ -238,7 +238,7 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
 
     /** One stream throughout: both tracks arrive as float, so the output carries over between them. */
     private fun longRun(tracks: List<ChainTrack>, minutes: Int) {
-        val silentTrack = if (intent.getBooleanExtra(EXTRA_SILENT_TRACK, false)) SilentSpeakerTrack(audioManager, intent.getIntExtra(EXTRA_SILENT_TRACK_LEVEL, 0), intent.getIntExtra(EXTRA_SILENT_TRACK_HZ, 1000), intent.getIntExtra(EXTRA_SILENT_TRACK_DEVICE, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)) else null
+        val silentTrack = if (intent.getBooleanExtra(EXTRA_SILENT_TRACK, false)) SilentSpeakerTrack(audioManager, intent.getIntExtra(EXTRA_SILENT_TRACK_LEVEL, 0), intent.getIntExtra(EXTRA_SILENT_TRACK_HZ, 1000), intent.getIntExtra(EXTRA_SILENT_TRACK_DEVICE, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER), intent.getFloatExtra(EXTRA_SILENT_TRACK_GAIN, 1f)) else null
         val mediaSession = if (intent.getBooleanExtra(EXTRA_SESSION, false)) onMain { MediaSession.Builder(this, player).build() } else null
         UsbChainKeepAliveService.mediaStyleSession = mediaSession.takeIf { intent.getBooleanExtra(EXTRA_MEDIA_STYLE, false) }
         UsbChainKeepAliveService.connectedDevice = intent.getBooleanExtra(EXTRA_CONNECTED_DEVICE, false)
@@ -493,6 +493,7 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
         const val EXTRA_SILENT_TRACK_LEVEL = "silentTrackLevel"
         const val EXTRA_SILENT_TRACK_HZ = "silentTrackHz"
         const val EXTRA_SILENT_TRACK_DEVICE = "silentTrackDevice"
+        const val EXTRA_SILENT_TRACK_GAIN = "silentTrackGain"
         const val EXTRA_CONNECTED_DEVICE = "connectedDevice"
         const val EXTRA_MEDIA_STYLE = "mediaStyle"
         const val EXTRA_SESSION = "session"

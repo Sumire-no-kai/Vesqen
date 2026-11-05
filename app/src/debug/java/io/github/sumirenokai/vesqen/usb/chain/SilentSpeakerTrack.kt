@@ -23,6 +23,7 @@ internal class SilentSpeakerTrack(
     level: Int = 0,
     toneHz: Int = 1000,
     deviceType: Int = AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+    gain: Float = 1f,
 ) {
     private val track = AudioTrack.Builder()
         .setAudioAttributes(
@@ -49,6 +50,8 @@ internal class SilentSpeakerTrack(
         val outputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
         val device = outputs.firstOrNull { it.type == deviceType }
         check(device != null && track.setPreferredDevice(device)) { "No device of type $deviceType in ${outputs.map { it.type }}" }
+        // A gain below one shows whether the ROM reads the samples before or after the track's volume.
+        check(track.setVolume(gain) == AudioTrack.SUCCESS) { "Gain $gain refused" }
         track.play()
         writer = thread(name = "silent-speaker") {
             // One second holds whole periods of any tone in whole hertz, so the loop has no click.
