@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.usb.chain
 
+import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -13,8 +14,10 @@ import android.media.AudioManager
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.Process
 import android.os.SystemClock
+import android.provider.Settings
 import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -51,6 +54,10 @@ import kotlin.math.abs
  * `--ez silentTrack true` adds [SilentSpeakerTrack] to a long run, and `--ei silentTrackLevel` gives
  * its tone a level, 3277 being -20 dBFS and audible from the phone. `--ez session true` adds a media
  * session, as the app has, and `--ez mediaStyle true` also shows the notification in the media style.
+ * `--ei silentTrackHz` sets the tone's frequency and `--ei silentTrackDevice` the type of output
+ * it prefers, from [AudioDeviceInfo]. `--es mode battery` asks the system to stop
+ * optimizing this app's battery use, which the person holding the phone answers.
+ * `--ez connectedDevice true` adds that foreground service type.
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 class UsbChainProbeActivity : UsbProbeBaseActivity() {
@@ -138,6 +145,14 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
     override fun onDevice(device: UsbDevice) {
         val bits = intent.getIntExtra(EXTRA_BITS, 16)
         val mode = intent.getStringExtra(EXTRA_MODE) ?: MODE_SCRIPT
+        if (mode == MODE_BATTERY) {
+            val power = getSystemService(PowerManager::class.java)
+            report("Ignoring battery optimizations: ${power.isIgnoringBatteryOptimizations(packageName)}")
+            @SuppressLint("BatteryLife")
+            val request = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
+            startActivity(request)
+            return
+        }
         if (mode == MODE_SCAN) {
             thread(name = "chain-scan") {
                 ChainFileScan.scan(File(checkNotNull(intent.getStringExtra(EXTRA_DIR)) { "No dir" }), ::report)
@@ -223,9 +238,10 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
 
     /** One stream throughout: both tracks arrive as float, so the output carries over between them. */
     private fun longRun(tracks: List<ChainTrack>, minutes: Int) {
-        val silentTrack = if (intent.getBooleanExtra(EXTRA_SILENT_TRACK, false)) SilentSpeakerTrack(audioManager, intent.getIntExtra(EXTRA_SILENT_TRACK_LEVEL, 0)) else null
+        val silentTrack = if (intent.getBooleanExtra(EXTRA_SILENT_TRACK, false)) SilentSpeakerTrack(audioManager, intent.getIntExtra(EXTRA_SILENT_TRACK_LEVEL, 0), intent.getIntExtra(EXTRA_SILENT_TRACK_HZ, 1000), intent.getIntExtra(EXTRA_SILENT_TRACK_DEVICE, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)) else null
         val mediaSession = if (intent.getBooleanExtra(EXTRA_SESSION, false)) onMain { MediaSession.Builder(this, player).build() } else null
         UsbChainKeepAliveService.mediaStyleSession = mediaSession.takeIf { intent.getBooleanExtra(EXTRA_MEDIA_STYLE, false) }
+        UsbChainKeepAliveService.connectedDevice = intent.getBooleanExtra(EXTRA_CONNECTED_DEVICE, false)
         ContextCompat.startForegroundService(this, Intent(this, UsbChainKeepAliveService::class.java))
         onMain {
             player.setWakeMode(C.WAKE_MODE_LOCAL)
@@ -475,12 +491,16 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
         const val EXTRA_VOLUME = "volume"
         const val EXTRA_SILENT_TRACK = "silentTrack"
         const val EXTRA_SILENT_TRACK_LEVEL = "silentTrackLevel"
+        const val EXTRA_SILENT_TRACK_HZ = "silentTrackHz"
+        const val EXTRA_SILENT_TRACK_DEVICE = "silentTrackDevice"
+        const val EXTRA_CONNECTED_DEVICE = "connectedDevice"
         const val EXTRA_MEDIA_STYLE = "mediaStyle"
         const val EXTRA_SESSION = "session"
         const val MODE_SCRIPT = "script"
         const val MODE_LONG = "long"
         const val MODE_FILE = "file"
         const val MODE_SCAN = "scan"
+        const val MODE_BATTERY = "battery"
 
         /** -30 dB in the spec's 1/256 dB (D4). */
         const val START_VOLUME = -30 * 256

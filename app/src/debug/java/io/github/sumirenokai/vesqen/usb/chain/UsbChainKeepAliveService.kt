@@ -25,7 +25,9 @@ class UsbChainKeepAliveService : Service() {
             .setContentTitle("USB chain test")
             .apply { mediaStyleSession?.let { setStyle(MediaStyleNotificationHelper.MediaStyle(it)) } }
             .build()
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        val type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or
+            (if (connectedDevice) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0)
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
         return START_NOT_STICKY
     }
 
@@ -33,6 +35,10 @@ class UsbChainKeepAliveService : Service() {
         /** Set before the service starts, to show its notification in the media style. */
         @Volatile
         internal var mediaStyleSession: MediaSession? = null
+
+        /** Also declares the type meant for USB devices, to see whether the ROM treats it differently. */
+        @Volatile
+        internal var connectedDevice = false
 
         private const val CHANNEL = "usb-chain-test"
         private const val NOTIFICATION_ID = 7102

@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- M7-2: to see whether this exemption keeps the ROM from freezing the USB path. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
     <application>
         <!-- M7-1: reads a USB audio device's descriptors, started over adb. It claims no interface
              and sends no audio. -->
@@ -24,7 +28,7 @@
         <service
             android:name="io.github.sumirenokai.vesqen.usb.chain.UsbChainKeepAliveService"
             android:exported="false"
-            android:foregroundServiceType="mediaPlayback" />
+            android:foregroundServiceType="mediaPlayback|connectedDevice" />
         <!-- Device tests only: a documents provider whose answers the test sets (#191 D3, D13). It
              has no roots, so the system file picker lists nothing from it. -->
         <provider

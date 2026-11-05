@@ -18,7 +18,12 @@ import kotlin.math.sin
  * phone's speaker so that it can. It never touches the USB data. Without the preferred device the
  * system would send it to the USB route, where the card no longer exists.
  */
-internal class SilentSpeakerTrack(audioManager: AudioManager, level: Int = 0) {
+internal class SilentSpeakerTrack(
+    audioManager: AudioManager,
+    level: Int = 0,
+    toneHz: Int = 1000,
+    deviceType: Int = AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+) {
     private val track = AudioTrack.Builder()
         .setAudioAttributes(
             AudioAttributes.Builder()
@@ -41,16 +46,17 @@ internal class SilentSpeakerTrack(audioManager: AudioManager, level: Int = 0) {
     private val writer: Thread
 
     init {
-        val speaker = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-            .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
-        check(speaker != null && track.setPreferredDevice(speaker)) { "No speaker to prefer" }
+        val outputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        val device = outputs.firstOrNull { it.type == deviceType }
+        check(device != null && track.setPreferredDevice(device)) { "No device of type $deviceType in ${outputs.map { it.type }}" }
         track.play()
         writer = thread(name = "silent-speaker") {
-            val silence = ByteBuffer.allocateDirect(TONE_PERIOD_FRAMES * TONE_PERIODS * FRAME_BYTES).order(ByteOrder.LITTLE_ENDIAN)
+            // One second holds whole periods of any tone in whole hertz, so the loop has no click.
+            val silence = ByteBuffer.allocateDirect(SAMPLE_RATE_HZ * FRAME_BYTES).order(ByteOrder.LITTLE_ENDIAN)
             // A level above zero shows whether the ROM looks at the samples as well as the track.
             val samples = silence.asShortBuffer()
             for (index in 0 until samples.capacity()) {
-                samples.put(index, (level * sin(2 * PI * (index / 2) / TONE_PERIOD_FRAMES)).roundToInt().toShort())
+                samples.put(index, (level * sin(2 * PI * toneHz * (index / 2) / SAMPLE_RATE_HZ)).roundToInt().toShort())
             }
             while (writing) {
                 silence.clear()
@@ -74,7 +80,5 @@ internal class SilentSpeakerTrack(audioManager: AudioManager, level: Int = 0) {
     private companion object {
         const val SAMPLE_RATE_HZ = 48_000
         const val FRAME_BYTES = 4
-        const val TONE_PERIOD_FRAMES = 48
-        const val TONE_PERIODS = 100
     }
 }
