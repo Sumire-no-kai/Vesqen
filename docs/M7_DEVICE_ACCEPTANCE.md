@@ -449,7 +449,7 @@ B 组被冻结时，丢失、欠载和失败包都是 0，只有交付时长与�
 ### 2026-11-06 · M7-3 自然切歌时的源位深（#282）
 
 - **构建：** Vesqen Test 1.2.0 / versionCode 17（调试构建，不是发布候选），`fix/usb-source-bits-at-boundary`。手机上 base APK 的 SHA-256 与本地一致：`5f07a61b0e79ada68c3980f2f043e5bebd33f696646f7e2323e95ed8dd8605e7`。
-- **手机和设备：** 同上一条记录，JBL Flip 7 的硬件音量为 -60 dB。
+- **手机和设备：** iQOO 9（V2171A，Android 15）。链路脚本接 JBL Flip 7，硬件音量为 -60 dB；设备测试不使用 USB 设备。
 - **问题：** 两首曲目解码成相同的 float 格式时，严格 Sink 沿用同一个输出，而输出的转换器仍按上一首的源位深检查。16 位之后的 24 位曲目会被错误拒绝；24 位之后的 16 位曲目则失去对异常样本的拒绝。
 - **设备测试：** `DirectUsbSourceBoundaryDeviceTest` 用真实的 Media3 队列播放两首 48 kHz 的 FLAC，经严格 Sink 和自研输出写入一个记录字节的 USB 句柄，不接 DAC；源信息跟随渲染器配置 Sink 时的输入格式。
 
