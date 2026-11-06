@@ -4,9 +4,9 @@
 
 ## 当前状态
 
-**M7-0 和 M7-1 已完成（D1 的设备待定），M7 的播放代码尚未开始。** 分支 `feature/usb-host-output` 及其 worktree `.claude/worktrees/usb-host-output` 于 2026-10-26 从 `master` 建立，M7-1 的代码已合入这个分支（PR #260），尚未进入 `master`。M7-1 和 M7-2 在这个分支上开发，何时合入 `master` 见 D6。
+**M7-0 至 M7-2 已完成（D1 的设备待定），产品代码尚未开始：M7-2 的播放代码只在调试构建中。** M7-1 和 M7-2 在 `feature/usb-host-output` 上开发，2026-11-06 按 D6 经 [#274](https://github.com/Sumire-no-kai/Vesqen/pull/274) 合入 `master`（`6e34ce18`），同日从 `v1.2.0` 建立 `release/1.x`。M7-3 起的 PR 直接合入 `master`。
 
-**M7-2：G1 于 2026-11-06 在 iQOO 9 × JBL Flip 7 上判定通过**（调试构建，焦点按模拟触发通过，见[设备验收](M7_DEVICE_ACCEPTANCE.md)）。同日的独立复核及其意见的处理见 [#273](https://github.com/Sumire-no-kai/Vesqen/issues/273)。代码在本地分支 `feature/usb-native-transport`，尚未合入 `feature/usb-host-output`。
+**M7-2：G1 于 2026-11-06 在 iQOO 9 × JBL Flip 7 上判定通过**（调试构建，焦点按模拟触发通过，见[设备验收](M7_DEVICE_ACCEPTANCE.md)）。同日的独立复核及其意见的处理见 [#273](https://github.com/Sumire-no-kai/Vesqen/issues/273)。代码经 [#272](https://github.com/Sumire-no-kai/Vesqen/pull/272) 合入 `feature/usb-host-output`，再随 #274 合入 `master`。
 
 可直接复用的部分：
 
@@ -99,7 +99,7 @@
 
 ### M7-3 USB 引擎
 
-- [ ] 开始前，按 D6 从最后一个 1.x 标签建立 `release/1.x`，把 `feature/usb-host-output` 合入 `master`。
+- [x] 开始前，按 D6 从最后一个 1.x 标签建立 `release/1.x`，把 `feature/usb-host-output` 合入 `master`。2026-11-06 完成：`release/1.x` 建在 `v1.2.0`（`2756c197`），#274 合入 `master`。
 - [ ] 完善 `:usb-engine` 模块（M7-1 已建立，只有 Kotlin；M7-2 加入 C++），对应用只暴露小型接口，并让发布构建依赖它。应用模块也要固定 `ndkVersion`，否则打包时无法裁剪 native 库（M7-2 的测试包每个 ABI 为 560 至 658 KB，裁剪后约 73 至 128 KB）。
 - [ ] 实现 `StreamingPlan`（实际速度、服务间隔、每间隔最大载荷、反馈单位和有效期）、URB 队列、环形缓冲、按反馈调整的包长、逐包错误统计、反馈超时、时钟和 alternate setting 切换，以及只统计媒体帧的播放位置。按 D3 覆盖 UAC1 和 UAC2。
 - [ ] 反馈的有效期不得短于更新周期。UAC1 的周期取自 `UacEndpoint.refreshPeriodMs`，UAC2 取自 `bInterval`。用较慢的合法周期（例如 `bRefresh` 为 9，即 512 ms）测试，确认不会误报 `FEEDBACK_TIMEOUT`。
