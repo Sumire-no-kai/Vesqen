@@ -104,12 +104,13 @@ int64_t StreamEngine::retireOutput() {
 
 void StreamEngine::readStats(int64_t* out) const {
     // The stream thread resets the counters between two stores of the acknowledged epoch, the first
-    // of them -1, so a read that sees the same epoch before and after has one epoch's values.
+    // of them -1, and resets them with release stores. A counter read with acquire that shows a reset
+    // therefore makes the later read of the epoch see -1 or newer, so a read that sees the same epoch
+    // before and after has one epoch's values. (No fence: GCC refuses one under ThreadSanitizer.)
     for (int attempt = 0; attempt < 16; ++attempt) {
         const int64_t before = acknowledgedEpoch_.load(std::memory_order_acquire);
-        for (size_t i = 0; i < kStatCount; ++i) out[i] = stats_[i].load(std::memory_order_relaxed);
-        std::atomic_thread_fence(std::memory_order_acquire);
-        const int64_t after = acknowledgedEpoch_.load(std::memory_order_relaxed);
+        for (size_t i = 0; i < kStatCount; ++i) out[i] = stats_[i].load(std::memory_order_acquire);
+        const int64_t after = acknowledgedEpoch_.load(std::memory_order_acquire);
         if (before == after) {
             out[kStatEpoch] = before;
             out[kStatRequestedEpoch] = requestedEpoch_.load(std::memory_order_acquire);
@@ -224,12 +225,11 @@ bool StreamEngine::retireInFlight() {
     {
         Lock lock(epochMutex_);
         acknowledgedEpoch_.store(-1, std::memory_order_relaxed);
-        std::atomic_thread_fence(std::memory_order_release);
         ring_.discardAll();
         for (Stat counter : {kStatMediaFramesWritten, kStatMediaFramesSubmitted, kStatMediaFramesProcessed,
                              kStatMediaFramesDelivered, kStatMediaFramesLost, kStatSilenceFramesInserted,
                              kStatUsbFramesDelivered, kStatUnderruns, kStatUrbsCompleted, kStatPacketsFailed}) {
-            stats_[counter].store(0, std::memory_order_relaxed);
+            stats_[counter].store(0, std::memory_order_release);
         }
         mediaStarted_ = false;
         inUnderrun_ = false;
