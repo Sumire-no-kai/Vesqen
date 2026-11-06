@@ -452,4 +452,29 @@ class DirectUsbAudioOutputTest {
         assertThrows(AudioOutput.WriteException::class.java) { output.write(floats, 1, 0) }
         assertEquals(listOf(Reason.PCM_NOT_EXACT), failures.map { it.reason })
     }
+
+    private fun outputConfig(sampleRateHz: Int = 48_000) = AudioOutputProvider.OutputConfig.Builder()
+        .setEncoding(C.ENCODING_PCM_FLOAT)
+        .setSampleRate(sampleRateHz)
+        .setChannelMask(androidx.media3.common.util.Util.getAudioTrackChannelConfig(2))
+        .setBufferSize(plan.ringFrames * 8)
+        .build()
+
+    private val floatFormat = AudioOutputProvider.FormatConfig.Builder(
+        Format.Builder().setSampleMimeType(MimeTypes.AUDIO_RAW).setPcmEncoding(C.ENCODING_PCM_FLOAT)
+            .setSampleRate(48_000).setChannelCount(2).build(),
+    ).build()
+
+    @Test
+    fun `a different output configuration is not reused`() {
+        val output = DirectUsbAudioOutput(plan, UsbPcmEncoding.FLOAT, sourceBits = 16, FakeHandle(), configuredSourceBits = { 16 })
+        assertFalse(output.canReuseAudioOutput(outputConfig(), floatFormat, outputConfig(sampleRateHz = 44_100)))
+        assertTrue(output.canReuseAudioOutput(outputConfig(), floatFormat, outputConfig()))
+    }
+
+    @Test
+    fun `an output is not reused for a format the gate refused`() {
+        val output = DirectUsbAudioOutput(plan, UsbPcmEncoding.FLOAT, sourceBits = 16, FakeHandle(), configuredSourceBits = { 0 })
+        assertFalse(output.canReuseAudioOutput(outputConfig(), floatFormat, outputConfig()))
+    }
 }
