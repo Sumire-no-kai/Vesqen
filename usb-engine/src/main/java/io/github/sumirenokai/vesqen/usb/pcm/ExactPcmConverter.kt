@@ -17,7 +17,7 @@ enum class UsbPcmEncoding(val bytesPerSample: Int) {
  * source and must come out a whole number in range, and wider integers must have nothing below the
  * source's bits (D10). Samples then sit at the top of their subslot, so 16 bits in a 24-bit setting
  * gain zeros below them (#65). A value off the lattice stops the conversion: there is no rounding,
- * dithering or truncation here.
+ * dithering or truncation here. A converter keeps working arrays, so it serves one thread.
  */
 class ExactPcmConverter(
     private val encoding: UsbPcmEncoding,
@@ -30,6 +30,11 @@ class ExactPcmConverter(
     private val floatScale = (1L shl (sourceBits - 1)).toDouble()
     private val bitsBelowSource = (1 shl (Int.SIZE_BITS - sourceBits)) - 1
     private val subslotShift = Int.SIZE_BITS - subslotBytes * Byte.SIZE_BITS
+
+    // #271: the samples go through arrays with one bulk copy in and one out. Reading and writing the
+    // buffers a byte at a time cost the playback thread several times more on the phone's small cores.
+    private val input = ByteArray(CHUNK_SAMPLES * Int.SIZE_BYTES)
+    private val output = ByteArray(CHUNK_SAMPLES * Int.SIZE_BYTES)
 
     init {
         require(subslotBytes in 1..Int.SIZE_BYTES) { "Subslot of $subslotBytes bytes" }
@@ -45,35 +50,51 @@ class ExactPcmConverter(
      * exactly, and both buffers are then partly consumed, so the stream has to stop.
      */
     fun convert(source: ByteBuffer, target: ByteBuffer): Boolean {
-        val samples = minOf(source.remaining() / encoding.bytesPerSample, target.remaining() / subslotBytes) / channels * channels
-        repeat(samples) {
+        var samples = minOf(source.remaining() / encoding.bytesPerSample, target.remaining() / subslotBytes) / channels * channels
+        while (samples > 0) {
+            val count = minOf(samples, CHUNK_SAMPLES)
+            source.get(input, 0, count * encoding.bytesPerSample)
+            if (!convertChunk(count)) return false
+            target.put(output, 0, count * subslotBytes)
+            samples -= count
+        }
+        return true
+    }
+
+    private fun convertChunk(count: Int): Boolean {
+        var at = 0
+        for (sample in 0 until count) {
             val value: Int
             if (encoding == UsbPcmEncoding.FLOAT) {
-                val scaled = Float.fromBits(readInt32(source)).toDouble() * floatScale
+                val scaled = Float.fromBits(readInt32(sample * Int.SIZE_BYTES)).toDouble() * floatScale
                 // NaN fails the first comparison, and infinities fail the range.
                 if (scaled != floor(scaled) || scaled < -floatScale || scaled >= floatScale) return false
                 value = scaled.toInt() shl (Int.SIZE_BITS - sourceBits)
             } else {
-                value = readTopAligned(source)
+                value = readTopAligned(sample * encoding.bytesPerSample)
                 if (value and bitsBelowSource != 0) return false
             }
             var wire = value ushr subslotShift
             repeat(subslotBytes) {
-                target.put(wire.toByte())
+                output[at++] = wire.toByte()
                 wire = wire ushr Byte.SIZE_BITS
             }
         }
         return true
     }
 
-    private fun readTopAligned(source: ByteBuffer): Int = when (encoding) {
-        UsbPcmEncoding.INT16 -> (nextByte(source) shl 16) or (nextByte(source) shl 24)
-        UsbPcmEncoding.INT24 -> (nextByte(source) shl 8) or (nextByte(source) shl 16) or (nextByte(source) shl 24)
-        UsbPcmEncoding.INT32, UsbPcmEncoding.FLOAT -> readInt32(source)
+    private fun readTopAligned(at: Int): Int = when (encoding) {
+        UsbPcmEncoding.INT16 -> (byteAt(at) shl 16) or (byteAt(at + 1) shl 24)
+        UsbPcmEncoding.INT24 -> (byteAt(at) shl 8) or (byteAt(at + 1) shl 16) or (byteAt(at + 2) shl 24)
+        UsbPcmEncoding.INT32, UsbPcmEncoding.FLOAT -> readInt32(at)
     }
 
-    private fun readInt32(source: ByteBuffer): Int =
-        nextByte(source) or (nextByte(source) shl 8) or (nextByte(source) shl 16) or (nextByte(source) shl 24)
+    private fun readInt32(at: Int): Int = byteAt(at) or (byteAt(at + 1) shl 8) or (byteAt(at + 2) shl 16) or (byteAt(at + 3) shl 24)
 
-    private fun nextByte(source: ByteBuffer): Int = source.get().toInt() and 0xFF
+    private fun byteAt(at: Int): Int = input[at].toInt() and 0xFF
+
+    private companion object {
+        /** 16 KB per array at most: a decoded buffer takes a few rounds, and no allocation happens per call. */
+        const val CHUNK_SAMPLES = 4096
+    }
 }

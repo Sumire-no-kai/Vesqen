@@ -25,6 +25,11 @@
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:label="USB chain" />
+        <!-- M7-3 (#271): times the conversion and the own output on the phone's CPU, without USB. Started over adb. -->
+        <activity
+            android:name="io.github.sumirenokai.vesqen.usb.chain.UsbCostProbeActivity"
+            android:exported="true"
+            android:label="USB cost" />
         <service
             android:name="io.github.sumirenokai.vesqen.usb.chain.UsbChainKeepAliveService"
             android:exported="false"
