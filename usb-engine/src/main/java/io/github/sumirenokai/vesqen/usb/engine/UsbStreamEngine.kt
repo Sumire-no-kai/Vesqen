@@ -20,6 +20,10 @@ data class UsbStreamStats(
     val failureErrno: Long,
     val threadNice: Long,
     val threadSchedulerPolicy: Long,
+    /** The output the counters above belong to, or -1 while they are reset for the next one. */
+    val epoch: Long,
+    /** The newest output handed out; it differs from [epoch] until the last one's URBs are back. */
+    val requestedEpoch: Long,
 ) {
     /** The order matches `enum StreamFailure` in core/stream_engine.h. */
     enum class Failure { NONE, THREAD_START, SUBMIT, DEVICE_GONE, REAP }
@@ -29,6 +33,9 @@ data class UsbStreamStats(
  * The native data plane. Its thread runs outside the JVM and never calls back, so progress and
  * errors are read through [readStats]. The file descriptor stays with UsbDeviceConnection, which
  * must stay open until [destroy] has returned true.
+ *
+ * The stream outlives each output. The first output is [FIRST_EPOCH]; [retireOutput] ends it at once
+ * and hands out the next, which can write nothing until the last one's URBs are back (D14).
  */
 class UsbStreamEngine private constructor(private var handle: Long) {
     /** Each failure keeps its own reason, so the own output can fail closed and say why (D5). */
@@ -54,17 +61,26 @@ class UsbStreamEngine private constructor(private var handle: Long) {
 
     fun start(): Boolean = synchronized(lock) { handle != 0L && nativeStart(handle) }
 
-    /** Takes a direct buffer. Returns the bytes accepted, or -1 once the stream has ended. */
-    fun write(buffer: ByteBuffer, offset: Int, size: Int): Int = synchronized(lock) {
-        if (handle == 0L) -1 else nativeWrite(handle, buffer, offset, size)
+    /**
+     * Takes a direct buffer. Returns the bytes accepted: 0 while the ring is full or the last output's
+     * URBs are still coming back, -1 for an epoch that is not the newest or a stream that has ended.
+     */
+    fun write(epoch: Long, buffer: ByteBuffer, offset: Int, size: Int): Int = synchronized(lock) {
+        if (handle == 0L) -1 else nativeWrite(handle, epoch, buffer, offset, size)
     }
 
-    fun setRunning(running: Boolean) = synchronized(lock) {
-        if (handle != 0L) nativeSetRunning(handle, running)
+    /** Ignored for any epoch but the newest. */
+    fun setRunning(epoch: Long, running: Boolean) = synchronized(lock) {
+        if (handle != 0L) nativeSetRunning(handle, epoch, running)
     }
 
-    fun markEndOfStream() = synchronized(lock) {
-        if (handle != 0L) nativeMarkEndOfStream(handle)
+    fun markEndOfStream(epoch: Long) = synchronized(lock) {
+        if (handle != 0L) nativeMarkEndOfStream(handle, epoch)
+    }
+
+    /** Ends the current output and returns the next one's epoch, or -1 once destroyed. Never waits for URBs. */
+    fun retireOutput(): Long = synchronized(lock) {
+        if (handle == 0L) -1 else nativeRetireOutput(handle)
     }
 
     fun readStats(): UsbStreamStats? = synchronized(lock) {
@@ -86,7 +102,9 @@ class UsbStreamEngine private constructor(private var handle: Long) {
             failure = UsbStreamStats.Failure.entries[values[index++].toInt()],
             failureErrno = values[index++],
             threadNice = values[index++],
-            threadSchedulerPolicy = values[index],
+            threadSchedulerPolicy = values[index++],
+            epoch = values[index++],
+            requestedEpoch = values[index],
         )
     }
 
@@ -107,7 +125,8 @@ class UsbStreamEngine private constructor(private var handle: Long) {
     }
 
     companion object {
-        private const val STAT_COUNT = 14
+        const val FIRST_EPOCH = 0L
+        private const val STAT_COUNT = 16
 
         /** Loaded on first use only (D5), so ordinary playback never depends on it. Null once loaded. */
         private val libraryError: String? by lazy {
@@ -158,13 +177,16 @@ class UsbStreamEngine private constructor(private var handle: Long) {
         private external fun nativeStart(handle: Long): Boolean
 
         @JvmStatic
-        private external fun nativeWrite(handle: Long, buffer: ByteBuffer, offset: Int, size: Int): Int
+        private external fun nativeWrite(handle: Long, epoch: Long, buffer: ByteBuffer, offset: Int, size: Int): Int
 
         @JvmStatic
-        private external fun nativeSetRunning(handle: Long, running: Boolean)
+        private external fun nativeSetRunning(handle: Long, epoch: Long, running: Boolean)
 
         @JvmStatic
-        private external fun nativeMarkEndOfStream(handle: Long)
+        private external fun nativeMarkEndOfStream(handle: Long, epoch: Long)
+
+        @JvmStatic
+        private external fun nativeRetireOutput(handle: Long): Long
 
         @JvmStatic
         private external fun nativeReadStats(handle: Long, out: LongArray)

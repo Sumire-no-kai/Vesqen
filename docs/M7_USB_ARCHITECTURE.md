@@ -275,7 +275,7 @@ stateDiagram-v2
 - **`BECOMING_NOISY`。** AOSP 把 USB 设备列入该广播的设备集合，而 `PlaybackService` 开启了 `setHandleAudioBecomingNoisy(true)`。如果 ROM 在接管时移除路由，Media3 会自行暂停。iQOO 9 不移除路由，但其他 ROM 没有实测，因此接管前仍关闭这项处理，释放后恢复。此期间的真实拔出由 `ACTION_USB_DEVICE_DETACHED` 和 URB 的 `ENODEV` 判断。
 - **路由监听。** 自有路径下 `selectedDevice` 为空，`onAudioDevicesRemoved()` 不会触发失败关闭，官方路径的逻辑不需要改动。
 - **会话的生命周期长于 `AudioOutput`。** 格式变化时 Media3 会释放旧输出、创建新输出，会话保持接管状态，只重新配置时钟和 alternate setting。设置采样率和切换 alternate setting 的先后顺序按协议版本处理，由 M7-2 实测确认。
-- **释放时机。** 切回系统输出、暂停超过 30 秒（默认值，待实测）、失去音频焦点、服务停止、发生失败。短暂暂停时持续发送静音，避免切换带来的爆音。
+- **释放时机。** 切回系统输出、失去音频焦点、服务停止、发生失败时释放。暂停按 D14（2026-11-06）：亮屏时最多保留 30 秒，期间如果 `AudioPlaybackCallback` 显示有其他播放活动，就提前释放；已经息屏时暂停，或暂停期间转为息屏，立即释放，因为 iQOO 9 没有保活措施时最快约 5 至 6 秒就冻结进程，30 秒的定时器保证不了一定能归还 DAC。普通应用看到的播放信息经过匿名化，只能当作提前释放的信号，不能据此识别是哪个应用或它要用哪个设备。正在播放时不因其他播放活动释放，真正的焦点丢失仍按 D11 处理。这些策略属于掌握播放状态的服务层（M7-4），原生引擎只提供安全释放。短暂暂停时持续发送静音，避免切换带来的爆音。
 - **释放顺序。** 停止接收旧 epoch 的数据、停止重新提交、取消并回收全部在途 URB、native 确认静止、切回 alternate setting 0、恢复接管前的音量、释放全部接口、关闭连接、清除接管标记、恢复 `BECOMING_NOISY` 处理。Android 的 `releaseInterface()` 成功后会请求内核重新连接驱动。
 - **清理记录和安全屏障。** 清理步骤分两类。恢复音量这类步骤失败时，写入清理记录并继续，保留第一个失败原因。native 静止是安全屏障：确认全部在途 URB 都已回收之前，不得销毁 native 资源、关闭文件描述符、释放接口或开始下一次接管（见"输出退休与销毁"）。**只有确认全部接口都已释放，才清除接管标记。**
 - **进程异常退出。** 内核关闭文件描述符时只释放接口（`usbdev_release`），不会重新绑定驱动，DAC 在重新插拔前不能被系统使用。下次启动时如果发现接管标记，且设备仍连接并有权限，就重新声明再释放一次，由 `releaseInterface()` 触发重新连接（2026-11-04 在 iQOO 9 上确认：声卡节点在释放的同一时刻重建）。硬件音量会停留在接管时的值，内核不会恢复。因此接管标记须同时保存 `UsbDevice.getDeviceId()` 和接管前的音量（读取后更新标记）；恢复时设备 ID 相同才写回音量，设备重新插入后 ID 会变，不写回。
@@ -357,16 +357,17 @@ URB 的大小按时长计算：每个约 16 到 32 ms，不超过内核上限的
 
 ### 线程和通信
 
-- 只有 native 线程操作传输队列。控制命令经带 epoch 和完成确认的信箱传递。
+- 只有 native 线程操作传输队列。每个外部调用都带 epoch，只有最新的 epoch 生效；外部调用和流线程从检查 epoch 到提交 URB 的一段共用一把短锁，所以 `retireOutput()` 返回之后，旧输出的数据不会再被提交。流线程等待 URB 时不持有这把锁。退休完成后流线程发布已确认的 epoch，这就是完成确认（2026-11-06 实现）。
 - native 线程不回调 JVM，只发布原子计数和错误状态。Kotlin 在 `write()` 和 `getPositionUs()` 中读取；会话存在期间，另由 `usb-control` 每 250 ms 读取一次，以便在暂停时也能发现拔出。
 - 线程请求 `THREAD_PRIORITY_URGENT_AUDIO` 级别，普通应用无法使用 `SCHED_FIFO`。实际是否生效由 M7-2 核实。
-- JNI 接口保持很小：`create(fd, plan)`、`start()`、`write(directBuffer, offset, size)`、`setRunning()`、`retireOutput(epoch)`、`markEndOfStream()`、`readStats(long[])`、`destroy()`。
+- JNI 接口保持很小：`create(fd, plan)`、`start()`、`write(epoch, directBuffer, offset, size)`、`setRunning(epoch, running)`、`retireOutput()`（返回下一个输出的 epoch）、`markEndOfStream(epoch)`、`readStats(long[])`、`destroy()`。`readStats()` 同时给出计数所属的 epoch 和最新的 epoch，计数重置期间 epoch 为 -1。
 
 ### 输出退休与销毁
 
 - **输出退休。** Media3 通过 `release()` 结束一个输出，不调用 `AudioOutput.flush()`。`release()` 立即返回：旧写入口失效，开始新的 epoch，旧数据不再提交。native 取消并回收全部在途 URB、清空环形缓冲后确认。
 - **新输出等待确认。** 确认之前，新输出的 `write()` 返回 `false`，格式重配和首个媒体包都排在确认之后。这一约束由会话保证，不依赖 Media3 等待。超过上限（默认 1 秒）仍未确认时失败关闭。
-- **切换生效点。** 确认点就是切换生效点。取消之前已经送出的数据无法撤回，不作这样的声明。
+- **切换生效点。** 确认点就是切换生效点。取消之前已经送出的数据无法撤回，不作这样的声明：在途队列的容量（全速下 3 × 32 ms）只说明最多还有多少旧数据在路上，不能据此承诺旧声音立刻消失（D14）。
+- **seek 立即取消（D14）。** 用户拖到新位置后立即停止提交旧音频，取消并回收在途 URB，不补静音过渡；JBL Flip 7 上是否有咔声留给真机试听。自然播到下一首且 DAC 的输出配置不变时，沿用现有输出，上一首的尾音照常播完。
 - **流结束与 seek。** 正常流结束时 Sink 先等待 `hasPendingData()` 为 `false` 再释放，此时已没有媒体帧；seek 时 `release()` 丢弃尚未送出的部分。两者使用同一协议。
 - **`DISCARDURB` 之后仍须回收。** 被取消的 URB 仍会进入回收路径，停止线程不等于 URB 结构和缓冲区已经可以释放。native 确认静止的条件是所有在途 URB 都已回收。
 - **句柄生命周期。** 一把小锁只保护关闭标记、句柄摘除和短 JNI 调用（`write()`、`readStats()`、`setRunning()`、`retireOutput()`），这些调用看到关闭标记后立即返回。取消、回收和销毁的等待都在锁外的 `usb-control` 线程上进行，因此播放线程不会因回收而阻塞。

@@ -42,19 +42,24 @@ JNIEXPORT jboolean JNICALL Java_io_github_sumirenokai_vesqen_usb_engine_UsbStrea
 }
 
 JNIEXPORT jint JNICALL Java_io_github_sumirenokai_vesqen_usb_engine_UsbStreamEngine_nativeWrite(
-    JNIEnv* env, jclass, jlong handle, jobject buffer, jint offset, jint size) {
+    JNIEnv* env, jclass, jlong handle, jlong epoch, jobject buffer, jint offset, jint size) {
     auto* start = static_cast<const uint8_t*>(env->GetDirectBufferAddress(buffer));
     const jlong capacity = env->GetDirectBufferCapacity(buffer);
     if (start == nullptr || offset < 0 || size < 0 || static_cast<jlong>(offset) + size > capacity) return -1;
-    return fromHandle(handle)->engine.write(start + offset, size);
+    return fromHandle(handle)->engine.write(epoch, start + offset, size);
 }
 
-JNIEXPORT void JNICALL Java_io_github_sumirenokai_vesqen_usb_engine_UsbStreamEngine_nativeSetRunning(JNIEnv*, jclass, jlong handle, jboolean running) {
-    fromHandle(handle)->engine.setRunning(running == JNI_TRUE);
+JNIEXPORT void JNICALL Java_io_github_sumirenokai_vesqen_usb_engine_UsbStreamEngine_nativeSetRunning(
+    JNIEnv*, jclass, jlong handle, jlong epoch, jboolean running) {
+    fromHandle(handle)->engine.setRunning(epoch, running == JNI_TRUE);
 }
 
-JNIEXPORT void JNICALL Java_io_github_sumirenokai_vesqen_usb_engine_UsbStreamEngine_nativeMarkEndOfStream(JNIEnv*, jclass, jlong handle) {
-    fromHandle(handle)->engine.markEndOfStream();
+JNIEXPORT void JNICALL Java_io_github_sumirenokai_vesqen_usb_engine_UsbStreamEngine_nativeMarkEndOfStream(JNIEnv*, jclass, jlong handle, jlong epoch) {
+    fromHandle(handle)->engine.markEndOfStream(epoch);
+}
+
+JNIEXPORT jlong JNICALL Java_io_github_sumirenokai_vesqen_usb_engine_UsbStreamEngine_nativeRetireOutput(JNIEnv*, jclass, jlong handle) {
+    return fromHandle(handle)->engine.retireOutput();
 }
 
 JNIEXPORT void JNICALL Java_io_github_sumirenokai_vesqen_usb_engine_UsbStreamEngine_nativeReadStats(JNIEnv* env, jclass, jlong handle, jlongArray out) {
