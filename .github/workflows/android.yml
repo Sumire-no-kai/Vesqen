@@ -32,6 +32,18 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      # The same versions as usb-engine/build.gradle.kts.
+      - name: Install the NDK and CMake
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;30.0.16248370" "cmake;4.1.2" > /dev/null
+
+      - name: Verify the USB stream core
+        run: |
+          # ThreadSanitizer cannot map its shadow memory at the runner's default ASLR entropy.
+          sudo sysctl -w vm.mmap_rnd_bits=28
+          cmake -S usb-engine/src/main/cpp -B build/usb-core-test -DVESQEN_SANITIZE=thread
+          cmake --build build/usb-core-test
+          ctest --test-dir build/usb-core-test --output-on-failure
+
       - name: Verify M4 evidence tools
         run: python3 -m unittest discover -s tools/tests -v
 
@@ -39,7 +51,7 @@ jobs:
       # its own, so it compiles them and runs only the license catalog test, whose input is the
       # flavor's own dependency list. Lint, both APKs and both instrumentation APKs still cover it.
       - name: Verify debug and tests
-        run: ./gradlew testGithubDebugUnitTest testPlayDebugUnitTest --tests 'io.github.sumirenokai.vesqen.licenses.ThirdPartyLicensesTest' lintDebug assembleDebug assembleDeviceTest assembleDeviceTestAndroidTest --no-daemon
+        run: ./gradlew testGithubDebugUnitTest :usb-engine:testDebugUnitTest testPlayDebugUnitTest --tests 'io.github.sumirenokai.vesqen.licenses.ThirdPartyLicensesTest' lintDebug assembleDebug assembleDeviceTest assembleDeviceTestAndroidTest --no-daemon
 
       - name: Assemble Profile
         run: ./gradlew assembleProfile --no-daemon

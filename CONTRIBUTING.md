@@ -23,10 +23,18 @@ You don't need to enable any logging. Don't attach music files, and remove perso
 
 ## Local checks
 
-Use JDK 25 and Android SDK Platform 36. Before submitting a change, run:
+Use JDK 25, Android SDK Platform 36, NDK 30.0.16248370 and CMake 4.1.2. Before submitting a change, run:
 
 ```bash
-./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+./gradlew :app:testDebugUnitTest :usb-engine:testDebugUnitTest :app:lintDebug :app:assembleDebug
+```
+
+The USB stream core also runs on the development machine. CI runs it with `-DVESQEN_SANITIZE=thread`:
+
+```bash
+cmake -S usb-engine/src/main/cpp -B build/usb-core-test
+cmake --build build/usb-core-test
+ctest --test-dir build/usb-core-test --output-on-failure
 ```
 
 On Windows, use `.\gradlew.bat`. Add unit tests for core logic and instrumentation tests for Android integration when practical. Device-dependent audio claims must name the app version, phone, ROM or build, DAC, source format and verification method.

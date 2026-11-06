@@ -1,6 +1,7 @@
 import com.android.build.api.artifact.SingleArtifact
 import io.github.sumirenokai.vesqen.build.GenerateThirdPartyLicenses
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import java.io.File
 import java.util.Properties
 
@@ -322,7 +323,10 @@ androidComponents {
         }
     }
     onVariants { variant ->
-        val runtimeArtifacts = variant.runtimeConfiguration.incoming.artifacts
+        // Vesqen's own modules carry no third-party license.
+        val runtimeArtifacts = variant.runtimeConfiguration.incoming.artifactView {
+            componentFilter { it !is ProjectComponentIdentifier }
+        }.artifacts
         val generateLicenses = tasks.register<GenerateThirdPartyLicenses>(
             "generate${variant.name.replaceFirstChar(Char::uppercaseChar)}ThirdPartyLicenses",
         ) {
@@ -411,4 +415,7 @@ dependencies {
     "deviceTestImplementation"(libs.androidx.test.core)
     "deviceTestImplementation"(libs.androidx.compose.ui.test.manifest)
     "deviceTestImplementation"(libs.androidx.compose.ui.tooling)
+    // M7-1: only the descriptor reader in src/debug uses this. No release build depends on it until M7-3.
+    debugImplementation(project(":usb-engine"))
+    "deviceTestImplementation"(project(":usb-engine"))
 }
