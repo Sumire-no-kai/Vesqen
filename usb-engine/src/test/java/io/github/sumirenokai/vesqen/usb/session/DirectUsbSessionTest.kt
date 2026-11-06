@@ -300,6 +300,18 @@ class DirectUsbSessionTest {
     }
 
     @Test
+    fun `an output of a session given back on purpose takes nothing and does not fail`() {
+        takeOver()
+        val output = checkNotNull(session.openOutput())
+
+        release()
+
+        assertEquals(0, output.write(BUFFER, 0, 4))
+        assertNull(output.failure)
+        assertNull(session.openOutput())
+    }
+
+    @Test
     fun `an older output released late leaves the newer one alone`() {
         takeOver()
         val older = checkNotNull(session.openOutput())

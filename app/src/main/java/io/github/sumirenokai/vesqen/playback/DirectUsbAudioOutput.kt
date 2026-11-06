@@ -20,8 +20,10 @@ import java.util.concurrent.CopyOnWriteArrayList
 /**
  * M7-3: the output Media3 writes to on Vesqen's own USB path. It writes under its own epoch of the
  * session's stream, so after [release] (a seek or a format change) nothing it still holds reaches the
- * DAC, and the next output's audio waits until this one's URBs are back. Every call runs on the
- * playback thread and none waits for USB. No release build uses it before M7-4.
+ * DAC, and the next output's audio waits until this one's URBs are back. When the session gives the
+ * device back on purpose, writes simply stop being taken until the player is rebuilt; only a failure
+ * fails them. Every call runs on the playback thread and none waits for USB. No release build uses it
+ * before M7-4.
  */
 @UnstableApi
 class DirectUsbAudioOutput(

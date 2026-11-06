@@ -304,7 +304,10 @@ class DirectUsbSession(
         private var released = false
 
         override fun write(buffer: ByteBuffer, offset: Int, size: Int): Int {
-            if (released || state !is State.Streaming) return -1
+            if (released) return -1
+            // A device given back on purpose (focus, a long pause) is no error: the output takes nothing
+            // until its owner rebuilds the player. A failure ends it, and [failure] says why.
+            if (state !is State.Streaming) return if (failure == null) 0 else -1
             return stream?.write(epoch, buffer, offset, size) ?: -1
         }
 

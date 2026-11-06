@@ -10,7 +10,10 @@ import java.nio.ByteBuffer
 interface UsbOutputHandle {
     val epoch: Long
 
-    /** Bytes accepted; 0 while the last output's URBs are coming back or the ring is full; -1 once this output is over. */
+    /**
+     * Bytes accepted; 0 while the last output's URBs are coming back, the ring is full, or the session gave the
+     * device back on purpose; -1 once this output was released or ended, or the session failed.
+     */
     fun write(buffer: ByteBuffer, offset: Int, size: Int): Int
 
     fun setRunning(running: Boolean)
