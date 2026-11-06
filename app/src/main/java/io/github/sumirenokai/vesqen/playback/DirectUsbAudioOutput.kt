@@ -7,6 +7,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.util.Util
 import androidx.media3.exoplayer.audio.AudioOutput
 import androidx.media3.exoplayer.audio.AudioOutputProvider
+import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceFacts
 import io.github.sumirenokai.vesqen.usb.engine.UsbMediaClock
 import io.github.sumirenokai.vesqen.usb.pcm.ExactPcmConverter
 import io.github.sumirenokai.vesqen.usb.pcm.UsbPcmEncoding
@@ -29,13 +30,15 @@ import java.util.concurrent.CopyOnWriteArrayList
 class DirectUsbAudioOutput(
     private val plan: StreamingPlan,
     encoding: UsbPcmEncoding,
+    /** The source file's bit depth, as [DirectUsbFormatGate] accepted it: the lattice every sample must lie on. */
+    sourceBits: Int,
     /** Null when the session could not give an output; the first write then fails. */
     private val handle: UsbOutputHandle?,
     private val onFailure: (DirectUsbFailure) -> Unit = {},
     private val onVolumeIgnored: (Float) -> Unit = {},
     private val nanoTime: () -> Long = System::nanoTime,
 ) : AudioOutput {
-    private val converter = ExactPcmConverter(encoding, plan.channels, plan.bitResolution, plan.subslotBytes)
+    private val converter = ExactPcmConverter(encoding, plan.channels, sourceBits, plan.bitResolution, plan.subslotBytes)
     private val clock = UsbMediaClock(plan.sampleRateHz)
     private val scratch = ByteBuffer.allocateDirect(SCRATCH_FRAMES * plan.frameBytes).also { it.limit(0) }
     private val prefillFrames = plan.sampleRateHz / PREFILL_DIVISOR
@@ -80,8 +83,12 @@ class DirectUsbAudioOutput(
             scratch.clear()
             val exact = converter.convert(buffer, scratch)
             scratch.flip()
+            if (!exact) {
+                report(DirectUsbFailure(DirectUsbFailure.Reason.PCM_NOT_EXACT, "a sample is not on the source's lattice"))
+                throw AudioOutput.WriteException(ERROR_INEXACT_PCM, false)
+            }
             // A leftover smaller than a frame could never leave the buffer.
-            if (!exact || !scratch.hasRemaining()) throw AudioOutput.WriteException(ERROR_INEXACT_PCM, false)
+            if (!scratch.hasRemaining()) throw AudioOutput.WriteException(ERROR_INEXACT_PCM, false)
         }
     }
 
@@ -186,15 +193,23 @@ class DirectUsbAudioOutput(
     }
 }
 
-/** Answers from the plan: the system has no card to ask once the device is claimed. */
+/**
+ * Answers from the plan, because the system has no card to ask once the device is claimed, and only
+ * for formats [DirectUsbFormatGate] accepts.
+ */
 @UnstableApi
-class DirectUsbAudioOutputProvider(
+internal class DirectUsbAudioOutputProvider(
     private val plan: StreamingPlan,
     /** The session's [io.github.sumirenokai.vesqen.usb.session.DirectUsbSession.openOutput]. */
     private val openOutput: () -> UsbOutputHandle?,
+    /** The library's facts about the file being configured, from its MediaItem. */
+    private val source: () -> TelemetrySourceFacts?,
     private val onFailure: (DirectUsbFailure) -> Unit = {},
     private val onVolumeIgnored: (Float) -> Unit = {},
 ) : AudioOutputProvider {
+    /** Set by [getOutputConfig], which Media3 calls just before [getAudioOutput] for the same format. */
+    private var acceptedSourceBits = 0
+
     private fun encodingOf(pcmEncoding: Int): UsbPcmEncoding? = when (pcmEncoding) {
         C.ENCODING_PCM_16BIT -> UsbPcmEncoding.INT16
         C.ENCODING_PCM_24BIT -> UsbPcmEncoding.INT24
@@ -203,26 +218,35 @@ class DirectUsbAudioOutputProvider(
         else -> null
     }
 
-    private fun matchesPlan(formatConfig: AudioOutputProvider.FormatConfig): Boolean {
+    private fun decide(formatConfig: AudioOutputProvider.FormatConfig): DirectUsbFormatGate.Decision {
         val format = formatConfig.format
-        return format.sampleRate == plan.sampleRateHz && format.channelCount == plan.channels &&
-            encodingOf(format.pcmEncoding) != null
+        if (encodingOf(format.pcmEncoding) == null) {
+            return DirectUsbFormatGate.Decision.Rejected(
+                DirectUsbFailure(DirectUsbFailure.Reason.DECODER_PRECISION_LOST, "decoded to PCM encoding ${format.pcmEncoding}"),
+            )
+        }
+        return DirectUsbFormatGate.check(source(), format, plan)
     }
 
     override fun getFormatSupport(formatConfig: AudioOutputProvider.FormatConfig): AudioOutputProvider.FormatSupport =
         AudioOutputProvider.FormatSupport.Builder()
             .setFormatSupportLevel(
-                if (matchesPlan(formatConfig)) AudioOutputProvider.FORMAT_SUPPORTED_DIRECTLY else AudioOutputProvider.FORMAT_UNSUPPORTED,
+                if (decide(formatConfig) is DirectUsbFormatGate.Decision.Accepted) {
+                    AudioOutputProvider.FORMAT_SUPPORTED_DIRECTLY
+                } else {
+                    AudioOutputProvider.FORMAT_UNSUPPORTED
+                },
             )
             .build()
 
     override fun getOutputConfig(formatConfig: AudioOutputProvider.FormatConfig): AudioOutputProvider.OutputConfig {
         val format = formatConfig.format
-        if (!matchesPlan(formatConfig)) {
-            throw AudioOutputProvider.ConfigurationException(
-                "${format.sampleRate} Hz, ${format.channelCount} channels, encoding ${format.pcmEncoding} " +
-                    "does not match the ${plan.sampleRateHz} Hz, ${plan.channels} channel plan",
-            )
+        when (val decision = decide(formatConfig)) {
+            is DirectUsbFormatGate.Decision.Rejected -> {
+                onFailure(decision.failure)
+                throw AudioOutputProvider.ConfigurationException("${decision.failure.reason}: ${decision.failure.detail}")
+            }
+            is DirectUsbFormatGate.Decision.Accepted -> acceptedSourceBits = decision.sourceBits
         }
         return AudioOutputProvider.OutputConfig.Builder()
             .setEncoding(format.pcmEncoding)
@@ -233,8 +257,10 @@ class DirectUsbAudioOutputProvider(
             .build()
     }
 
-    override fun getAudioOutput(config: AudioOutputProvider.OutputConfig): AudioOutput =
-        DirectUsbAudioOutput(plan, checkNotNull(encodingOf(config.encoding)), openOutput(), onFailure, onVolumeIgnored)
+    override fun getAudioOutput(config: AudioOutputProvider.OutputConfig): AudioOutput {
+        check(acceptedSourceBits > 0) { "No format was accepted before the output" }
+        return DirectUsbAudioOutput(plan, checkNotNull(encodingOf(config.encoding)), acceptedSourceBits, openOutput(), onFailure, onVolumeIgnored)
+    }
 
     override fun addListener(listener: AudioOutputProvider.Listener) = Unit
 

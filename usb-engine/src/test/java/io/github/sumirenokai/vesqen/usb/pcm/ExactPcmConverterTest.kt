@@ -26,7 +26,7 @@ class ExactPcmConverterTest {
     @Test
     fun `16 bits on a 16-bit wire stay as they are`() {
         val (ok, wire) = convert(
-            ExactPcmConverter(UsbPcmEncoding.INT16, 2, 16, 2),
+            ExactPcmConverter(UsbPcmEncoding.INT16, 2, sourceBits = 16, bitResolution = 16, subslotBytes = 2),
             ByteBuffer.wrap(bytes(0x34, 0x12, 0xCD, 0xAB)),
         )
         assertTrue(ok)
@@ -36,7 +36,7 @@ class ExactPcmConverterTest {
     @Test
     fun `16 bits on a 24-bit wire gain zeros below them`() {
         val (ok, wire) = convert(
-            ExactPcmConverter(UsbPcmEncoding.INT16, 2, 24, 3),
+            ExactPcmConverter(UsbPcmEncoding.INT16, 2, sourceBits = 16, bitResolution = 24, subslotBytes = 3),
             ByteBuffer.wrap(bytes(0x34, 0x12, 0xCD, 0xAB)),
         )
         assertTrue(ok)
@@ -46,7 +46,7 @@ class ExactPcmConverterTest {
     @Test
     fun `24 bits on a 24-bit wire stay as they are`() {
         val (ok, wire) = convert(
-            ExactPcmConverter(UsbPcmEncoding.INT24, 2, 24, 3),
+            ExactPcmConverter(UsbPcmEncoding.INT24, 2, sourceBits = 24, bitResolution = 24, subslotBytes = 3),
             ByteBuffer.wrap(bytes(0x56, 0x34, 0x12, 0xBA, 0xDC, 0xFE)),
         )
         assertTrue(ok)
@@ -56,7 +56,7 @@ class ExactPcmConverterTest {
     @Test
     fun `24 bits in a 32-bit subslot sit at the top`() {
         val (ok, wire) = convert(
-            ExactPcmConverter(UsbPcmEncoding.INT24, 2, 24, 4),
+            ExactPcmConverter(UsbPcmEncoding.INT24, 2, sourceBits = 24, bitResolution = 24, subslotBytes = 4),
             ByteBuffer.wrap(bytes(0x56, 0x34, 0x12, 0xBA, 0xDC, 0xFE)),
         )
         assertTrue(ok)
@@ -65,7 +65,7 @@ class ExactPcmConverterTest {
 
     @Test
     fun `32 bits holding 24 reach a 24-bit wire, and anything lower does not`() {
-        val converter = ExactPcmConverter(UsbPcmEncoding.INT32, 2, 24, 3)
+        val converter = ExactPcmConverter(UsbPcmEncoding.INT32, 2, sourceBits = 24, bitResolution = 24, subslotBytes = 3)
         val (ok, wire) = convert(converter, ByteBuffer.wrap(bytes(0x00, 0x56, 0x34, 0x12, 0x00, 0x01, 0x00, 0x00)))
         assertTrue(ok)
         assertArrayEquals(bytes(0x56, 0x34, 0x12, 0x01, 0x00, 0x00), wire)
@@ -73,8 +73,8 @@ class ExactPcmConverterTest {
     }
 
     @Test
-    fun `24 bits only reach a 16-bit wire when the low byte is empty`() {
-        val converter = ExactPcmConverter(UsbPcmEncoding.INT24, 2, 16, 2)
+    fun `a 16-bit source in 24-bit samples reaches a 16-bit wire only when the low byte is empty`() {
+        val converter = ExactPcmConverter(UsbPcmEncoding.INT24, 2, sourceBits = 16, bitResolution = 16, subslotBytes = 2)
         val (ok, wire) = convert(converter, ByteBuffer.wrap(bytes(0x00, 0x34, 0x12, 0x00, 0xCD, 0xAB)))
         assertTrue(ok)
         assertArrayEquals(bytes(0x34, 0x12, 0xCD, 0xAB), wire)
@@ -84,7 +84,7 @@ class ExactPcmConverterTest {
     @Test
     fun `float on the 16-bit lattice comes out as those integers, ends of the range included`() {
         val (ok, wire) = convert(
-            ExactPcmConverter(UsbPcmEncoding.FLOAT, 2, 16, 2),
+            ExactPcmConverter(UsbPcmEncoding.FLOAT, 2, sourceBits = 16, bitResolution = 16, subslotBytes = 2),
             floats(-1f, 32767f / 32768f, 1f / 32768f, -0f),
         )
         assertTrue(ok)
@@ -94,7 +94,7 @@ class ExactPcmConverterTest {
     @Test
     fun `float on the 24-bit lattice comes out as those integers`() {
         val (ok, wire) = convert(
-            ExactPcmConverter(UsbPcmEncoding.FLOAT, 2, 24, 3),
+            ExactPcmConverter(UsbPcmEncoding.FLOAT, 2, sourceBits = 24, bitResolution = 24, subslotBytes = 3),
             floats(-1f, 8_388_607f / 8_388_608f),
         )
         assertTrue(ok)
@@ -103,20 +103,20 @@ class ExactPcmConverterTest {
 
     @Test
     fun `float that is not on the lattice is refused`() {
-        val converter = ExactPcmConverter(UsbPcmEncoding.FLOAT, 2, 16, 2)
+        val converter = ExactPcmConverter(UsbPcmEncoding.FLOAT, 2, sourceBits = 16, bitResolution = 16, subslotBytes = 2)
         assertFalse(convert(converter, floats(1f / 65536f, 0f)).first)
     }
 
     @Test
     fun `float outside the range is refused`() {
-        val converter = ExactPcmConverter(UsbPcmEncoding.FLOAT, 2, 16, 2)
+        val converter = ExactPcmConverter(UsbPcmEncoding.FLOAT, 2, sourceBits = 16, bitResolution = 16, subslotBytes = 2)
         assertFalse("Full scale has no positive integer", convert(converter, floats(1f, 0f)).first)
         assertFalse(convert(converter, floats(-1f - 1f / 32768f, 0f)).first)
     }
 
     @Test
     fun `values that are not numbers are refused`() {
-        val converter = ExactPcmConverter(UsbPcmEncoding.FLOAT, 2, 16, 2)
+        val converter = ExactPcmConverter(UsbPcmEncoding.FLOAT, 2, sourceBits = 16, bitResolution = 16, subslotBytes = 2)
         assertFalse(convert(converter, floats(Float.NaN, 0f)).first)
         assertFalse(convert(converter, floats(Float.POSITIVE_INFINITY, 0f)).first)
         assertFalse(convert(converter, floats(Float.NEGATIVE_INFINITY, 0f)).first)
@@ -125,7 +125,7 @@ class ExactPcmConverterTest {
     @Test
     fun `only whole frames move, so a short target leaves the rest in the source`() {
         val source = ByteBuffer.wrap(ByteArray(12))
-        val (ok, wire) = convert(ExactPcmConverter(UsbPcmEncoding.INT16, 2, 16, 2), source, capacity = 7)
+        val (ok, wire) = convert(ExactPcmConverter(UsbPcmEncoding.INT16, 2, sourceBits = 16, bitResolution = 16, subslotBytes = 2), source, capacity = 7)
         assertTrue(ok)
         assertEquals(4, wire.size)
         assertEquals(4, source.position())
@@ -134,7 +134,7 @@ class ExactPcmConverterTest {
     @Test
     fun `a partial trailing frame stays in the source`() {
         val source = ByteBuffer.wrap(ByteArray(6))
-        val (ok, wire) = convert(ExactPcmConverter(UsbPcmEncoding.INT16, 2, 16, 2), source)
+        val (ok, wire) = convert(ExactPcmConverter(UsbPcmEncoding.INT16, 2, sourceBits = 16, bitResolution = 16, subslotBytes = 2), source)
         assertTrue(ok)
         assertEquals(4, wire.size)
         assertEquals(2, source.remaining())
@@ -143,12 +143,47 @@ class ExactPcmConverterTest {
     @Test
     fun `the source's own byte order does not matter`() {
         val source = ByteBuffer.wrap(bytes(0x34, 0x12, 0xCD, 0xAB)).order(ByteOrder.BIG_ENDIAN)
-        val (_, wire) = convert(ExactPcmConverter(UsbPcmEncoding.INT16, 2, 16, 2), source)
+        val (_, wire) = convert(ExactPcmConverter(UsbPcmEncoding.INT16, 2, sourceBits = 16, bitResolution = 16, subslotBytes = 2), source)
         assertArrayEquals(bytes(0x34, 0x12, 0xCD, 0xAB), wire)
     }
 
     @Test(expected = IllegalArgumentException::class)
     fun `a resolution larger than the subslot is rejected`() {
-        ExactPcmConverter(UsbPcmEncoding.INT16, 2, 24, 2)
+        ExactPcmConverter(UsbPcmEncoding.INT16, 2, sourceBits = 16, bitResolution = 24, subslotBytes = 2)
+    }
+    @Test
+    fun `float on the wire's lattice but not the source's is refused`() {
+        // 16-bit source on a 24-bit wire: half a 16-bit step is a whole 24-bit value, but not the source's.
+        val converter = ExactPcmConverter(UsbPcmEncoding.FLOAT, 2, sourceBits = 16, bitResolution = 24, subslotBytes = 3)
+        assertFalse(converter.convert(floats(0.5f / 32768f, 0f), ByteBuffer.allocate(64)))
+    }
+
+    @Test
+    fun `float on a 16-bit source's lattice reaches a 24-bit wire with zeros below`() {
+        val (ok, wire) = convert(
+            ExactPcmConverter(UsbPcmEncoding.FLOAT, 2, sourceBits = 16, bitResolution = 24, subslotBytes = 3),
+            floats(1f / 32768f, -1f),
+        )
+        assertTrue(ok)
+        assertArrayEquals(bytes(0x00, 0x01, 0x00, 0x00, 0x00, 0x80), wire)
+    }
+
+    @Test
+    fun `24-bit samples carrying a 16-bit source must leave the low byte empty even on a 24-bit wire`() {
+        val converter = ExactPcmConverter(UsbPcmEncoding.INT24, 2, sourceBits = 16, bitResolution = 24, subslotBytes = 3)
+        assertFalse(converter.convert(ByteBuffer.wrap(bytes(0x01, 0x34, 0x12, 0x00, 0xCD, 0xAB)), ByteBuffer.allocate(64)))
+        val (ok, wire) = convert(converter, ByteBuffer.wrap(bytes(0x00, 0x34, 0x12, 0x00, 0xCD, 0xAB)))
+        assertTrue(ok)
+        assertArrayEquals(bytes(0x00, 0x34, 0x12, 0x00, 0xCD, 0xAB), wire)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `a source deeper than the wire is rejected`() {
+        ExactPcmConverter(UsbPcmEncoding.FLOAT, 2, sourceBits = 24, bitResolution = 16, subslotBytes = 2)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `a source deeper than its decoded samples has lost precision`() {
+        ExactPcmConverter(UsbPcmEncoding.INT16, 2, sourceBits = 24, bitResolution = 24, subslotBytes = 3)
     }
 }

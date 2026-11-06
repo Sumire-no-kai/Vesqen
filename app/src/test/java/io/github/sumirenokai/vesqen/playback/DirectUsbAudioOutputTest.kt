@@ -1,6 +1,11 @@
 package io.github.sumirenokai.vesqen.playback
 
+import androidx.media3.common.C
+import androidx.media3.common.Format
+import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.audio.AudioOutput
+import androidx.media3.exoplayer.audio.AudioOutputProvider
+import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceFacts
 import io.github.sumirenokai.vesqen.usb.engine.UsbStreamStats
 import io.github.sumirenokai.vesqen.usb.pcm.UsbPcmEncoding
 import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
@@ -106,7 +111,7 @@ class DirectUsbAudioOutputTest {
         onFailure: (DirectUsbFailure) -> Unit = {},
         onVolumeIgnored: (Float) -> Unit = {},
         nanoTime: () -> Long = { 0 },
-    ) = DirectUsbAudioOutput(plan, encoding, handle, onFailure, onVolumeIgnored, nanoTime)
+    ) = DirectUsbAudioOutput(plan, encoding, sourceBits = 16, handle, onFailure, onVolumeIgnored, nanoTime)
 
     @Test
     fun `nothing reaches the stream until the last output's URBs are back`() {
@@ -396,20 +401,55 @@ class DirectUsbAudioOutputTest {
         assertEquals(1_000_000, output.positionUs)
     }
 
+    private val flac16 = TelemetrySourceFacts(codecMime = "audio/flac", bitDepth = 16, sampleRateHz = 48_000, channelCount = 2)
+
+    private fun formatConfig(encoding: Int = C.ENCODING_PCM_16BIT) = AudioOutputProvider.FormatConfig.Builder(
+        Format.Builder().setSampleMimeType(MimeTypes.AUDIO_RAW).setPcmEncoding(encoding).setSampleRate(48_000).setChannelCount(2).build(),
+    ).build()
+
     @Test
     fun `the provider asks the session for a new output each time`() {
         val handles = mutableListOf<UsbOutputHandle>()
-        val provider = DirectUsbAudioOutputProvider(plan, openOutput = { FakeHandle().also(handles::add) })
-        val config = androidx.media3.exoplayer.audio.AudioOutputProvider.OutputConfig.Builder()
-            .setEncoding(androidx.media3.common.C.ENCODING_PCM_16BIT)
-            .setSampleRate(48_000)
-            .setChannelMask(android.media.AudioFormat.CHANNEL_OUT_STEREO)
-            .setBufferSize(96_000)
-            .build()
+        val provider = DirectUsbAudioOutputProvider(plan, openOutput = { FakeHandle().also(handles::add) }, source = { flac16 })
+        val config = provider.getOutputConfig(formatConfig())
         provider.getAudioOutput(config).release()
         provider.getAudioOutput(config)
         assertEquals(2, handles.size)
         assertEquals(1, (handles[0] as FakeHandle).releases)
         assertEquals(0, (handles[1] as FakeHandle).releases)
+    }
+
+    @Test
+    fun `the provider refuses what the format gate refuses and says why`() {
+        val failures = mutableListOf<DirectUsbFailure>()
+        val mp3 = flac16.copy(codecMime = "audio/mpeg")
+        val provider = DirectUsbAudioOutputProvider(plan, openOutput = { FakeHandle() }, source = { mp3 }, onFailure = { failures += it })
+        assertEquals(AudioOutputProvider.FORMAT_UNSUPPORTED, provider.getFormatSupport(formatConfig()).supportLevel)
+        assertThrows(AudioOutputProvider.ConfigurationException::class.java) { provider.getOutputConfig(formatConfig()) }
+        assertEquals(listOf(Reason.SOURCE_FORMAT_UNSUPPORTED), failures.map { it.reason })
+    }
+
+    @Test
+    fun `the provider gives the output the source's depth to check against`() {
+        val handle = FakeHandle()
+        // A 24-bit setting with a 16-bit source, so the wire's depth would let the sample through.
+        val plan24 = plan.copy(alternateSetting = 2, subslotBytes = 3, bitResolution = 24, maxPacketBytes = 288)
+        val provider = DirectUsbAudioOutputProvider(plan24, openOutput = { handle }, source = { flac16 })
+        val output = provider.getAudioOutput(provider.getOutputConfig(formatConfig(C.ENCODING_PCM_FLOAT)))
+        // Half a 16-bit step: whole on a finer lattice, but not on a 16-bit source's.
+        val off = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putFloat(0.5f / 32768f).putFloat(0f)
+        off.flip()
+        val thrown = assertThrows(AudioOutput.WriteException::class.java) { output.write(off, 1, 0) }
+        assertEquals(DirectUsbAudioOutput.ERROR_INEXACT_PCM, thrown.errorCode)
+    }
+
+    @Test
+    fun `audio off the lattice is reported as not exact`() {
+        val failures = mutableListOf<DirectUsbFailure>()
+        val output = output(FakeHandle(), UsbPcmEncoding.FLOAT, onFailure = { failures += it })
+        val floats = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putFloat(1f / 65536f).putFloat(0f)
+        floats.flip()
+        assertThrows(AudioOutput.WriteException::class.java) { output.write(floats, 1, 0) }
+        assertEquals(listOf(Reason.PCM_NOT_EXACT), failures.map { it.reason })
     }
 }

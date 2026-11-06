@@ -30,6 +30,7 @@ import androidx.media3.session.MediaSession
 import io.github.sumirenokai.vesqen.playback.DirectUsbAudioOutputProvider
 import io.github.sumirenokai.vesqen.playback.GuardedRenderersFactory
 import io.github.sumirenokai.vesqen.playback.StrictPcmAudioSink
+import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceFacts
 import io.github.sumirenokai.vesqen.usb.UsbProbeBaseActivity
 import io.github.sumirenokai.vesqen.usb.engine.UsbStreamStats
 import java.io.File
@@ -199,10 +200,21 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
                 }
                 taken.await()
                 if (!claimed) return@thread report("Not playing: the takeover failed")
+                // Every generated chain track is lossless at the run's rate, channels and depth, so one
+                // set of facts serves the WAV and the FLAC; a real file is read as the library would.
+                val chainSource = TelemetrySourceFacts(
+                    codecMime = "audio/flac",
+                    sampleRateHz = plan.sampleRateHz,
+                    bitDepth = plan.bitResolution,
+                    channelCount = plan.channels,
+                )
+                val fileSource = intent.getStringExtra(EXTRA_FILE)?.takeIf { mode == MODE_FILE }?.let { ChainFileScan.sourceFactsOf(File(it)) }
+                if (mode == MODE_FILE) report("Source facts: $fileSource")
                 onMain {
                     val provider = DirectUsbAudioOutputProvider(
                         plan,
                         openOutput = session::openOutput,
+                        source = { if (mode == MODE_FILE) fileSource else chainSource },
                         onFailure = { failure -> report("Output failed: ${failure.reason} (${failure.detail})") },
                         onVolumeIgnored = { volumesIgnored.incrementAndGet() },
                     )
