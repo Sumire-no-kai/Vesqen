@@ -37,7 +37,7 @@ data class UsbStreamStats(
  * The stream outlives each output. The first output is [FIRST_EPOCH]; [retireOutput] ends it at once
  * and hands out the next, which can write nothing until the last one's URBs are back (D14).
  */
-class UsbStreamEngine private constructor(private var handle: Long) {
+class UsbStreamEngine private constructor(private var handle: Long) : UsbStream {
     /** Each failure keeps its own reason, so the own output can fail closed and say why (D5). */
     sealed interface Creation {
         data class Created(val engine: UsbStreamEngine) : Creation
@@ -59,31 +59,31 @@ class UsbStreamEngine private constructor(private var handle: Long) {
 
     private val lock = Any()
 
-    fun start(): Boolean = synchronized(lock) { handle != 0L && nativeStart(handle) }
+    override fun start(): Boolean = synchronized(lock) { handle != 0L && nativeStart(handle) }
 
     /**
      * Takes a direct buffer. Returns the bytes accepted: 0 while the ring is full or the last output's
      * URBs are still coming back, -1 for an epoch that is not the newest or a stream that has ended.
      */
-    fun write(epoch: Long, buffer: ByteBuffer, offset: Int, size: Int): Int = synchronized(lock) {
+    override fun write(epoch: Long, buffer: ByteBuffer, offset: Int, size: Int): Int = synchronized(lock) {
         if (handle == 0L) -1 else nativeWrite(handle, epoch, buffer, offset, size)
     }
 
     /** Ignored for any epoch but the newest. */
-    fun setRunning(epoch: Long, running: Boolean) = synchronized(lock) {
+    override fun setRunning(epoch: Long, running: Boolean) = synchronized(lock) {
         if (handle != 0L) nativeSetRunning(handle, epoch, running)
     }
 
-    fun markEndOfStream(epoch: Long) = synchronized(lock) {
+    override fun markEndOfStream(epoch: Long) = synchronized(lock) {
         if (handle != 0L) nativeMarkEndOfStream(handle, epoch)
     }
 
     /** Ends the current output and returns the next one's epoch, or -1 once destroyed. Never waits for URBs. */
-    fun retireOutput(): Long = synchronized(lock) {
+    override fun retireOutput(): Long = synchronized(lock) {
         if (handle == 0L) -1 else nativeRetireOutput(handle)
     }
 
-    fun readStats(): UsbStreamStats? = synchronized(lock) {
+    override fun readStats(): UsbStreamStats? = synchronized(lock) {
         if (handle == 0L) return null
         val values = LongArray(STAT_COUNT)
         nativeReadStats(handle, values)
@@ -113,7 +113,7 @@ class UsbStreamEngine private constructor(private var handle: Long) {
      * means URBs are still in the kernel: nothing has been freed, the connection has to stay open,
      * and the call can be repeated. The waiting happens outside the lock, so a writer never blocks on it.
      */
-    fun destroy(timeoutMs: Int): Boolean {
+    override fun destroy(timeoutMs: Int): Boolean {
         val current = synchronized(lock) { handle }
         if (current == 0L) return true
         if (!nativeStop(current, timeoutMs)) return false

@@ -1,4 +1,4 @@
-package io.github.sumirenokai.vesqen.usb.chain
+package io.github.sumirenokai.vesqen.playback
 
 import android.media.AudioDeviceInfo
 import androidx.media3.common.C
@@ -8,41 +8,28 @@ import androidx.media3.common.util.Util
 import androidx.media3.exoplayer.audio.AudioOutput
 import androidx.media3.exoplayer.audio.AudioOutputProvider
 import io.github.sumirenokai.vesqen.usb.engine.UsbMediaClock
-import io.github.sumirenokai.vesqen.usb.engine.UsbStreamStats
 import io.github.sumirenokai.vesqen.usb.pcm.ExactPcmConverter
 import io.github.sumirenokai.vesqen.usb.pcm.UsbPcmEncoding
 import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
+import io.github.sumirenokai.vesqen.usb.session.DirectUsbFailure
+import io.github.sumirenokai.vesqen.usb.session.UsbOutputHandle
+import io.github.sumirenokai.vesqen.usb.session.asFailure
 import java.nio.ByteBuffer
 import java.util.concurrent.CopyOnWriteArrayList
 
-/** One stream of URBs. A stream closed underneath its output stops accepting data without failing. */
-internal interface UsbOutputStream {
-    fun write(buffer: ByteBuffer, offset: Int, size: Int): Int
-    fun setRunning(running: Boolean)
-    fun markEndOfStream()
-    fun readStats(): UsbStreamStats?
-}
-
-internal interface UsbOutputStreams {
-    /**
-     * Calls back off the playback thread, after every earlier stream has been reclaimed, so old
-     * audio cannot follow new audio. Null means no stream can be opened.
-     */
-    fun open(onOpened: (UsbOutputStream?) -> Unit)
-    fun close(stream: UsbOutputStream)
-}
-
 /**
- * M7-2: the output Media3 writes to on Vesqen's own USB path. Each output has its own stream, so a
- * seek or a format change starts from an empty ring with counters at zero. Everything except the
- * callback from [UsbOutputStreams.open] runs on the playback thread.
+ * M7-3: the output Media3 writes to on Vesqen's own USB path. It writes under its own epoch of the
+ * session's stream, so after [release] (a seek or a format change) nothing it still holds reaches the
+ * DAC, and the next output's audio waits until this one's URBs are back. Every call runs on the
+ * playback thread and none waits for USB. No release build uses it before M7-4.
  */
 @UnstableApi
-internal class DirectUsbAudioOutput(
+class DirectUsbAudioOutput(
     private val plan: StreamingPlan,
     encoding: UsbPcmEncoding,
-    private val streams: UsbOutputStreams,
-    private val onFailure: (UsbStreamStats) -> Unit = {},
+    /** Null when the session could not give an output; the first write then fails. */
+    private val handle: UsbOutputHandle?,
+    private val onFailure: (DirectUsbFailure) -> Unit = {},
     private val onVolumeIgnored: (Float) -> Unit = {},
     private val nanoTime: () -> Long = System::nanoTime,
 ) : AudioOutput {
@@ -51,12 +38,8 @@ internal class DirectUsbAudioOutput(
     private val scratch = ByteBuffer.allocateDirect(SCRATCH_FRAMES * plan.frameBytes).also { it.limit(0) }
     private val prefillFrames = plan.sampleRateHz / PREFILL_DIVISOR
     private val listeners = CopyOnWriteArrayList<AudioOutput.Listener>()
-    private val lock = Any()
 
-    private var stream: UsbOutputStream? = null
-    private var openFailed = false
     private var released = false
-
     private var wantRunning = false
     private var running = false
     private var endRequested = false
@@ -64,44 +47,28 @@ internal class DirectUsbAudioOutput(
     private var acceptedFrames = 0L
     private var failureReported = false
 
-    init {
-        streams.open { opened ->
-            val unwanted = synchronized(lock) {
-                stream = opened
-                openFailed = opened == null
-                released
-            }
-            if (unwanted && opened != null) streams.close(opened)
-        }
-    }
-
     override fun play() {
         wantRunning = true
-        current()?.let(::settle)
+        handle?.let(::settle)
     }
 
     override fun pause() {
         wantRunning = false
-        current()?.let(::settle)
+        handle?.let(::settle)
     }
 
     override fun write(buffer: ByteBuffer, encodedAccessUnitCount: Int, presentationTimeUs: Long): Boolean {
-        val target = synchronized(lock) {
-            if (released) throw AudioOutput.WriteException(ERROR_RELEASED, false)
-            if (openFailed) throw AudioOutput.WriteException(ERROR_NO_STREAM, false)
-            stream
-        } ?: return false
+        if (released) throw AudioOutput.WriteException(ERROR_RELEASED, false)
+        val target = handle ?: throw AudioOutput.WriteException(ERROR_NO_STREAM, false)
+        checkFailure(target)
         settle(target)
-        target.readStats()?.let { stats ->
-            if (stats.failure != UsbStreamStats.Failure.NONE) {
-                reportFailure(stats)
-                throw AudioOutput.WriteException(ERROR_STREAM_FAILED, false)
-            }
-        }
         while (true) {
             if (scratch.hasRemaining()) {
                 val accepted = target.write(scratch, scratch.position(), scratch.remaining())
-                if (accepted < 0) throw AudioOutput.WriteException(ERROR_STREAM_ENDED, false)
+                if (accepted < 0) {
+                    checkFailure(target)
+                    throw AudioOutput.WriteException(ERROR_STREAM_ENDED, false)
+                }
                 scratch.position(scratch.position() + accepted)
                 acceptedFrames += accepted / plan.frameBytes
                 settle(target)
@@ -121,16 +88,13 @@ internal class DirectUsbAudioOutput(
 
     override fun stop() {
         endRequested = true
-        current()?.let(::settle)
+        handle?.let(::settle)
     }
 
     override fun release() {
-        val closing = synchronized(lock) {
-            if (released) return
-            released = true
-            stream
-        }
-        closing?.let(streams::close)
+        if (released) return
+        released = true
+        handle?.release()
         listeners.forEach(AudioOutput.Listener::onReleased)
     }
 
@@ -140,10 +104,12 @@ internal class DirectUsbAudioOutput(
     }
 
     override fun getPositionUs(): Long {
-        val target = current() ?: return 0
+        val target = handle ?: return 0
         settle(target)
+        target.failure?.let(::report)
+        // Null until the stream reached this output's epoch: none of its audio has gone out yet.
         val stats = target.readStats() ?: return 0
-        if (stats.failure != UsbStreamStats.Failure.NONE) reportFailure(stats)
+        stats.asFailure()?.let(::report)
         val frames = clock.positionFrames(stats.mediaFramesProcessed, stats.mediaFramesSubmitted, running, nanoTime())
         return Util.sampleCountToDurationUs(frames, plan.sampleRateHz)
     }
@@ -181,10 +147,14 @@ internal class DirectUsbAudioOutput(
 
     override fun setPreferredDevice(preferredDevice: AudioDeviceInfo?) = Unit
 
-    private fun current(): UsbOutputStream? = synchronized(lock) { stream }
+    private fun checkFailure(target: UsbOutputHandle) {
+        val failure = target.failure ?: target.readStats()?.asFailure() ?: return
+        report(failure)
+        throw AudioOutput.WriteException(ERROR_STREAM_FAILED, false)
+    }
 
     /** Running waits for a little audio in the ring, so the start is not counted as an underrun. */
-    private fun settle(target: UsbOutputStream) {
+    private fun settle(target: UsbOutputHandle) {
         if (endRequested && !endMarked) {
             target.markEndOfStream()
             endMarked = true
@@ -196,10 +166,10 @@ internal class DirectUsbAudioOutput(
         }
     }
 
-    private fun reportFailure(stats: UsbStreamStats) {
+    private fun report(failure: DirectUsbFailure) {
         if (failureReported) return
         failureReported = true
-        onFailure(stats)
+        onFailure(failure)
     }
 
     companion object {
@@ -216,10 +186,11 @@ internal class DirectUsbAudioOutput(
 
 /** Answers from the plan: the system has no card to ask once the device is claimed. */
 @UnstableApi
-internal class DirectUsbAudioOutputProvider(
+class DirectUsbAudioOutputProvider(
     private val plan: StreamingPlan,
-    private val streams: UsbOutputStreams,
-    private val onFailure: (UsbStreamStats) -> Unit = {},
+    /** The session's [io.github.sumirenokai.vesqen.usb.session.DirectUsbSession.openOutput]. */
+    private val openOutput: () -> UsbOutputHandle?,
+    private val onFailure: (DirectUsbFailure) -> Unit = {},
     private val onVolumeIgnored: (Float) -> Unit = {},
 ) : AudioOutputProvider {
     private fun encodingOf(pcmEncoding: Int): UsbPcmEncoding? = when (pcmEncoding) {
@@ -261,7 +232,7 @@ internal class DirectUsbAudioOutputProvider(
     }
 
     override fun getAudioOutput(config: AudioOutputProvider.OutputConfig): AudioOutput =
-        DirectUsbAudioOutput(plan, checkNotNull(encodingOf(config.encoding)), streams, onFailure, onVolumeIgnored)
+        DirectUsbAudioOutput(plan, checkNotNull(encodingOf(config.encoding)), openOutput(), onFailure, onVolumeIgnored)
 
     override fun addListener(listener: AudioOutputProvider.Listener) = Unit
 
