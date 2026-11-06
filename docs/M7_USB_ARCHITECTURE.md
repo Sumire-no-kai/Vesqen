@@ -132,7 +132,7 @@ Media3 1.11.0 的 `DefaultAudioSink` 会对写入帧数不足 20 ms 的 PCM 做�
 
 | 层 | 来源 |
 | --- | --- |
-| `SourceFormat` | 文件元数据 |
+| `SourceFormat` | 文件元数据：曲库经 `TelemetrySourceFacts` 放进 `MediaItem` 的编码、位深、采样率和声道 |
 | `DecodedPcmFormat` | 解码器实际输出（现有的 `onDecoderOutputFormat`，#72） |
 | `SinkInputFormat` | `AudioOutputProvider.OutputConfig` |
 | `UsbWireFormat` | 所选 alternate setting 的 subslot、位深和声道 |
@@ -141,8 +141,8 @@ Media3 1.11.0 的 `DefaultAudioSink` 会对写入帧数不足 20 ms 的 PCM 做�
 
 | 音源 | 处理 |
 | --- | --- |
-| 16 位无损 | 支持。解码输出可以是 int16 或 float。 |
-| 24 位无损 | 支持。解码输出须为 int24 或 float；int16 按 `DECODER_PRECISION_LOST` 拒绝。 |
+| 16 位无损 | 支持。解码输出可以是 int16、int24、int32 或 float，每个样本都须落在 16 位格点上。 |
+| 24 位无损 | 支持。解码输出须为 int24、int32 或 float，每个样本都须落在 24 位格点上；int16 按 `DECODER_PRECISION_LOST` 拒绝。 |
 | 20 位、32 位、浮点 WAV | 拒绝。开启 float 输出时高精度整数会被转为 float，32 位无法保持；这些格式第一版不做专门路径。 |
 | 有损格式、位深未知 | 拒绝，沿用现有规则。 |
 | encoder delay 或 padding 不为 0 | 拒绝。严格模式不裁剪样本。WAV 和 FLAC 不受影响，ALAC 文件待用真实文件确认。 |
@@ -151,10 +151,14 @@ Android 9 上的 OMX 解码器只输出 int16（现有的 `keepIntegerPcmForOmx(
 
 转换规则：
 
-- float 样本乘以 2^(N-1) 还原为 N 位整数，结果须为整数且在取值范围内，否则按 `PCM_NOT_EXACT` 失败关闭。
+- N 是源文件的位深，不是 DAC 设置的位深。float 样本乘以 2^(N-1) 还原为 N 位整数，结果须为整数且在取值范围内；更宽的整数样本在 N 位以下须全为 0。否则按 `PCM_NOT_EXACT` 失败关闭。只按 DAC 的位深检查时，16 位音源送到 24 位设置，解码器改动过的低位就会混过去（2026-11-06 修正）。
 - 这项校验是必要条件，不足以证明样本未被改动：已截断的数据和被淡入的整数样本都能通过。样本未改动由捕获测试、解码格式判断和外部验证共同支撑。
 - 整数按 UAC 规定左对齐放入 subslot，低位补零。16 位放入 24 位格式时，状态须写明"已补零"（#65）。
 - 不做重采样、抖动或截断。
+
+实现（2026-11-06）：`DirectUsbFormatGate` 在 Media3 配置输出时依次检查源信息是否齐全、编码是否无损、位深是否为 16 或 24、encoder delay 和 padding 是否为 0、解码输出的采样率和声道是否与源一致、解码精度是否不低于源，以及 DAC 设置能否原样承载，任何一项不满足就带原因拒绝，之后才打开输出。`ExactPcmConverter` 在播放中逐个样本检查源位深的格点。
+
+M7-4 要注意：Media3 会在当前曲目播完前为下一首配置输出，所以服务层提供的源信息必须对应正在配置的那一首，而不是当前播放的那一首。对应错了的后果是失败关闭，不会输出改动过的样本：把 24 位当成 16 位会让样本校验失败；反过来，16 位样本本来就落在 24 位格点上。
 - 最高 192 kHz 双声道约为每秒 38 万个样本，在 Media3 播放线程上处理没有压力。
 
 ## 路径选择

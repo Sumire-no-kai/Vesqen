@@ -2,6 +2,7 @@ package io.github.sumirenokai.vesqen.usb.chain
 
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceFacts
 import java.io.File
 import java.io.IOException
 
@@ -31,6 +32,21 @@ internal object ChainFileScan {
         }
         groups.forEach { (key, group) -> report("$key: ${group.files} files, for example ${group.examples}") }
         report("Unreadable: $unreadable")
+    }
+
+    /**
+     * What the library would know about [file], read the same way as `LocalAudioMetadataReader`: the
+     * codec, and the bit depth the container declares (null when it declares none).
+     */
+    fun sourceFactsOf(file: File): TelemetrySourceFacts? {
+        val format = audioFormatOf(file) ?: return null
+        fun positive(key: String) = if (format.containsKey(key)) format.getInteger(key).takeIf { it > 0 } else null
+        return TelemetrySourceFacts(
+            codecMime = format.getString(MediaFormat.KEY_MIME),
+            sampleRateHz = positive(MediaFormat.KEY_SAMPLE_RATE),
+            bitDepth = positive("bits-per-sample"),
+            channelCount = positive(MediaFormat.KEY_CHANNEL_COUNT),
+        )
     }
 
     private fun audioFormatOf(file: File): MediaFormat? {
