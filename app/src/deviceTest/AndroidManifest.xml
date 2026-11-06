@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- M7-2: to see whether this exemption keeps the ROM from freezing the USB path. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
     <application>
         <!-- M7-1: reads a USB audio device's descriptors, started over adb. It claims no interface
              and sends no audio. -->
@@ -8,6 +12,23 @@
             android:name="io.github.sumirenokai.vesqen.usb.UsbDescriptorDumpActivity"
             android:exported="true"
             android:label="USB descriptors" />
+        <!-- M7-2: claims a USB audio device and, only when asked for play, sends a test signal.
+             Started over adb. -->
+        <activity
+            android:name="io.github.sumirenokai.vesqen.usb.UsbStreamProbeActivity"
+            android:exported="true"
+            android:label="USB probe" />
+        <!-- M7-2: a real ExoPlayer on the own USB path, driven by a fixed script. Started over adb. -->
+        <activity
+            android:name="io.github.sumirenokai.vesqen.usb.chain.UsbChainProbeActivity"
+            android:exported="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:label="USB chain" />
+        <service
+            android:name="io.github.sumirenokai.vesqen.usb.chain.UsbChainKeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback|connectedDevice" />
         <!-- Device tests only: a documents provider whose answers the test sets (#191 D3, D13). It
              has no roots, so the system file picker lists nothing from it. -->
         <provider
