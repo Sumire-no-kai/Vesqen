@@ -27,6 +27,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
+import io.github.sumirenokai.vesqen.playback.DirectUsbAudioOutputProvider
 import io.github.sumirenokai.vesqen.playback.GuardedRenderersFactory
 import io.github.sumirenokai.vesqen.playback.StrictPcmAudioSink
 import io.github.sumirenokai.vesqen.usb.UsbProbeBaseActivity
@@ -63,7 +64,7 @@ import kotlin.math.abs
 class UsbChainProbeActivity : UsbProbeBaseActivity() {
     override val logTag = "VesqenUsbChain"
 
-    private lateinit var session: DirectUsbSession
+    private lateinit var session: ChainUsb
     private lateinit var player: ExoPlayer
     private val main = Handler(Looper.getMainLooper())
     private val volumesIgnored = AtomicInteger()
@@ -99,7 +100,7 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
             deviceGone = true
             report("Device detached: ${session.latestStats()}")
             player.stop()
-            session.giveBack()
+            session.onDetached()
         }
     }
 
@@ -138,7 +139,8 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
     private fun takeBackAfterFocus() {
         releasedForFocus = false
         player.stop()
-        session.takeOver()
+        // A session's outputs exist only while it streams, so the player prepares after the takeover.
+        if (!session.takeOverAndWait()) report("Taking the device back failed")
         player.prepare()
     }
 
@@ -173,7 +175,7 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
             }
             val (function, plan) = planned
             val volume = intent.getIntExtra(EXTRA_VOLUME, START_VOLUME)
-            session = DirectUsbSession(device, connection, function, plan, volume, ::report)
+            session = ChainUsb(device, usbManager, connection, function, plan, volume, ::report)
             val tracks = ChainTracks.write(File(filesDir, "usb-chain"), plan.bitResolution)
             try {
                 ContextCompat.registerReceiver(
@@ -200,8 +202,8 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
                 onMain {
                     val provider = DirectUsbAudioOutputProvider(
                         plan,
-                        session,
-                        onFailure = { stats -> report("Stream failed: ${stats.failure} (${stats.failureErrno})") },
+                        openOutput = session::openOutput,
+                        onFailure = { failure -> report("Output failed: ${failure.reason} (${failure.detail})") },
                         onVolumeIgnored = { volumesIgnored.incrementAndGet() },
                     )
                     player = ExoPlayer.Builder(this, GuardedRenderersFactory(this, StrictPcmAudioSink(provider)))
@@ -236,7 +238,7 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
         }
     }
 
-    /** One stream throughout: both tracks arrive as float, so the output carries over between them. */
+    /** One stream and one output throughout: both tracks arrive as float, so the output carries over between them. */
     private fun longRun(tracks: List<ChainTrack>, minutes: Int) {
         val silentTrack = if (intent.getBooleanExtra(EXTRA_SILENT_TRACK, false)) SilentSpeakerTrack(audioManager, intent.getIntExtra(EXTRA_SILENT_TRACK_LEVEL, 0), intent.getIntExtra(EXTRA_SILENT_TRACK_HZ, 1000), intent.getIntExtra(EXTRA_SILENT_TRACK_DEVICE, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER), intent.getFloatExtra(EXTRA_SILENT_TRACK_GAIN, 1f)) else null
         val mediaSession = if (intent.getBooleanExtra(EXTRA_SESSION, false)) onMain { MediaSession.Builder(this, player).build() } else null
@@ -276,7 +278,7 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
         val deliveredMs = totals.deliveredFrames / FRAMES_PER_MS
         report("Ran ${elapsed / 1000} s, delivered $deliveredMs ms")
         check("ran the whole time", minute >= minutes, "$minute of $minutes minutes")
-        check("one stream", session.streamsOpened == 1, "${session.streamsOpened} streams")
+        check("one stream", session.streamsCreated == 1, "${session.streamsCreated} streams")
         check("the frames kept up with the clock", abs(deliveredMs - elapsed) <= LONG_TOLERANCE_MS, "$deliveredMs ms in $elapsed ms")
         check("nothing lost", totals.lostFrames == 0L && totals.failedPackets == 0L, "$totals")
         check("no underruns", totals.underruns == 0L, "$totals")
@@ -334,16 +336,18 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
         onMain { player.play() }
         checkProgress("resume plays in real time", PROGRESS_MS)
 
-        // Seek: the new stream has counted nothing from the old position.
+        // Seek: the new output has counted nothing from the old position, and the stream carries on.
         checkSeek("seek forward", 15_000)
         checkSeek("seek back", 5_000)
 
-        // A format change between tracks: WAV arrives as integers and FLAC as float.
-        val streamsBeforeChange = session.streamsOpened
+        // A format change between tracks: WAV arrives as integers and FLAC as float. The DAC's
+        // configuration stays the same, so the stream does too and only the output changes (D14).
+        val outputsBeforeChange = session.outputsOpened
         onMain { player.seekTo(first.durationMs - NEAR_END_MS) }
         check("format change moves to the next track", waitFor(NEAR_END_MS + TRANSITION_TIMEOUT_MS) { index() == 1 }, "index ${index()}")
         SystemClock.sleep(SETTLE_MS)
-        check("format change opens one stream per output", session.streamsOpened == streamsBeforeChange + 2, "${session.streamsOpened - streamsBeforeChange} streams")
+        check("format change starts one output per track", session.outputsOpened == outputsBeforeChange + 2, "${session.outputsOpened - outputsBeforeChange} outputs")
+        check("format change keeps the stream", session.streamsCreated == 1, "${session.streamsCreated} streams")
         checkProgress("the next track plays in real time", PROGRESS_MS)
 
         // Changing tracks by hand.
@@ -354,13 +358,13 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
         SystemClock.sleep(SETTLE_MS)
 
         // The same format continues with no gap and no repeated frames.
-        val streamsBeforeGapless = session.streamsOpened
+        val outputsBeforeGapless = session.outputsOpened
         onMain { player.seekTo(1, second.durationMs - NEAR_END_MS) }
         check("same format moves to the next track", waitFor(NEAR_END_MS + TRANSITION_TIMEOUT_MS) { index() == 2 }, "index ${index()}")
         SystemClock.sleep(PROGRESS_MS)
         val gaplessPosition = position()
         val expected = NEAR_END_MS + gaplessPosition
-        check("same format keeps one stream", session.streamsOpened == streamsBeforeGapless + 1, "${session.streamsOpened - streamsBeforeGapless} streams")
+        check("same format keeps one output", session.outputsOpened == outputsBeforeGapless + 1, "${session.outputsOpened - outputsBeforeGapless} outputs")
         check("same format has no gap", abs(processedMs() - expected) <= TOLERANCE_MS, "frames ${processedMs()} ms, expected $expected ms")
 
         // End of stream.
@@ -428,12 +432,14 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
     }
 
     private fun checkSeek(name: String, targetMs: Long) {
-        val streams = session.streamsOpened
+        val outputs = session.outputsOpened
+        val streams = session.streamsCreated
         onMain { player.seekTo(targetMs) }
         SystemClock.sleep(PROGRESS_MS)
         val played = position() - targetMs
         check("$name reaches the target", played in 0..PROGRESS_MS + TOLERANCE_MS, "$played ms past $targetMs")
-        check("$name opens a new stream", session.streamsOpened == streams + 1, "${session.streamsOpened - streams} streams")
+        check("$name starts a new output", session.outputsOpened == outputs + 1, "${session.outputsOpened - outputs} outputs")
+        check("$name keeps the stream", session.streamsCreated == streams, "${session.streamsCreated - streams} new streams")
         check("$name leaves no old audio", abs(processedMs() - played) <= TOLERANCE_MS, "frames ${processedMs()} ms, played $played ms")
     }
 
@@ -461,7 +467,7 @@ class UsbChainProbeActivity : UsbProbeBaseActivity() {
         return condition()
     }
 
-    private fun latest(): UsbStreamStats = checkNotNull(session.latestStats()) { "No stream has opened" }
+    private fun latest(): UsbStreamStats = checkNotNull(session.latestStats()) { "No output has counters yet" }
 
     private fun processedMs() = latest().mediaFramesProcessed / FRAMES_PER_MS
 
