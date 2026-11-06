@@ -29,12 +29,12 @@
 
 Vesqen 是一款 Android 离线音乐播放器，无需注册账号即可播放手机中的本地音乐。播放时，它会记录音频从文件到耳机经过的每个环节；链路页上的每个数值都注明来源和获取方式。
 
-> **当前版本：** `1.1.1`，2026 年 11 月 1 日在 [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.1.1) 发布。Google Play 版正在封闭测试，获得 Google 批准后将上架同一版本。使用严格 USB 输出前，请先阅读[已知限制](#已知限制)。
+> **当前版本：** `1.2.0`，2026 年 11 月 4 日在 [GitHub Releases](https://github.com/Sumire-no-kai/Vesqen/releases/tag/v1.2.0) 发布。Google Play 版正在封闭测试，获得 Google 批准后将上架同一版本。使用严格 USB 输出前，请先阅读[已知限制](#已知限制)。
 
 ## 功能
 
 <p align="center">
-  <img src="docs/readme/now-zh.png" width="250" alt="正在播放：Maren Holt 的 Glass Harbor">
+  <img src="docs/readme/now-zh.png" width="250" alt="正在播放：Maren Holt 的 Glass Harbor 的歌词">
   <img src="docs/readme/chain-zh.png" width="250" alt="链路页：SYSTEM MIXED 状态和置顶指标">
   <img src="docs/readme/library-zh.png" width="250" alt="曲库：歌曲列表和字母索引">
 </p>
@@ -61,6 +61,8 @@ Vesqen 是一款 Android 离线音乐播放器，无需注册账号即可播放�
 | 严格输出已停止 | 严格输出的条件无法满足，播放已停止。 |
 
 状态仅依据证据显示，不会向更高等级提升：处于 ACTIVE 的路径不会被称为已验证，无损文件也不会被称为 bit-perfect。
+
+播放器和自研 USB 输出的工作方式，见[技术说明](docs/TECHNICAL_OVERVIEW.zh-CN.md)。
 
 ## 下载与安装
 
@@ -91,7 +93,10 @@ Vesqen 1.x 免费。曲库、播放和链路功能永久免费。严格 USB 输�
 - Android 13 及以下版本没有官方的 bit-perfect 混音接口，因此无法使用严格 USB 输出。
 - 即使手机开放了 bit-perfect 通路，目前播放大多数文件时严格 USB 输出也会停止：Vesqen 交给 Android 的是浮点音频，而 USB DAC 的 bit-perfect 格式为整数。该问题将与计划在 2.0 推出的 Vesqen 自研 USB 输出一并解决。
 - 严格 USB 模式下切换曲目时会有短暂间隔，无缝专辑也不例外。
-- 同名 `.lrc` 歌词文件仅在通过“添加音乐文件夹”加入的文件夹中读取；Vesqen 通过系统媒体库找到的歌曲不读取同名文件。
+- 系统媒体库歌曲要读取同名 `.lrc` 文件，需要 Android 10 及以上版本，并添加包含这些歌曲的文件夹。在 Android 9 上，只有通过“添加音乐文件夹”加入的歌曲才会读取。
+- 文件夹同时在系统媒体库和“添加音乐文件夹”中时，其中的歌曲会显示两次（[#267](https://github.com/Sumire-no-kai/Vesqen/issues/267)）。
+- 8 位、浮点、A-law 和 µ-law 的 AIFF 文件无法播放。
+- 在我们的 iQOO 9 测试机上，ALAC 文件无法播放，因为手机的高通解码器不接受 Vesqen 传入的配置数据。使用同款解码器的其他手机很可能也受影响。计划随 2.0 修复（[#270](https://github.com/Sumire-no-kai/Vesqen/issues/270)）。
 - 在 Android 9 上，手机和 SD 卡上路径相同的文件夹仍会合并显示为一个文件夹。
 - 蓝牙无法实现 bit-perfect。链路页可以说明 Vesqen 这一环节除开始播放、跳转或切换格式后的前 20 毫秒淡入外未改动音频，但手机仍会为蓝牙传输重新编码。
 - Media3 在开始播放、跳转或切换格式后，会对前 20 毫秒做淡入，严格 USB 输出同样如此。严格输出的修复计划随 2.0 提供。
@@ -100,7 +105,7 @@ Vesqen 1.x 免费。曲库、播放和链路功能永久免费。严格 USB 输�
 - 部分手机厂商的系统会自行暂停音乐。例如在我们的 vivo 测试机上，使用音量键将媒体音量调至 0 约三分钟后，系统暂停了 Vesqen。
 - 长时间播放和中断测试：接有线耳机播放 8 小时（Android 9）、关屏播放 4 小时（Android 15）、来电（Android 16 模拟器）、拔出有线耳机和断开蓝牙耳机（Android 15）均已通过。
 - Vesqen 不支持将数据迁移至新手机，收藏、歌单和设置会保留在原手机上。
-- 尚未在折叠屏上测试，高刷新率下的流畅度也尚未测量。TalkBack 已在 Android 16 模拟器上检查，尚未在真机上测试。
+- 尚未在折叠屏上测试，高刷新率下的流畅度也尚未测量。TalkBack 和三键导航已在 Android 16 模拟器上检查，尚未在真机上测试。
 
 每个版本的发布说明都会列出当时的限制，各版本的主要变化汇总在[更新日志](https://vesqen.sumirenokai.com/zh/changelog/)中。
 
@@ -134,6 +139,7 @@ Vesqen 1.x 免费。曲库、播放和链路功能永久免费。严格 USB 输�
 
 - 产品：[PRODUCT.md](PRODUCT.md)、[需求文档](docs/PRD.md)、[里程碑概览](docs/ROADMAP.md)
 - 设计：[DESIGN.md](DESIGN.md)、[视觉识别](docs/brand/VISUAL_IDENTITY.md)、[重设计方向](docs/redesign/README.md)
+- 技术设计：[技术说明](docs/TECHNICAL_OVERVIEW.zh-CN.md)、[USB 架构设计](docs/M7_USB_ARCHITECTURE.md)
 - 工程：[架构审查](docs/ARCHITECTURE_REVIEW.md)、[工程案例](docs/ENGINEERING_CASEBOOK.md)、[开发日志](docs/DEVELOPMENT_LOG.md)、[Media3 淡入测试报告](docs/MEDIA3_FADE_IN_STUDY.zh-CN.md)
 - 发布：[发布路线与排期](docs/LAUNCH_BACKLOG.md)、[测试版检查表](docs/M4_BETA_RELEASE.md)、[设备验收](docs/M4_DEVICE_ACCEPTANCE.md)
 

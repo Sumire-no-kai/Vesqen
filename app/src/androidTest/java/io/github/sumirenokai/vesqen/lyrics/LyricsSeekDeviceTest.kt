@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.lyrics
 
+import io.github.sumirenokai.vesqen.LibraryProjectionIdling
 import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -35,6 +36,10 @@ import org.junit.Test
  */
 class LyricsSeekDeviceTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
+    init {
+        compose.registerIdlingResource(LibraryProjectionIdling)
+    }
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
 

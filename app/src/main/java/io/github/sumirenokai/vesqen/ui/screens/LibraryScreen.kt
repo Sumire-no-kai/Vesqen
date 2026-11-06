@@ -1,11 +1,14 @@
 package io.github.sumirenokai.vesqen.ui.screens
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -97,17 +100,17 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import io.github.sumirenokai.vesqen.library.LibraryTitleIndex
 import io.github.sumirenokai.vesqen.library.libraryTitleKeys
-import io.github.sumirenokai.vesqen.library.projectLibraryTitleOrder
 import io.github.sumirenokai.vesqen.ui.components.ConfirmDestructiveDialog
 import io.github.sumirenokai.vesqen.ui.components.LibraryAlphabetIndex
 import io.github.sumirenokai.vesqen.ui.components.LibraryTrackList
+import io.github.sumirenokai.vesqen.ui.components.SheetWithoutNavigationBand
 import io.github.sumirenokai.vesqen.ui.components.rememberTwinPathsPainter
 import io.github.sumirenokai.vesqen.ui.components.hairlineBelow
 import androidx.activity.compose.BackHandler
@@ -134,12 +137,10 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
-import io.github.sumirenokai.vesqen.library.ArtistNames
 import io.github.sumirenokai.vesqen.library.ArtistSplitSettings
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.library.LibraryBrowseMode
-import io.github.sumirenokai.vesqen.library.LibraryNameOrder
 import io.github.sumirenokai.vesqen.library.LibraryCollection
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
 import io.github.sumirenokai.vesqen.library.LibraryScanState
@@ -147,9 +148,6 @@ import io.github.sumirenokai.vesqen.library.LibrarySortOrder
 import io.github.sumirenokai.vesqen.library.LibrarySource
 import io.github.sumirenokai.vesqen.library.LibrarySourceKind
 import io.github.sumirenokai.vesqen.library.UnmatchedLibraryRecord
-import io.github.sumirenokai.vesqen.library.buildLibraryCollections
-import io.github.sumirenokai.vesqen.library.sortLibraryTracks
-import io.github.sumirenokai.vesqen.library.sortLibraryCollections
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.LibraryUiState
 import io.github.sumirenokai.vesqen.ui.MusicAccess
@@ -168,7 +166,6 @@ private val LibraryHierarchyEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
 // B · Paper & Sound shelf: 124 dp covers; a dozen recent albums is enough to browse sideways.
 private val AlbumShelfCover = 124.dp
-private const val AlbumShelfSize = 12
 
 private sealed interface LibraryContentView {
     val depth: Int
@@ -245,6 +242,7 @@ fun LibraryScreen(
     loadLyrics: suspend (AudioTrack) -> TrackLyrics = { TrackLyrics.None(folderHint = false) },
     onImportLyrics: (AudioTrack) -> Unit = {},
     onRemoveLyrics: (Long) -> Unit = {},
+    projections: LibraryProjections = remember { LibraryProjections() },
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     val listStateHolder = rememberSaveableStateHolder()
@@ -271,68 +269,58 @@ fun LibraryScreen(
     var orderTarget by remember { mutableStateOf<Pair<Long?, List<AudioTrack>>?>(null) }
     var orderSaving by remember { mutableStateOf(false) }
     var orderSaveFailed by remember { mutableStateOf(false) }
+    var orderSaved by remember { mutableStateOf(false) }
     val orderScope = rememberCoroutineScope()
     val context = LocalContext.current.applicationContext
     val preferences = remember(context) { context.getSharedPreferences("library-browse", 0) }
     var alphabetEnabled by remember { mutableStateOf(preferences.getBoolean("alphabet-index", true)) }
     val sourceTracks = state.tracks
-    val titleKeys = remember(sourceTracks) { libraryTitleKeys(sourceTracks) }
-    val titleProjection by produceState<Pair<List<Pair<Long, String>>, LibraryTitleIndex>?>(null, titleKeys) {
-        value = withContext(Dispatchers.Default) { titleKeys to LibraryTitleIndex.build(sourceTracks) }
+    LaunchedEffect(projections, sourceTracks) {
+        val held = projections.title
+        projections.title = withContext(Dispatchers.Default) {
+            val keys = libraryTitleKeys(sourceTracks)
+            if (held?.keys == keys) held else LibraryTitleProjection(keys, LibraryTitleIndex.build(sourceTracks))
+        }
     }
-    val titleIndex = titleProjection?.second
-    val titleIndexIsCurrent = titleProjection?.first == titleKeys
     var showCreatePlaylist by rememberSaveable { mutableStateOf(false) }
     var playlistToEdit by remember { mutableStateOf<LibraryPlaylist?>(null) }
     val browseMode = LibraryBrowseMode.valueOf(browseModeName)
     val rootSortOrder = LibrarySortOrder.valueOf(sortOrderName)
     val favoriteSortOrder = LibrarySortOrder.valueOf(favoriteSortName)
     val sortOrder = if (favoritesOnly) favoriteSortOrder else rootSortOrder
-    val searchedTracks = remember(state.tracks, query) { filterTracks(state.tracks, query) }
-    val favoriteTracks = remember(searchedTracks) {
-        searchedTracks.filter(AudioTrack::isFavorite)
-    }
-    val rootVisibleTracks = remember(searchedTracks, rootSortOrder, titleIndex) {
-        when {
-            rootSortOrder == LibrarySortOrder.TITLE && titleIndex != null -> {
-                projectLibraryTitleOrder(titleIndex.tracks, searchedTracks)
-            }
-            rootSortOrder == LibrarySortOrder.TITLE -> searchedTracks
-            else -> sortLibraryTracks(searchedTracks, rootSortOrder)
-        }
-    }
-    val favoriteVisibleTracks = remember(favoriteTracks, favoriteSortOrder, favoriteCustomOrder, titleIndex) {
-        when {
-            favoriteCustomOrder -> favoriteTracks.sortedWith(
-                compareBy<AudioTrack> { it.favoritePosition ?: Long.MAX_VALUE }.thenBy { it.id },
-            )
-            favoriteSortOrder == LibrarySortOrder.TITLE && titleIndex != null -> {
-                projectLibraryTitleOrder(titleIndex.tracks, favoriteTracks)
-            }
-            favoriteSortOrder == LibrarySortOrder.TITLE -> favoriteTracks
-            else -> sortLibraryTracks(favoriteTracks, favoriteSortOrder)
-        }
-    }
+    val projectionInput = LibraryProjectionInput(
+        tracks = state.tracks,
+        playlists = state.playlists,
+        query = query,
+        browseMode = browseMode,
+        rootSortOrder = rootSortOrder,
+        favoriteSortOrder = favoriteSortOrder,
+        favoriteCustomOrder = favoriteCustomOrder,
+        title = projections.title,
+        artistNames = projections.artistNames(artistSplit),
+    )
+    val projection = rememberLibraryProjection(projections, projectionInput)
+    val projectionSettled = projection.input == projectionInput
+    SideEffect { libraryProjectionSettled.set(projectionSettled) }
+    DisposableEffect(Unit) { onDispose { libraryProjectionSettled.set(true) } }
+    // The list on screen may still be the last mode's or the last query's until the new one is ready.
+    val shownMode = projection.input.browseMode
+    val shownQuery = projection.input.query
+    val favoriteVisibleTracks = projection.favoriteVisibleTracks
+    val rootVisibleTracks = projection.rootVisibleTracks
     val visibleTracks = if (favoritesOnly) favoriteVisibleTracks else rootVisibleTracks
-    val filteredTracks = if (favoritesOnly) favoriteTracks else searchedTracks
-    // #168: kept for as long as the setting, so a search, a sort or a new play count regroups the
-    // Artists list without splitting every tag again.
-    val artistNames = remember(artistSplit) { ArtistNames(artistSplit) }
-    val collections = remember(browseMode, searchedTracks, state.playlists, rootSortOrder, artistNames) {
-        // Songs has no collections. The others share one name order, so each title is measured once;
-        // its ICU index is first built off the main thread by the Songs index.
-        if (browseMode == LibraryBrowseMode.SONGS) {
-            emptyList()
-        } else {
-            val names = LibraryNameOrder()
-            sortLibraryCollections(
-                buildLibraryCollections(browseMode, searchedTracks, state.playlists, names, artistNames),
-                rootSortOrder,
-                names,
-            )
+    val filteredTracks = if (favoritesOnly) projection.favoriteTracks else projection.searchedTracks
+    val collections = projection.collections
+    // The saved order reaches the list with its next lists. Until then the edited order stays, so the
+    // rows do not step back to the old order for a moment.
+    if (orderSaved && projectionSettled) {
+        SideEffect {
+            orderSaved = false
+            orderSaving = false
+            orderTarget = null
         }
     }
-    val selectedCollection = remember(collections, selectedCollectionKey) {
+    val selectedCollection = remember(projection, selectedCollectionKey) {
         collections.firstOrNull { it.key == selectedCollectionKey }
     }
     // A new split setting gives most artists a new key (#191 C3). An open artist page it removed
@@ -342,7 +330,7 @@ fun LibraryScreen(
     // every process.
     val artistSplitHash = artistSplit.hashCode()
     var keyedArtistSplitHash by rememberSaveable { mutableIntStateOf(artistSplitHash) }
-    if (keyedArtistSplitHash != artistSplitHash) {
+    if (keyedArtistSplitHash != artistSplitHash && projection.input.artistNames === projectionInput.artistNames) {
         SideEffect {
             if (selectedCollection == null) selectedCollectionKey = null
             keyedArtistSplitHash = artistSplitHash
@@ -365,13 +353,6 @@ fun LibraryScreen(
             }
         }
     }
-    val albumShelf = remember(collections, browseMode, query) {
-        if (browseMode == LibraryBrowseMode.ALBUMS && query.isBlank() && collections.size > 1) {
-            sortLibraryCollections(collections, LibrarySortOrder.RECENTLY_ADDED).take(AlbumShelfSize)
-        } else {
-            emptyList()
-        }
-    }
     // An open album tints the whole page from its cover, as Now does; every other view stays paper.
     val openAlbum = selectedCollection?.takeIf { browseMode == LibraryBrowseMode.ALBUMS && !favoritesOnly }
     val pageBackground = rememberAlbumBackground(
@@ -384,6 +365,9 @@ fun LibraryScreen(
     val isPlaylist = selectedCollection?.playlistId != null
     val contentView = selectedCollection?.let { LibraryContentView.Collection(it.key) }
         ?: if (isFavoriteList) LibraryContentView.Favorites else LibraryContentView.Root
+
+    val folderSources = state.sources.filter { it.kind == LibrarySourceKind.FOLDER }
+    var showSourceManager by rememberSaveable { mutableStateOf(false) }
 
     Column(modifier = modifier.fillMaxSize()) {
         AnimatedContent(
@@ -444,6 +428,7 @@ fun LibraryScreen(
                     }
                 },
                 onAddLibraryFolder = onAddLibraryFolder,
+                onManageSources = if (folderSources.isEmpty()) null else ({ showSourceManager = true }),
                 onRescan = onRescan,
                 sourceActionsEnabled = !state.isLoading && orderTarget == null,
             )
@@ -453,8 +438,8 @@ fun LibraryScreen(
         LaunchedEffect(state.unmatchedRecords.isEmpty()) {
             if (state.unmatchedRecords.isEmpty()) showUnmatchedRecords = false
         }
-        // #191 C2: the access notice and the sources card take at most half the height under the
-        // title and scroll inside it. At 320 x 533 dp and 2.0x text the card with the unmatched-records
+        // #191 C2: the access notice and, further down, the sources card take at most half the height
+        // left and scroll inside it. At 320 x 533 dp and 2.0x text the card with the unmatched-records
         // line otherwise left the songs no height. A scanning card can reach the limit at normal text
         // on a small phone too, so the two short notices below stay outside, always in view (R3-C2).
         Column(
@@ -472,28 +457,27 @@ fun LibraryScreen(
                     onOpenAppSettings = onOpenAppSettings,
                 )
             }
-            if (
-                state.sources.any { it.kind == LibrarySourceKind.FOLDER } ||
-                state.scanProgress != null ||
-                state.sources.any { it.scanState == LibraryScanState.FAILED } ||
-                state.promptsUnmatchedRecords
-            ) {
-                LibrarySourcesCard(
-                    state = state,
-                    onAddLibraryFolder = onAddLibraryFolder,
-                    onRemoveLibraryFolder = onRemoveLibraryFolder,
-                    onPauseLibraryScan = onPauseLibraryScan,
-                    onResumeLibraryScan = onResumeLibraryScan,
-                    onReviewUnmatchedRecords = { showUnmatchedRecords = true },
-                    onDismissUnmatchedRecords = onDismissUnmatchedRecords,
-                )
-            }
         }
         if (!state.notificationsAllowed && playback.hasActiveTrack) {
             NotificationNotice(onOpenNotificationSettings = onOpenNotificationSettings)
         }
         if (state.catalogMutationFailed) {
             LibraryMutationFailureNotice()
+        }
+        if (showSourceManager) {
+            LibrarySourcesSheet(
+                folders = folderSources,
+                scanInProgress = state.isLoading,
+                onDismiss = { showSourceManager = false },
+                onAddLibraryFolder = {
+                    showSourceManager = false
+                    onAddLibraryFolder()
+                },
+                onRemove = { sourceId ->
+                    onRemoveLibraryFolder(sourceId)
+                    if (folderSources.size == 1) showSourceManager = false
+                },
+            )
         }
         // Kept outside the card: the sheet lists every record, and it stays open while the user works
         // through them, even once the card has nothing else to show.
@@ -531,7 +515,9 @@ fun LibraryScreen(
                             orderSaveFailed = false
                             orderTarget = selectedCollection?.let { it.playlistId to it.tracks } ?: (null to visibleTracks)
                         },
-                        enabled = query.isBlank() && (!favoritesOnly || favoriteCustomOrder),
+                        // The editor starts from the rows on screen, and saving it replaces the stored order, so
+                        // those rows must already be the ones asked for.
+                        enabled = projectionSettled && query.isBlank() && (!favoritesOnly || favoriteCustomOrder),
                         modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.library.edit-order"),
                     ) { Text(stringResource(R.string.edit_track_order)) }
                 } else {
@@ -543,10 +529,11 @@ fun LibraryScreen(
                             orderSaving = true
                             orderSaveFailed = false
                             orderScope.launch {
+                                var saved = false
                                 try {
-                                    if (onSaveTrackOrder(target.first, target.second.map(AudioTrack::id))) orderTarget = null
-                                    else orderSaveFailed = true
-                                } finally { orderSaving = false }
+                                    saved = onSaveTrackOrder(target.first, target.second.map(AudioTrack::id))
+                                    if (saved) orderSaved = true else orderSaveFailed = true
+                                } finally { if (!saved) orderSaving = false }
                             }
                         },
                         enabled = !orderSaving,
@@ -558,6 +545,40 @@ fun LibraryScreen(
                 stringResource(R.string.track_order_save_failed), Modifier.padding(horizontal = 16.dp),
                 color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
             )
+        }
+        // Only for something that needs the listener, and managing folders otherwise lives in the menu.
+        // It is about the whole library, so it follows the tabs on the root lists: a folder, an album
+        // or favorites starts with its own back row instead.
+        val cardMillis = if (appliedMotionPolicy.reduceMotion) appliedMotionPolicy.stateChangeMillis else 180
+        AnimatedVisibility(
+            visible = contentView == LibraryContentView.Root && (
+                state.scanProgress != null ||
+                    state.sources.any { it.scanState == LibraryScanState.FAILED } ||
+                    folderSources.any { !it.isAvailable } ||
+                    state.promptsUnmatchedRecords
+                ),
+            modifier = Modifier.atMostShareOfRemainingHeight(HeaderNoticesShare),
+            enter = if (appliedMotionPolicy.reduceMotion) {
+                fadeIn(tween(cardMillis))
+            } else {
+                fadeIn(tween(cardMillis)) + expandVertically(tween(cardMillis, easing = LibraryHierarchyEasing))
+            },
+            exit = if (appliedMotionPolicy.reduceMotion) {
+                fadeOut(tween(cardMillis))
+            } else {
+                fadeOut(tween(cardMillis)) + shrinkVertically(tween(cardMillis, easing = LibraryHierarchyEasing))
+            },
+        ) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                LibrarySourcesCard(
+                    state = state,
+                    onManageSources = { showSourceManager = true },
+                    onPauseLibraryScan = onPauseLibraryScan,
+                    onResumeLibraryScan = onResumeLibraryScan,
+                    onReviewUnmatchedRecords = { showUnmatchedRecords = true },
+                    onDismissUnmatchedRecords = onDismissUnmatchedRecords,
+                )
+            }
         }
         Box(modifier = Modifier.weight(1f)) {
             AnimatedContent(
@@ -623,6 +644,9 @@ fun LibraryScreen(
                         modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
                     )
 
+                    // Tracks have arrived, and their first lists are still being worked out.
+                    projection.input.tracks.isEmpty() -> LibraryLoading()
+
                     browseMode == LibraryBrowseMode.PLAYLISTS && state.playlists.isEmpty() -> VesqenEmptyState(
                         title = stringResource(R.string.no_playlists_title),
                         body = stringResource(R.string.no_playlists_body),
@@ -631,7 +655,7 @@ fun LibraryScreen(
                         modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
                     )
 
-                    activeFavorites && query.isBlank() && activeVisibleTracks.isEmpty() -> VesqenEmptyState(
+                    activeFavorites && shownQuery.isBlank() && activeVisibleTracks.isEmpty() -> VesqenEmptyState(
                         title = stringResource(R.string.library_favorites),
                         body = stringResource(R.string.library_favorites_empty),
                         actionLabel = stringResource(R.string.show_all_music),
@@ -640,7 +664,7 @@ fun LibraryScreen(
                         modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
                     )
 
-                    activeVisibleTracks.isEmpty() && browseMode != LibraryBrowseMode.PLAYLISTS -> VesqenEmptyState(
+                    activeVisibleTracks.isEmpty() && shownMode != LibraryBrowseMode.PLAYLISTS -> VesqenEmptyState(
                         title = stringResource(R.string.no_search_results),
                         body = stringResource(R.string.no_search_results_body),
                         actionLabel = stringResource(R.string.clear_search),
@@ -649,7 +673,7 @@ fun LibraryScreen(
                         modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
                     )
 
-                    activeCollection != null && browseMode == LibraryBrowseMode.ALBUMS -> {
+                    activeCollection != null && shownMode == LibraryBrowseMode.ALBUMS -> {
                         listStateHolder.SaveableStateProvider(key = "collection:${activeCollection.key}") {
                             AlbumPage(
                                 album = activeCollection,
@@ -692,7 +716,7 @@ fun LibraryScreen(
                         )
                     }
 
-                    browseMode == LibraryBrowseMode.SONGS -> listStateHolder.SaveableStateProvider(
+                    activeFavorites || shownMode == LibraryBrowseMode.SONGS -> listStateHolder.SaveableStateProvider(
                         key = if (activeFavorites) "tracks:favorites" else "tracks:root",
                     ) {
                         LibraryTrackList(
@@ -702,10 +726,11 @@ fun LibraryScreen(
                             onReorder = { tracks -> orderTarget = orderTarget?.copy(second = tracks) },
                             currentTrackId = playback.trackId,
                             isPlaying = playback.isPlaying,
-                            alphabetSections = if (
-                                titleIndexIsCurrent && alphabetEnabled && !activeFavorites &&
-                                query.isBlank() && rootSortOrder == LibrarySortOrder.TITLE
-                            ) titleIndex?.sections.orEmpty() else emptyMap(),
+                            alphabetSections = if (alphabetEnabled && !activeFavorites) {
+                                projection.alphabetSections
+                            } else {
+                                emptyMap()
+                            },
                             onTrackSelected = { track ->
                                 onPlayQueue(activeVisibleTracks, activeVisibleTracks.indexOf(track))
                             },
@@ -713,13 +738,13 @@ fun LibraryScreen(
                         )
                     }
 
-                    else -> listStateHolder.SaveableStateProvider(key = "collections:${browseMode.name}") {
+                    else -> listStateHolder.SaveableStateProvider(key = "collections:${shownMode.name}") {
                         CollectionList(
-                            mode = browseMode,
+                            mode = shownMode,
                             collections = collections,
-                            shelf = albumShelf,
+                            shelf = projection.albumShelf,
                             onCollectionSelected = { selectedCollectionKey = it.key },
-                            onCreatePlaylist = if (browseMode == LibraryBrowseMode.PLAYLISTS) {
+                            onCreatePlaylist = if (shownMode == LibraryBrowseMode.PLAYLISTS) {
                                 { showCreatePlaylist = true }
                             } else {
                                 null
@@ -1539,6 +1564,7 @@ private fun LibraryHeader(
     onOpenFavorites: () -> Unit,
     onBack: () -> Unit,
     onAddLibraryFolder: () -> Unit,
+    onManageSources: (() -> Unit)?,
     onRescan: () -> Unit,
     sourceActionsEnabled: Boolean,
 ) {
@@ -1603,6 +1629,14 @@ private fun LibraryHeader(
                             onClick = { showLibraryMenu = false; onAddLibraryFolder() },
                             modifier = Modifier.testTag("vesqen.library.add-folder"),
                         )
+                        onManageSources?.let { manage ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.manage_music_sources)) },
+                                leadingIcon = { Icon(Icons.Filled.FolderOpen, null) },
+                                onClick = { showLibraryMenu = false; manage() },
+                                modifier = Modifier.testTag("vesqen.library.manage-sources"),
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.rescan_library)) },
                             leadingIcon = { Icon(Icons.Filled.Refresh, null) },
@@ -1726,14 +1760,12 @@ private const val HeaderNoticesShare = 0.5f
 @Composable
 private fun LibrarySourcesCard(
     state: LibraryUiState,
-    onAddLibraryFolder: () -> Unit,
-    onRemoveLibraryFolder: (String) -> Unit,
+    onManageSources: () -> Unit,
     onPauseLibraryScan: () -> Unit,
     onResumeLibraryScan: () -> Unit,
     onReviewUnmatchedRecords: () -> Unit,
     onDismissUnmatchedRecords: () -> Unit,
 ) {
-    var showSourceManager by rememberSaveable { mutableStateOf(false) }
     val folders = state.sources.filter { it.kind == LibrarySourceKind.FOLDER }
     Surface(
         modifier = Modifier
@@ -1743,53 +1775,9 @@ private fun LibrarySourcesCard(
         shape = androidx.compose.foundation.shape.RoundedCornerShape(VesqenRadii.control),
         color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
-        Column(modifier = Modifier.padding(VesqenSpacing.md)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.FolderOpen,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(Modifier.width(VesqenSpacing.xs))
-                Text(
-                    text = stringResource(R.string.music_sources),
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(
-                    onClick = if (folders.isEmpty()) {
-                        onAddLibraryFolder
-                    } else {
-                        { showSourceManager = true }
-                    },
-                    enabled = !state.isLoading,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag(
-                        if (folders.isEmpty()) {
-                            "vesqen.library.sources.add"
-                        } else {
-                            "vesqen.library.sources.manage"
-                        },
-                    ),
-                ) {
-                    Text(
-                        stringResource(
-                            if (folders.isEmpty()) R.string.add_music_folder else R.string.manage_music_sources,
-                        ),
-                    )
-                }
-            }
-            Text(
-                text = pluralStringResource(
-                    R.plurals.imported_folders_count,
-                    folders.size,
-                    folders.size,
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        Column(modifier = Modifier.padding(start = VesqenSpacing.sm, end = VesqenSpacing.xxs)) {
             val progress = state.scanProgress
             if (progress != null) {
-                Spacer(Modifier.height(VesqenSpacing.xs))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = if (state.isScanPaused) {
@@ -1827,19 +1815,35 @@ private fun LibrarySourcesCard(
                     }
                 }
             }
-            if (state.sources.any { it.scanState == LibraryScanState.FAILED }) {
+            val scanFailed = state.sources.any { it.scanState == LibraryScanState.FAILED }
+            val accessLost = folders.any { !it.isAvailable }
+            if (scanFailed) {
                 Text(
                     text = stringResource(R.string.library_source_scan_failed),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(vertical = VesqenSpacing.xs),
                 )
             }
-            if (folders.any { !it.isAvailable }) {
+            if (accessLost) {
                 Text(
                     text = stringResource(R.string.library_folder_access_needs_renewal),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(vertical = VesqenSpacing.xs),
                 )
+            }
+            if ((scanFailed || accessLost) && folders.isNotEmpty()) {
+                TextButton(
+                    onClick = onManageSources,
+                    enabled = !state.isLoading,
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .heightIn(min = 48.dp)
+                        .testTag("vesqen.library.sources.manage"),
+                ) {
+                    Text(stringResource(R.string.manage_music_sources))
+                }
             }
             if (state.promptsUnmatchedRecords) {
                 Spacer(Modifier.height(VesqenSpacing.xs))
@@ -1868,21 +1872,6 @@ private fun LibrarySourcesCard(
                 }
             }
         }
-    }
-    if (showSourceManager) {
-        LibrarySourcesSheet(
-            folders = folders,
-            scanInProgress = state.isLoading,
-            onDismiss = { showSourceManager = false },
-            onAddLibraryFolder = {
-                showSourceManager = false
-                onAddLibraryFolder()
-            },
-            onRemove = { sourceId ->
-                onRemoveLibraryFolder(sourceId)
-                if (folders.size == 1) showSourceManager = false
-            },
-        )
     }
 }
 
@@ -1913,6 +1902,7 @@ private fun LibrarySourcesSheet(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag("vesqen.library.source-manager"),
     ) {
+        SheetWithoutNavigationBand()
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1995,6 +1985,7 @@ private fun UnmatchedRecordsSheet(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag("vesqen.library.unmatched-records"),
     ) {
+        SheetWithoutNavigationBand()
         UnmatchedRecordsList(records, playlists, onAssign, onDiscard = { pendingDiscard = it })
     }
 }

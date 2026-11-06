@@ -52,11 +52,12 @@ class BaselineProfileGenerator {
         click(ALBUM_ROW)
         click("vesqen.library.album.play")
         click("vesqen.mini-player.open-now")
-        // #169: the lyrics in the cover's place, then the cover again, so later runs start from it.
-        // The first demo track embeds synced lyrics (tools/demo_library); any other shows the message.
-        click("vesqen.now.lyrics-toggle")
+        // #209: a tap on the cover shows the lyrics, and a tap on them brings the cover back, so later
+        // runs start from it. The first demo track embeds synced lyrics (tools/demo_library); any other
+        // shows the message.
+        click("vesqen.now.artwork-stage")
         waitFor(By.res(LYRICS_SHOWN), LYRICS_SHOWN.pattern(), UI_TIMEOUT_MS)
-        click("vesqen.now.lyrics-toggle")
+        click("vesqen.now.lyrics")
         waitFor("vesqen.now.artwork-stage")
         click("vesqen.now.notes-toggle")
         click("vesqen.now.open-chain")

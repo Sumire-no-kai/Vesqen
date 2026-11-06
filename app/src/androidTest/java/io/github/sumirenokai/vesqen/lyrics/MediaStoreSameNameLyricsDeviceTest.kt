@@ -67,6 +67,19 @@ class MediaStoreSameNameLyricsDeviceTest {
     private suspend fun source() = (resolver.load(track) as TrackLyrics.Found).source
 
     @Test
+    fun anImportNeedsNoLookupOfTheFolder() = runBlocking {
+        var lookups = 0
+        covering = {
+            lookups++
+            error("Not asked for")
+        }
+        store.import(track.id, "[00:01.00]Imported".toByteArray(), store.generation())
+
+        assertEquals(LyricsSource.Imported, source())
+        assertEquals(0, lookups)
+    }
+
+    @Test
     fun aCoveredTrackReadsTheFileBesideIt() = runBlocking {
         FakeDocumentsProvider.files["music/song.lrc"] = "[00:01.00]Beside the song".toByteArray()
 

@@ -614,7 +614,7 @@ private fun NowPortraitPage(
                             NowCover(
                                 presentation = presentation,
                                 size = artworkSize,
-                                isPlaying = snapshot.isPlaying,
+                                showsPauseAction = snapshot.showsPauseAction,
                                 motionPolicy = motionPolicy,
                                 onClick = actions.onToggleLyrics,
                             )
@@ -705,7 +705,7 @@ private fun NowLandscapePage(
                 NowCover(
                     presentation = presentation,
                     size = minOf(maxWidth, maxHeight, COVER_MAX_DP.dp),
-                    isPlaying = snapshot.isPlaying,
+                    showsPauseAction = snapshot.showsPauseAction,
                     motionPolicy = motionPolicy,
                     onClick = actions.onToggleLyrics,
                 )
@@ -868,16 +868,17 @@ private fun Modifier.stageTap(onTap: () -> Unit): Modifier = pointerInput(onTap)
 private fun NowCover(
     presentation: NowTrackPresentation,
     size: Dp,
-    isPlaying: Boolean,
+    showsPauseAction: Boolean,
     motionPolicy: VesqenMotionPolicy,
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(VesqenRadii.album)
     val shadowColor = LocalVesqenColors.current.shadow
     // The cover settles when playback pauses and returns to full presence on play: a one-shot
-    // state change, not a decorative loop.
+    // state change, not a decorative loop. It follows the play button, since the player also stops
+    // playing for a moment after every seek, which is no pause.
     val playScale by animateFloatAsState(
-        targetValue = if (motionPolicy.reduceMotion || isPlaying) 1f else .95f,
+        targetValue = if (motionPolicy.reduceMotion || showsPauseAction) 1f else .95f,
         animationSpec = tween(if (motionPolicy.reduceMotion) 0 else 220, easing = PaperEasing),
         label = "vesqen.now.artwork-play-state",
     )

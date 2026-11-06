@@ -386,7 +386,7 @@ private fun collectMp4Lyrics(
  * Reads one Ogg packet at a time across pages, so a comment packet that also holds a large picture
  * never has to fit in memory. Reads return -1 at the end of the current packet.
  */
-private class OggPacketInputStream(private val delegate: InputStream) : InputStream() {
+internal class OggPacketInputStream(private val delegate: InputStream) : InputStream() {
     private var lacing = ByteArray(0)
     private var nextLace = 0
     private var segmentRemaining = 0

@@ -263,6 +263,13 @@ VERIFICATION_SCHEMA = object_schema({"verdicts": {"type": "array", "items": obje
 })}})
 
 
+def anthropic_stop(result):
+    """Why a response ended: only plain identifiers, as provider text can repeat prompt data."""
+    details = result.get("stop_details")
+    parts = [result.get("stop_reason"), details.get("category") if isinstance(details, dict) else None]
+    return "/".join(part for part in parts if isinstance(part, str) and re.fullmatch(r"[a-z_]{1,40}", part)) or "unknown"
+
+
 class Model:
     def __init__(self, provider, model, env, system=None):
         if provider not in {"anthropic", "openai"} or not model:
@@ -297,14 +304,15 @@ class Model:
                 raise ReviewError("OpenAI declined the review; no verdict produced")
             text = "".join(block["text"] for block in blocks if block.get("type") == "output_text")
         else:
-            payload = {"model": self.model, "system": self.system, "max_tokens": 8192,
+            # Thinking shares this limit, and current Claude models think unless told not to.
+            payload = {"model": self.model, "system": self.system, "max_tokens": 16000,
                        "messages": [{"role": "user", "content": prompt}],
                        "output_config": {"format": {"type": "json_schema", "schema": schema}}}
             result = request_json(self.base + "/messages",
                                   {"x-api-key": self.key, "anthropic-version": "2023-06-01"},
                                   payload, label="Anthropic")
             if result.get("stop_reason") != "end_turn":
-                raise ReviewError("Anthropic review did not complete; no verdict produced")
+                raise ReviewError(f"Anthropic review did not complete ({anthropic_stop(result)}); no verdict produced")
             text = "".join(block["text"] for block in result.get("content", []) if block.get("type") == "text")
         try:
             return json.loads(text)

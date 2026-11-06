@@ -3,7 +3,13 @@ package io.github.sumirenokai.vesqen.library
 import java.io.InputStream
 
 /** Container facts, never the PCM format selected by a platform decoder. */
-internal data class SourceAudioHeader(val sampleRate: Int, val channels: Int, val bitDepth: Int)
+internal data class SourceAudioHeader(
+    val sampleRate: Int,
+    val channels: Int,
+    val bitDepth: Int,
+    /** Only where the header states it and Android may not read the file itself (AIFF on Android 9). */
+    val durationMs: Long? = null,
+)
 
 /** Fixed-size reads and a 1 MiB traversal limit; no audio or artwork payload is allocated. */
 internal fun readSourceAudioHeader(input: InputStream): SourceAudioHeader? {
@@ -21,6 +27,17 @@ internal fun readSourceAudioHeader(input: InputStream): SourceAudioHeader? {
     fun ByteArray.u32(at: Int): Long = (0..3).fold(0L) { n, i -> n or ((this[at + i].toLong() and 255) shl (8 * i)) }
     fun facts(rate: Int, channels: Int, bits: Int): SourceAudioHeader? =
         if (rate in 1..768_000 && channels in 1..32 && bits in 4..32) SourceAudioHeader(rate, channels, bits) else null
+    fun skip(size: Long): Boolean {
+        var left = size
+        while (left > 0) {
+            val count = input.skip(left)
+            if (count > 0) left -= count else {
+                if (input.read() < 0) return false
+                left--
+            }
+        }
+        return true
+    }
     val signature = exact(4)?.toString(Charsets.US_ASCII) ?: return null
     if (signature == "fLaC") {
         val block = exact(4) ?: return null
@@ -28,6 +45,31 @@ internal fun readSourceAudioHeader(input: InputStream): SourceAudioHeader? {
         val info = exact(34) ?: return null
         val packed = (10..17).fold(0L) { n, i -> (n shl 8) or (info[i].toLong() and 255) }
         return facts((packed ushr 44).toInt(), ((packed ushr 41) and 7).toInt() + 1, ((packed ushr 36) and 31).toInt() + 1)
+    }
+    if (signature == "FORM") {
+        val form = exact(8) ?: return null
+        val type = String(form, 4, 4, Charsets.US_ASCII)
+        if (type != "AIFF" && type != "AIFC") return null
+        var remaining = 1_048_576L
+        while (remaining >= 8) {
+            val chunk = exact(8) ?: return null
+            remaining -= 8
+            val size = (4..7).fold(0L) { n, i -> (n shl 8) or (chunk[i].toLong() and 255) }
+            when (String(chunk, 0, 4, Charsets.US_ASCII)) {
+                "COMM" -> {
+                    if (size < AIFF_COMM_MIN_SIZE) return null
+                    val pcm = parseAiffComm(exact(minOf(size, AIFF_COMM_READ_SIZE.toLong()).toInt()) ?: return null, type == "AIFC")
+                        ?: return null
+                    return facts(pcm.sampleRate, pcm.channels, pcm.bitDepth)
+                        ?.copy(durationMs = (pcm.frames * 1_000 / pcm.sampleRate).takeIf { it > 0 })
+                }
+                "SSND" -> return null
+            }
+            val next = size + size % 2
+            if (next > remaining || !skip(next)) return null
+            remaining -= next
+        }
+        return null
     }
     if (signature != "RIFF") return null
     val riff = exact(8) ?: return null
@@ -58,16 +100,9 @@ internal fun readSourceAudioHeader(input: InputStream): SourceAudioHeader? {
             }
             "data" -> return null
         }
-        var skip = size + size % 2
-        if (skip > remaining) return null
-        remaining -= skip
-        while (skip > 0) {
-            val count = input.skip(skip)
-            if (count > 0) skip -= count else {
-                if (input.read() < 0) return null
-                skip--
-            }
-        }
+        val next = size + size % 2
+        if (next > remaining || !skip(next)) return null
+        remaining -= next
     }
     return null
 }
