@@ -111,6 +111,8 @@ android {
     }
     // Instrumentation runs under a separate Android UID and private data directory.
     testBuildType = "deviceTest"
+    // The same NDK as :usb-engine, so packaging can strip its native library (D5).
+    ndkVersion = "30.0.16248370"
     sourceSets.getByName("deviceTest").kotlin.directories.add("src/debug/java")
 
     compileOptions {
@@ -415,7 +417,6 @@ dependencies {
     "deviceTestImplementation"(libs.androidx.test.core)
     "deviceTestImplementation"(libs.androidx.compose.ui.test.manifest)
     "deviceTestImplementation"(libs.androidx.compose.ui.tooling)
-    // M7-1: only the descriptor reader in src/debug uses this. No release build depends on it until M7-3.
-    debugImplementation(project(":usb-engine"))
-    "deviceTestImplementation"(project(":usb-engine"))
+    // M7-3: every build ships the USB engine (D5). Only the own output loads its native library.
+    implementation(project(":usb-engine"))
 }

@@ -100,8 +100,10 @@ internal class DirectUsbSession(
     override fun close(stream: UsbOutputStream) = control.execute { closeNow(stream as EngineStream) }
 
     private fun openEngine(): EngineStream? {
-        val engine = UsbStreamEngine.create(connection.fileDescriptor, plan) ?: return null.also {
-            report("The native engine is not available")
+        val engine = when (val creation = UsbStreamEngine.create(connection.fileDescriptor, plan)) {
+            is UsbStreamEngine.Creation.Created -> creation.engine
+            is UsbStreamEngine.Creation.LibraryUnavailable -> return null.also { report("The native engine is not available: ${creation.reason}") }
+            UsbStreamEngine.Creation.PlanRefused -> return null.also { report("The native engine refused the plan") }
         }
         if (!engine.start()) {
             report("The stream did not start")

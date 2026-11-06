@@ -62,7 +62,7 @@ flowchart TD
 | `UacControlClient` | `:usb-engine`，新增 | UAC1 和 UAC2 各自的时钟、音量控制请求，带边界检查和超时。经小型接口访问 USB，可以用假实现测试。 |
 | `StreamingPlanner` | `:usb-engine`，新增 | 按静态能力、运行时能力和源格式确定 `StreamingPlan`。纯函数。 |
 | `DirectUsbSession` | `:usb-engine`，新增 | 从接管到释放的状态机和清理记录。生命周期长于单个 `AudioOutput`。 |
-| `UsbStreamEngine` | `:usb-engine`，新增 | JNI 封装。第一次需要时才调用 `System.loadLibrary`；加载失败按失败关闭。 |
+| `UsbStreamEngine` | `:usb-engine`，新增 | JNI 封装。第一次需要时才调用 `System.loadLibrary`；加载失败按失败关闭，并带上加载器给出的原因（`Creation.LibraryUnavailable`）。 |
 | native core | `:usb-engine`，新增 | 环形缓冲、包调度、反馈换算和计数。不依赖 Android，可在主机上测试。 |
 | native transport | `:usb-engine`，新增 | usbdevfs 的 `ioctl` 调用，不引入 libusb（D2）。 |
 

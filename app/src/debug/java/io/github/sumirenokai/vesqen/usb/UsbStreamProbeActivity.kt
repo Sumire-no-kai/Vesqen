@@ -196,7 +196,11 @@ class UsbStreamProbeActivity : UsbProbeBaseActivity() {
     }
 
     private fun stream(connection: UsbDeviceConnection, plan: StreamingPlan, seconds: Int) {
-        val engine = UsbStreamEngine.create(connection.fileDescriptor, plan) ?: return report("The native engine is not available")
+        val engine = when (val creation = UsbStreamEngine.create(connection.fileDescriptor, plan)) {
+            is UsbStreamEngine.Creation.Created -> creation.engine
+            is UsbStreamEngine.Creation.LibraryUnavailable -> return report("The native engine is not available: ${creation.reason}")
+            UsbStreamEngine.Creation.PlanRefused -> return report("The native engine refused the plan")
+        }
         val frames = testSignal(plan)
         if (!engine.start()) {
             report("The stream did not start")

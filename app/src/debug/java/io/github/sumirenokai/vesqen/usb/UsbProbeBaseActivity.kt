@@ -23,10 +23,9 @@ import androidx.core.content.IntentCompat
 import io.github.sumirenokai.vesqen.usb.descriptor.UacDescriptorParser
 import io.github.sumirenokai.vesqen.usb.descriptor.UacFunction
 import io.github.sumirenokai.vesqen.usb.descriptor.UacParseResult
+import io.github.sumirenokai.vesqen.usb.engine.StreamPreflight
 import io.github.sumirenokai.vesqen.usb.engine.UsbStreamEngine
 import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
-import io.github.sumirenokai.vesqen.usb.plan.StreamingPlanResult
-import io.github.sumirenokai.vesqen.usb.plan.StreamingPlanner
 import java.io.File
 
 /** What the M7-2 probes share: finding the device, asking for permission, planning and reporting. */
@@ -96,15 +95,15 @@ abstract class UsbProbeBaseActivity : Activity() {
         val raw = connection.rawDescriptors ?: return null.also { report("No descriptors") }
         val parsed = UacDescriptorParser.parse(raw)
         if (parsed !is UacParseResult.Parsed) return null.also { report("Descriptors refused: $parsed") }
-        val function = parsed.topology.functions.firstOrNull { candidate ->
-            candidate.streamingInterfaces.any { streaming -> streaming.alternateSettings.any { it.isPlayback } }
-        } ?: return null.also { report("No playback function") }
-
         val speed = UsbStreamEngine.busSpeed(connection.fileDescriptor)
-        report("Bus speed: $speed")
-        return when (val result = StreamingPlanner.plan(function, speed, SAMPLE_RATE_HZ, bits)) {
-            is StreamingPlanResult.Planned -> (function to result.plan).also { report("Plan: ${result.plan}") }
-            is StreamingPlanResult.Refused -> null.also { report("No plan: ${result.reason}") }
+        return when (val preflight = StreamPreflight.run(parsed.topology, speed, SAMPLE_RATE_HZ, bits)) {
+            is StreamPreflight.Ready -> (preflight.function to preflight.plan).also {
+                report("Bus speed: ${preflight.speed}")
+                report("Plan: ${preflight.plan}")
+            }
+            StreamPreflight.NoPlaybackFunction -> null.also { report("No playback function") }
+            is StreamPreflight.LibraryUnavailable -> null.also { report("The native engine is not available: ${preflight.reason}") }
+            is StreamPreflight.Refused -> null.also { report("Bus speed: ${preflight.speed}; no plan: ${preflight.reason}") }
         }
     }
 
