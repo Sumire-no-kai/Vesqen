@@ -177,6 +177,43 @@ class ExactPcmConverterTest {
         assertArrayEquals(bytes(0x00, 0x34, 0x12, 0x00, 0xCD, 0xAB), wire)
     }
 
+    /** 10,000 frames span several of the converter's working chunks, from and to direct buffers as on the device. */
+    private fun latticeFloats(frames: Int, seed: Long): Pair<ByteBuffer, IntArray> {
+        val random = java.util.Random(seed)
+        val values = IntArray(frames * 2) { random.nextInt(65536) - 32768 }
+        val source = ByteBuffer.allocateDirect(values.size * 4).order(ByteOrder.LITTLE_ENDIAN)
+        values.forEach { source.putFloat(it / 32768f) }
+        source.flip()
+        return source to values
+    }
+
+    @Test
+    fun `a long buffer comes out sample for sample across the working chunks`() {
+        val (source, values) = latticeFloats(frames = 10_000, seed = 271)
+        val target = ByteBuffer.allocateDirect(values.size * 3)
+        val converter = ExactPcmConverter(UsbPcmEncoding.FLOAT, 2, sourceBits = 16, bitResolution = 24, subslotBytes = 3)
+        assertTrue(converter.convert(source, target))
+        assertEquals(0, source.remaining())
+        assertEquals(values.size * 3, target.position())
+        val expected = ByteArray(values.size * 3)
+        values.forEachIndexed { index, value ->
+            expected[index * 3 + 1] = value.toByte()
+            expected[index * 3 + 2] = (value shr 8).toByte()
+        }
+        val wire = ByteArray(values.size * 3)
+        target.flip()
+        target.get(wire)
+        assertArrayEquals(expected, wire)
+    }
+
+    @Test
+    fun `a sample off the lattice deep in a long buffer still stops the conversion`() {
+        val (source, values) = latticeFloats(frames = 10_000, seed = 272)
+        source.putFloat(9_001 * 4, 0.5f / 32768f)
+        val converter = ExactPcmConverter(UsbPcmEncoding.FLOAT, 2, sourceBits = 16, bitResolution = 16, subslotBytes = 2)
+        assertFalse(converter.convert(source, ByteBuffer.allocateDirect(values.size * 2)))
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun `a source deeper than the wire is rejected`() {
         ExactPcmConverter(UsbPcmEncoding.FLOAT, 2, sourceBits = 24, bitResolution = 16, subslotBytes = 2)
