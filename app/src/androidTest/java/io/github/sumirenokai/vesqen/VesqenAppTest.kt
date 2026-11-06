@@ -208,6 +208,10 @@ class VesqenAppTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
+    init {
+        composeRule.registerIdlingResource(LibraryProjectionIdling)
+    }
+
     private lateinit var fixtureDensity: Density
 
     private val context
@@ -853,7 +857,8 @@ class VesqenAppTest {
             onRemoveLibraryFolder = { removedSourceId = it },
         )
 
-        composeRule.onNodeWithTag("vesqen.library.sources.manage").performClick()
+        composeRule.onNodeWithTag("vesqen.library.menu").performClick()
+        composeRule.onNodeWithTag("vesqen.library.manage-sources").performClick()
         composeRule.onNodeWithTag("vesqen.library.source-manager").assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.library.source.tree:test.remove").performClick()
         // Removing a folder forgets its favorites, play counts and playlist entries, so it asks first.
@@ -4732,10 +4737,14 @@ class VesqenAppTest {
             SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, context.getString(R.string.paused)),
         )
         composeRule.onNodeWithTag("vesqen.queue.item.1").performClick()
-        // The first row cannot move up and the last cannot move down; the others edit in place.
-        composeRule.onAllNodesWithContentDescription(context.getString(R.string.move_up))[0].assertIsNotEnabled()
-        composeRule.onAllNodesWithContentDescription(context.getString(R.string.move_down))[1].assertIsNotEnabled()
-        composeRule.onAllNodesWithContentDescription(context.getString(R.string.move_up))[1].performClick()
+        // #211: no arrows on the rows. The first row can only move down and the last only up.
+        composeRule.onAllNodesWithContentDescription(context.getString(R.string.move_up)).assertCountEquals(0)
+        fun moves(row: Int) = composeRule.onNodeWithTag("vesqen.queue.item.$row").fetchSemanticsNode()
+            .config[SemanticsActions.CustomActions]
+        assertEquals(listOf(context.getString(R.string.move_down)), moves(0).map { it.label })
+        assertEquals(listOf(context.getString(R.string.move_up)), moves(1).map { it.label })
+        val moveUp = moves(1).single()
+        composeRule.runOnIdle { moveUp.action() }
         composeRule.onAllNodesWithContentDescription(context.getString(R.string.remove_from_queue))[0].performClick()
         composeRule.runOnIdle {
             assertEquals(listOf(0), played)

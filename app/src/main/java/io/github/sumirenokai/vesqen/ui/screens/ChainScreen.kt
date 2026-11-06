@@ -161,6 +161,7 @@ import io.github.sumirenokai.vesqen.ui.chain.telemetryMetricLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetrySectionLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetrySourceLabelResource
 import io.github.sumirenokai.vesqen.ui.chain.segmentChartHistory
+import io.github.sumirenokai.vesqen.ui.components.SheetWithoutNavigationBand
 import io.github.sumirenokai.vesqen.ui.components.VesqenEmptyState
 import io.github.sumirenokai.vesqen.ui.theme.VesqenDataStyle
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
@@ -2011,6 +2012,7 @@ private fun ChainCustomizerSheet(
 ) {
     var confirmReset by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
+        SheetWithoutNavigationBand()
         Column(modifier = Modifier.fillMaxWidth().testTag("vesqen.chain.customizer")) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = VesqenSpacing.lg),

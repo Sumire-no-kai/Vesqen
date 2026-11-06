@@ -1,5 +1,7 @@
 package io.github.sumirenokai.vesqen.telemetry
 
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Debug
 import android.os.BatteryManager
 import android.content.Intent
@@ -16,6 +18,7 @@ import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.playback.PlaybackController
 import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.cycleTo
 import java.io.File
 import java.nio.ByteBuffer
@@ -323,6 +326,13 @@ class SpeakerPlaybackDeviceTest {
     }
 
     private fun main(action: () -> Unit) = instrumentation.runOnMainSync(action)
+}
+
+/** What strict output reports with no USB audio attached, in the order UsbOutputStrategyResolver checks. */
+internal fun noUsbAudioFailure(app: VesqenApplication): UsbOutputFailure = when {
+    Build.VERSION.SDK_INT < 34 -> UsbOutputFailure.UNSUPPORTED_ANDROID_VERSION
+    !app.packageManager.hasSystemFeature(PackageManager.FEATURE_USB_HOST) -> UsbOutputFailure.USB_HOST_UNAVAILABLE
+    else -> UsbOutputFailure.NO_USB_AUDIO_DEVICE
 }
 
 internal fun speakerFixture(app: VesqenApplication, rate: Int, bits: Int): AudioTrack {

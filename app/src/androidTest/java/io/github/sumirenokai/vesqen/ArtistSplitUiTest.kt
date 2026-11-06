@@ -60,6 +60,10 @@ import org.junit.Test
 class ArtistSplitUiTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
+    init {
+        compose.registerIdlingResource(LibraryProjectionIdling)
+    }
+
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
 
     private val tracks = listOf(

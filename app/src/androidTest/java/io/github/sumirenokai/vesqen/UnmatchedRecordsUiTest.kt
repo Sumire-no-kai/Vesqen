@@ -43,6 +43,10 @@ import org.junit.Test
 class UnmatchedRecordsUiTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
+    init {
+        compose.registerIdlingResource(LibraryProjectionIdling)
+    }
+
     private val record = AudioTrack(1, "content://media/external/audio/media/1", "Aira", "Artist", "Album A", 200_000, isFavorite = true, playCount = 3)
     private val aira = AudioTrack(11, "content://media/external/audio/media/11", "Aira", "Artist", "Album A", 200_000)
     private val tide = AudioTrack(12, "content://media/external/audio/media/12", "Tide", "Artist", "Album B", 300_000)

@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.playback
 
+import io.github.sumirenokai.vesqen.LibraryProjectionIdling
 import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -34,6 +35,10 @@ import org.junit.Test
  */
 class QueueClearedUndoDeviceTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
+    init {
+        compose.registerIdlingResource(LibraryProjectionIdling)
+    }
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
 

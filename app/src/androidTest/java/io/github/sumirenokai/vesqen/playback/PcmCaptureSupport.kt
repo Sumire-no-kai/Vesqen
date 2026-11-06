@@ -15,13 +15,12 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.security.MessageDigest
 import java.util.Random
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.floor
 import kotlin.math.min
 
-internal enum class PcmContainer { WAV, FLAC }
+internal enum class PcmContainer { WAV, FLAC, AIFF }
 
 /** Deterministic full-range stereo noise: every sample differs, so alignment is unambiguous. */
 internal class PcmFixture(
@@ -41,15 +40,37 @@ internal class PcmFixture(
 
     fun write(directory: File): File {
         directory.mkdirs()
-        val extension = if (container == PcmContainer.WAV) "wav" else "flac"
-        return File(directory, "$name.$extension").also { file ->
-            file.writeBytes(if (container == PcmContainer.WAV) wavBytes() else flacBytes())
+        return when (container) {
+            PcmContainer.WAV -> File(directory, "$name.wav").also { it.writeBytes(wavBytes()) }
+            PcmContainer.FLAC -> File(directory, "$name.flac").also { it.writeBytes(flacBytes()) }
+            PcmContainer.AIFF -> File(directory, "$name.aiff").also { it.writeBytes(aiffBytes()) }
         }
     }
 
     private fun wavBytes() = PcmFiles.wavBytes(samples, sampleRateHz, bitDepth, CHANNELS)
 
     private fun flacBytes() = PcmFiles.flacBytes(samples, sampleRateHz, bitDepth, CHANNELS)
+
+    /** The same samples as [wavBytes], big-endian as AIFF stores them. */
+    private fun aiffBytes(): ByteArray {
+        val bytesPerSample = bitDepth / 8
+        val pcm = ByteArray(samples.size * bytesPerSample)
+        samples.forEachIndexed { index, sample ->
+            for (byte in 0 until bytesPerSample) {
+                pcm[index * bytesPerSample + byte] = (sample shr (8 * (bytesPerSample - 1 - byte))).toByte()
+            }
+        }
+        // An 80-bit extended float, whose mantissa's top bit stands for 2^exponent.
+        val exponent = 31 - Integer.numberOfLeadingZeros(sampleRateHz)
+        val mantissa = sampleRateHz.toLong() shl (63 - exponent)
+        val body = 4 + 8 + 18 + 8 + 8 + pcm.size
+        return ByteBuffer.allocate(8 + body).order(ByteOrder.BIG_ENDIAN).apply {
+            put("FORM".toByteArray()); putInt(body); put("AIFF".toByteArray())
+            put("COMM".toByteArray()); putInt(18); putShort(CHANNELS.toShort()); putInt(frameCount)
+            putShort(bitDepth.toShort()); putShort((16383 + exponent).toShort()); putLong(mantissa)
+            put("SSND".toByteArray()); putInt(8 + pcm.size); putInt(0); putInt(0); put(pcm)
+        }.array()
+    }
 
     companion object {
         const val CHANNELS = 2

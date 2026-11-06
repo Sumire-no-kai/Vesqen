@@ -15,4 +15,13 @@ class CodecLabelTest {
         assertEquals("Ogg Vorbis", codecLabel("audio/vorbis", "song.ogg"))
         assertEquals("Opus", codecLabel("audio/opus", "song.opus"))
     }
+
+    @Test
+    fun `an m4a file whose codec the system cannot read is not called AAC`() {
+        // Android 9 reads no codec from an ALAC .m4a, and the system type says only the container.
+        assertEquals("M4A", codecLabel("audio/mp4", "song.m4a"))
+        assertEquals("M4A", codecLabel("audio/quicktime", "song.m4a"))
+        assertEquals("M4A", codecLabel("", "song.m4a"))
+        assertEquals("AAC", codecLabel("", "song.aac"))
+    }
 }

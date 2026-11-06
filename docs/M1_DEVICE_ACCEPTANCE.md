@@ -125,3 +125,12 @@ Manual follow-up: original-list Favorites drag, Save, process restart and persis
 - 同一候选的 3 个输出状态／控制器断连 UI 用例均有通过证据。严格失败提示首个合批在断言前被 vivo 前台宿主销毁 Activity，该原始失败不计通过；相同方法随后独立 1/1 完整通过，未删除或放宽断言。
 - 旧 test APK 与当前调试证书不一致时，只卸载并替换 `io.github.sumirenokai.vesqen.test`；主应用未卸载、未清数据，用户曲库和音乐文件未修改。测试结束后移除 test 包，并恢复不可调试 Profile。设备 `base.apk` 与本地 Profile 的 SHA-256 均为 `ac6a3ad2678279ac838e88e734b62ad09d9b20ab24bcab8eeb8de9279eb12177`。
 - 这些结果关闭本次改动对应的定向回归，不替代完整格式、跨设备、TalkBack、长时播放或 M3-R1 双机同条件性能门禁；M1 整体状态不因此改写。
+
+## 2026-11-03 · AIFF 播放（#268）
+
+- 此前 AIFF 在两台手机上都不能播放（`None of the available extractors`），这份文档的 AIFF 夹具没有执行过。修复后的构建为 GitHub profile（R8、不可调试、debug 签名），触摸由 adb 注入。
+- 夹具由 macOS `afconvert` 和 ffmpeg 生成：AIFF 16/44.1、24/96、24/48，AIFF-C 32/48（`NONE`）、16/44.1（`sowt`），以及浮点 AIFF-C。
+- iQOO V2171A / Android 15：整数格式全部播放，24/96 跳转落点正确，Now 显示 `AIFF 24/96`，链路页欠载 0；浮点文件显示不支持。实际声音只在低音量下外放，没有逐样本测量。
+- Honor STF-AL00 / Android 9：通过添加文件夹加入，整数格式全部播放，24/96 跳转正确，曲目详情的时长、采样率、位深和声道来自文件头。扬声器音量为 0，没有听到声音。
+- `vesqen-check` 模拟器（Android 16）：`Media3PcmCaptureDeviceTest` 的 WAV 和 AIFF 用例结果完全一致（36 组对比），严格输出路径下与源 PCM 逐字节一致。
+- 未验证：真实 DAC、长时播放。
