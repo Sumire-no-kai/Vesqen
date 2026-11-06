@@ -1,8 +1,6 @@
 package io.github.sumirenokai.vesqen.usb.engine
 
 import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
-import io.github.sumirenokai.vesqen.usb.plan.UsbBusSpeed
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -17,8 +15,11 @@ class UsbStreamEngineTest {
     }
 
     @Test
-    fun theBusSpeedIsUnknownWithoutTheLibrary() {
-        assertEquals(UsbBusSpeed.UNKNOWN, UsbStreamEngine.busSpeed(fileDescriptor = -1))
+    fun theSpeedQueryReportsTheMissingLibraryInsteadOfAnUnknownSpeed() {
+        val speed = UsbStreamEngine.busSpeed(fileDescriptor = -1)
+
+        assertTrue("$speed", speed is UsbStreamEngine.SpeedQuery.LibraryUnavailable)
+        assertTrue((speed as UsbStreamEngine.SpeedQuery.LibraryUnavailable).reason, speed.reason.contains("vesqen_usb"))
     }
 
     private companion object {

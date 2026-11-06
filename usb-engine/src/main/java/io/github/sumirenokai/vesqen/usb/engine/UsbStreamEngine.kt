@@ -42,6 +42,14 @@ class UsbStreamEngine private constructor(private var handle: Long) {
         data object PlanRefused : Creation
     }
 
+    /** The speed comes from a native ioctl, so a library that did not load must not read as a slow bus (#276). */
+    sealed interface SpeedQuery {
+        /** UNKNOWN when the kernel could not tell. */
+        data class Answered(val speed: UsbBusSpeed) : SpeedQuery
+
+        data class LibraryUnavailable(val reason: String) : SpeedQuery
+    }
+
     private val lock = Any()
 
     fun start(): Boolean = synchronized(lock) { handle != 0L && nativeStart(handle) }
@@ -127,8 +135,8 @@ class UsbStreamEngine private constructor(private var handle: Long) {
             return if (handle == 0L) Creation.PlanRefused else Creation.Created(UsbStreamEngine(handle))
         }
 
-        fun busSpeed(fileDescriptor: Int): UsbBusSpeed =
-            if (libraryError == null) UsbBusSpeed.fromKernel(nativeBusSpeed(fileDescriptor)) else UsbBusSpeed.UNKNOWN
+        fun busSpeed(fileDescriptor: Int): SpeedQuery = libraryError?.let(SpeedQuery::LibraryUnavailable)
+            ?: SpeedQuery.Answered(UsbBusSpeed.fromKernel(nativeBusSpeed(fileDescriptor)))
 
         @JvmStatic
         private external fun nativeBusSpeed(fd: Int): Int
