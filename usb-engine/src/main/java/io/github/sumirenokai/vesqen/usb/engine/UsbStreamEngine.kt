@@ -31,6 +31,17 @@ data class UsbStreamStats(
  * must stay open until [destroy] has returned true.
  */
 class UsbStreamEngine private constructor(private var handle: Long) {
+    /** Each failure keeps its own reason, so the own output can fail closed and say why (D5). */
+    sealed interface Creation {
+        data class Created(val engine: UsbStreamEngine) : Creation
+
+        /** The native library did not load on this device, with the loader's message. */
+        data class LibraryUnavailable(val reason: String) : Creation
+
+        /** The native side checks the plan and the file descriptor again and refused them. */
+        data object PlanRefused : Creation
+    }
+
     private val lock = Any()
 
     fun start(): Boolean = synchronized(lock) { handle != 0L && nativeStart(handle) }
@@ -89,18 +100,19 @@ class UsbStreamEngine private constructor(private var handle: Long) {
 
     companion object {
         private const val STAT_COUNT = 14
-        private val libraryLoaded: Boolean by lazy {
+
+        /** Loaded on first use only (D5), so ordinary playback never depends on it. Null once loaded. */
+        private val libraryError: String? by lazy {
             try {
                 System.loadLibrary("vesqen_usb")
-                true
-            } catch (_: UnsatisfiedLinkError) {
-                false
+                null
+            } catch (error: UnsatisfiedLinkError) {
+                error.message ?: error.toString()
             }
         }
 
-        /** Null when the library could not load or the plan is refused again by the native check. */
-        fun create(fileDescriptor: Int, plan: StreamingPlan): UsbStreamEngine? {
-            if (!libraryLoaded) return null
+        fun create(fileDescriptor: Int, plan: StreamingPlan): Creation {
+            libraryError?.let { return Creation.LibraryUnavailable(it) }
             val handle = nativeCreate(
                 fileDescriptor,
                 plan.endpointAddress,
@@ -112,11 +124,11 @@ class UsbStreamEngine private constructor(private var handle: Long) {
                 plan.urbCount,
                 plan.ringFrames,
             )
-            return if (handle == 0L) null else UsbStreamEngine(handle)
+            return if (handle == 0L) Creation.PlanRefused else Creation.Created(UsbStreamEngine(handle))
         }
 
         fun busSpeed(fileDescriptor: Int): UsbBusSpeed =
-            if (libraryLoaded) UsbBusSpeed.fromKernel(nativeBusSpeed(fileDescriptor)) else UsbBusSpeed.UNKNOWN
+            if (libraryError == null) UsbBusSpeed.fromKernel(nativeBusSpeed(fileDescriptor)) else UsbBusSpeed.UNKNOWN
 
         @JvmStatic
         private external fun nativeBusSpeed(fd: Int): Int
