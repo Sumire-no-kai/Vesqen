@@ -76,6 +76,8 @@ class DirectUsbAudioOutputTest {
             failureErrno = 0,
             threadNice = 0,
             threadSchedulerPolicy = 0,
+            epoch = 0,
+            requestedEpoch = 0,
         )
     }
 

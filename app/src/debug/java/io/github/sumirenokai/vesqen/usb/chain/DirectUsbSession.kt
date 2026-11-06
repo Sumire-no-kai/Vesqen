@@ -189,6 +189,7 @@ internal class DirectUsbSession(
     private fun interfaceWith(number: Int, alternate: Int): UsbInterface? =
         (0 until device.interfaceCount).map(device::getInterface).firstOrNull { it.id == number && it.alternateSetting == alternate }
 
+    /** M7-2 opens one engine per output and never retires one, so its only epoch is the first. */
     private class EngineStream(private val engine: UsbStreamEngine) : UsbOutputStream {
         @Volatile
         private var closed = false
@@ -206,17 +207,17 @@ internal class DirectUsbSession(
 
         override fun write(buffer: ByteBuffer, offset: Int, size: Int): Int {
             if (closed) return 0
-            val accepted = engine.write(buffer, offset, size)
+            val accepted = engine.write(EPOCH, buffer, offset, size)
             // The engine went away between the check and the call.
             return if (accepted < 0 && closed) 0 else accepted
         }
 
         override fun setRunning(running: Boolean) {
-            if (!closed) engine.setRunning(running)
+            if (!closed) engine.setRunning(EPOCH, running)
         }
 
         override fun markEndOfStream() {
-            if (!closed) engine.markEndOfStream()
+            if (!closed) engine.markEndOfStream(EPOCH)
         }
 
         override fun readStats(): UsbStreamStats? {
@@ -228,5 +229,6 @@ internal class DirectUsbSession(
 
     private companion object {
         const val STOP_TIMEOUT_MS = 1000
+        const val EPOCH = UsbStreamEngine.FIRST_EPOCH
     }
 }

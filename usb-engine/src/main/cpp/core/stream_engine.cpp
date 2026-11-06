@@ -69,23 +69,55 @@ bool StreamEngine::start() {
     return true;
 }
 
-int32_t StreamEngine::write(const uint8_t* source, int32_t bytes) {
+int32_t StreamEngine::write(int64_t epoch, const uint8_t* source, int32_t bytes) {
     if (bytes < 0 || bytes % config_.frameBytes != 0) return -1;
+    Lock lock(epochMutex_);
     if (stopRequested_.load(std::memory_order_acquire) ||
         stats_[kStatFailure].load(std::memory_order_acquire) != kFailureNone) {
         return -1;
     }
+    const int64_t newest = requestedEpoch_.load(std::memory_order_relaxed);
+    if (epoch != newest) return -1;
+    // The last output's URBs are not all back yet, so its audio could still follow this one's.
+    if (acknowledgedEpoch_.load(std::memory_order_relaxed) != newest) return 0;
     const size_t frames = ring_.write(source, static_cast<size_t>(bytes / config_.frameBytes));
     add(kStatMediaFramesWritten, static_cast<int64_t>(frames));
     return static_cast<int32_t>(frames) * config_.frameBytes;
 }
 
-void StreamEngine::setRunning(bool running) { running_.store(running, std::memory_order_release); }
+void StreamEngine::setRunning(int64_t epoch, bool running) {
+    Lock lock(epochMutex_);
+    if (epoch == requestedEpoch_.load(std::memory_order_relaxed)) running_.store(running, std::memory_order_release);
+}
 
-void StreamEngine::markEndOfStream() { endOfStream_.store(true, std::memory_order_release); }
+void StreamEngine::markEndOfStream(int64_t epoch) {
+    Lock lock(epochMutex_);
+    if (epoch == requestedEpoch_.load(std::memory_order_relaxed)) endOfStream_.store(true, std::memory_order_release);
+}
+
+int64_t StreamEngine::retireOutput() {
+    Lock lock(epochMutex_);
+    running_.store(false, std::memory_order_release);
+    endOfStream_.store(false, std::memory_order_release);
+    return requestedEpoch_.fetch_add(1, std::memory_order_acq_rel) + 1;
+}
 
 void StreamEngine::readStats(int64_t* out) const {
-    for (size_t i = 0; i < kStatCount; ++i) out[i] = stats_[i].load(std::memory_order_relaxed);
+    // The stream thread resets the counters between two stores of the acknowledged epoch, the first
+    // of them -1, so a read that sees the same epoch before and after has one epoch's values.
+    for (int attempt = 0; attempt < 16; ++attempt) {
+        const int64_t before = acknowledgedEpoch_.load(std::memory_order_acquire);
+        for (size_t i = 0; i < kStatCount; ++i) out[i] = stats_[i].load(std::memory_order_relaxed);
+        std::atomic_thread_fence(std::memory_order_acquire);
+        const int64_t after = acknowledgedEpoch_.load(std::memory_order_relaxed);
+        if (before == after) {
+            out[kStatEpoch] = before;
+            out[kStatRequestedEpoch] = requestedEpoch_.load(std::memory_order_acquire);
+            return;
+        }
+    }
+    out[kStatEpoch] = -1;
+    out[kStatRequestedEpoch] = requestedEpoch_.load(std::memory_order_acquire);
 }
 
 bool StreamEngine::stop(int timeoutMs) {
@@ -112,20 +144,12 @@ void StreamEngine::run() {
     stats_[kStatThreadNice].store(report.nice, std::memory_order_relaxed);
     stats_[kStatThreadPolicy].store(report.schedulerPolicy, std::memory_order_relaxed);
 
-    bool healthy = true;
-    for (IsoUrb& urb : urbs_) {
-        fill(urb);
-        const int error = transport_.submit(urb);
-        if (error != 0) {
-            failSubmit(error);
-            healthy = false;
-            break;
-        }
-        urb.inFlight = true;
-        ++inFlight_;
-    }
-
+    bool healthy = submitIdle();
     while (healthy && !stopRequested_.load(std::memory_order_acquire)) {
+        if (retirePending()) {
+            healthy = retireInFlight();
+            continue;
+        }
         IsoUrb* urb = nullptr;
         int error = 0;
         switch (transport_.reap(urb, kReapTimeoutMs, error)) {
@@ -144,24 +168,13 @@ void StreamEngine::run() {
                 urb->inFlight = false;
                 --inFlight_;
                 if (stopRequested_.load(std::memory_order_acquire)) break;
-                fill(*urb);
-                const int submitError = transport_.submit(*urb);
-                if (submitError != 0) {
-                    failSubmit(submitError);
-                    healthy = false;
-                    break;
-                }
-                urb->inFlight = true;
-                ++inFlight_;
+                healthy = submitOne(*urb);
                 break;
             }
         }
     }
 
-    // A discarded URB still comes back through reap, and until it does the kernel owns its buffers.
-    for (IsoUrb& urb : urbs_) {
-        if (urb.inFlight) transport_.discard(urb);
-    }
+    discardInFlight();
     while (inFlight_ > 0) {
         IsoUrb* urb = nullptr;
         int error = 0;
@@ -180,6 +193,86 @@ void StreamEngine::run() {
         }
     }
     quiesced_.store(true, std::memory_order_release);
+}
+
+bool StreamEngine::retirePending() const {
+    return requestedEpoch_.load(std::memory_order_acquire) != acknowledgedEpoch_.load(std::memory_order_relaxed);
+}
+
+/** Returns false when the stream failed. Nothing is acknowledged before every URB is back. */
+bool StreamEngine::retireInFlight() {
+    discardInFlight();
+    while (inFlight_ > 0) {
+        IsoUrb* urb = nullptr;
+        int error = 0;
+        switch (transport_.reap(urb, kReapTimeoutMs, error)) {
+            case ReapResult::kUrb:
+                account(*urb, true);
+                urb->inFlight = false;
+                --inFlight_;
+                break;
+            case ReapResult::kNothing:
+                break;
+            case ReapResult::kDeviceGone:
+                fail(kFailureDeviceGone, 0);
+                return false;
+            case ReapResult::kFailed:
+                fail(kFailureReap, error);
+                return false;
+        }
+    }
+    {
+        Lock lock(epochMutex_);
+        acknowledgedEpoch_.store(-1, std::memory_order_relaxed);
+        std::atomic_thread_fence(std::memory_order_release);
+        ring_.discardAll();
+        for (Stat counter : {kStatMediaFramesWritten, kStatMediaFramesSubmitted, kStatMediaFramesProcessed,
+                             kStatMediaFramesDelivered, kStatMediaFramesLost, kStatSilenceFramesInserted,
+                             kStatUsbFramesDelivered, kStatUnderruns, kStatUrbsCompleted, kStatPacketsFailed}) {
+            stats_[counter].store(0, std::memory_order_relaxed);
+        }
+        mediaStarted_ = false;
+        inUnderrun_ = false;
+        // Several retirements may have come in while reaping; only the newest output may now write.
+        acknowledgedEpoch_.store(requestedEpoch_.load(std::memory_order_relaxed), std::memory_order_release);
+    }
+    return submitIdle();
+}
+
+bool StreamEngine::submitIdle() {
+    for (IsoUrb& urb : urbs_) {
+        if (!urb.inFlight && !submitOne(urb)) return false;
+    }
+    return true;
+}
+
+/** Returns false when the submit failed. A URB left idle by a retirement or a stop is not a failure. */
+bool StreamEngine::submitOne(IsoUrb& urb) {
+    Lock lock(epochMutex_);
+    if (stopRequested_.load(std::memory_order_acquire) ||
+        requestedEpoch_.load(std::memory_order_relaxed) != acknowledgedEpoch_.load(std::memory_order_relaxed)) {
+        return true;
+    }
+    fill(urb);
+    const int error = transport_.submit(urb);
+    if (error != 0) {
+        failSubmit(error);
+        return false;
+    }
+    urb.inFlight = true;
+    urb.discarded = false;
+    ++inFlight_;
+    return true;
+}
+
+// A discarded URB still comes back through reap, and until it does the kernel owns its buffers.
+void StreamEngine::discardInFlight() {
+    for (IsoUrb& urb : urbs_) {
+        if (urb.inFlight && !urb.discarded) {
+            transport_.discard(urb);
+            urb.discarded = true;
+        }
+    }
 }
 
 void StreamEngine::fill(IsoUrb& urb) {

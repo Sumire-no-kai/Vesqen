@@ -213,12 +213,12 @@ class UsbStreamProbeActivity : UsbProbeBaseActivity() {
         var nextReport = SystemClock.elapsedRealtime() + REPORT_INTERVAL_MS
         var startedAt = 0L
         while (!cancelled && writtenFrames < total) {
-            val accepted = engine.write(frames, offset, frames.capacity() - offset)
+            val accepted = engine.write(UsbStreamEngine.FIRST_EPOCH, frames, offset, frames.capacity() - offset)
             if (accepted < 0) break
             offset = (offset + accepted) % frames.capacity()
             writtenFrames += accepted / plan.frameBytes
             if (startedAt == 0L && writtenFrames >= plan.ringFrames / 2) {
-                engine.setRunning(true)
+                engine.setRunning(UsbStreamEngine.FIRST_EPOCH, true)
                 startedAt = SystemClock.elapsedRealtime()
                 report("Media started")
             }
@@ -228,8 +228,8 @@ class UsbStreamProbeActivity : UsbProbeBaseActivity() {
             }
             if (accepted == 0) SystemClock.sleep(WRITE_RETRY_MS)
         }
-        if (startedAt == 0L) engine.setRunning(true)
-        engine.markEndOfStream()
+        if (startedAt == 0L) engine.setRunning(UsbStreamEngine.FIRST_EPOCH, true)
+        engine.markEndOfStream(UsbStreamEngine.FIRST_EPOCH)
         val deadline = SystemClock.elapsedRealtime() + END_OF_STREAM_TIMEOUT_MS
         while (SystemClock.elapsedRealtime() < deadline) {
             val stats = engine.readStats() ?: break

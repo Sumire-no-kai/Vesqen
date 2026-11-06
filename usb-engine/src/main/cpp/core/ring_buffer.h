@@ -46,6 +46,9 @@ public:
         return count;
     }
 
+    /** Consumer only: drops everything written so far, as an output that was retired needs. */
+    void discardAll() { read_.store(written_.load(std::memory_order_acquire), std::memory_order_release); }
+
 private:
     const size_t capacity_;
     const size_t frameBytes_;

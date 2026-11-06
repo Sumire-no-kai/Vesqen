@@ -9,6 +9,7 @@
 #include <cstring>
 #include <deque>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 #include "core/packet_schedule.h"
@@ -83,12 +84,26 @@ public:
 
     void discard(IsoUrb& urb) override {
         std::lock_guard<std::mutex> lock(mutex_);
+        for (IsoUrb* pending : cancelled_) {
+            if (pending == &urb) ++doubleDiscards;
+        }
         ++discards;
         if (!ignoreDiscard) cancelled_.push_back(&urb);
     }
 
     ReapResult reap(IsoUrb*& urb, int timeoutMs, int&) override {
         std::unique_lock<std::mutex> lock(mutex_);
+        // The device went away while cancelled URBs were still the kernel's.
+        if (deviceGoneWhileCancelled && !cancelled_.empty()) {
+            deviceGoneWhileCancelled = false;
+            return ReapResult::kDeviceGone;
+        }
+        // A held cancellation keeps the URB in the kernel, as a slow controller would.
+        if (holdCancelled && !cancelled_.empty()) {
+            lock.unlock();
+            sleepMs(1);
+            return ReapResult::kNothing;
+        }
         if (!cancelled_.empty()) {
             urb = cancelled_.front();
             cancelled_.pop_front();
@@ -144,6 +159,9 @@ public:
     std::atomic<int> submitError{0};
     std::atomic<bool> hold{false};
     std::atomic<bool> ignoreDiscard{false};
+    std::atomic<bool> holdCancelled{false};
+    std::atomic<bool> deviceGoneWhileCancelled{false};
+    std::atomic<int> doubleDiscards{0};
     std::atomic<bool> deviceGone{false};
     std::atomic<bool> deviceGoneAtOnce{false};
     std::atomic<bool> holdInsideReap{false};
@@ -171,12 +189,12 @@ std::vector<uint8_t> pattern(size_t frames, size_t frameBytes) {
     return bytes;
 }
 
-void writeAll(StreamEngine& engine, const std::vector<uint8_t>& bytes) {
+void writeAll(StreamEngine& engine, const std::vector<uint8_t>& bytes, int64_t epoch = 0) {
     size_t offset = 0;
     int guard = 0;
     while (offset < bytes.size() && guard < 20'000) {
         const int32_t chunk = static_cast<int32_t>(bytes.size() - offset < 4096 ? bytes.size() - offset : 4096);
-        const int32_t accepted = engine.write(bytes.data() + offset, chunk);
+        const int32_t accepted = engine.write(epoch, bytes.data() + offset, chunk);
         CHECK(accepted >= 0);
         if (accepted <= 0) {
             sleepMs(1);
@@ -262,9 +280,9 @@ void testMediaBytesArriveUnchangedAndInOrder() {
     const std::vector<uint8_t> input = pattern(30'000, 4);
 
     CHECK(engine.start());
-    engine.setRunning(true);
+    engine.setRunning(0, true);
     writeAll(engine, input);
-    engine.markEndOfStream();
+    engine.markEndOfStream(0);
     CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) == 30'000; }));
     CHECK(engine.stop(2000));
 
@@ -287,7 +305,7 @@ void testNothingLeavesTheRingWhileNotRunning() {
     transport.paceMs = 1;
     StreamEngine engine(config44k(), transport);
     const std::vector<uint8_t> input = pattern(100, 4);
-    CHECK_EQ(engine.write(input.data(), 400), 400);
+    CHECK_EQ(engine.write(0, input.data(), 400), 400);
     CHECK(engine.start());
     CHECK(waitUntil([&] { return stat(engine, kStatUrbsCompleted) >= 6; }));
 
@@ -298,7 +316,7 @@ void testNothingLeavesTheRingWhileNotRunning() {
     CHECK(stat(engine, kStatUsbFramesDelivered) > 0);
 
     // Resuming picks up exactly what was waiting.
-    engine.setRunning(true);
+    engine.setRunning(0, true);
     CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) == 100; }));
     CHECK(engine.stop(2000));
 }
@@ -307,14 +325,14 @@ void testUnderrunsCountOncePerGapAndNeverBeforeOrAfterTheMedia() {
     FakeTransport transport;
     transport.paceMs = 1;
     StreamEngine engine(config44k(), transport);
-    engine.setRunning(true);
+    engine.setRunning(0, true);
     CHECK(engine.start());
     // Running with nothing written yet is the start of a stream, not an underrun.
     CHECK(waitUntil([&] { return stat(engine, kStatUrbsCompleted) >= 6; }));
     CHECK_EQ(stat(engine, kStatUnderruns), 0);
 
     const std::vector<uint8_t> input = pattern(50, 4);
-    CHECK_EQ(engine.write(input.data(), 200), 200);
+    CHECK_EQ(engine.write(0, input.data(), 200), 200);
     CHECK(waitUntil([&] { return stat(engine, kStatUnderruns) == 1; }));
     const int64_t completed = stat(engine, kStatUrbsCompleted);
     CHECK(waitUntil([&] { return stat(engine, kStatUrbsCompleted) >= completed + 6; }));
@@ -322,12 +340,12 @@ void testUnderrunsCountOncePerGapAndNeverBeforeOrAfterTheMedia() {
 
     // A full packet ends the gap, so the next shortfall is a second one.
     const std::vector<uint8_t> more = pattern(200, 4);
-    CHECK_EQ(engine.write(more.data(), 800), 800);
+    CHECK_EQ(engine.write(0, more.data(), 800), 800);
     CHECK(waitUntil([&] { return stat(engine, kStatUnderruns) == 2; }));
 
-    engine.markEndOfStream();
+    engine.markEndOfStream(0);
     const std::vector<uint8_t> last = pattern(100, 4);
-    CHECK_EQ(engine.write(last.data(), 400), 400);
+    CHECK_EQ(engine.write(0, last.data(), 400), 400);
     const int64_t before = stat(engine, kStatUrbsCompleted);
     CHECK(waitUntil([&] { return stat(engine, kStatUrbsCompleted) >= before + 6; }));
     CHECK_EQ(stat(engine, kStatUnderruns), 2);
@@ -338,14 +356,14 @@ void testPauseIsNotAnUnderrun() {
     FakeTransport transport;
     transport.paceMs = 1;
     StreamEngine engine(config44k(), transport);
-    engine.setRunning(true);
+    engine.setRunning(0, true);
     CHECK(engine.start());
     const std::vector<uint8_t> input = pattern(200, 4);
-    CHECK_EQ(engine.write(input.data(), 800), 800);
+    CHECK_EQ(engine.write(0, input.data(), 800), 800);
     CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) == 200; }));
     const int64_t underruns = stat(engine, kStatUnderruns);
 
-    engine.setRunning(false);
+    engine.setRunning(0, false);
     const int64_t completed = stat(engine, kStatUrbsCompleted);
     CHECK(waitUntil([&] { return stat(engine, kStatUrbsCompleted) >= completed + 6; }));
     CHECK_EQ(stat(engine, kStatUnderruns), underruns);
@@ -358,12 +376,12 @@ void testPausingWithMediaInTheRingIsNotAnUnderrun() {
     transport.paceMs = 1;
     StreamEngine engine(config44k(), transport);
     const std::vector<uint8_t> input = pattern(4000, 4);
-    CHECK_EQ(engine.write(input.data(), 16'000), 16'000);
-    engine.setRunning(true);
+    CHECK_EQ(engine.write(0, input.data(), 16'000), 16'000);
+    engine.setRunning(0, true);
     CHECK(engine.start());
     CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) >= 400; }));
 
-    engine.setRunning(false);
+    engine.setRunning(0, false);
     const int64_t completed = stat(engine, kStatUrbsCompleted);
     CHECK(waitUntil([&] { return stat(engine, kStatUrbsCompleted) >= completed + 6; }));
     CHECK(stat(engine, kStatMediaFramesSubmitted) < 4000);
@@ -377,9 +395,9 @@ void testFailedAndShortPacketsAreLostButStillProcessed() {
     transport.shortNextPacket = 5;
     StreamEngine engine(config44k(), transport);
     const std::vector<uint8_t> input = pattern(4000, 4);
-    CHECK_EQ(engine.write(input.data(), static_cast<int32_t>(input.size())), static_cast<int32_t>(input.size()));
-    engine.setRunning(true);
-    engine.markEndOfStream();
+    CHECK_EQ(engine.write(0, input.data(), static_cast<int32_t>(input.size())), static_cast<int32_t>(input.size()));
+    engine.setRunning(0, true);
+    engine.markEndOfStream(0);
     CHECK(engine.start());
     // Lost frames must not leave the end of the stream waiting.
     CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) == 4000; }));
@@ -398,8 +416,8 @@ void testStoppingReclaimsWhatIsInFlight() {
     transport.hold = true;
     StreamEngine engine(config44k(), transport);
     const std::vector<uint8_t> input = pattern(500, 4);
-    CHECK_EQ(engine.write(input.data(), 2000), 2000);
-    engine.setRunning(true);
+    CHECK_EQ(engine.write(0, input.data(), 2000), 2000);
+    engine.setRunning(0, true);
     CHECK(engine.start());
     CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesSubmitted) > 0 && transport.submitted == 3; }));
 
@@ -412,7 +430,7 @@ void testStoppingReclaimsWhatIsInFlight() {
     CHECK_EQ(stat(engine, kStatPacketsFailed), 0);
     CHECK_EQ(stat(engine, kStatFailure), kFailureNone);
     CHECK_EQ(stat(engine, kStatUrbsCompleted), 3);
-    CHECK_EQ(engine.write(input.data(), 4), -1);
+    CHECK_EQ(engine.write(0, input.data(), 4), -1);
 }
 
 void testAUrbCompletingDuringAStopIsNotSentAgain() {
@@ -450,8 +468,8 @@ void testARemovedDeviceEndsTheStream() {
     transport.paceMs = 1;
     StreamEngine engine(config44k(), transport);
     const std::vector<uint8_t> input = pattern(1000, 4);
-    CHECK_EQ(engine.write(input.data(), 4000), 4000);
-    engine.setRunning(true);
+    CHECK_EQ(engine.write(0, input.data(), 4000), 4000);
+    engine.setRunning(0, true);
     CHECK(engine.start());
     CHECK(waitUntil([&] { return stat(engine, kStatUrbsCompleted) >= 2; }));
 
@@ -459,7 +477,7 @@ void testARemovedDeviceEndsTheStream() {
     transport.deviceGone = true;
     CHECK(waitUntil([&] { return stat(engine, kStatFailure) == kFailureDeviceGone; }));
     CHECK(engine.stop(2000));
-    CHECK_EQ(engine.write(input.data(), 4), -1);
+    CHECK_EQ(engine.write(0, input.data(), 4), -1);
 }
 
 void testADeviceGoneFromReapIsReportedAndItsUrbsStillComeBack() {
@@ -473,7 +491,7 @@ void testADeviceGoneFromReapIsReportedAndItsUrbsStillComeBack() {
     transport.deviceGone = true;
     CHECK(waitUntil([&] { return stat(engine, kStatFailure) == kFailureDeviceGone; }));
     const uint8_t frame[4] = {};
-    CHECK_EQ(engine.write(frame, 4), -1);
+    CHECK_EQ(engine.write(0, frame, 4), -1);
     CHECK(engine.stop(2000));
     CHECK_EQ(transport.discards, 3);
     CHECK_EQ(stat(engine, kStatUrbsCompleted), 3);
@@ -496,12 +514,237 @@ void testPartialFramesAreRefused() {
     FakeTransport transport;
     StreamEngine engine(config44k(), transport);
     const std::vector<uint8_t> input = pattern(4, 4);
-    CHECK_EQ(engine.write(input.data(), 6), -1);
-    CHECK_EQ(engine.write(input.data(), -4), -1);
+    CHECK_EQ(engine.write(0, input.data(), 6), -1);
+    CHECK_EQ(engine.write(0, input.data(), -4), -1);
     CHECK_EQ(stat(engine, kStatMediaFramesWritten), 0);
-    CHECK_EQ(engine.write(input.data(), 16), 16);
+    CHECK_EQ(engine.write(0, input.data(), 16), 16);
     CHECK_EQ(stat(engine, kStatMediaFramesWritten), 4);
     CHECK(engine.stop(10));
+}
+
+// Each frame carries its own number, little-endian, so order, gaps and repeats show. 0 is silence.
+StreamConfig config48kNumbered() { return {48'000, 4, 1000, 192, 8, 3, 24'000}; }
+
+std::vector<uint8_t> numbered(uint32_t first, size_t frames) {
+    std::vector<uint8_t> bytes(frames * 4);
+    for (size_t i = 0; i < frames; ++i) {
+        const uint32_t value = first + static_cast<uint32_t>(i);
+        std::memcpy(bytes.data() + i * 4, &value, 4);
+    }
+    return bytes;
+}
+
+/** The numbers of the media frames submitted from packet [from] on, in submission order. */
+std::vector<uint32_t> mediaNumbers(const std::vector<CapturedPacket>& packets, size_t from) {
+    std::vector<uint32_t> numbers;
+    for (size_t p = from; p < packets.size(); ++p) {
+        for (size_t offset = 0; offset + 4 <= packets[p].bytes.size(); offset += 4) {
+            uint32_t value = 0;
+            std::memcpy(&value, packets[p].bytes.data() + offset, 4);
+            if (value != 0) numbers.push_back(value);
+        }
+    }
+    return numbers;
+}
+
+void testASecondSeekWhileTheFirstIsReclaimedStartsAtItsOwnFirstFrame() {
+    FakeTransport transport;
+    // Slow enough that the ring still holds old audio and URBs are in flight when the seek comes.
+    transport.paceMs = 2;
+    StreamEngine engine(config48kNumbered(), transport);
+    CHECK(engine.start());
+    writeAll(engine, numbered(1, 20'000));
+    engine.setRunning(0, true);
+    CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) >= 2'000; }));
+
+    // The first seek's URBs stay in the kernel, so its output must wait, and a second seek follows.
+    transport.holdCancelled = true;
+    const int64_t first = engine.retireOutput();
+    const size_t afterRetire = transport.snapshot().size();
+    const auto firstSeek = numbered(500'000, 400);
+    CHECK_EQ(engine.write(first, firstSeek.data(), 1'600), 0);
+    sleepMs(20);
+    CHECK_EQ(engine.write(first, firstSeek.data(), 1'600), 0);
+    CHECK_EQ(stat(engine, kStatEpoch), 0);
+    CHECK_EQ(stat(engine, kStatRequestedEpoch), first);
+    const int64_t second = engine.retireOutput();
+    CHECK_EQ(second, first + 1);
+    CHECK_EQ(engine.write(first, firstSeek.data(), 1'600), -1);
+    engine.setRunning(first, true);
+    CHECK_EQ(engine.write(second, firstSeek.data(), 1'600), 0);
+    CHECK_EQ(transport.snapshot().size(), afterRetire);
+
+    transport.holdCancelled = false;
+    CHECK(waitUntil([&] { return stat(engine, kStatEpoch) == second; }));
+    // Each output counts from zero, so nothing of the first one shows in the second's progress.
+    CHECK_EQ(stat(engine, kStatMediaFramesWritten), 0);
+    CHECK_EQ(stat(engine, kStatMediaFramesProcessed), 0);
+    CHECK_EQ(stat(engine, kStatUnderruns), 0);
+    writeAll(engine, numbered(1'000'000, 20'000), second);
+    // The first output was running; the new one waits for its own start.
+    sleepMs(20);
+    CHECK_EQ(stat(engine, kStatMediaFramesSubmitted), 0);
+    engine.markEndOfStream(second);
+    engine.setRunning(second, true);
+    CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) == 20'000; }));
+    CHECK(engine.stop(2000));
+
+    const auto numbers = mediaNumbers(transport.snapshot(), afterRetire);
+    CHECK_EQ(numbers.size(), 20'000);
+    CHECK_EQ(numbers.empty() ? 0 : numbers.front(), 1'000'000);
+    bool inOrder = true;
+    for (size_t i = 0; i < numbers.size(); ++i) inOrder = inOrder && numbers[i] == 1'000'000 + i;
+    CHECK(inOrder);
+    CHECK_EQ(stat(engine, kStatMediaFramesLost), 0);
+}
+
+void testARetirementWhoseUrbsNeverComeBackNeverLetsTheNextOutputWrite() {
+    FakeTransport transport;
+    StreamEngine engine(config48kNumbered(), transport);
+    CHECK(engine.start());
+    writeAll(engine, numbered(1, 4'000));
+    engine.setRunning(0, true);
+    CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) >= 500; }));
+
+    transport.holdCancelled = true;
+    const int64_t next = engine.retireOutput();
+    const size_t afterRetire = transport.snapshot().size();
+    const auto audio = numbered(700'000, 400);
+    for (int i = 0; i < 20; ++i) {
+        CHECK_EQ(engine.write(next, audio.data(), 1'600), 0);
+        sleepMs(10);
+    }
+    engine.setRunning(next, true);
+    CHECK_EQ(stat(engine, kStatEpoch), 0);
+    CHECK_EQ(transport.snapshot().size(), afterRetire);
+    // The URBs are still the kernel's, so nothing may be freed yet.
+    CHECK(!engine.stop(50));
+    transport.holdCancelled = false;
+    CHECK(engine.stop(2000));
+    CHECK(mediaNumbers(transport.snapshot(), afterRetire).empty());
+}
+
+void testANaturalEndPlaysTheTailBeforeTheOutputIsRetired() {
+    FakeTransport transport;
+    StreamEngine engine(config48kNumbered(), transport);
+    CHECK(engine.start());
+    writeAll(engine, numbered(1, 3'000));
+    engine.markEndOfStream(0);
+    engine.setRunning(0, true);
+    // Media3 releases an output that reached its end only once nothing is pending.
+    CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) == 3'000; }));
+    CHECK_EQ(stat(engine, kStatMediaFramesDelivered), 3'000);
+    const int64_t next = engine.retireOutput();
+    CHECK(waitUntil([&] { return stat(engine, kStatEpoch) == next; }));
+
+    // The last output's start and end do not carry over: running before any audio is no underrun,
+    // and a gap after this output's audio is one, because it has not ended.
+    engine.setRunning(next, true);
+    sleepMs(20);
+    CHECK_EQ(stat(engine, kStatUnderruns), 0);
+    writeAll(engine, numbered(5'000, 1'000), next);
+    CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) == 1'000; }));
+    CHECK(waitUntil([&] { return stat(engine, kStatUnderruns) == 1; }));
+    CHECK(engine.stop(2000));
+
+    const auto numbers = mediaNumbers(transport.snapshot(), 0);
+    CHECK_EQ(numbers.size(), 4'000);
+    bool inOrder = true;
+    for (size_t i = 0; i < numbers.size(); ++i) inOrder = inOrder && numbers[i] == (i < 3'000 ? 1 + i : 5'000 + i - 3'000);
+    CHECK(inOrder);
+}
+
+void testEveryRetirementCancelsWhatIsInFlight() {
+    FakeTransport transport;
+    transport.paceMs = 3;
+    StreamEngine engine(config48kNumbered(), transport);
+    CHECK(engine.start());
+    for (int round = 0; round < 2; ++round) {
+        const int64_t epoch = round == 0 ? 0 : engine.retireOutput();
+        CHECK(waitUntil([&] { return stat(engine, kStatEpoch) == epoch; }));
+        writeAll(engine, numbered(1 + round * 100'000, 8'000), epoch);
+        engine.setRunning(epoch, true);
+        CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) >= 1'000; }));
+    }
+    // Two rounds of URBs have gone out and come back, and this seek must cancel what is in flight again:
+    // all three, or two when one was just reaped and waits to be submitted.
+    const int before = transport.discards;
+    const int64_t last = engine.retireOutput();
+    CHECK(waitUntil([&] { return stat(engine, kStatEpoch) == last; }));
+    CHECK(transport.discards - before >= 2);
+    CHECK(transport.discards - before <= 3);
+    CHECK(engine.stop(2000));
+    CHECK_EQ(transport.doubleDiscards, 0);
+}
+
+void testADeviceRemovedDuringARetirementEndsTheStreamAndEveryUrbStillComesBack() {
+    FakeTransport transport;
+    transport.paceMs = 2;
+    StreamEngine engine(config48kNumbered(), transport);
+    CHECK(engine.start());
+    writeAll(engine, numbered(1, 8'000));
+    engine.setRunning(0, true);
+    CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) >= 500; }));
+
+    transport.deviceGoneWhileCancelled = true;
+    const int64_t next = engine.retireOutput();
+    CHECK(waitUntil([&] { return stat(engine, kStatFailure) == kFailureDeviceGone; }));
+    const auto audio = numbered(900'000, 400);
+    CHECK_EQ(engine.write(next, audio.data(), 1'600), -1);
+    CHECK(engine.stop(2000));
+    CHECK_EQ(transport.doubleDiscards, 0);
+}
+
+void testStatsNeverMixTwoOutputs() {
+    FakeTransport transport;
+    transport.paceMs = 1;
+    StreamEngine engine(config48kNumbered(), transport);
+    CHECK(engine.start());
+    std::atomic<bool> done{false};
+    std::atomic<int> mixed{0};
+    std::thread reader([&] {
+        int64_t values[kStatCount];
+        while (!done) {
+            engine.readStats(values);
+            if (values[kStatEpoch] < 0) continue;
+            if (values[kStatMediaFramesSubmitted] > values[kStatMediaFramesWritten] ||
+                values[kStatMediaFramesProcessed] > values[kStatMediaFramesSubmitted]) {
+                ++mixed;
+            }
+        }
+    });
+    int64_t epoch = 0;
+    for (int round = 0; round < 40; ++round) {
+        writeAll(engine, numbered(1 + round * 10'000, 2'000), epoch);
+        engine.setRunning(epoch, true);
+        waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) >= 400; });
+        epoch = engine.retireOutput();
+        CHECK(waitUntil([&] { return stat(engine, kStatEpoch) == epoch; }));
+    }
+    done = true;
+    reader.join();
+    CHECK(engine.stop(2000));
+    CHECK_EQ(mixed, 0);
+}
+
+void testARetiredOutputsCommandsChangeNothing() {
+    FakeTransport transport;
+    StreamEngine engine(config48kNumbered(), transport);
+    CHECK(engine.start());
+    const int64_t next = engine.retireOutput();
+    CHECK(waitUntil([&] { return stat(engine, kStatEpoch) == next; }));
+    writeAll(engine, numbered(1, 2'000), next);
+
+    // Running or ending the retired epoch must change nothing for the new one: its audio waits for its
+    // own start, and the gap after it still counts as an underrun.
+    engine.setRunning(0, true);
+    engine.markEndOfStream(0);
+    sleepMs(30);
+    CHECK_EQ(stat(engine, kStatMediaFramesSubmitted), 0);
+    engine.setRunning(next, true);
+    CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) == 2'000; }));
+    CHECK(waitUntil([&] { return stat(engine, kStatUnderruns) == 1; }));
+    CHECK(engine.stop(2000));
 }
 
 }  // namespace
@@ -523,6 +766,13 @@ int main() {
     testADeviceGoneFromReapIsReportedAndItsUrbsStillComeBack();
     testAFailedSubmitEndsTheStreamAndReclaimsTheRest();
     testPartialFramesAreRefused();
+    testASecondSeekWhileTheFirstIsReclaimedStartsAtItsOwnFirstFrame();
+    testARetirementWhoseUrbsNeverComeBackNeverLetsTheNextOutputWrite();
+    testANaturalEndPlaysTheTailBeforeTheOutputIsRetired();
+    testARetiredOutputsCommandsChangeNothing();
+    testEveryRetirementCancelsWhatIsInFlight();
+    testADeviceRemovedDuringARetirementEndsTheStreamAndEveryUrbStillComesBack();
+    testStatsNeverMixTwoOutputs();
     if (failures == 0) std::printf("All checks passed\n");
     return failures == 0 ? 0 : 1;
 }

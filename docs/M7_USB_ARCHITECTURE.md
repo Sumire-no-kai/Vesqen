@@ -357,10 +357,10 @@ URB 的大小按时长计算：每个约 16 到 32 ms，不超过内核上限的
 
 ### 线程和通信
 
-- 只有 native 线程操作传输队列。控制命令经带 epoch 和完成确认的信箱传递。
+- 只有 native 线程操作传输队列。每个外部调用都带 epoch，只有最新的 epoch 生效；外部调用和流线程从检查 epoch 到提交 URB 的一段共用一把短锁，所以 `retireOutput()` 返回之后，旧输出的数据不会再被提交。流线程等待 URB 时不持有这把锁。退休完成后流线程发布已确认的 epoch，这就是完成确认（2026-11-06 实现）。
 - native 线程不回调 JVM，只发布原子计数和错误状态。Kotlin 在 `write()` 和 `getPositionUs()` 中读取；会话存在期间，另由 `usb-control` 每 250 ms 读取一次，以便在暂停时也能发现拔出。
 - 线程请求 `THREAD_PRIORITY_URGENT_AUDIO` 级别，普通应用无法使用 `SCHED_FIFO`。实际是否生效由 M7-2 核实。
-- JNI 接口保持很小：`create(fd, plan)`、`start()`、`write(directBuffer, offset, size)`、`setRunning()`、`retireOutput(epoch)`、`markEndOfStream()`、`readStats(long[])`、`destroy()`。
+- JNI 接口保持很小：`create(fd, plan)`、`start()`、`write(epoch, directBuffer, offset, size)`、`setRunning(epoch, running)`、`retireOutput()`（返回下一个输出的 epoch）、`markEndOfStream(epoch)`、`readStats(long[])`、`destroy()`。`readStats()` 同时给出计数所属的 epoch 和最新的 epoch，计数重置期间 epoch 为 -1。
 
 ### 输出退休与销毁
 
