@@ -6,7 +6,7 @@
 
 **M7-0 和 M7-1 已完成（D1 的设备待定），M7 的播放代码尚未开始。** 分支 `feature/usb-host-output` 及其 worktree `.claude/worktrees/usb-host-output` 于 2026-10-26 从 `master` 建立，M7-1 的代码已合入这个分支（PR #260），尚未进入 `master`。M7-1 和 M7-2 在这个分支上开发，何时合入 `master` 见 D6。
 
-**M7-2：G1 于 2026-11-06 在 iQOO 9 × JBL Flip 7 上判定通过**（调试构建，焦点按模拟触发通过，见[设备验收](M7_DEVICE_ACCEPTANCE.md)）。代码在本地分支 `feature/usb-native-transport`，尚未合入 `feature/usb-host-output`。
+**M7-2：G1 于 2026-11-06 在 iQOO 9 × JBL Flip 7 上判定通过**（调试构建，焦点按模拟触发通过，见[设备验收](M7_DEVICE_ACCEPTANCE.md)）。同日的独立复核及其意见的处理见 [#273](https://github.com/Sumire-no-kai/Vesqen/issues/273)。代码在本地分支 `feature/usb-native-transport`，尚未合入 `feature/usb-host-output`。
 
 可直接复用的部分：
 
