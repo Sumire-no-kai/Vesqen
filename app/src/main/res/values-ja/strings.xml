@@ -327,7 +327,7 @@
     <string name="chain_strict_applying_body_direct">Vesqen は %1$s を占有し、サンプルレートと音量を設定しています。</string>
     <string name="chain_strict_active_title">厳格 USB 出力が有効</string>
     <string name="chain_strict_active_body">%1$s は %2$s を使用中で、AudioTrack、ミキサーの優先設定、出力先が一致しています。再生開始、シーク、形式の切り替えの直後 20 ミリ秒にはフェードインが入ります。出力信号の外部検証は、これとは別の根拠です。</string>
-    <string name="chain_strict_active_body_direct">%1$s は Vesqen の直接出力を %2$s で受信しています。Android のミキシング、リサンプリング、ソフトウェア音量調整は経由していません。出力信号の外部検証は、これとは別の根拠です。</string>
+    <string name="chain_strict_active_body_direct">%1$s は Vesqen の直接出力を %2$sで受信しています。Android のミキシング、リサンプリング、ソフトウェア音量調整は経由していません。出力信号の外部検証は、これとは別の根拠です。</string>
     <string name="chain_verified_title">外部で検証済みの出力</string>
     <string name="chain_verified_body">記録 %1$s は、このアプリのビルド、スマートフォンと ROM、DAC、ソース形式、出力形式がすべて一致する構成での検証結果です。検証方法：%2$s。</string>
     <string name="chain_strict_failed_title">再生を停止しました</string>
