@@ -2,6 +2,7 @@ package io.github.sumirenokai.vesqen.playback
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
@@ -20,9 +21,13 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioOutput
 import androidx.media3.exoplayer.audio.AudioOutputProvider
+import androidx.media3.exoplayer.audio.AudioSink
 import io.github.sumirenokai.vesqen.library.AudioTrack as LibraryTrack
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMediaItemExtras
+import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
+import io.github.sumirenokai.vesqen.usb.session.DirectUsbFailure
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 import java.nio.ByteBuffer
@@ -71,7 +76,7 @@ class UsbOutputCoordinatorTest {
     private var strictAllowed = true
     private lateinit var coordinator: UsbOutputCoordinator
 
-    private fun start(modifyAudioSettingsGranted: Boolean = true, usbHost: Boolean = true) {
+    private fun start(modifyAudioSettingsGranted: Boolean = true, usbHost: Boolean = true, direct: DirectUsbRoute? = null) {
         if (modifyAudioSettingsGranted) {
             shadowOf(context).grantPermissions(Manifest.permission.MODIFY_AUDIO_SETTINGS)
         }
@@ -82,6 +87,7 @@ class UsbOutputCoordinatorTest {
             stateRepository = repository,
             mixerAdapter = mixer,
             strictOutputAllowed = { strictAllowed },
+            directRoute = direct,
         )
         coordinator.attachPlayer(player)
     }
@@ -1037,6 +1043,239 @@ class UsbOutputCoordinatorTest {
         assertNull(status().hardwareIdentity)
     }
 
+    // Vesqen's own USB output (M7-4)
+
+    private val direct = FakeDirectRoute()
+
+    private fun reachDirectActive(items: List<MediaItem> = listOf(mediaItem())) {
+        connect(dac)
+        start(direct = direct)
+        player.setMediaItems(items)
+        player.prepare()
+        idle()
+        requestStrict()
+        player.play()
+        idle()
+        checkNotNull(direct.listener).onOutputOpened()
+        idle()
+        assertStatus(UsbOutputPhase.ACTIVE, "direct_usb.active")
+        playerCalls.clear()
+        direct.calls.clear()
+    }
+
+    @Test
+    fun `without a bit-perfect mixer strict mode inspects the own path and takes over only to play`() {
+        connect(dac)
+        start(direct = direct)
+        loadTrack()
+
+        requestStrict()
+        assertStatus(UsbOutputPhase.AVAILABLE, "direct_usb.available")
+        assertEquals("JBL Flip 7", status().deviceName)
+        assertEquals(listOf("inspect"), direct.calls)
+        assertTrue(playerCalls.isEmpty())
+
+        player.play()
+        idle()
+        assertStatus(UsbOutputPhase.APPLYING, "direct_usb.taking_over")
+        assertEquals(listOf("inspect", "inspect", "takeOver"), direct.calls)
+        assertEquals(listOf("stop", "prepare", "play"), playerCalls.takeLast(3))
+        assertTrue("The player plays on, now through the strict sink", player.playWhenReady)
+
+        checkNotNull(direct.listener).onOutputOpened()
+        idle()
+        assertStatus(UsbOutputPhase.ACTIVE, "direct_usb.active")
+    }
+
+    @Test
+    fun `a bit-perfect mixer keeps the official path`() {
+        connectDacWithMixer()
+        start(direct = direct)
+        loadTrack()
+
+        requestStrict()
+
+        assertStatus(UsbOutputPhase.AVAILABLE, "strict_usb.bit_perfect_available")
+        assertTrue(direct.calls.isEmpty())
+    }
+
+    @Test
+    fun `on service start a missing USB permission is reported without a dialog`() {
+        connect(dac)
+        preferences.edit(commit = true) { putString(MODE_KEY, UsbOutputMode.STRICT_BIT_PERFECT.name) }
+        player.setMediaItem(mediaItem())
+        player.prepare()
+        direct.inspection = DirectUsbInspection.PermissionNeeded
+
+        start(direct = direct)
+        idle()
+
+        assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_required")
+        assertEquals(listOf("inspect", "release"), direct.calls)
+    }
+
+    @Test
+    fun `the user's own action asks for USB permission, and a refusal fails closed`() {
+        connect(dac)
+        start(direct = direct)
+        loadTrack()
+        direct.inspection = DirectUsbInspection.PermissionNeeded
+        direct.permissionGranted = false
+
+        requestStrict()
+
+        assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_denied")
+        assertEquals(listOf("inspect", "requestPermission", "release"), direct.calls)
+    }
+
+    @Test
+    fun `a granted USB permission continues the attempt`() {
+        connect(dac)
+        start(direct = direct)
+        loadTrack()
+        direct.inspection = DirectUsbInspection.PermissionNeeded
+
+        requestStrict()
+
+        assertStatus(UsbOutputPhase.AVAILABLE, "direct_usb.available")
+        assertEquals(listOf("inspect", "requestPermission", "inspect"), direct.calls)
+    }
+
+    @Test
+    fun `a failed takeover fails closed and gives the device back`() {
+        connect(dac)
+        start(direct = direct)
+        loadTrack()
+        direct.takeoverFailure = DirectUsbFailure(DirectUsbFailure.Reason.VOLUME_CONTROL_FAILED, "no readback")
+        requestStrict()
+
+        player.play()
+        idle()
+
+        assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.volume_control_failed")
+        assertEquals("release", direct.calls.last())
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `the route coming back after a failure starts nothing until the device is plugged in again`() {
+        connect(dac)
+        start(direct = direct)
+        loadTrack()
+        direct.takeoverFailure = DirectUsbFailure(DirectUsbFailure.Reason.INTERFACE_CLAIM_FAILED, "busy")
+        requestStrict()
+        player.play()
+        idle()
+        direct.calls.clear()
+        direct.takeoverFailure = null
+
+        connect(audioDevice(id = 12))
+        idle()
+        assertTrue("Android shows the released device again", direct.calls.isEmpty())
+
+        context.sendBroadcast(Intent(UsbManager.ACTION_USB_DEVICE_ATTACHED).setPackage(context.packageName))
+        idle()
+        assertEquals(listOf("inspect"), direct.calls)
+    }
+
+    @Test
+    fun `a track transition keeps the own output`() {
+        reachDirectActive(listOf(mediaItem(mediaId = "first"), mediaItem(mediaId = "second")))
+
+        player.seekToNextMediaItem()
+        idle()
+
+        assertFalse(playerCalls.contains("stop"))
+        assertTrue(direct.calls.isEmpty())
+        assertEquals(UsbOutputPhase.ACTIVE, status().phase)
+    }
+
+    @Test
+    fun `pausing leaves ACTIVE and playing returns to it without a new takeover`() {
+        reachDirectActive()
+
+        player.pause()
+        idle()
+        assertStatus(UsbOutputPhase.APPLYING, "direct_usb.configured_not_playing")
+
+        player.play()
+        idle()
+        assertStatus(UsbOutputPhase.ACTIVE, "direct_usb.active")
+        assertTrue(direct.calls.isEmpty())
+    }
+
+    @Test
+    fun `returning to system output gives the device back and rebuilds the player`() {
+        reachDirectActive()
+
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        idle()
+
+        assertStatus(UsbOutputPhase.SYSTEM, "system_audio_route")
+        assertEquals(listOf("release"), direct.calls)
+        assertTrue(playerCalls.containsAll(listOf("stop", "prepare")))
+        assertFalse(direct.streaming)
+    }
+
+    @Test
+    fun `a session failure fails closed with its reason`() {
+        reachDirectActive()
+
+        checkNotNull(direct.listener).onFailed(DirectUsbFailure(DirectUsbFailure.Reason.DEVICE_DISCONNECTED, "unplugged"))
+        idle()
+
+        assertFailedAfterActive(UsbOutputFailure.DEVICE_DISCONNECTED, "direct_usb.device_disconnected", UsbOutputFailureOrigin.ROUTE_CHANGE)
+        assertEquals(listOf("release"), direct.calls)
+    }
+
+    private class FakeDirectRoute : DirectUsbRoute {
+        val calls = mutableListOf<String>()
+        var inspection: DirectUsbInspection = DirectUsbInspection.Ready("JBL Flip 7", PLAN_48K_24)
+        var permissionGranted = true
+        var takeoverFailure: DirectUsbFailure? = null
+
+        override val provider: AudioOutputProvider = object : AudioOutputProvider {
+            override fun getFormatSupport(formatConfig: AudioOutputProvider.FormatConfig) = throw UnsupportedOperationException()
+
+            override fun getOutputConfig(formatConfig: AudioOutputProvider.FormatConfig) = throw UnsupportedOperationException()
+
+            override fun getAudioOutput(config: AudioOutputProvider.OutputConfig): AudioOutput = throw UnsupportedOperationException()
+
+            override fun addListener(listener: AudioOutputProvider.Listener) = Unit
+
+            override fun removeListener(listener: AudioOutputProvider.Listener) = Unit
+
+            override fun release() = Unit
+        }
+
+        override var streaming = false
+        override var listener: DirectUsbRoute.Listener? = null
+
+        override fun onSinkConfigured(config: AudioSink.AudioSinkConfig) = Unit
+
+        override fun inspect(source: SourcePcmFormat): DirectUsbInspection = inspection.also { calls += "inspect" }
+
+        override fun requestPermission(onResult: (granted: Boolean) -> Unit) {
+            calls += "requestPermission"
+            if (permissionGranted) inspection = DirectUsbInspection.Ready("JBL Flip 7", PLAN_48K_24)
+            onResult(permissionGranted)
+        }
+
+        override fun takeOver(onDone: (DirectUsbFailure?) -> Unit) {
+            calls += "takeOver"
+            val failure = takeoverFailure
+            streaming = failure == null
+            onDone(failure)
+        }
+
+        override fun release() {
+            calls += "release"
+            streaming = false
+        }
+
+        override fun close() = Unit
+    }
+
     private fun status(): UsbOutputStatus = repository.snapshot()
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
@@ -1196,6 +1435,12 @@ class UsbOutputCoordinatorTest {
 
         // AudioPort.ROLE_SINK is hidden; AudioDeviceInfoBuilder leaves the role unset.
         const val AUDIO_PORT_ROLE_SINK = 2
+
+        val PLAN_48K_24 = StreamingPlan(
+            interfaceNumber = 2, alternateSetting = 2, endpointAddress = 3, endpointSetsSampleRate = true, sampleRateHz = 48_000,
+            channels = 2, subslotBytes = 3, bitResolution = 24, serviceIntervalUs = 1000, maxPacketBytes = 288,
+            packetsPerUrb = 32, urbCount = 3, ringFrames = 24_000,
+        )
 
         val MIXER_48K_16 = MixerProfile(
             PlatformPcmFormat(48_000, AudioFormat.ENCODING_PCM_16BIT, AudioFormat.CHANNEL_OUT_STEREO, 2),

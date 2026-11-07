@@ -33,6 +33,7 @@ import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
+import io.github.sumirenokai.vesqen.BuildConfig
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.MainActivity
 import io.github.sumirenokai.vesqen.VesqenApplication
@@ -54,6 +55,7 @@ class PlaybackService : MediaSessionService() {
     private var playbackStateKeeper: PlaybackStateKeeper? = null
     private var sessionArtworkLoader: SessionArtworkLoader? = null
     private var usbOutputCoordinator: UsbOutputCoordinator? = null
+    private var directUsbRoute: DirectUsbRoute? = null
     private var notificationProvider: DefaultMediaNotificationProvider? = null
     /** Opened on the first playback resumption; the UI keeps its own catalog. */
     private var resumptionCatalog: AndroidLibraryCatalog? = null
@@ -248,14 +250,19 @@ class PlaybackService : MediaSessionService() {
             .setTransferListener(telemetry.transferListener)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory, VesqenExtractorsFactory())
         val outputStateRepository = (application as VesqenApplication).usbOutputStateRepository
+        // M7-4: off in release builds until 2.0.0-beta.1 (`vesqen.directUsb`).
+        val directRoute = if (BuildConfig.DIRECT_USB_ENABLED) AndroidDirectUsbRoute(this) else null
+        directUsbRoute = directRoute
         val outputCoordinator = UsbOutputCoordinator(
             this,
             outputStateRepository,
             strictOutputAllowed = (application as VesqenApplication).premiumAccess::strictOutputAllowed,
+            directRoute = directRoute,
         ).also {
             usbOutputCoordinator = it
         }
-        val player = ExoPlayer.Builder(this, VesqenAudioRenderersFactory(this, outputCoordinator, telemetry::onDecoderOutputFormat))
+        val renderers = VesqenAudioRenderersFactory(this, outputCoordinator, telemetry::onDecoderOutputFormat, directRoute)
+        val player = ExoPlayer.Builder(this, renderers)
             .setMediaSourceFactory(mediaSourceFactory)
             .build()
             .apply {
@@ -412,6 +419,8 @@ class PlaybackService : MediaSessionService() {
         (application as VesqenApplication).usbOutputStateRepository.removeListener(outputStateListener)
         usbOutputCoordinator?.close()
         usbOutputCoordinator = null
+        directUsbRoute?.close()
+        directUsbRoute = null
         playbackStateKeeper?.stop()
         playbackStateKeeper = null
         mediaSession?.run {

@@ -26,18 +26,24 @@ internal class VesqenAudioRenderersFactory(
     private val audioOutputProvider: AudioOutputProvider,
     /** Receives what each decoder actually produced (#72); called on the playback thread. */
     private val onDecoderOutputFormat: (Format, DecoderOutputFormat) -> Unit = { _, _ -> },
+    /** M7-4: while it streams, the player plays through the strict sink into Vesqen's own USB output. */
+    private val directRoute: DirectUsbRoute? = null,
 ) : DefaultRenderersFactory(context) {
     override fun buildAudioSink(
         context: Context,
         enableFloatOutput: Boolean,
         enableAudioTrackPlaybackParams: Boolean,
-    ): AudioSink = DefaultAudioSink.Builder(context)
-        // Media3 requests float PCM for high-resolution integer sources. A strict route is only
-        // activated when the USB mixer's advertised profile matches that actual request exactly.
-        .setEnableFloatOutput(true)
-        .setEnableAudioOutputPlaybackParameters(false)
-        .setAudioOutputProvider(audioOutputProvider)
-        .build()
+    ): AudioSink {
+        val normal = DefaultAudioSink.Builder(context)
+            // Media3 requests float PCM for high-resolution integer sources. A strict route is only
+            // activated when the USB mixer's advertised profile matches that actual request exactly.
+            .setEnableFloatOutput(true)
+            .setEnableAudioOutputPlaybackParameters(false)
+            .setAudioOutputProvider(audioOutputProvider)
+            .build()
+        val route = directRoute ?: return normal
+        return SelectingAudioSink(normal, StrictPcmAudioSink(route.provider, route::onSinkConfigured)) { route.streaming }
+    }
 
     override fun buildAudioRenderers(
         context: Context,

@@ -1,7 +1,10 @@
 package io.github.sumirenokai.vesqen.playback
 
 import android.Manifest
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
@@ -30,6 +33,7 @@ import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
 import androidx.media3.exoplayer.audio.ForwardingAudioOutputProvider
 import androidx.media3.exoplayer.audio.ForwardingAudioOutput
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMediaItemExtras
+import io.github.sumirenokai.vesqen.usb.session.DirectUsbFailure
 import java.nio.ByteBuffer
 
 /**
@@ -47,6 +51,11 @@ internal class UsbOutputCoordinator(
     private val mixerAdapter: MixerBitPerfectAdapter = MixerBitPerfectAdapterFactory.create(context),
     /** #119: false once the strict output trial ended without a purchase. */
     private val strictOutputAllowed: () -> Boolean = { true },
+    /**
+     * M7-4: Vesqen's own USB output, for phones whose Android offers no bit-perfect mixer for the
+     * device. Null when the build leaves it off (`vesqen.directUsb`).
+     */
+    private val directRoute: DirectUsbRoute? = null,
 ) : ForwardingAudioOutputProvider(
     AudioTrackAudioOutputProvider.Builder(context.applicationContext).build(),
 ), Player.Listener {
@@ -89,11 +98,35 @@ internal class UsbOutputCoordinator(
     private var closed = false
     private var statusGeneration = stateRepository.snapshot().generation
 
+    /** The current strict attempt uses Vesqen's own USB output; set from a ready inspection until it ends. */
+    private var directPath = false
+    private var directDeviceName: String? = null
+
+    /** Media3 opened an output on the current takeover; until then nothing has reached the DAC. */
+    private var directOutputOpened = false
+
+    /**
+     * Set when the own path gave the device back after a failure. Android then shows the USB route
+     * again, which must not start another takeover; a real plug-in (a USB attach) clears it.
+     */
+    private var awaitingReattach = false
+
+    private val usbAttachReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            synchronized(lock) { awaitingReattach = false }
+            if (currentMode() == UsbOutputMode.STRICT_BIT_PERFECT) {
+                scheduleReconfigure(resume = player?.playWhenReady == true, origin = UsbOutputFailureOrigin.ROUTE_CHANGE)
+            }
+        }
+    }
+
     private val deviceCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
             if (
                 addedDevices.any(AudioDeviceInfo::isUsbAudioOutput) &&
-                currentMode() == UsbOutputMode.STRICT_BIT_PERFECT
+                currentMode() == UsbOutputMode.STRICT_BIT_PERFECT &&
+                // The own path's device leaves and rejoins Android's routes on takeover and release.
+                synchronized(lock) { !directPath && !awaitingReattach }
             ) {
                 scheduleReconfigure(resume = player?.playWhenReady == true, origin = UsbOutputFailureOrigin.ROUTE_CHANGE)
             }
@@ -116,6 +149,27 @@ internal class UsbOutputCoordinator(
         this.player = player
         player.addListener(this)
         audioManager.registerAudioDeviceCallback(deviceCallback, mainHandler)
+        directRoute?.let { route ->
+            route.listener = object : DirectUsbRoute.Listener {
+                override fun onOutputOpened() {
+                    mainHandler.post {
+                        synchronized(lock) { if (directPath) directOutputOpened = true }
+                        publishDirectActiveIfPlaying()
+                    }
+                }
+
+                override fun onFailed(failure: DirectUsbFailure) {
+                    val (reason, code) = failure.toStrictFailure()
+                    failClosed(reason, code)
+                }
+            }
+            ContextCompat.registerReceiver(
+                appContext,
+                usbAttachReceiver,
+                IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+        }
         sourceFormat = player.currentMediaItem.toSourcePcmFormat()
         if (mode == UsbOutputMode.SYSTEM) {
             publishSystem()
@@ -151,6 +205,9 @@ internal class UsbOutputCoordinator(
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         sourceFormat = mediaItem.toSourcePcmFormat()
+        // The own output checks every item where its PCM begins (#282) and keeps the DAC between
+        // items, so a transition rebuilds nothing.
+        if (synchronized(lock) { directPath } && directRoute?.streaming == true) return
         if (currentMode() == UsbOutputMode.STRICT_BIT_PERFECT) {
             val playbackRequested = player?.playWhenReady == true || synchronized(lock) { resumeAfterConfiguration }
             scheduleReconfigure(
@@ -172,6 +229,11 @@ internal class UsbOutputCoordinator(
             }
             if (currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
             val status = stateRepository.snapshot()
+            if (status.phase == UsbOutputPhase.ACTIVE && synchronized(lock) { directPath }) {
+                // The output stops its stream on pause, so nothing needs gating here.
+                publishDirect(UsbOutputPhase.APPLYING, "direct_usb.configured_not_playing")
+                return
+            }
             if (status.phase == UsbOutputPhase.ACTIVE) {
                 // Pause/focus-loss callbacks can race the playback thread. Close the gate before
                 // revoking ACTIVE so buffered or newly resumed PCM cannot pass until reverified.
@@ -201,6 +263,12 @@ internal class UsbOutputCoordinator(
             internalResumeInProgress = false
         }
         if (currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
+        if (synchronized(lock) { directPath } && directRoute?.streaming == true &&
+            stateRepository.snapshot().phase == UsbOutputPhase.APPLYING
+        ) {
+            publishDirectActiveIfPlaying()
+            return
+        }
         when (stateRepository.snapshot().phase) {
             UsbOutputPhase.SYSTEM,
             UsbOutputPhase.AVAILABLE,
@@ -307,6 +375,11 @@ internal class UsbOutputCoordinator(
             return
         }
         enforceNeutralProcessing(activePlayer)
+        val route = directRoute
+        if (route != null && usesDirectPath(route)) {
+            reconfigureDirectOutput(route, generation, activePlayer)
+            return
+        }
         val source = sourceFormat
         val devices = usbAudioOutputs()
         val deviceModels = devices.map { UsbOutputDevice(it.id, it.displayName()) }
@@ -932,6 +1005,7 @@ internal class UsbOutputCoordinator(
                 device = device ?: selectedDevice,
                 sink = sink ?: selectedMixerFormat,
                 audioAttributes = audioAttributes ?: selectedAudioAttributes,
+                directDeviceName = directDeviceName.takeIf { directPath },
             )
             configurationGeneration += 1
             selectedPlanGeneration = NO_GENERATION
@@ -941,8 +1015,12 @@ internal class UsbOutputCoordinator(
             selectedAudioAttributes = null
             resumeAfterConfiguration = false
             reconfigurePosted = false
+            if (directPath) awaitingReattach = true
+            directPath = false
+            directOutputOpened = false
             state
         } ?: return
+        directRoute?.release()
         detachRoutingListener()
         if (attemptMixerCleanup) synchronized(mixerMutationLock) {
             mixerPreferences.clearAll()
@@ -955,6 +1033,7 @@ internal class UsbOutputCoordinator(
             sink = failedState.sink,
             decisionCode = code,
             failureOrigin = origin,
+            deviceName = failedState.device?.displayName() ?: failedState.directDeviceName,
         )
         if (currentMode() == UsbOutputMode.STRICT_BIT_PERFECT) {
             player?.run {
@@ -976,6 +1055,8 @@ internal class UsbOutputCoordinator(
             } else {
                 synchronized(lock) {
                     mode = UsbOutputMode.SYSTEM
+                    directPath = false
+                    directOutputOpened = false
                     selectedDevice = null
                     selectedProfiles = null
                     selectedMixerFormat = null
@@ -999,6 +1080,7 @@ internal class UsbOutputCoordinator(
             return
         }
         preferences.edit { putString(MODE_KEY, UsbOutputMode.SYSTEM.name) }
+        directRoute?.release()
         activePlayer?.setPreferredAudioDevice(null)
         publishSystem()
         if (rebuild && activePlayer != null && activePlayer.mediaItemCount > 0) {
@@ -1008,6 +1090,141 @@ internal class UsbOutputCoordinator(
             if (resume) activePlayer.play()
         }
     }
+
+    /**
+     * The official path wherever Android offers a bit-perfect mixer for the device, the own path
+     * otherwise. Decided per USB connection: once the device is held, its route is gone and the
+     * attempt stays on the own path.
+     */
+    private fun usesDirectPath(route: DirectUsbRoute): Boolean {
+        if (route.streaming) return true
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
+        val routes = usbAudioOutputs()
+        // Without a route the official preflight reports the missing device, and the route's
+        // arrival starts the next attempt.
+        if (routes.isEmpty()) return false
+        return routes.none { device -> mixerAdapter.profiles(device).getOrNull()?.any(MixerProfile::bitPerfect) == true }
+    }
+
+    private fun reconfigureDirectOutput(route: DirectUsbRoute, generation: Long, activePlayer: ExoPlayer) {
+        if (!appContext.packageManager.hasSystemFeature(PackageManager.FEATURE_USB_HOST)) {
+            failClosed(UsbOutputFailure.USB_HOST_UNAVAILABLE, "direct_usb.usb_host_unavailable", expectedGeneration = generation)
+            return
+        }
+        val source = sourceFormat
+        if (source == null) {
+            failClosed(UsbOutputFailure.SOURCE_FORMAT_UNKNOWN, "direct_usb.source_format_unknown", expectedGeneration = generation)
+            return
+        }
+        when (val inspection = route.inspect(source)) {
+            DirectUsbInspection.NoDevice ->
+                failClosed(UsbOutputFailure.NO_USB_AUDIO_DEVICE, "direct_usb.no_usb_audio_device", expectedGeneration = generation)
+            DirectUsbInspection.SeveralDevices ->
+                failClosed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.device_ambiguous", expectedGeneration = generation)
+            DirectUsbInspection.PermissionNeeded -> requestDirectPermission(route, generation, source)
+            is DirectUsbInspection.Refused -> failClosed(
+                if (inspection.formatRefused) UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED else UsbOutputFailure.PLATFORM_ERROR,
+                "direct_usb.${inspection.code}",
+                expectedGeneration = generation,
+            )
+            is DirectUsbInspection.Ready -> startDirectOutput(route, generation, activePlayer, inspection, source)
+        }
+    }
+
+    /** USB permission is asked for only on the user's own action; otherwise the state says it is missing (#34). */
+    private fun requestDirectPermission(route: DirectUsbRoute, generation: Long, source: SourcePcmFormat) {
+        val origin = synchronized(lock) { configurationOrigin }
+        if (origin != UsbOutputFailureOrigin.USER_MODE_CHANGE && origin != UsbOutputFailureOrigin.USER_PLAYBACK) {
+            failClosed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_required", expectedGeneration = generation)
+            return
+        }
+        publish(phase = UsbOutputPhase.APPLYING, source = source, decisionCode = "direct_usb.permission_requested")
+        route.requestPermission { granted ->
+            mainHandler.post {
+                if (!isGenerationCurrent(generation)) return@post
+                if (granted) {
+                    scheduleReconfigure(resume = false, origin = origin)
+                } else {
+                    failClosed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_denied", expectedGeneration = generation)
+                }
+            }
+        }
+    }
+
+    private fun startDirectOutput(
+        route: DirectUsbRoute,
+        generation: Long,
+        activePlayer: ExoPlayer,
+        inspection: DirectUsbInspection.Ready,
+        source: SourcePcmFormat,
+    ) {
+        val installed = synchronized(lock) {
+            if (!isGenerationCurrentLocked(generation)) return@synchronized false
+            directPath = true
+            directDeviceName = inspection.deviceName
+            true
+        }
+        if (!installed) return
+        publishDirect(UsbOutputPhase.AVAILABLE, "direct_usb.available", source)
+        // As on the official path, inspection on startup or queue restoration takes nothing over.
+        if (!activePlayer.playWhenReady && !synchronized(lock) { resumeAfterConfiguration }) return
+        if (route.streaming) {
+            // Still holding the device with a plan for this source: the strict sink is in place.
+            resumeAfterDirectRebuild(activePlayer, generation)
+            return
+        }
+        publishDirect(UsbOutputPhase.APPLYING, "direct_usb.taking_over", source)
+        synchronized(lock) { directOutputOpened = false }
+        if (activePlayer.playWhenReady) {
+            synchronized(lock) {
+                internalPauseInProgress = true
+                resumeAfterConfiguration = true
+            }
+        }
+        activePlayer.pause()
+        route.takeOver { failure ->
+            if (!isGenerationCurrent(generation)) return@takeOver
+            if (failure != null) {
+                val (reason, code) = failure.toStrictFailure()
+                failClosed(reason, code, expectedGeneration = generation)
+                return@takeOver
+            }
+            activePlayer.setPreferredAudioDevice(null)
+            // Media3 resets the sink on stop(), which is where the selecting sink turns to the
+            // strict sink and the session's outputs.
+            if (activePlayer.mediaItemCount > 0) {
+                activePlayer.stop()
+                activePlayer.prepare()
+            }
+            resumeAfterDirectRebuild(activePlayer, generation)
+        }
+    }
+
+    private fun resumeAfterDirectRebuild(activePlayer: ExoPlayer, generation: Long) {
+        val resume = synchronized(lock) {
+            if (!isGenerationCurrentLocked(generation)) return@synchronized false
+            val requested = resumeAfterConfiguration
+            resumeAfterConfiguration = false
+            if (requested) internalResumeInProgress = true
+            requested
+        }
+        if (resume) activePlayer.play()
+    }
+
+    /** ACTIVE once the own output exists and the player plays; Media3 opens it on its first buffer. */
+    private fun publishDirectActiveIfPlaying() {
+        val route = directRoute ?: return
+        if (!synchronized(lock) { directPath && directOutputOpened } || !route.streaming || player?.playWhenReady != true) return
+        if (stateRepository.snapshot().phase == UsbOutputPhase.FAILED) return
+        publishDirect(UsbOutputPhase.ACTIVE, "direct_usb.active")
+    }
+
+    private fun publishDirect(phase: UsbOutputPhase, code: String, source: SourcePcmFormat? = sourceFormat) = publish(
+        phase = phase,
+        source = source,
+        decisionCode = code,
+        deviceName = synchronized(lock) { directDeviceName },
+    )
 
     private fun enforceNeutralProcessing(player: ExoPlayer) {
         if (player.volume != 1f) player.volume = 1f
@@ -1043,6 +1260,7 @@ internal class UsbOutputCoordinator(
         decisionCode: String,
         explicitMode: UsbOutputMode? = null,
         failureOrigin: UsbOutputFailureOrigin? = null,
+        deviceName: String? = device?.displayName(),
     ) {
         val cleanup = mixerPreferences.snapshot()
         val status = synchronized(lock) {
@@ -1051,8 +1269,8 @@ internal class UsbOutputCoordinator(
                 mode = explicitMode ?: mode,
                 phase = phase,
                 failure = failure,
-                deviceName = device?.displayName(),
-                hardwareIdentity = device?.let { uniqueUsbHardwareIdentity() },
+                deviceName = deviceName,
+                hardwareIdentity = deviceName?.let { uniqueUsbHardwareIdentity() },
                 sourceFormat = source?.toSummary(),
                 sinkFormat = sink?.toSummary(),
                 decisionCode = decisionCode,
@@ -1114,6 +1332,8 @@ internal class UsbOutputCoordinator(
             state
         }
         runCatching { audioManager.unregisterAudioDeviceCallback(deviceCallback) }
+        if (directRoute != null) runCatching { appContext.unregisterReceiver(usbAttachReceiver) }
+        directRoute?.release()
         player?.removeListener(this)
         detachRoutingListener()
         synchronized(mixerMutationLock) { mixerPreferences.clearAll() }
@@ -1245,6 +1465,7 @@ private data class FailedOutputState(
     val device: AudioDeviceInfo?,
     val sink: PlatformPcmFormat?,
     val audioAttributes: AudioAttributes? = null,
+    val directDeviceName: String? = null,
 )
 
 private data class ClosingOutputState(
@@ -1423,7 +1644,7 @@ internal class StrictGatedAudioOutput(
 
 private fun AudioDeviceInfo.isUsbAudioOutput(): Boolean = isSink && type in USB_AUDIO_TYPES
 
-private fun UsbDevice.isUsbAudioDevice(): Boolean =
+internal fun UsbDevice.isUsbAudioDevice(): Boolean =
     deviceClass == UsbConstants.USB_CLASS_AUDIO ||
         (0 until interfaceCount).any { index ->
             getInterface(index).interfaceClass == UsbConstants.USB_CLASS_AUDIO
