@@ -71,18 +71,20 @@ internal class StrictPcmAudioSink(
     override fun configure(audioSinkConfig: AudioSink.AudioSinkConfig) {
         onConfigure(audioSinkConfig)
         val format = audioSinkConfig.format
-        if (format.encoderDelay > 0 || format.encoderPadding > 0) {
-            throw AudioSink.ConfigurationException("Strict output does not trim samples", format)
-        }
         val formatConfig = AudioOutputProvider.FormatConfig.Builder(format)
             .setAudioAttributes(audioAttributes)
             .setAudioSessionId(audioSessionId)
             .setEnableHighResolutionPcmOutput(true)
             .build()
+        // The provider goes first, so its own refusal of a track that needs trimming reaches the state
+        // with a reason (#294). The sink still refuses it whatever the provider says.
         val outputConfig = try {
             provider.getOutputConfig(formatConfig)
         } catch (exception: AudioOutputProvider.ConfigurationException) {
             throw AudioSink.ConfigurationException(exception, format)
+        }
+        if (format.encoderDelay > 0 || format.encoderPadding > 0) {
+            throw AudioSink.ConfigurationException("Strict output does not trim samples", format)
         }
         val next = Configuration(formatConfig, outputConfig)
         if (output == null) configuration = next else pendingConfiguration = next

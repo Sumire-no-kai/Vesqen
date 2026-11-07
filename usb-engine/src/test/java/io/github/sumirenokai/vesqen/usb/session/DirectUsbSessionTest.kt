@@ -285,6 +285,69 @@ class DirectUsbSessionTest {
     }
 
     @Test
+    fun `no takeover starts while the previous session still waits for its URBs`() {
+        // #289: a rescheduled cleanup left the control thread free, and its late marker clear erased B's.
+        takeOver()
+        stream.destroyAnswers.addAll(List(5) { false })
+        session.release()
+        assertTrue(waitUntil { events.contains("stream not destroyed") })
+
+        val second = nextSession()
+        val refused = takeOver(second)
+
+        assertEquals(DirectUsbSession.Takeover.Failed::class, refused::class)
+        assertEquals(Reason.USB_TRANSFER_FAILED, (refused as DirectUsbSession.Takeover.Failed).failure.reason)
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertEquals(
+            "Only the first session wrote and cleared the marker",
+            listOf("marker volume null", "marker volume -2560", "marker cleared"),
+            events.filter { it.startsWith("marker") },
+        )
+
+        // Once the first session has given everything back, the next takeover goes ahead.
+        events.clear()
+        val third = nextSession()
+        assertEquals(DirectUsbSession.Takeover.Ready::class, takeOver(third)::class)
+        assertEquals("marker volume -2560", events.last { it.startsWith("marker") })
+    }
+
+    /** Another session for the same device after [session], sharing its control thread and marker store. */
+    private fun nextSession(): DirectUsbSession {
+        val nextStream = FakeStream(CopyOnWriteArrayList())
+        return DirectUsbSession(
+            device = UsbDeviceIdentity(deviceId = 1004, vendorId = 0x0ecb, productId = 0x2107),
+            link = FakeLink(CopyOnWriteArrayList(), FakeUac1Device(CopyOnWriteArrayList())),
+            function = JBL,
+            markers = markers,
+            control = control,
+            streams = { _, _ -> UsbStreamFactory.Creation.Created(nextStream) },
+            timing = DirectUsbSession.Timing(monitorPeriodMs = 10, retireTimeoutMs = 150, destroyTimeoutMs = 1, destroyRetryMs = 20),
+            after = session,
+        )
+    }
+
+    @Test
+    fun `an output native has not yet retired is counted once`() {
+        // #296: the retired epoch went into the finished totals and was still read live until native moved on.
+        takeOver()
+        val first = checkNotNull(session.openOutput())
+        stream.lost[0L] = 3
+        stream.acknowledgeRetirements = false
+        first.release()
+        assertEquals(3L, session.totals().lostFrames)
+
+        // Packets of the retiring output can still finish during the handoff.
+        stream.lost[0L] = 4
+        assertEquals(4L, session.totals().lostFrames)
+
+        checkNotNull(session.openOutput())
+        stream.lost[1L] = 2
+        stream.acknowledgeRetirements = true
+        assertEquals(6L, session.totals().lostFrames)
+        assertEquals(6L, session.totals().lostFrames)
+    }
+
+    @Test
     fun `a control thread stopped while URBs are out leaves the device held and says so`() {
         takeOver()
         stream.destroyAnswers.add(false)
@@ -384,10 +447,10 @@ class DirectUsbSessionTest {
         session.takeOver(PLAN, START_VOLUME) {}
     }
 
-    private fun takeOver(): DirectUsbSession.Takeover {
+    private fun takeOver(target: DirectUsbSession = session): DirectUsbSession.Takeover {
         val result = AtomicReference<DirectUsbSession.Takeover>()
         val done = CountDownLatch(1)
-        session.takeOver(PLAN, START_VOLUME) {
+        target.takeOver(PLAN, START_VOLUME) {
             result.set(it)
             done.countDown()
         }

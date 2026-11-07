@@ -13,6 +13,7 @@ import io.github.sumirenokai.vesqen.usb.descriptor.UacStreamingInterface
 import io.github.sumirenokai.vesqen.usb.descriptor.UacSyncType
 import io.github.sumirenokai.vesqen.usb.descriptor.UacVersion
 import io.github.sumirenokai.vesqen.usb.descriptor.UsbAudioTopology
+import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
 import io.github.sumirenokai.vesqen.usb.plan.StreamingRefusal
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -136,6 +137,21 @@ class DirectUsbRefusalTest {
             listOf(48_000..48_000),
             directRefusal(topology(mixed), List(3) { StreamingRefusal.NO_MATCHING_FORMAT }, cd).details?.deviceSampleRatesHz,
         )
+    }
+
+    @Test
+    fun `a plan carries a source only at its rate, depth and channel count`() {
+        val stereo24 = StreamingPlan(
+            interfaceNumber = 2, alternateSetting = 2, endpointAddress = 3, endpointSetsSampleRate = true, sampleRateHz = 48_000,
+            channels = 2, subslotBytes = 3, bitResolution = 24, serviceIntervalUs = 1000, maxPacketBytes = 288,
+            packetsPerUrb = 32, urbCount = 3, ringFrames = 24_000,
+        )
+        assertEquals(true, stereo24.carries(SourcePcmFormat(48_000, 16, 2)))
+        assertEquals(true, stereo24.carries(SourcePcmFormat(48_000, 24, 2)))
+        assertEquals(false, stereo24.carries(SourcePcmFormat(44_100, 16, 2)))
+        // #295: a known mono or multichannel source would need mixing, so it is refused before takeover.
+        assertEquals(false, stereo24.carries(SourcePcmFormat(48_000, 16, 1)))
+        assertEquals(false, stereo24.carries(SourcePcmFormat(48_000, 16, 6)))
     }
 
     @Test
