@@ -20,6 +20,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import androidx.core.content.edit
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
@@ -113,6 +114,10 @@ internal class UsbOutputCoordinator(
 
     private val usbAttachReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
+            val attached = IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+            // Storage, hubs and keyboards are not this path's business, and while the own output
+            // holds a DAC another one plugged in does not interrupt it.
+            if (attached == null || !attached.isUsbAudioDevice() || directRoute?.streaming == true) return
             synchronized(lock) { awaitingReattach = false }
             if (currentMode() == UsbOutputMode.STRICT_BIT_PERFECT) {
                 scheduleReconfigure(resume = player?.playWhenReady == true, origin = UsbOutputFailureOrigin.ROUTE_CHANGE)
@@ -206,8 +211,12 @@ internal class UsbOutputCoordinator(
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         sourceFormat = mediaItem.toSourcePcmFormat()
         // The own output checks every item where its PCM begins (#282) and keeps the DAC between
-        // items, so a transition rebuilds nothing.
-        if (synchronized(lock) { directPath } && directRoute?.streaming == true) return
+        // items, so a transition rebuilds nothing; the status only takes the new item's source.
+        if (synchronized(lock) { directPath } && directRoute?.streaming == true) {
+            val current = stateRepository.snapshot()
+            publishDirect(current.phase, current.decisionCode)
+            return
+        }
         if (currentMode() == UsbOutputMode.STRICT_BIT_PERFECT) {
             val playbackRequested = player?.playWhenReady == true || synchronized(lock) { resumeAfterConfiguration }
             scheduleReconfigure(
@@ -1165,14 +1174,16 @@ internal class UsbOutputCoordinator(
             true
         }
         if (!installed) return
-        publishDirect(UsbOutputPhase.AVAILABLE, "direct_usb.available", source)
-        // As on the official path, inspection on startup or queue restoration takes nothing over.
-        if (!activePlayer.playWhenReady && !synchronized(lock) { resumeAfterConfiguration }) return
         if (route.streaming) {
-            // Still holding the device with a plan for this source: the strict sink is in place.
+            // Still holding the device with a plan for this source, so the strict sink is in place.
+            // Not AVAILABLE: playing from AVAILABLE would start another attempt, and so on.
+            publishDirect(UsbOutputPhase.APPLYING, "direct_usb.configured_not_playing", source)
             resumeAfterDirectRebuild(activePlayer, generation)
             return
         }
+        publishDirect(UsbOutputPhase.AVAILABLE, "direct_usb.available", source)
+        // As on the official path, inspection on startup or queue restoration takes nothing over.
+        if (!activePlayer.playWhenReady && !synchronized(lock) { resumeAfterConfiguration }) return
         publishDirect(UsbOutputPhase.APPLYING, "direct_usb.taking_over", source)
         synchronized(lock) { directOutputOpened = false }
         if (activePlayer.playWhenReady) {

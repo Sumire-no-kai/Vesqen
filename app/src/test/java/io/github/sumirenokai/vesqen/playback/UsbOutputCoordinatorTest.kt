@@ -1173,9 +1173,70 @@ class UsbOutputCoordinatorTest {
         idle()
         assertTrue("Android shows the released device again", direct.calls.isEmpty())
 
-        context.sendBroadcast(Intent(UsbManager.ACTION_USB_DEVICE_ATTACHED).setPackage(context.packageName))
-        idle()
+        attach(usbDevice(UsbConstants.USB_CLASS_AUDIO))
         assertEquals(listOf("inspect"), direct.calls)
+    }
+
+    @Test
+    fun `choosing strict mode again while the own output plays keeps playing on the same session`() {
+        reachDirectActive()
+
+        coordinator.requestMode(UsbOutputMode.STRICT_BIT_PERFECT)
+        idle()
+
+        assertStatus(UsbOutputPhase.ACTIVE, "direct_usb.active")
+        assertEquals("The device is still held, so nothing is taken over again", listOf("inspect"), direct.calls)
+        assertTrue(player.playWhenReady)
+    }
+
+    @Test
+    fun `a USB device that is not audio changes nothing`() {
+        reachDirectActive()
+        val before = status()
+
+        attach(usbDevice(UsbConstants.USB_CLASS_MASS_STORAGE))
+
+        assertEquals(before, status())
+        assertTrue(direct.calls.isEmpty())
+        assertTrue(playerCalls.isEmpty())
+    }
+
+    @Test
+    fun `another audio device attached while the own output plays changes nothing`() {
+        reachDirectActive()
+        val before = status()
+
+        attach(usbDevice(UsbConstants.USB_CLASS_AUDIO))
+
+        assertEquals(before, status())
+        assertTrue(direct.calls.isEmpty())
+        assertTrue(playerCalls.isEmpty())
+    }
+
+    @Test
+    fun `a track transition on the own output publishes the next track's source`() {
+        reachDirectActive(listOf(mediaItem(bitDepth = 16, mediaId = "first"), mediaItem(bitDepth = 24, mediaId = "second")))
+        assertEquals("16-bit source", status().sourceFormat?.encoding)
+
+        player.seekToNextMediaItem()
+        idle()
+
+        assertEquals(UsbOutputPhase.ACTIVE, status().phase)
+        assertEquals("24-bit source", status().sourceFormat?.encoding)
+        assertTrue(direct.calls.isEmpty())
+    }
+
+    private fun attach(device: UsbDevice) {
+        context.sendBroadcast(
+            Intent(UsbManager.ACTION_USB_DEVICE_ATTACHED).setPackage(context.packageName).putExtra(UsbManager.EXTRA_DEVICE, device),
+        )
+        idle()
+    }
+
+    private fun usbDevice(deviceClass: Int): UsbDevice = Shadow.newInstanceOf(UsbDevice::class.java).also { device ->
+        ReflectionHelpers.setField(device, "mName", "/dev/bus/usb/001/00$deviceClass")
+        ReflectionHelpers.setField(device, "mClass", deviceClass)
+        ReflectionHelpers.setField(device, "mConfigurations", arrayOf<android.hardware.usb.UsbConfiguration>())
     }
 
     @Test
