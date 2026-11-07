@@ -41,12 +41,20 @@ internal fun directUsbFailureSpec(status: UsbOutputStatus, device: String, rateS
     } else {
         StringSpec(R.string.usb_failure_direct_depth, listOf(bits, device, maxBits))
     }
+    val channels = details?.sourceChannelCount
+    val deviceChannels = details?.deviceChannelCount
+    val channelSpec = if (channels == null || deviceChannels == null || channels == deviceChannels) {
+        null
+    } else {
+        StringSpec(R.string.usb_failure_direct_channels, listOf(channels, device, deviceChannels))
+    }
     return when (status.decisionCode.removePrefix(DIRECT_USB_CODE_PREFIX)) {
         "rate_unsupported" -> rateSpec
         "depth_unsupported" -> depthSpec
+        "channels_unsupported" -> channelSpec
         // The DAC is already set for the previous item; until it can be set again (M7-4 4c), say so
         // only when the DAC lacks the new rate or depth altogether.
-        "no_matching_direct_format" -> rateSpec ?: depthSpec
+        "no_matching_direct_format" -> rateSpec ?: depthSpec ?: channelSpec
         "source_not_lossless" -> details?.sourceCodec
             ?.let { StringSpec(R.string.usb_failure_direct_lossless_codec, listOf(it)) }
             ?: StringSpec(R.string.usb_failure_direct_lossless)

@@ -1088,6 +1088,30 @@ class UsbOutputCoordinatorTest {
     }
 
     @Test
+    fun `a DAC that USB Host lists without an Android audio route goes to the own path`() {
+        // #293: no AudioManager route used to mean no device, so the own path never looked.
+        start(direct = direct)
+        loadTrack()
+        direct.usbAudioDevicePresent = true
+
+        requestStrict()
+
+        assertStatus(UsbOutputPhase.AVAILABLE, "direct_usb.available")
+        assertEquals(listOf("inspect"), direct.calls)
+    }
+
+    @Test
+    fun `with no USB audio device at all the reason stays that none is connected`() {
+        start(direct = direct)
+        loadTrack()
+
+        requestStrict()
+
+        assertFailed(UsbOutputFailure.NO_USB_AUDIO_DEVICE, "strict_usb.no_usb_audio_device")
+        assertTrue(direct.calls.none { it == "inspect" })
+    }
+
+    @Test
     fun `a bit-perfect mixer keeps the official path`() {
         connectDacWithMixer()
         start(direct = direct)
@@ -1335,6 +1359,54 @@ class UsbOutputCoordinatorTest {
     }
 
     @Test
+    fun `an ended trial stops the next track on the own output, not the current one`() {
+        // #291: the retained session skipped the only entitlement check (#119).
+        reachDirectActive(listOf(mediaItem(mediaId = "first"), mediaItem(mediaId = "second")))
+        strictAllowed = false
+        idle()
+        assertEquals("The current song plays on", UsbOutputPhase.ACTIVE, status().phase)
+
+        player.seekToNextMediaItem()
+        idle()
+
+        assertFailedAfterActive(UsbOutputFailure.TRIAL_ENDED, "strict_usb.trial_ended", UsbOutputFailureOrigin.TRACK_TRANSITION)
+        assertEquals(listOf("release"), direct.calls)
+    }
+
+    @Test
+    fun `an entitled next track keeps the own output`() {
+        reachDirectActive(listOf(mediaItem(mediaId = "first"), mediaItem(mediaId = "second")))
+
+        player.seekToNextMediaItem()
+        idle()
+
+        assertEquals(UsbOutputPhase.ACTIVE, status().phase)
+        assertTrue(direct.calls.isEmpty())
+    }
+
+    @Test
+    fun `an emptied queue no longer reports the own output as active`() {
+        // #292: clearing the queue left ACTIVE while the device was still held.
+        reachDirectActive()
+
+        player.stop()
+        player.clearMediaItems()
+        idle()
+
+        assertStatus(UsbOutputPhase.APPLYING, "direct_usb.configured_not_playing")
+
+        // A new queue is ACTIVE again only once its output opens and plays.
+        player.setMediaItem(mediaItem(mediaId = "next"))
+        player.prepare()
+        player.play()
+        idle()
+        assertEquals(UsbOutputPhase.APPLYING, status().phase)
+        checkNotNull(direct.listener).onOutputOpened()
+        idle()
+        assertStatus(UsbOutputPhase.ACTIVE, "direct_usb.active")
+    }
+
+    @Test
     fun `pausing leaves ACTIVE and playing returns to it without a new takeover`() {
         reachDirectActive()
 
@@ -1377,6 +1449,7 @@ class UsbOutputCoordinatorTest {
         var inspection: DirectUsbInspection = DirectUsbInspection.Ready("JBL Flip 7", PLAN_48K_24)
         var permissionGranted = true
         var takeoverFailure: DirectUsbFailure? = null
+        var usbAudioDevicePresent = false
 
         override val provider: AudioOutputProvider = object : AudioOutputProvider {
             override fun getFormatSupport(formatConfig: AudioOutputProvider.FormatConfig) = throw UnsupportedOperationException()
@@ -1398,6 +1471,8 @@ class UsbOutputCoordinatorTest {
         override fun onSinkConfigured(config: AudioSink.AudioSinkConfig) = Unit
 
         override fun inspect(source: SourcePcmFormat): DirectUsbInspection = inspection.also { calls += "inspect" }
+
+        override fun hasUsbAudioDevice() = usbAudioDevicePresent
 
         override fun requestPermission(onResult: (granted: Boolean) -> Unit) {
             calls += "requestPermission"

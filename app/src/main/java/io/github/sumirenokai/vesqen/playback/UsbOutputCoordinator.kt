@@ -217,6 +217,24 @@ internal class UsbOutputCoordinator(
         // The own output checks every item where its PCM begins (#282) and keeps the DAC between
         // items, so a transition rebuilds nothing; the status only takes the new item's source.
         if (synchronized(lock) { directPath } && directRoute?.streaming == true) {
+            val playbackRequested = player?.playWhenReady == true || synchronized(lock) { resumeAfterConfiguration }
+            if (mediaItem == null) {
+                // #292: an empty queue plays nothing, whatever the device is still held for. The next
+                // queue is ACTIVE again only once its own output opens and plays.
+                synchronized(lock) { directOutputOpened = false }
+                publishDirect(UsbOutputPhase.APPLYING, "direct_usb.configured_not_playing")
+                return
+            }
+            // #291: reconfiguration holds the only entitlement check (#119), and a retained session skips
+            // it. The song that was playing has finished; the next one may not start.
+            if (!strictOutputAllowed()) {
+                failClosed(
+                    UsbOutputFailure.TRIAL_ENDED,
+                    "strict_usb.trial_ended",
+                    origin = if (playbackRequested) UsbOutputFailureOrigin.TRACK_TRANSITION else UsbOutputFailureOrigin.QUEUE_RESTORE,
+                )
+                return
+            }
             val current = stateRepository.snapshot()
             publishDirect(current.phase, current.decisionCode)
             return
@@ -1118,9 +1136,10 @@ internal class UsbOutputCoordinator(
         if (route.streaming) return true
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
         val routes = usbAudioOutputs()
-        // Without a route the official preflight reports the missing device, and the route's
-        // arrival starts the next attempt.
-        if (routes.isEmpty()) return false
+        // Without an Android route the official path has nothing to ask for a mixer, but USB Host may
+        // still list the DAC (#293); the own path then inspects it. With neither, the official
+        // preflight reports the missing device, and an arriving route starts the next attempt.
+        if (routes.isEmpty()) return route.hasUsbAudioDevice()
         return routes.none { device -> mixerAdapter.profiles(device).getOrNull()?.any(MixerProfile::bitPerfect) == true }
     }
 

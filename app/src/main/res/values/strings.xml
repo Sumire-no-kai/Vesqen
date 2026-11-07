@@ -101,6 +101,7 @@
     <string name="usb_failure_trial_ended">The free trial of Pro features has ended.</string>
     <string name="usb_failure_direct_rate">This track’s sample rate is %1$s, and %2$s supports %3$s. Strict output does not resample, so this track cannot play.</string>
     <string name="usb_failure_direct_depth">This track is %1$d-bit, and %2$s supports at most %3$d-bit at this sample rate. Strict output does not reduce bit depth, so this track cannot play.</string>
+    <string name="usb_failure_direct_channels">This track’s channel count is %1$d, and %2$s supports only %3$d. Strict output does not change the channel count, so this track cannot play.</string>
     <string name="usb_failure_direct_lossless">Strict output plays only 16-bit or 24-bit lossless audio, such as FLAC, WAV or AIFF.</string>
     <string name="usb_failure_direct_lossless_codec">Strict output plays only 16-bit or 24-bit lossless audio, such as FLAC, WAV or AIFF. This track is %1$s.</string>
     <string name="usb_failure_direct_lossless_bits">Strict output plays only 16-bit or 24-bit lossless audio, such as FLAC, WAV or AIFF. This track is %1$d-bit.</string>
