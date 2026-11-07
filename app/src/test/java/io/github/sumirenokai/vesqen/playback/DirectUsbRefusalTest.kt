@@ -123,6 +123,22 @@ class DirectUsbRefusalTest {
     }
 
     @Test
+    fun `rates a device cannot mean are left out instead of throwing`() {
+        // #290: the parser accepts a zero rate and a reversed range; the reason must not throw on them.
+        val broken = function(alt(16, rates = SampleRates.Discrete(listOf(0))), alt(24, alternate = 2, rates = SampleRates.Continuous(96_000, 8_000)))
+        assertEquals(
+            DirectUsbInspection.Refused("no_matching_format", formatRefused = true),
+            directRefusal(topology(broken), List(3) { StreamingRefusal.NO_MATCHING_FORMAT }, cd),
+        )
+
+        val mixed = function(alt(16, rates = SampleRates.Discrete(listOf(0, 48_000))))
+        assertEquals(
+            listOf(48_000..48_000),
+            directRefusal(topology(mixed), List(3) { StreamingRefusal.NO_MATCHING_FORMAT }, cd).details?.deviceSampleRatesHz,
+        )
+    }
+
+    @Test
     fun `settings the own output cannot stream at all leave the format reason general`() {
         val mono = function(alt(16, channels = 1))
 

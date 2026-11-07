@@ -105,7 +105,8 @@ internal fun TelemetrySourceFacts.toDirectDetails() = DirectUsbDetails(
 
 /**
  * Adds what [function]'s settings offer to these details: every rate, and the deepest depth at the
- * source's rate. Settings the own output cannot stream through at all are left out.
+ * source's rate. Settings the own output cannot stream through at all are left out, and so are rates
+ * a device cannot mean, such as 0 Hz or a range that ends below its start (#290).
  */
 internal fun DirectUsbDetails.withOffer(function: UacFunction): DirectUsbDetails {
     val formats = function.streamingInterfaces.flatMap { it.alternateSettings }
@@ -113,7 +114,10 @@ internal fun DirectUsbDetails.withOffer(function: UacFunction): DirectUsbDetails
         .mapNotNull { it.format }
     val rate = sourceSampleRateHz
     return copy(
-        deviceSampleRatesHz = formats.flatMap { it.sampleRates.ranges() }.distinct().sortedBy { it.first },
+        deviceSampleRatesHz = formats.flatMap { it.sampleRates.ranges() }
+            .filter { it.first in 1..it.last }
+            .distinct()
+            .sortedBy { it.first },
         deviceMaxBitsAtSourceRate = rate?.let { formats.filter { format -> rate in format.sampleRates }.maxOfOrNull { it.bitResolution } },
     )
 }
