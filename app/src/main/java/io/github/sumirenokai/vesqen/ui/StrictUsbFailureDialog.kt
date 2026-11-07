@@ -21,7 +21,7 @@ import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailureOrigin
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
-import io.github.sumirenokai.vesqen.ui.screens.strictUsbFailureLabel
+import io.github.sumirenokai.vesqen.ui.screens.strictUsbFailureReason
 
 @Composable
 internal fun StrictUsbUnavailableDialog(
@@ -96,7 +96,7 @@ internal fun StrictUsbFailureDialog(
         onDismissRequest = { dismissedFailure = failureKey },
         title = { Text(stringResource(R.string.chain_strict_failed_title)) },
         text = {
-            val reason = strictUsbFailureLabel(failure, status.decisionCode)
+            val reason = strictUsbFailureReason(status)
             Text(
                 when {
                     openPremium != null -> stringResource(R.string.player_trial_ended_body, reason)

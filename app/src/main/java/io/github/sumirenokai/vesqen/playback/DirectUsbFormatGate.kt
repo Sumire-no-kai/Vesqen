@@ -24,23 +24,12 @@ internal object DirectUsbFormatGate {
     }
 
     fun check(source: TelemetrySourceFacts?, decoded: Format, plan: StreamingPlan): Decision {
-        val mime = source?.codecMime
-        val bits = source?.bitDepth
-        val rate = source?.sampleRateHz
-        val channels = source?.channelCount
-        if (mime == null || bits == null || rate == null || channels == null) {
-            val missing = listOfNotNull(
-                "codec".takeIf { mime == null },
-                "bit depth".takeIf { bits == null },
-                "sample rate".takeIf { rate == null },
-                "channel count".takeIf { channels == null },
-            )
-            return rejected(Reason.SOURCE_FORMAT_UNKNOWN, "the library has no ${missing.joinToString()} for this file")
-        }
-        if (codecIsLossless(mime) != true && mime.lowercase() !in AIFF_MIMES) {
-            return rejected(Reason.SOURCE_FORMAT_UNSUPPORTED, "$mime is not a lossless codec")
-        }
-        if (bits !in SUPPORTED_SOURCE_BITS) return rejected(Reason.SOURCE_FORMAT_UNSUPPORTED, "a $bits-bit source")
+        sourceRefusal(source)?.let { return Decision.Rejected(it) }
+        // sourceRefusal() passes only a source whose every fact is known.
+        val facts = checkNotNull(source)
+        val bits = checkNotNull(facts.bitDepth)
+        val rate = checkNotNull(facts.sampleRateHz)
+        val channels = checkNotNull(facts.channelCount)
         // Strict output does not trim samples, so a source that needs trimming cannot play unchanged.
         if (decoded.encoderDelay != 0 || decoded.encoderPadding != 0) {
             return rejected(
@@ -73,6 +62,31 @@ internal object DirectUsbFormatGate {
         }
         return Decision.Accepted(bits)
     }
+
+    /**
+     * The file's own layer, which needs no decoder or DAC, so the service can say why before it
+     * takes the DAC over. A known lossy codec is named even when the library has no bit depth for it.
+     */
+    fun sourceRefusal(source: TelemetrySourceFacts?): DirectUsbFailure? {
+        val mime = source?.codecMime
+        if (mime != null && !isLossless(mime)) return DirectUsbFailure(Reason.SOURCE_NOT_LOSSLESS, "$mime is not a lossless codec")
+        val bits = source?.bitDepth
+        val rate = source?.sampleRateHz
+        val channels = source?.channelCount
+        if (mime == null || bits == null || rate == null || channels == null) {
+            val missing = listOfNotNull(
+                "codec".takeIf { mime == null },
+                "bit depth".takeIf { bits == null },
+                "sample rate".takeIf { rate == null },
+                "channel count".takeIf { channels == null },
+            )
+            return DirectUsbFailure(Reason.SOURCE_FORMAT_UNKNOWN, "the library has no ${missing.joinToString()} for this file")
+        }
+        if (bits !in SUPPORTED_SOURCE_BITS) return DirectUsbFailure(Reason.SOURCE_BIT_DEPTH_UNSUPPORTED, "a $bits-bit source")
+        return null
+    }
+
+    private fun isLossless(mime: String) = codecIsLossless(mime) == true || mime.lowercase() in AIFF_MIMES
 
     private fun rejected(reason: Reason, detail: String) = Decision.Rejected(DirectUsbFailure(reason, detail))
 

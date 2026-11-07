@@ -34,6 +34,8 @@ import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
 import androidx.media3.exoplayer.audio.ForwardingAudioOutputProvider
 import androidx.media3.exoplayer.audio.ForwardingAudioOutput
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMediaItemExtras
+import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceFacts
+import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
 import io.github.sumirenokai.vesqen.usb.session.DirectUsbFailure
 import java.nio.ByteBuffer
 
@@ -81,6 +83,7 @@ internal class UsbOutputCoordinator(
         UsbOutputMode.entries.firstOrNull { it.name == stored }
     } ?: UsbOutputMode.SYSTEM
     @Volatile private var sourceFormat: SourcePcmFormat? = null
+    @Volatile private var sourceFacts: TelemetrySourceFacts? = null
     private var selectedDevice: AudioDeviceInfo? = null
     private var selectedProfiles: List<MixerProfile>? = null
     private var selectedMixerFormat: PlatformPcmFormat? = null
@@ -102,6 +105,7 @@ internal class UsbOutputCoordinator(
     /** The current strict attempt uses Vesqen's own USB output; set from a ready inspection until it ends. */
     private var directPath = false
     private var directDeviceName: String? = null
+    private var directPlan: StreamingPlan? = null
 
     /** Media3 opened an output on the current takeover; until then nothing has reached the DAC. */
     private var directOutputOpened = false
@@ -163,9 +167,9 @@ internal class UsbOutputCoordinator(
                     }
                 }
 
-                override fun onFailed(failure: DirectUsbFailure) {
+                override fun onFailed(failure: DirectUsbFailure, details: DirectUsbDetails?) {
                     val (reason, code) = failure.toStrictFailure()
-                    failClosed(reason, code)
+                    failClosed(reason, code, directDetails = details)
                 }
             }
             ContextCompat.registerReceiver(
@@ -175,7 +179,7 @@ internal class UsbOutputCoordinator(
                 ContextCompat.RECEIVER_NOT_EXPORTED,
             )
         }
-        sourceFormat = player.currentMediaItem.toSourcePcmFormat()
+        updateSource(player.currentMediaItem)
         if (mode == UsbOutputMode.SYSTEM) {
             publishSystem()
         } else {
@@ -209,7 +213,7 @@ internal class UsbOutputCoordinator(
     fun currentStatus(): UsbOutputStatus = stateRepository.snapshot()
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-        sourceFormat = mediaItem.toSourcePcmFormat()
+        updateSource(mediaItem)
         // The own output checks every item where its PCM begins (#282) and keeps the DAC between
         // items, so a transition rebuilds nothing; the status only takes the new item's source.
         if (synchronized(lock) { directPath } && directRoute?.streaming == true) {
@@ -376,7 +380,7 @@ internal class UsbOutputCoordinator(
         if (closed || currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
         val generation = synchronized(lock) { configurationGeneration }
         val activePlayer = player ?: return
-        sourceFormat = activePlayer.currentMediaItem.toSourcePcmFormat()
+        updateSource(activePlayer.currentMediaItem)
         // Checked whenever strict output is prepared, never mid-track: a song that is already
         // playing finishes, and the next attempt stops like any other strict failure (#119).
         if (!strictOutputAllowed()) {
@@ -987,6 +991,8 @@ internal class UsbOutputCoordinator(
             UsbOutputFailure.PROCESSING_NOT_NEUTRAL -> UsbOutputFailureOrigin.PROCESSING_CHANGE
             else -> synchronized(lock) { configurationOrigin }
         },
+        directDevice: String? = null,
+        directDetails: DirectUsbDetails? = null,
     ) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             mainHandler.post {
@@ -999,6 +1005,8 @@ internal class UsbOutputCoordinator(
                     audioAttributes,
                     attemptMixerCleanup,
                     origin,
+                    directDevice,
+                    directDetails,
                 )
             }
             return
@@ -1014,7 +1022,7 @@ internal class UsbOutputCoordinator(
                 device = device ?: selectedDevice,
                 sink = sink ?: selectedMixerFormat,
                 audioAttributes = audioAttributes ?: selectedAudioAttributes,
-                directDeviceName = directDeviceName.takeIf { directPath },
+                directDeviceName = directDevice ?: directDeviceName.takeIf { directPath },
             )
             configurationGeneration += 1
             selectedPlanGeneration = NO_GENERATION
@@ -1043,6 +1051,7 @@ internal class UsbOutputCoordinator(
             decisionCode = code,
             failureOrigin = origin,
             deviceName = failedState.device?.displayName() ?: failedState.directDeviceName,
+            directDetails = directDetails,
         )
         if (currentMode() == UsbOutputMode.STRICT_BIT_PERFECT) {
             player?.run {
@@ -1120,6 +1129,14 @@ internal class UsbOutputCoordinator(
             failClosed(UsbOutputFailure.USB_HOST_UNAVAILABLE, "direct_usb.usb_host_unavailable", expectedGeneration = generation)
             return
         }
+        // The file's own layer of D10 needs no DAC, so a lossy or 32-bit file is named before takeover.
+        // A missing fact still goes the old way: the format gate checks it once Media3 configures.
+        val facts = sourceFacts
+        DirectUsbFormatGate.sourceRefusal(facts)?.takeUnless { it.reason == DirectUsbFailure.Reason.SOURCE_FORMAT_UNKNOWN }?.let { refusal ->
+            val (reason, code) = refusal.toStrictFailure()
+            failClosed(reason, code, expectedGeneration = generation, directDetails = facts?.toDirectDetails())
+            return
+        }
         val source = sourceFormat
         if (source == null) {
             failClosed(UsbOutputFailure.SOURCE_FORMAT_UNKNOWN, "direct_usb.source_format_unknown", expectedGeneration = generation)
@@ -1130,31 +1147,48 @@ internal class UsbOutputCoordinator(
                 failClosed(UsbOutputFailure.NO_USB_AUDIO_DEVICE, "direct_usb.no_usb_audio_device", expectedGeneration = generation)
             DirectUsbInspection.SeveralDevices ->
                 failClosed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.device_ambiguous", expectedGeneration = generation)
-            DirectUsbInspection.PermissionNeeded -> requestDirectPermission(route, generation, source)
+            is DirectUsbInspection.PermissionNeeded -> requestDirectPermission(route, generation, source, inspection.deviceName)
             is DirectUsbInspection.Refused -> failClosed(
                 if (inspection.formatRefused) UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED else UsbOutputFailure.PLATFORM_ERROR,
                 "direct_usb.${inspection.code}",
                 expectedGeneration = generation,
+                directDevice = inspection.deviceName,
+                directDetails = inspection.details,
             )
             is DirectUsbInspection.Ready -> startDirectOutput(route, generation, activePlayer, inspection, source)
         }
     }
 
     /** USB permission is asked for only on the user's own action; otherwise the state says it is missing (#34). */
-    private fun requestDirectPermission(route: DirectUsbRoute, generation: Long, source: SourcePcmFormat) {
+    private fun requestDirectPermission(route: DirectUsbRoute, generation: Long, source: SourcePcmFormat, deviceName: String) {
         val origin = synchronized(lock) { configurationOrigin }
         if (origin != UsbOutputFailureOrigin.USER_MODE_CHANGE && origin != UsbOutputFailureOrigin.USER_PLAYBACK) {
-            failClosed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_required", expectedGeneration = generation)
+            failClosed(
+                UsbOutputFailure.PLATFORM_ERROR,
+                "direct_usb.permission_required",
+                expectedGeneration = generation,
+                directDevice = deviceName,
+            )
             return
         }
-        publish(phase = UsbOutputPhase.APPLYING, source = source, decisionCode = "direct_usb.permission_requested")
+        publish(
+            phase = UsbOutputPhase.APPLYING,
+            source = source,
+            decisionCode = "direct_usb.permission_requested",
+            deviceName = deviceName,
+        )
         route.requestPermission { granted ->
             mainHandler.post {
                 if (!isGenerationCurrent(generation)) return@post
                 if (granted) {
                     scheduleReconfigure(resume = false, origin = origin)
                 } else {
-                    failClosed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_denied", expectedGeneration = generation)
+                    failClosed(
+                        UsbOutputFailure.PLATFORM_ERROR,
+                        "direct_usb.permission_denied",
+                        expectedGeneration = generation,
+                        directDevice = deviceName,
+                    )
                 }
             }
         }
@@ -1171,6 +1205,7 @@ internal class UsbOutputCoordinator(
             if (!isGenerationCurrentLocked(generation)) return@synchronized false
             directPath = true
             directDeviceName = inspection.deviceName
+            directPlan = inspection.plan
             true
         }
         if (!installed) return
@@ -1230,12 +1265,16 @@ internal class UsbOutputCoordinator(
         publishDirect(UsbOutputPhase.ACTIVE, "direct_usb.active")
     }
 
-    private fun publishDirect(phase: UsbOutputPhase, code: String, source: SourcePcmFormat? = sourceFormat) = publish(
-        phase = phase,
-        source = source,
-        decisionCode = code,
-        deviceName = synchronized(lock) { directDeviceName },
-    )
+    private fun publishDirect(phase: UsbOutputPhase, code: String, source: SourcePcmFormat? = sourceFormat) {
+        val (name, plan) = synchronized(lock) { directDeviceName to directPlan }
+        publish(
+            phase = phase,
+            source = source,
+            decisionCode = code,
+            deviceName = name,
+            directDetails = plan?.let { DirectUsbDetails(wireSampleRateHz = it.sampleRateHz, wireBitDepth = it.bitResolution) },
+        )
+    }
 
     private fun enforceNeutralProcessing(player: ExoPlayer) {
         if (player.volume != 1f) player.volume = 1f
@@ -1272,6 +1311,7 @@ internal class UsbOutputCoordinator(
         explicitMode: UsbOutputMode? = null,
         failureOrigin: UsbOutputFailureOrigin? = null,
         deviceName: String? = device?.displayName(),
+        directDetails: DirectUsbDetails? = null,
     ) {
         val cleanup = mixerPreferences.snapshot()
         val status = synchronized(lock) {
@@ -1291,6 +1331,8 @@ internal class UsbOutputCoordinator(
                 officialMixerApiSupport = officialMixerApiSupport,
                 mixerCleanup = cleanup,
                 failureOrigin = failureOrigin,
+                directDetails = directDetails,
+                directUsbAvailable = directRoute != null,
             )
         }
         stateRepository.publish(status)
@@ -1382,12 +1424,17 @@ internal class UsbOutputCoordinator(
         runCatching { track.removeOnRoutingChangedListener(listener) }
     }
 
-    private fun MediaItem?.toSourcePcmFormat(): SourcePcmFormat? {
-        val facts = TelemetryMediaItemExtras.read(this?.mediaMetadata?.extras)
-        val sampleRate = facts.sampleRateHz ?: return null
-        val bitDepth = facts.bitDepth ?: return null
-        val channels = facts.channelCount ?: return null
-        return SourcePcmFormat(sampleRate, bitDepth, channels)
+    private fun updateSource(item: MediaItem?) {
+        val facts = TelemetryMediaItemExtras.read(item?.mediaMetadata?.extras)
+        sourceFacts = facts
+        sourceFormat = facts.toSourcePcmFormat()
+    }
+
+    private fun TelemetrySourceFacts.toSourcePcmFormat(): SourcePcmFormat? {
+        val rate = sampleRateHz ?: return null
+        val bits = bitDepth ?: return null
+        val channels = channelCount ?: return null
+        return SourcePcmFormat(rate, bits, channels)
     }
 
     private fun AudioOutputProvider.OutputConfig.toPlatformFormat() = PlatformPcmFormat(

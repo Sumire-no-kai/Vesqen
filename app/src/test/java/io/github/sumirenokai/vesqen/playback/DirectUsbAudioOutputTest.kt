@@ -426,7 +426,7 @@ class DirectUsbAudioOutputTest {
         val provider = DirectUsbAudioOutputProvider(plan, openOutput = { FakeHandle() }, source = { mp3 }, onFailure = { failures += it })
         assertEquals(AudioOutputProvider.FORMAT_UNSUPPORTED, provider.getFormatSupport(formatConfig()).supportLevel)
         assertThrows(AudioOutputProvider.ConfigurationException::class.java) { provider.getOutputConfig(formatConfig()) }
-        assertEquals(listOf(Reason.SOURCE_FORMAT_UNSUPPORTED), failures.map { it.reason })
+        assertEquals(listOf(Reason.SOURCE_NOT_LOSSLESS), failures.map { it.reason })
     }
 
     @Test

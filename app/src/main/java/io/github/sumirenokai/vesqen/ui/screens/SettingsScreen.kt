@@ -112,7 +112,7 @@ fun SettingsScreen(
     artistSplit: ArtistSplitSettings = ArtistSplitSettings(),
     onArtistSplitChange: (ArtistSplitSettings) -> Unit = {},
 ) {
-    val unsupportedPlatform = outputStatus.officialMixerApiSupport?.takeUnless { it.mixerApiAvailable }
+    val unsupportedPlatform = outputStatus.strictUnavailablePlatform
     val strictSelected = outputStatus.mode == UsbOutputMode.STRICT_BIT_PERFECT
     val motionMillis = rememberVesqenMotionPolicy().stateChangeMillis
     var editingArtistListName by rememberSaveable { mutableStateOf<String?>(null) }
@@ -152,7 +152,13 @@ fun SettingsScreen(
                             title = stringResource(R.string.settings_strict_usb_output),
                             description = unsupportedPlatform?.let {
                                 stringResource(R.string.settings_strict_usb_platform_unavailable, it.androidRelease, it.apiLevel)
-                            } ?: stringResource(R.string.settings_strict_usb_output_body),
+                            } ?: stringResource(
+                                if (outputStatus.directUsbAvailable) {
+                                    R.string.settings_strict_usb_output_body_direct
+                                } else {
+                                    R.string.settings_strict_usb_output_body
+                                },
+                            ),
                             selected = strictSelected,
                             enabled = outputModeSelectionEnabled && unsupportedPlatform == null,
                             onClick = { onSetUsbOutputMode(UsbOutputMode.STRICT_BIT_PERFECT) },
@@ -306,14 +312,16 @@ private fun verificationFailureLabel(failure: OutputVerificationImportFailure): 
 @Composable
 internal fun strictUsbOutputBody(status: UsbOutputStatus): String {
     if (status.mode != UsbOutputMode.STRICT_BIT_PERFECT) {
-        status.officialMixerApiSupport?.takeUnless { it.mixerApiAvailable }?.let { support ->
+        status.strictUnavailablePlatform?.let { support ->
             return stringResource(
                 R.string.settings_strict_usb_platform_unavailable,
                 support.androidRelease,
                 support.apiLevel,
             )
         }
-        return stringResource(R.string.settings_strict_usb_output_body)
+        return stringResource(
+            if (status.directUsbAvailable) R.string.settings_strict_usb_output_body_direct else R.string.settings_strict_usb_output_body,
+        )
     }
     val device = status.deviceName ?: stringResource(R.string.settings_usb_device_unknown)
     return when (status.phase) {
@@ -321,15 +329,20 @@ internal fun strictUsbOutputBody(status: UsbOutputStatus): String {
         UsbOutputPhase.SYSTEM -> stringResource(R.string.settings_strict_usb_waiting)
         UsbOutputPhase.AVAILABLE -> stringResource(R.string.settings_strict_usb_available, device)
         UsbOutputPhase.APPLYING -> stringResource(R.string.settings_strict_usb_applying, device)
-        UsbOutputPhase.ACTIVE -> stringResource(
-            R.string.settings_strict_usb_active,
-            device,
-            status.sinkFormat?.displayName ?: stringResource(R.string.settings_format_unknown),
-        )
-        UsbOutputPhase.FAILED -> stringResource(
-            R.string.settings_strict_usb_failed,
-            strictUsbFailureLabel(requireNotNull(status.failure), status.decisionCode),
-        )
+        UsbOutputPhase.ACTIVE -> if (status.usesDirectUsb) {
+            stringResource(
+                R.string.settings_strict_usb_active_direct,
+                device,
+                directUsbWireFormat(status) ?: stringResource(R.string.settings_format_unknown),
+            )
+        } else {
+            stringResource(
+                R.string.settings_strict_usb_active,
+                device,
+                status.sinkFormat?.displayName ?: stringResource(R.string.settings_format_unknown),
+            )
+        }
+        UsbOutputPhase.FAILED -> stringResource(R.string.settings_strict_usb_failed, strictUsbFailureReason(status))
     }
 }
 

@@ -99,8 +99,16 @@ class DirectUsbFormatGateTest {
     @Test
     fun `lossy and unknown codecs do not play`() {
         listOf(MimeTypes.AUDIO_MPEG, MimeTypes.AUDIO_AAC, MimeTypes.AUDIO_OPUS, "audio/x-made-up").forEach { mime ->
-            assertEquals(mime, Reason.SOURCE_FORMAT_UNSUPPORTED, reason(DirectUsbFormatGate.check(source(mime = mime), decoded(), plan(16))))
+            assertEquals(mime, Reason.SOURCE_NOT_LOSSLESS, reason(DirectUsbFormatGate.check(source(mime = mime), decoded(), plan(16))))
         }
+    }
+
+    @Test
+    fun `a lossy codec is named even when the library has no bit depth for it`() {
+        // 4d: an MP3 usually has no bit depth, and "unknown format" would hide the real reason.
+        val failure = DirectUsbFormatGate.sourceRefusal(source(mime = MimeTypes.AUDIO_MPEG, bits = null))
+        assertEquals(Reason.SOURCE_NOT_LOSSLESS, failure?.reason)
+        assertEquals(null, DirectUsbFormatGate.sourceRefusal(source()))
     }
 
     @Test
@@ -113,7 +121,7 @@ class DirectUsbFormatGateTest {
     @Test
     fun `20-bit and 32-bit sources do not play`() {
         listOf(20, 32).forEach { bits ->
-            assertEquals("$bits", Reason.SOURCE_FORMAT_UNSUPPORTED, reason(DirectUsbFormatGate.check(source(bits = bits), decoded(), plan(24))))
+            assertEquals("$bits", Reason.SOURCE_BIT_DEPTH_UNSUPPORTED, reason(DirectUsbFormatGate.check(source(bits = bits), decoded(), plan(24))))
         }
     }
 

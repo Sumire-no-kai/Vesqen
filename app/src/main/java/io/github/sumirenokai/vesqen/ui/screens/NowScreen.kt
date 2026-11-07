@@ -1558,7 +1558,7 @@ private fun OutputModeDialog(
     onExplainStrictUsbUnavailable: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val strictUsbPlatformUnavailable = snapshot.usbOutputStatus.officialMixerApiSupport?.mixerApiAvailable == false
+    val strictUsbPlatformUnavailable = snapshot.usbOutputStatus.strictUnavailablePlatform != null
     val strictOn = snapshot.usbOutputStatus.mode == UsbOutputMode.STRICT_BIT_PERFECT
     val switchEnabled = strictUsbSwitchEnabled(snapshot.canSetUsbOutputMode, strictUsbPlatformUnavailable, strictOn)
     val strictOutputLabel = stringResource(R.string.settings_strict_usb_output)
