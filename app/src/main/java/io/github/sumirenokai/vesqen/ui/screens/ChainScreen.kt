@@ -533,16 +533,23 @@ internal fun outputClaimBody(playback: PlaybackSnapshot): String {
                 R.string.chain_strict_available_body,
                 status.deviceName ?: stringResource(R.string.settings_usb_device_unknown),
             )
-        io.github.sumirenokai.vesqen.playback.UsbOutputPhase.APPLYING ->
+        io.github.sumirenokai.vesqen.playback.UsbOutputPhase.APPLYING -> if (status.usesDirectUsb) {
+            stringResource(
+                R.string.chain_strict_applying_body_direct,
+                status.deviceName ?: stringResource(R.string.settings_usb_device_unknown),
+            )
+        } else {
             stringResource(R.string.chain_strict_applying_body)
+        }
         io.github.sumirenokai.vesqen.playback.UsbOutputPhase.ACTIVE ->
             stringResource(
-                R.string.chain_strict_active_body,
+                if (status.usesDirectUsb) R.string.chain_strict_active_body_direct else R.string.chain_strict_active_body,
                 status.deviceName ?: stringResource(R.string.settings_usb_device_unknown),
-                status.sinkFormat?.displayName ?: stringResource(R.string.settings_format_unknown),
+                (if (status.usesDirectUsb) directUsbWireFormat(status) else status.sinkFormat?.displayName)
+                    ?: stringResource(R.string.settings_format_unknown),
             )
         io.github.sumirenokai.vesqen.playback.UsbOutputPhase.FAILED ->
-            stringResource(R.string.chain_strict_failed_body, strictUsbFailureLabel(requireNotNull(status.failure), status.decisionCode))
+            stringResource(R.string.chain_strict_failed_body, strictUsbFailureReason(status))
     }
 }
 

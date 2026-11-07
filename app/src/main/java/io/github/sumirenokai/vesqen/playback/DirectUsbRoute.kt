@@ -21,12 +21,16 @@ import androidx.media3.exoplayer.audio.AudioOutputProvider
 import androidx.media3.exoplayer.audio.AudioSink
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMediaItemExtras
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceFacts
+import io.github.sumirenokai.vesqen.usb.descriptor.SampleRates
 import io.github.sumirenokai.vesqen.usb.descriptor.UacDescriptorParser
 import io.github.sumirenokai.vesqen.usb.descriptor.UacFunction
 import io.github.sumirenokai.vesqen.usb.descriptor.UacParseResult
+import io.github.sumirenokai.vesqen.usb.descriptor.UacVersion
+import io.github.sumirenokai.vesqen.usb.descriptor.UsbAudioTopology
 import io.github.sumirenokai.vesqen.usb.engine.StreamPreflight
 import io.github.sumirenokai.vesqen.usb.engine.UsbStreamEngine
 import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
+import io.github.sumirenokai.vesqen.usb.plan.StreamingRefusal
 import io.github.sumirenokai.vesqen.usb.session.AndroidUsbLink
 import io.github.sumirenokai.vesqen.usb.session.DirectUsbFailure
 import io.github.sumirenokai.vesqen.usb.session.DirectUsbSession
@@ -44,10 +48,90 @@ internal sealed interface DirectUsbInspection {
 
     data object SeveralDevices : DirectUsbInspection
 
-    data object PermissionNeeded : DirectUsbInspection
+    /** The name needs no permission, so the reason can still say which device it is about. */
+    data class PermissionNeeded(val deviceName: String) : DirectUsbInspection
 
-    /** [code] is the stable decision suffix, [formatRefused] true when only this source's format is the problem. */
-    data class Refused(val code: String, val formatRefused: Boolean = false) : DirectUsbInspection
+    /**
+     * [code] is the stable decision suffix, [formatRefused] true when only this source's format is the
+     * problem. [details] holds what the DAC offers when it is.
+     */
+    data class Refused(
+        val code: String,
+        val formatRefused: Boolean = false,
+        val deviceName: String? = null,
+        val details: DirectUsbDetails? = null,
+    ) : DirectUsbInspection
+}
+
+/**
+ * 4d: why no depth could be planned for [source], from each depth's refusal. A limit of the device
+ * itself (protocol version, asynchronous endpoints, bus speed) comes before the format, so a UAC2
+ * dongle is not reported as lacking the track's sample rate.
+ */
+internal fun directRefusal(
+    topology: UsbAudioTopology,
+    refusals: Collection<StreamingRefusal>,
+    source: SourcePcmFormat,
+): DirectUsbInspection.Refused {
+    val function = topology.functions.firstOrNull { candidate ->
+        candidate.streamingInterfaces.any { streaming -> streaming.alternateSettings.any { it.isPlayback } }
+    } ?: return DirectUsbInspection.Refused("no_playback_function")
+    return when {
+        StreamingRefusal.VERSION_NOT_IMPLEMENTED in refusals -> DirectUsbInspection.Refused(
+            if (function.version == UacVersion.UAC2) "uac2_not_supported" else "uac_version_unsupported",
+        )
+        StreamingRefusal.ASYNCHRONOUS_NOT_IMPLEMENTED in refusals -> DirectUsbInspection.Refused("async_not_supported")
+        StreamingRefusal.SPEED_UNSUPPORTED in refusals -> DirectUsbInspection.Refused("speed_unsupported")
+        StreamingRefusal.PACKET_TOO_SMALL in refusals -> DirectUsbInspection.Refused("format_exceeds_bus", formatRefused = true)
+        else -> {
+            val details = DirectUsbDetails(sourceSampleRateHz = source.sampleRateHz, sourceBitDepth = source.bitDepth)
+                .withOffer(function)
+            when {
+                details.deviceSampleRatesHz.isEmpty() -> DirectUsbInspection.Refused("no_matching_format", formatRefused = true)
+                details.deviceMaxBitsAtSourceRate == null ->
+                    DirectUsbInspection.Refused("rate_unsupported", formatRefused = true, details = details)
+                else -> DirectUsbInspection.Refused("depth_unsupported", formatRefused = true, details = details)
+            }
+        }
+    }
+}
+
+/** What the source is, from the library's facts. */
+internal fun TelemetrySourceFacts.toDirectDetails() = DirectUsbDetails(
+    sourceCodec = codecLabel?.takeIf(String::isNotBlank),
+    sourceSampleRateHz = sampleRateHz?.takeIf { it > 0 },
+    sourceBitDepth = bitDepth?.takeIf { it > 0 },
+)
+
+/**
+ * Adds what [function]'s settings offer to these details: every rate, and the deepest depth at the
+ * source's rate. Settings the own output cannot stream through at all are left out, and so are rates
+ * a device cannot mean, such as 0 Hz or a range that ends below its start (#290).
+ */
+internal fun DirectUsbDetails.withOffer(function: UacFunction): DirectUsbDetails {
+    val formats = function.streamingInterfaces.flatMap { it.alternateSettings }
+        .filter { it.isPlayback && it.streamingBlockers.isEmpty() }
+        .mapNotNull { it.format }
+    val rate = sourceSampleRateHz
+    return copy(
+        deviceSampleRatesHz = formats.flatMap { it.sampleRates.ranges() }
+            .filter { it.first in 1..it.last }
+            .distinct()
+            .sortedBy { it.first },
+        deviceMaxBitsAtSourceRate = rate?.let { formats.filter { format -> rate in format.sampleRates }.maxOfOrNull { it.bitResolution } },
+    )
+}
+
+private operator fun SampleRates.contains(rateHz: Int): Boolean = when (this) {
+    is SampleRates.Discrete -> rateHz in ratesHz
+    is SampleRates.Continuous -> rateHz in minHz..maxHz
+    SampleRates.RuntimeUnknown -> false
+}
+
+private fun SampleRates.ranges(): List<IntRange> = when (this) {
+    is SampleRates.Discrete -> ratesHz.map { it..it }
+    is SampleRates.Continuous -> listOf(minHz..maxHz)
+    SampleRates.RuntimeUnknown -> emptyList()
 }
 
 /**
@@ -60,8 +144,11 @@ internal interface DirectUsbRoute {
         /** Media3 opened an output on the session. Called on the playback thread. */
         fun onOutputOpened() = Unit
 
-        /** The session failed, or the format gate refused what Media3 configured. Any thread. */
-        fun onFailed(failure: DirectUsbFailure) = Unit
+        /**
+         * The session failed, or the format gate refused what Media3 configured; [details] then name
+         * the item the gate checked and what the DAC offers. Any thread.
+         */
+        fun onFailed(failure: DirectUsbFailure, details: DirectUsbDetails? = null) = Unit
     }
 
     /** What the strict sink plays through: the current session's outputs. */
@@ -182,7 +269,7 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
             1 -> devices.single()
             else -> return DirectUsbInspection.SeveralDevices
         }
-        if (!usbManager.hasPermission(device)) return DirectUsbInspection.PermissionNeeded
+        if (!usbManager.hasPermission(device)) return DirectUsbInspection.PermissionNeeded(device.displayName())
         val held = prepared
         if (held != null && streaming && held.device.deviceId == device.deviceId &&
             held.plan.sampleRateHz == source.sampleRateHz && held.plan.bitResolution >= source.bitDepth
@@ -190,29 +277,33 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
             return DirectUsbInspection.Ready(device.displayName(), held.plan)
         }
         release()
-        val connection = usbManager.openDevice(device) ?: return DirectUsbInspection.Refused("open_failed")
+        val name = device.displayName()
+        val connection = usbManager.openDevice(device) ?: return DirectUsbInspection.Refused("open_failed", deviceName = name)
         val raw = connection.rawDescriptors
         val parsed = raw?.let(UacDescriptorParser::parse)
         if (parsed !is UacParseResult.Parsed) {
             connection.close()
-            return DirectUsbInspection.Refused("descriptors_refused")
+            return DirectUsbInspection.Refused("descriptors_refused", deviceName = name)
         }
         val speed = UsbStreamEngine.busSpeed(connection.fileDescriptor)
+        val refusals = mutableListOf<StreamingRefusal>()
         // The deepest depth the device offers at this rate: tracks of other depths then share the
         // DAC's setting, 16-bit samples gaining zeros below them (#65).
         for (bits in WIRE_DEPTHS.filter { it >= source.bitDepth }) {
             when (val preflight = StreamPreflight.run(parsed.topology, speed, source.sampleRateHz, bits)) {
                 is StreamPreflight.Ready -> {
                     prepared = Prepared(device, connection, preflight.function, preflight.plan)
-                    return DirectUsbInspection.Ready(device.displayName(), preflight.plan)
+                    return DirectUsbInspection.Ready(name, preflight.plan)
                 }
-                StreamPreflight.NoPlaybackFunction -> return DirectUsbInspection.Refused("no_playback_function").also { connection.close() }
-                is StreamPreflight.LibraryUnavailable -> return DirectUsbInspection.Refused("engine_unavailable").also { connection.close() }
-                is StreamPreflight.Refused -> Unit
+                StreamPreflight.NoPlaybackFunction ->
+                    return DirectUsbInspection.Refused("no_playback_function", deviceName = name).also { connection.close() }
+                is StreamPreflight.LibraryUnavailable ->
+                    return DirectUsbInspection.Refused("engine_unavailable", deviceName = name).also { connection.close() }
+                is StreamPreflight.Refused -> refusals += preflight.reason
             }
         }
         connection.close()
-        return DirectUsbInspection.Refused("no_matching_format", formatRefused = true)
+        return directRefusal(parsed.topology, refusals, source).copy(deviceName = name)
     }
 
     override fun requestPermission(onResult: (granted: Boolean) -> Unit) {
@@ -256,7 +347,10 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
                             target.plan,
                             openOutput = { next.openOutput()?.also { listener?.onOutputOpened() } },
                             source = { configuringSource },
-                            onFailure = { failure -> listener?.onFailed(failure) },
+                            onFailure = { failure ->
+                                val details = configuringSource?.toDirectDetails()?.withOffer(target.function)
+                                listener?.onFailed(failure, details)
+                            },
                         )
                         streaming = true
                         onDone(null)
@@ -328,6 +422,8 @@ private class PreferencesTakeoverMarkerStore(context: Context) : TakeoverMarkerS
  */
 internal fun DirectUsbFailure.toStrictFailure(): Pair<UsbOutputFailure, String> = when (reason) {
     DirectUsbFailure.Reason.SOURCE_FORMAT_UNKNOWN -> UsbOutputFailure.SOURCE_FORMAT_UNKNOWN
+    DirectUsbFailure.Reason.SOURCE_NOT_LOSSLESS,
+    DirectUsbFailure.Reason.SOURCE_BIT_DEPTH_UNSUPPORTED,
     DirectUsbFailure.Reason.SOURCE_FORMAT_UNSUPPORTED,
     DirectUsbFailure.Reason.DECODER_PRECISION_LOST,
     DirectUsbFailure.Reason.NO_MATCHING_DIRECT_FORMAT -> UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED

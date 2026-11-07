@@ -14,6 +14,9 @@ data class DirectUsbFailure(val reason: Reason, val detail: String) {
         DEVICE_DISCONNECTED,
         // The format layers (D10), checked before an output is opened, and the samples while it runs.
         SOURCE_FORMAT_UNKNOWN,
+        SOURCE_NOT_LOSSLESS,
+        SOURCE_BIT_DEPTH_UNSUPPORTED,
+        /** A lossless source that still needs samples trimmed (encoder delay or padding). */
         SOURCE_FORMAT_UNSUPPORTED,
         DECODER_PRECISION_LOST,
         NO_MATCHING_DIRECT_FORMAT,

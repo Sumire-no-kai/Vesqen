@@ -91,6 +91,7 @@ import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode
 import io.github.sumirenokai.vesqen.playback.OutputDeclaration
 import io.github.sumirenokai.vesqen.playback.AudioFormatSummary
+import io.github.sumirenokai.vesqen.playback.DirectUsbDetails
 import io.github.sumirenokai.vesqen.playback.OfficialMixerApiSupport
 import io.github.sumirenokai.vesqen.playback.UsbHardwareIdentity
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
@@ -270,6 +271,25 @@ class VesqenAppTest {
     }
 
     @Test
+    fun a_stop_on_the_own_usb_output_names_the_track_and_the_dac() {
+        val failure = UsbOutputStatus(
+            mode = UsbOutputMode.STRICT_BIT_PERFECT,
+            phase = UsbOutputPhase.FAILED,
+            failure = UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED,
+            deviceName = "JBL Flip 7",
+            sourceFormat = AudioFormatSummary(96_000, 2, "24-bit source"),
+            decisionCode = "direct_usb.rate_unsupported",
+            generation = 1,
+            failureOrigin = UsbOutputFailureOrigin.USER_PLAYBACK,
+            directDetails = DirectUsbDetails(sourceBitDepth = 24, deviceSampleRatesHz = listOf(48_000..48_000)),
+        )
+        val state = activePlaybackState().let { it.copy(playback = it.playback.copy(usbOutputStatus = failure)) }
+        render(state)
+        val reason = context.getString(R.string.usb_failure_direct_rate, "96 kHz", "JBL Flip 7", "48 kHz")
+        composeRule.onNodeWithText(context.getString(R.string.player_strict_failure_body, reason)).assertIsDisplayed()
+    }
+
+    @Test
     fun a_failed_undo_of_the_mixer_setting_says_how_to_retry_and_reappears() {
         val failure = UsbOutputStatus(
             mode = UsbOutputMode.STRICT_BIT_PERFECT,
@@ -313,6 +333,9 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.settings.output.strict-usb").performClick()
         composeRule.onNodeWithTag("vesqen.premium.strict-intro").assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.premium_strict_intro_body_not_charging)).assertIsDisplayed()
+        // 4d: the mode changes only once the explanation closes, so Android's USB permission dialog
+        // cannot open on top of it.
+        composeRule.runOnIdle { assertTrue(modes.isEmpty()) }
         composeRule.onNodeWithTag("vesqen.premium.strict-intro.open").performClick()
         composeRule.onNodeWithTag("vesqen.premium.status")
             .assertTextEquals(context.getString(R.string.premium_status_not_charging))
@@ -445,6 +468,27 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.strict-usb-switch").assertIsEnabled().assertIsOn().performClick()
         composeRule.onNodeWithTag("vesqen.output.unavailable-dialog").assertDoesNotExist()
         composeRule.runOnIdle { assertEquals(listOf(UsbOutputMode.SYSTEM), modes) }
+    }
+
+    @Test
+    fun the_own_usb_output_offers_strict_mode_without_the_official_api() {
+        val modes = mutableListOf<UsbOutputMode>()
+        val android9WithOwnOutput = UsbOutputStatus(
+            officialMixerApiSupport = OfficialMixerApiSupport(androidRelease = "9", apiLevel = 28, mixerApiAvailable = false),
+            directUsbAvailable = true,
+        )
+        render(
+            state = activePlaybackState().let { state ->
+                state.copy(playback = state.playback.copy(usbOutputStatus = android9WithOwnOutput, canSetUsbOutputMode = true))
+            },
+            onSetUsbOutputMode = modes::add,
+        )
+        composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        // 4d: Settings describes both paths instead of asking for Android 14.
+        composeRule.onNodeWithText(context.getString(R.string.settings_strict_usb_output_body_direct)).assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.settings.output.strict-usb").assertIsEnabled().performClick()
+        composeRule.onNodeWithTag("vesqen.output.unavailable-dialog").assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals(listOf(UsbOutputMode.STRICT_BIT_PERFECT), modes) }
     }
 
     @Test

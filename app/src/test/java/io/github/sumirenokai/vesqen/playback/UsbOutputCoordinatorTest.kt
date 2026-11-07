@@ -1105,13 +1105,14 @@ class UsbOutputCoordinatorTest {
         preferences.edit(commit = true) { putString(MODE_KEY, UsbOutputMode.STRICT_BIT_PERFECT.name) }
         player.setMediaItem(mediaItem())
         player.prepare()
-        direct.inspection = DirectUsbInspection.PermissionNeeded
+        direct.inspection = DirectUsbInspection.PermissionNeeded("JBL Flip 7")
 
         start(direct = direct)
         idle()
 
         assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_required")
         assertEquals(listOf("inspect", "release"), direct.calls)
+        assertEquals("JBL Flip 7", status().deviceName)
     }
 
     @Test
@@ -1119,7 +1120,7 @@ class UsbOutputCoordinatorTest {
         connect(dac)
         start(direct = direct)
         loadTrack()
-        direct.inspection = DirectUsbInspection.PermissionNeeded
+        direct.inspection = DirectUsbInspection.PermissionNeeded("JBL Flip 7")
         direct.permissionGranted = false
 
         requestStrict()
@@ -1133,12 +1134,94 @@ class UsbOutputCoordinatorTest {
         connect(dac)
         start(direct = direct)
         loadTrack()
-        direct.inspection = DirectUsbInspection.PermissionNeeded
+        direct.inspection = DirectUsbInspection.PermissionNeeded("JBL Flip 7")
 
         requestStrict()
 
         assertStatus(UsbOutputPhase.AVAILABLE, "direct_usb.available")
         assertEquals(listOf("inspect", "requestPermission", "inspect"), direct.calls)
+    }
+
+    @Test
+    fun `a lossy track on the own path is named before the DAC is taken over`() {
+        // 4d: an MP3 has no bit depth, so this used to read as a format Vesqen could not determine.
+        connect(dac)
+        start(direct = direct)
+        player.setMediaItem(mediaItem(bitDepth = 0, mimeType = "audio/mpeg", codec = "MP3"))
+        player.prepare()
+        idle()
+
+        requestStrict()
+
+        assertFailed(UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED, "direct_usb.source_not_lossless")
+        assertFalse(direct.calls.contains("inspect"))
+        assertEquals("MP3", status().directDetails?.sourceCodec)
+    }
+
+    @Test
+    fun `a device the own output cannot drive is named, not reported as a format problem`() {
+        connect(dac)
+        start(direct = direct)
+        loadTrack()
+        direct.inspection = DirectUsbInspection.Refused("uac2_not_supported", deviceName = "Moondrop Echo-A")
+
+        requestStrict()
+
+        assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.uac2_not_supported")
+        assertEquals("Moondrop Echo-A", status().deviceName)
+    }
+
+    @Test
+    fun `a format refusal keeps what the DAC offers for the reason`() {
+        connect(dac)
+        start(direct = direct)
+        loadTrack(sampleRateHz = 44_100)
+        val details = DirectUsbDetails(sourceBitDepth = 16, deviceSampleRatesHz = listOf(48_000..48_000))
+        direct.inspection = DirectUsbInspection.Refused(
+            "rate_unsupported",
+            formatRefused = true,
+            deviceName = "JBL Flip 7",
+            details = details,
+        )
+
+        requestStrict()
+
+        assertFailed(UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED, "direct_usb.rate_unsupported")
+        assertEquals("JBL Flip 7", status().deviceName)
+        assertEquals(details, status().directDetails)
+    }
+
+    @Test
+    fun `a gate refusal names the item the gate checked`() {
+        reachDirectActive()
+
+        val details = DirectUsbDetails(sourceSampleRateHz = 44_100, sourceBitDepth = 16, deviceSampleRatesHz = listOf(48_000..48_000))
+        checkNotNull(direct.listener).onFailed(
+            DirectUsbFailure(DirectUsbFailure.Reason.NO_MATCHING_DIRECT_FORMAT, "the DAC's setting is 48000 Hz"),
+            details,
+        )
+        idle()
+
+        assertFailedAfterActive(UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED, "direct_usb.no_matching_direct_format", null)
+        assertEquals(details, status().directDetails)
+    }
+
+    @Test
+    fun `the own output's status carries its wire format and that this build has it`() {
+        reachDirectActive()
+
+        assertEquals(48_000, status().directDetails?.wireSampleRateHz)
+        assertEquals(24, status().directDetails?.wireBitDepth)
+        assertTrue(status().directUsbAvailable)
+    }
+
+    @Test
+    fun `without the own output the status says strict needs the official path`() {
+        connectDacWithMixer()
+        start()
+        requestStrict()
+
+        assertFalse(status().directUsbAvailable)
     }
 
     @Test
@@ -1518,7 +1601,13 @@ class UsbOutputCoordinatorTest {
             return device
         }
 
-        fun mediaItem(sampleRateHz: Int = 48_000, bitDepth: Int = 16, mediaId: String = "track"): MediaItem {
+        fun mediaItem(
+            sampleRateHz: Int = 48_000,
+            bitDepth: Int = 16,
+            mediaId: String = "track",
+            mimeType: String = "",
+            codec: String = "",
+        ): MediaItem {
             val track = LibraryTrack(
                 id = 1,
                 contentUri = "file:///nonexistent/$mediaId.flac",
@@ -1529,6 +1618,8 @@ class UsbOutputCoordinatorTest {
                 sampleRateHz = sampleRateHz,
                 bitDepth = bitDepth,
                 channelCount = 2,
+                mimeType = mimeType,
+                codec = codec,
             )
             return MediaItem.Builder()
                 .setMediaId(mediaId)

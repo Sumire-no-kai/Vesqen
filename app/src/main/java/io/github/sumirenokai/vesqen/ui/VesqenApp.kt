@@ -541,21 +541,24 @@ fun VesqenAppContent(
         if (result == SnackbarResult.ActionPerformed) onUndoClearQueue() else onQueueClearedOfferEnded(queueClearedOffer)
     }
     var showStrictUsbUnavailable by rememberSaveable { mutableStateOf(false) }
-    val officialMixerApiSupport = state.playback.usbOutputStatus.officialMixerApiSupport
-    LaunchedEffect(officialMixerApiSupport?.mixerApiAvailable) {
-        if (officialMixerApiSupport?.mixerApiAvailable != false) {
-            showStrictUsbUnavailable = false
-        }
+    val strictUnavailablePlatform = state.playback.usbOutputStatus.strictUnavailablePlatform
+    LaunchedEffect(strictUnavailablePlatform) {
+        if (strictUnavailablePlatform == null) showStrictUsbUnavailable = false
     }
     // #119: the first time strict output is turned on, explain once that it is a Pro feature.
     var showStrictIntroduction by rememberSaveable { mutableStateOf(false) }
     val strictIntroductionShown = premiumAccess?.strictIntroductionShown?.collectAsStateWithLifecycle()?.value ?: true
+    // The explanation comes before the change itself: on Vesqen's own USB output the change asks for
+    // USB permission, and Android's dialog would otherwise open on top of it (4d).
     val setUsbOutputMode: (UsbOutputMode) -> Unit = { mode ->
-        onSetUsbOutputMode(mode)
-        if (mode == UsbOutputMode.STRICT_BIT_PERFECT && !strictIntroductionShown) showStrictIntroduction = true
+        if (mode == UsbOutputMode.STRICT_BIT_PERFECT && !strictIntroductionShown) {
+            showStrictIntroduction = true
+        } else {
+            onSetUsbOutputMode(mode)
+        }
     }
     StrictUsbUnavailableDialog(
-        support = officialMixerApiSupport.takeIf { showStrictUsbUnavailable },
+        support = strictUnavailablePlatform.takeIf { showStrictUsbUnavailable },
         onDismiss = { showStrictUsbUnavailable = false },
     )
     val appliedChainPreferencesRepository = chainPreferencesRepository ?: remember {
@@ -726,6 +729,7 @@ fun VesqenAppContent(
     fun closeStrictIntroduction() {
         showStrictIntroduction = false
         premiumAccess?.markStrictIntroductionShown()
+        onSetUsbOutputMode(UsbOutputMode.STRICT_BIT_PERFECT)
     }
 
     // #113: after a crash or ANR, ask once. The statistics introduction, when due, comes first.
@@ -811,7 +815,7 @@ fun VesqenAppContent(
             },
         )
     } else {
-        // A failure from the same switch waits until the explanation is closed.
+        // A failure waits while any explanation above is open.
         StrictUsbFailureDialog(
             status = state.playback.usbOutputStatus,
             canChangeOutputMode = state.playback.canSetUsbOutputMode,

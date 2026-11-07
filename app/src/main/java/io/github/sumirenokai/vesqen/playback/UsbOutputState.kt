@@ -117,6 +117,28 @@ enum class MixerCleanupExceptionReason {
     }
 }
 
+/**
+ * 4d: what Vesqen's own USB output can say beyond its decision code, so a reason names the track and
+ * the DAC: the source's codec and bit depth, the rates and depth the DAC's descriptors offer, and the
+ * format on the wire once it plays. Shown on the device only; the device report keeps the decision code.
+ */
+data class DirectUsbDetails(
+    val sourceCodec: String? = null,
+    /** The item the reason is about, which during a gapless change is not yet the current item. */
+    val sourceSampleRateHz: Int? = null,
+    val sourceBitDepth: Int? = null,
+    /** Each range is one discrete rate or one continuous span, as the descriptors list them. */
+    val deviceSampleRatesHz: List<IntRange> = emptyList(),
+    val deviceMaxBitsAtSourceRate: Int? = null,
+    val wireSampleRateHz: Int? = null,
+    val wireBitDepth: Int? = null,
+) {
+    init {
+        require(sourceCodec == null || sourceCodec.isNotBlank()) { "Codec cannot be blank" }
+        require(deviceSampleRatesHz.all { it.first in 1..it.last }) { "Rates must be positive ranges" }
+    }
+}
+
 /** Cleanup evidence is independent of the failure that stopped strict playback. */
 data class MixerCleanupStatus(
     val pendingCount: Int = 0,
@@ -147,6 +169,9 @@ data class UsbOutputStatus(
     val officialMixerApiSupport: OfficialMixerApiSupport? = null,
     val mixerCleanup: MixerCleanupStatus = MixerCleanupStatus(),
     val failureOrigin: UsbOutputFailureOrigin? = null,
+    val directDetails: DirectUsbDetails? = null,
+    /** This build plays strict mode through Vesqen's own USB output where Android offers no official path. */
+    val directUsbAvailable: Boolean = false,
 ) {
     init {
         require(observedAtEpochMs >= 0) { "Output state timestamp cannot be negative" }
@@ -161,6 +186,10 @@ data class UsbOutputStatus(
             "System mode cannot retain a strict USB phase"
         }
     }
+
+    /** Strict output cannot start on this phone: no official API, and no own output in this build. */
+    val strictUnavailablePlatform: OfficialMixerApiSupport?
+        get() = officialMixerApiSupport?.takeUnless { it.mixerApiAvailable || directUsbAvailable }
 
     val declaration: OutputDeclaration
         get() = when (phase) {
@@ -229,6 +258,15 @@ internal object UsbOutputSessionContract {
     private const val ANDROID_RELEASE = "usb_output_android_release"
     private const val ANDROID_API_LEVEL = "usb_output_android_api_level"
     private const val OFFICIAL_MIXER_API_AVAILABLE = "usb_output_official_mixer_api_available"
+    private const val DIRECT_DETAILS = "usb_output_direct_details"
+    private const val DIRECT_AVAILABLE = "usb_output_direct_available"
+    private const val DIRECT_SOURCE_CODEC = "codec"
+    private const val DIRECT_SOURCE_RATE = "source_rate"
+    private const val DIRECT_SOURCE_BITS = "source_bits"
+    private const val DIRECT_DEVICE_RATES = "device_rates"
+    private const val DIRECT_DEVICE_MAX_BITS = "device_max_bits"
+    private const val DIRECT_WIRE_RATE = "wire_rate"
+    private const val DIRECT_WIRE_BITS = "wire_bits"
 
     fun modeArguments(mode: UsbOutputMode): Bundle = Bundle().apply {
         putString(MODE_ARGUMENT, mode.name)
@@ -261,6 +299,37 @@ internal object UsbOutputSessionContract {
         }
         status.sourceFormat?.writeTo(this, SOURCE_RATE, SOURCE_CHANNELS, SOURCE_ENCODING)
         status.sinkFormat?.writeTo(this, SINK_RATE, SINK_CHANNELS, SINK_ENCODING)
+        status.directDetails?.let { putBundle(DIRECT_DETAILS, it.toBundle()) }
+        putBoolean(DIRECT_AVAILABLE, status.directUsbAvailable)
+    }
+
+    private fun DirectUsbDetails.toBundle() = Bundle().apply {
+        sourceCodec?.let { putString(DIRECT_SOURCE_CODEC, it) }
+        sourceSampleRateHz?.let { putInt(DIRECT_SOURCE_RATE, it) }
+        sourceBitDepth?.let { putInt(DIRECT_SOURCE_BITS, it) }
+        // Flattened as first, last pairs.
+        putIntArray(DIRECT_DEVICE_RATES, deviceSampleRatesHz.flatMap { listOf(it.first, it.last) }.toIntArray())
+        deviceMaxBitsAtSourceRate?.let { putInt(DIRECT_DEVICE_MAX_BITS, it) }
+        wireSampleRateHz?.let { putInt(DIRECT_WIRE_RATE, it) }
+        wireBitDepth?.let { putInt(DIRECT_WIRE_BITS, it) }
+    }
+
+    private fun Bundle.readDirectDetails(): DirectUsbDetails? {
+        val details = getBundle(DIRECT_DETAILS) ?: return null
+        fun Bundle.positive(key: String) = getInt(key).takeIf { containsKey(key) && it > 0 }
+        val rates = details.getIntArray(DIRECT_DEVICE_RATES)?.toList().orEmpty().chunked(2)
+            .filter { it.size == 2 }
+            .map { (first, last) -> first..last }
+            .filter { it.first in 1..it.last }
+        return DirectUsbDetails(
+            sourceCodec = details.getString(DIRECT_SOURCE_CODEC)?.takeIf(String::isNotBlank),
+            sourceSampleRateHz = details.positive(DIRECT_SOURCE_RATE),
+            sourceBitDepth = details.positive(DIRECT_SOURCE_BITS),
+            deviceSampleRatesHz = rates,
+            deviceMaxBitsAtSourceRate = details.positive(DIRECT_DEVICE_MAX_BITS),
+            wireSampleRateHz = details.positive(DIRECT_WIRE_RATE),
+            wireBitDepth = details.positive(DIRECT_WIRE_BITS),
+        )
     }
 
     fun fromBundle(bundle: Bundle?): UsbOutputStatus? {
@@ -295,6 +364,8 @@ internal object UsbOutputSessionContract {
                     pendingCount = bundle.getInt(CLEANUP_PENDING).coerceAtLeast(0),
                     exceptionTypes = bundle.getStringArrayList(CLEANUP_EXCEPTION_TYPES)?.toSet().orEmpty(),
                 ),
+                directDetails = bundle.readDirectDetails(),
+                directUsbAvailable = bundle.getBoolean(DIRECT_AVAILABLE),
             )
         }.getOrNull()
     }

@@ -54,4 +54,25 @@ class UsbOutputSessionContractDeviceTest {
         assertEquals(original, UsbOutputSessionContract.fromBundle(UsbOutputSessionContract.toBundle(original)))
     }
 
+    @Test
+    fun ownUsbOutputDetailsSurviveSessionRoundTrip() {
+        val original = UsbOutputStatus(
+            mode = UsbOutputMode.STRICT_BIT_PERFECT,
+            phase = UsbOutputPhase.FAILED,
+            failure = UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED,
+            deviceName = "JBL Flip 7",
+            decisionCode = "direct_usb.rate_unsupported",
+            directDetails = DirectUsbDetails(
+                sourceCodec = "FLAC",
+                sourceBitDepth = 24,
+                deviceSampleRatesHz = listOf(44_100..44_100, 8_000..96_000),
+                deviceMaxBitsAtSourceRate = 16,
+                wireSampleRateHz = 48_000,
+                wireBitDepth = 24,
+            ),
+            directUsbAvailable = true,
+        )
+        assertEquals(original, UsbOutputSessionContract.fromBundle(UsbOutputSessionContract.toBundle(original)))
+    }
+
 }
