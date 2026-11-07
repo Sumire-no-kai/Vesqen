@@ -84,8 +84,7 @@ internal fun directRefusal(
         StreamingRefusal.SPEED_UNSUPPORTED in refusals -> DirectUsbInspection.Refused("speed_unsupported")
         StreamingRefusal.PACKET_TOO_SMALL in refusals -> DirectUsbInspection.Refused("format_exceeds_bus", formatRefused = true)
         else -> {
-            val details = DirectUsbDetails(sourceSampleRateHz = source.sampleRateHz, sourceBitDepth = source.bitDepth)
-                .withOffer(function)
+            val details = source.toDirectDetails().withOffer(function)
             when {
                 details.deviceSampleRatesHz.isEmpty() -> DirectUsbInspection.Refused("no_matching_format", formatRefused = true)
                 details.deviceMaxBitsAtSourceRate == null ->
@@ -108,6 +107,14 @@ internal fun TelemetrySourceFacts.toDirectDetails() = DirectUsbDetails(
     sourceCodec = codecLabel?.takeIf(String::isNotBlank),
     sourceSampleRateHz = sampleRateHz?.takeIf { it > 0 },
     sourceBitDepth = bitDepth?.takeIf { it > 0 },
+    sourceChannelCount = channelCount?.takeIf { it > 0 },
+)
+
+/** What the source is, as the service planned for it. */
+internal fun SourcePcmFormat.toDirectDetails() = DirectUsbDetails(
+    sourceSampleRateHz = sampleRateHz,
+    sourceBitDepth = bitDepth,
+    sourceChannelCount = channelCount,
 )
 
 /**
@@ -126,6 +133,7 @@ internal fun DirectUsbDetails.withOffer(function: UacFunction): DirectUsbDetails
             .distinct()
             .sortedBy { it.first },
         deviceMaxBitsAtSourceRate = rate?.let { formats.filter { format -> rate in format.sampleRates }.maxOfOrNull { it.bitResolution } },
+        deviceChannelCount = formats.map { it.channels }.distinct().singleOrNull(),
     )
 }
 
@@ -309,7 +317,12 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
                     // multichannel source is refused here, before anything is claimed (#295).
                     if (!preflight.plan.carries(source)) {
                         connection.close()
-                        return DirectUsbInspection.Refused("channels_unsupported", formatRefused = true, deviceName = name)
+                        return DirectUsbInspection.Refused(
+                            "channels_unsupported",
+                            formatRefused = true,
+                            deviceName = name,
+                            details = source.toDirectDetails().withOffer(preflight.function),
+                        )
                     }
                     prepared = Prepared(device, connection, preflight.function, preflight.plan)
                     return DirectUsbInspection.Ready(name, preflight.plan)

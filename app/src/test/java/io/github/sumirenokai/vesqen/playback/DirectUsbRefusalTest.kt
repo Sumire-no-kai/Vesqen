@@ -71,7 +71,13 @@ class DirectUsbRefusalTest {
         assertEquals("rate_unsupported", refusal.code)
         assertEquals(true, refusal.formatRefused)
         assertEquals(
-            DirectUsbDetails(sourceSampleRateHz = 44_100, sourceBitDepth = 16, deviceSampleRatesHz = listOf(48_000..48_000)),
+            DirectUsbDetails(
+                sourceSampleRateHz = 44_100,
+                sourceBitDepth = 16,
+                sourceChannelCount = 2,
+                deviceSampleRatesHz = listOf(48_000..48_000),
+                deviceChannelCount = 2,
+            ),
             refusal.details,
         )
     }
@@ -99,8 +105,10 @@ class DirectUsbRefusalTest {
             DirectUsbDetails(
                 sourceSampleRateHz = 48_000,
                 sourceBitDepth = 24,
+                sourceChannelCount = 2,
                 deviceSampleRatesHz = listOf(48_000..48_000),
                 deviceMaxBitsAtSourceRate = 16,
+                deviceChannelCount = 2,
             ),
             refusal.details,
         )
@@ -116,10 +124,16 @@ class DirectUsbRefusalTest {
                 sourceCodec = "FLAC",
                 sourceSampleRateHz = 44_100,
                 sourceBitDepth = 16,
+                sourceChannelCount = 2,
                 deviceSampleRatesHz = listOf(48_000..48_000),
+                deviceChannelCount = 2,
             ),
             next.toDirectDetails().withOffer(jbl),
         )
+        // A mono source on the stereo JBL names both channel counts for the reason (#295).
+        val mono = SourcePcmFormat(48_000, 16, 1).toDirectDetails().withOffer(jbl)
+        assertEquals(1, mono.sourceChannelCount)
+        assertEquals(2, mono.deviceChannelCount)
         assertEquals(24, next.copy(sampleRateHz = 48_000).toDirectDetails().withOffer(jbl).deviceMaxBitsAtSourceRate)
     }
 

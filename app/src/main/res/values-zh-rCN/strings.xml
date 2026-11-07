@@ -99,6 +99,7 @@
     <string name="usb_failure_trial_ended">高级功能的免费试用已结束。</string>
     <string name="usb_failure_direct_rate">当前曲目的采样率为 %1$s，%2$s 支持的采样率为 %3$s。严格输出不进行重采样，因此无法播放这首曲目。</string>
     <string name="usb_failure_direct_depth">当前曲目为 %1$d 位，%2$s 在该采样率下最高支持 %3$d 位。严格输出不降低位深，因此无法播放这首曲目。</string>
+    <string name="usb_failure_direct_channels">当前曲目有 %1$d 个声道，%2$s 只支持 %3$d 个声道。严格输出不改变声道数，因此无法播放这首曲目。</string>
     <string name="usb_failure_direct_lossless">严格输出只播放 16 位或 24 位的无损音频，例如 FLAC、WAV、AIFF。</string>
     <string name="usb_failure_direct_lossless_codec">严格输出只播放 16 位或 24 位的无损音频，例如 FLAC、WAV、AIFF。当前曲目为 %1$s。</string>
     <string name="usb_failure_direct_lossless_bits">严格输出只播放 16 位或 24 位的无损音频，例如 FLAC、WAV、AIFF。当前曲目为 %1$d 位。</string>

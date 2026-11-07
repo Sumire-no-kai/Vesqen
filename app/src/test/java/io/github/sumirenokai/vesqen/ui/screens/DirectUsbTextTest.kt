@@ -75,6 +75,14 @@ class DirectUsbTextTest {
     }
 
     @Test
+    fun `a mono track on a stereo DAC names both channel counts`() {
+        val details = DirectUsbDetails(sourceChannelCount = 1, deviceChannelCount = 2)
+        val expected = StringSpec(R.string.usb_failure_direct_channels, listOf(1, "JBL Flip 7", 2))
+        assertEquals(expected, spec(failed("direct_usb.channels_unsupported", UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED, details = details)))
+        assertEquals(expected, spec(failed("direct_usb.no_matching_direct_format", UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED, details = details)))
+    }
+
+    @Test
     fun `a sentence whose facts are missing falls back to the general reason`() {
         assertNull(spec(failed("direct_usb.rate_unsupported", UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED, sourceRate = 44_100)))
         assertNull(spec(failed("direct_usb.depth_unsupported", UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED)))

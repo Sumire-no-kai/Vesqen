@@ -64,9 +64,12 @@ class UsbOutputSessionContractDeviceTest {
             decisionCode = "direct_usb.rate_unsupported",
             directDetails = DirectUsbDetails(
                 sourceCodec = "FLAC",
+                sourceSampleRateHz = 96_000,
                 sourceBitDepth = 24,
+                sourceChannelCount = 1,
                 deviceSampleRatesHz = listOf(44_100..44_100, 8_000..96_000),
                 deviceMaxBitsAtSourceRate = 16,
+                deviceChannelCount = 2,
                 wireSampleRateHz = 48_000,
                 wireBitDepth = 24,
             ),

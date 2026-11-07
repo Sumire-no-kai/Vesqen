@@ -127,9 +127,12 @@ data class DirectUsbDetails(
     /** The item the reason is about, which during a gapless change is not yet the current item. */
     val sourceSampleRateHz: Int? = null,
     val sourceBitDepth: Int? = null,
+    val sourceChannelCount: Int? = null,
     /** Each range is one discrete rate or one continuous span, as the descriptors list them. */
     val deviceSampleRatesHz: List<IntRange> = emptyList(),
     val deviceMaxBitsAtSourceRate: Int? = null,
+    /** The channel count of every setting the own output can stream through, when they agree. */
+    val deviceChannelCount: Int? = null,
     val wireSampleRateHz: Int? = null,
     val wireBitDepth: Int? = null,
 ) {
@@ -263,6 +266,8 @@ internal object UsbOutputSessionContract {
     private const val DIRECT_SOURCE_CODEC = "codec"
     private const val DIRECT_SOURCE_RATE = "source_rate"
     private const val DIRECT_SOURCE_BITS = "source_bits"
+    private const val DIRECT_SOURCE_CHANNELS = "source_channels"
+    private const val DIRECT_DEVICE_CHANNELS = "device_channels"
     private const val DIRECT_DEVICE_RATES = "device_rates"
     private const val DIRECT_DEVICE_MAX_BITS = "device_max_bits"
     private const val DIRECT_WIRE_RATE = "wire_rate"
@@ -307,6 +312,8 @@ internal object UsbOutputSessionContract {
         sourceCodec?.let { putString(DIRECT_SOURCE_CODEC, it) }
         sourceSampleRateHz?.let { putInt(DIRECT_SOURCE_RATE, it) }
         sourceBitDepth?.let { putInt(DIRECT_SOURCE_BITS, it) }
+        sourceChannelCount?.let { putInt(DIRECT_SOURCE_CHANNELS, it) }
+        deviceChannelCount?.let { putInt(DIRECT_DEVICE_CHANNELS, it) }
         // Flattened as first, last pairs.
         putIntArray(DIRECT_DEVICE_RATES, deviceSampleRatesHz.flatMap { listOf(it.first, it.last) }.toIntArray())
         deviceMaxBitsAtSourceRate?.let { putInt(DIRECT_DEVICE_MAX_BITS, it) }
@@ -325,6 +332,8 @@ internal object UsbOutputSessionContract {
             sourceCodec = details.getString(DIRECT_SOURCE_CODEC)?.takeIf(String::isNotBlank),
             sourceSampleRateHz = details.positive(DIRECT_SOURCE_RATE),
             sourceBitDepth = details.positive(DIRECT_SOURCE_BITS),
+            sourceChannelCount = details.positive(DIRECT_SOURCE_CHANNELS),
+            deviceChannelCount = details.positive(DIRECT_DEVICE_CHANNELS),
             deviceSampleRatesHz = rates,
             deviceMaxBitsAtSourceRate = details.positive(DIRECT_DEVICE_MAX_BITS),
             wireSampleRateHz = details.positive(DIRECT_WIRE_RATE),
