@@ -190,6 +190,20 @@ M7-4 要注意：Media3 会在当前曲目播完前为下一首配置输出，�
 - `reconcile()` 不改变 `playWhenReady`，也不启动服务或后台播放。
 - 状态中保存 `releaseCause`，用于说明 DAC 为何已被归还。
 
+### 4a 的实现（2026-11-07）
+
+M7-4 的第一步只接入自有输出，全部放在构建开关 `vesqen.directUsb` 后面：debug 和 deviceTest 构建默认开启，release 和 profile 构建在 2.0.0-beta.1 之前关闭。
+
+- **组件。** `AndroidDirectUsbRoute`（`:app` 的 `playback` 包）负责一台设备从检查到释放的全过程：只接受一台 USB 音频设备，检查权限，读描述符并规划，接管和释放 `DirectUsbSession`，监听拔出。`SelectingAudioSink` 平时使用 `DefaultAudioSink`，路由在流传输时改用 `StrictPcmAudioSink`。它在 `reset()` 和 `configure()` 时重新选择：Media3 只为已启用的渲染器重置 Sink，重建如果发生在渲染器启用之前，到达 Sink 的只是一次 `configure()`（2026-11-07 在 iQOO 上发现）。
+- **路径选择。** 每次尝试开始时决定，按 USB 连接而不按曲目：Android 为该设备提供 bit-perfect 混音器时走官方通道，否则走自有输出；设备已被接管时，系统路由已经消失，尝试留在自有输出上。官方通道的代码和行为不变，仍使用 `DefaultAudioSink`（#286）。
+- **规划。** 按源文件的采样率，选设备在该采样率下支持的最深位深。不同位深的曲目因此共用 DAC 的设置，16 位样本在低位补零（#65），连续播放时不必重新配置 DAC。
+- **源信息。** Media3 在 `AudioSinkConfig` 中带有 timeline 和 period，`StrictPcmAudioSink` 在配置时交给路由，路由据此找到正在配置的那一项，读取它的 extras。
+- **接管与状态。** 用户有播放意图时才接管：先暂停，接管成功后以 `stop()` 加 `prepare()` 重建播放器并恢复播放。Media3 打开第一个输出、且正在播放时才进入 `ACTIVE`；暂停时退回 `APPLYING`，设备保留（D14 的释放时机在 4c 实现）；自然切歌不重建。
+- **权限。** 只在用户操作（切换模式、按播放）时请求；服务启动、恢复队列和 USB 插入时没有权限，只报告缺少权限。
+- **释放。** 失败、切回系统输出和服务关闭时释放设备。释放后 Android 会重新显示该设备的路由，这个事件不再触发接管，直到真正的 USB 插入事件。
+- **失败原因。** 暂时使用现有的失败类别（设备报告的词表也用它们），具体原因写在 decision code 中，例如 `direct_usb.permission_required`、`direct_usb.no_matching_direct_format`。专门的失败类别、四种语言的说明和报告词表放在 4d，届时先确认上传内容的变化。
+- **4a 尚未处理。** 播放中采样率变化时重新配置 DAC（4c；目前在配置时拒绝，播放器报错后失败关闭）；暂停的释放时机和息屏保活（4c）；焦点、来电、进程异常退出后的恢复和 `UsbAttachActivity`（4b）；界面文字（4d）；链路页上自有输出的实际数据（M7-5）。
+
 ## 音频焦点
 
 继续使用 Media3 的自动焦点管理（`setAudioAttributes(..., true)`），不另建 `AudioFocusRequest`，以免出现两个焦点所有者。

@@ -1,9 +1,6 @@
 package io.github.sumirenokai.vesqen.playback
 
-import android.content.Context
 import android.media.AudioTrack
-import android.media.MediaCrypto
-import android.os.Handler
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.AuxEffectInfo
 import androidx.media3.common.C
@@ -12,28 +9,29 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.util.Util
-import androidx.media3.exoplayer.DefaultRenderersFactory
-import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.audio.AudioOutput
 import androidx.media3.exoplayer.audio.AudioOutputProvider
-import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioSink
-import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
-import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
-import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
-import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import java.nio.ByteBuffer
 import kotlin.math.abs
 
 /**
- * M7 D9. It lives with the debug builds until M7-4 moves it to production code.
+ * M7 D9. Vesqen's own USB output plays through it; the official path stays on Media3's
+ * `DefaultAudioSink` until a phone with that channel can verify the change (#286).
  * PCM goes straight to the output with no processing, so there is nothing to undo.
  * Strict mode already requires neutral speed and skip-silence, and rejects what would need
  * trimming, so those parts of the `AudioSink` contract have nothing to do here. Volume goes to the
  * output, which decides: the official path fails closed, and the direct path ignores it (D11).
  */
 @androidx.annotation.OptIn(UnstableApi::class)
-internal class StrictPcmAudioSink(private val provider: AudioOutputProvider) : AudioSink {
+internal class StrictPcmAudioSink(
+    private val provider: AudioOutputProvider,
+    /**
+     * Called first in every [configure], on the playback thread. Media3 names the playlist item it
+     * configures for there (timeline and period), which the provider's format gate needs (#282).
+     */
+    private val onConfigure: (AudioSink.AudioSinkConfig) -> Unit = {},
+) : AudioSink {
     private var listener: AudioSink.Listener? = null
     private var audioAttributes = AudioAttributes.DEFAULT
     private var audioSessionId = C.AUDIO_SESSION_ID_UNSET
@@ -71,6 +69,7 @@ internal class StrictPcmAudioSink(private val provider: AudioOutputProvider) : A
     }
 
     override fun configure(audioSinkConfig: AudioSink.AudioSinkConfig) {
+        onConfigure(audioSinkConfig)
         val format = audioSinkConfig.format
         if (format.encoderDelay > 0 || format.encoderPadding > 0) {
             throw AudioSink.ConfigurationException("Strict output does not trim samples", format)
@@ -243,46 +242,5 @@ internal class StrictPcmAudioSink(private val provider: AudioOutputProvider) : A
 
     private companion object {
         const val MAX_TIMESTAMP_DRIFT_US = 200_000L
-    }
-}
-
-/** The production factory with the strict sink; the renderer keeps #107's OMX protection. */
-@androidx.annotation.OptIn(UnstableApi::class)
-internal class GuardedRenderersFactory(
-    context: Context,
-    private val sink: AudioSink,
-) : DefaultRenderersFactory(context) {
-    override fun buildAudioSink(
-        context: Context,
-        enableFloatOutput: Boolean,
-        enableAudioTrackPlaybackParams: Boolean,
-    ): AudioSink = sink
-
-    override fun buildAudioRenderers(
-        context: Context,
-        extensionRendererMode: Int,
-        mediaCodecSelector: MediaCodecSelector,
-        enableDecoderFallback: Boolean,
-        audioSink: AudioSink,
-        eventHandler: Handler,
-        eventListener: AudioRendererEventListener,
-        out: ArrayList<Renderer>,
-    ) {
-        out.add(
-            object : MediaCodecAudioRenderer(
-                context, codecAdapterFactory, mediaCodecSelector, enableDecoderFallback,
-                eventHandler, eventListener, audioSink,
-            ) {
-                override fun getMediaCodecConfiguration(
-                    codecInfo: MediaCodecInfo,
-                    format: Format,
-                    crypto: MediaCrypto?,
-                    codecOperatingRate: Float,
-                ): MediaCodecAdapter.Configuration =
-                    super.getMediaCodecConfiguration(codecInfo, format, crypto, codecOperatingRate).also {
-                        it.mediaFormat.keepIntegerPcmForOmx(codecInfo.name)
-                    }
-            },
-        )
     }
 }

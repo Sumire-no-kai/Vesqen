@@ -41,6 +41,15 @@ require(premiumEnforced == "true" || premiumEnforced == "false") {
     "vesqen.premiumEnforced must be true or false"
 }
 
+// M7-4: whether strict mode may use Vesqen's own USB output on phones without the official
+// bit-perfect channel. On in debug builds for device tests, off in release and profile builds until
+// 2.0.0-beta.1. `-Pvesqen.directUsb=true|false` overrides both.
+val directUsbOverride = providers.gradleProperty("vesqen.directUsb").orNull
+require(directUsbOverride == null || directUsbOverride == "true" || directUsbOverride == "false") {
+    "vesqen.directUsb must be true or false"
+}
+fun directUsbEnabled(default: Boolean) = directUsbOverride ?: default.toString()
+
 // Empty until the owner deploys #70. Shared across build types, with no production host in source.
 val usageEndpoint = providers.gradleProperty("vesqen.usageEndpoint").orElse("").get()
 require(usageEndpoint.isEmpty() || usageEndpoint.matches(Regex("https://[A-Za-z0-9.-]+(:[0-9]+)?/v1/usage"))) {
@@ -59,6 +68,7 @@ android {
         // #96: the owner's remote switch, read only right before a usage ping or report upload.
         buildConfigField("String", "SERVICE_SWITCH_URL", "\"https://vesqen.sumirenokai.com/service/status.json\"")
         buildConfigField("boolean", "PREMIUM_ENFORCED", premiumEnforced)
+        buildConfigField("boolean", "DIRECT_USB_ENABLED", directUsbEnabled(default = false))
         applicationId = "io.github.sumirenokai.vesqen"
         minSdk = 28
         targetSdk = 36
@@ -87,6 +97,7 @@ android {
     buildTypes {
         debug {
             buildConfigField("boolean", "DEVELOPER_DIAGNOSTICS_ENABLED", "true")
+            buildConfigField("boolean", "DIRECT_USB_ENABLED", directUsbEnabled(default = true))
             buildConfigField("String", "UPDATE_MANIFEST_BASE_URL", "\"$debugUpdateEndpoint\"")
         }
         create("deviceTest") {
