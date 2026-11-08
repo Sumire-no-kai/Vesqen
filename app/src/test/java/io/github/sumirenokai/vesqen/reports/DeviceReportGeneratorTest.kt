@@ -36,6 +36,24 @@ class DeviceReportGeneratorTest {
         assertFalse(report.contains("process.soc_model"))
     }
 
+    @Test fun `readings kept on the device never reach a report`() {
+        // 2026-11-09 owner decision: Vesqen's own USB output readings stay on the phone for now.
+        val direct = TelemetryDataSource(TelemetrySourceId("vesqen.direct_usb"))
+        val telemetry = TelemetrySnapshot(200, metrics = listOf(
+            textMetric(Metrics.ROUTE_SELECTED_SYSTEM_TYPE, TelemetrySection.ROUTE, "usb_device"),
+            TelemetryMetric(Metrics.USB_DIRECT_UNDERRUNS, TelemetrySection.USB,
+                TelemetryEvidence.Measured(TelemetryReading.Integer(3, TelemetryUnit.COUNT), direct, 100)),
+            textMetric(Metrics.USB_DIRECT_PROTOCOL, TelemetrySection.USB, "uac1", direct),
+            textMetric(Metrics.ROUTE_SYSTEM_RESAMPLING, TelemetrySection.ROUTE, "resampled"),
+        ))
+        for (options in listOf(DeviceReportOptions(audioCapabilities = true), DeviceReportOptions(chainEvidence = true))) {
+            val report = DeviceReportGenerator.generate(reportData().copy(telemetry = telemetry), options).previewText
+            assertTrue(report.contains("usb_device"))
+            assertFalse(report.contains("usb.direct_"))
+            assertFalse(report.contains("route.system_resampling"))
+        }
+    }
+
     @Test fun `raw paths names exception details and event history never pass the export boundary`() {
         val secrets = listOf("private-track.flac", "private-folder", "Secret Headphones", "12:34:56:78:9A:BC", "hidden.example")
         val detail = "Failed to read /private-folder/private-track.flac C:\\private-folder\\private-track.flac content://hidden.example/music Secret Headphones 12:34:56:78:9A:BC"

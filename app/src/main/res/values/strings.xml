@@ -521,6 +521,7 @@
     <string name="chain_unit_display_raw">Raw base units</string>
     <string name="chain_pinned_metrics">Pinned metrics</string>
     <string name="chain_pinned_handoff">Sent to Android</string>
+    <string name="chain_pinned_handoff_direct">Sent to the DAC</string>
     <string name="chain_pinned_output">Output</string>
     <string name="chain_pinned_underruns">Underruns</string>
     <string name="chain_pinned_output_speaker">Speaker</string>
@@ -666,6 +667,7 @@
     <string name="chain_unit_volts">%1$s V</string>
     <string name="chain_unit_milliamperes">%1$s mA</string>
     <string name="chain_unit_milliwatts">%1$s mW</string>
+    <string name="chain_unit_decibels">%1$s dB</string>
     <string name="chain_unit_seconds">%1$s s</string>
     <string name="chain_usb_inventory_summary">%1$s · %2$s</string>
     <plurals name="chain_usb_host_device_count">
@@ -716,6 +718,7 @@
     <string name="chain_source_android_direct_capability">Android direct-playback capability API</string>
     <string name="chain_source_android_mixer_attributes">Android mixer-attributes capability API</string>
     <string name="chain_source_output_coordinator">Vesqen output coordinator</string>
+    <string name="chain_source_direct_usb">Vesqen USB output</string>
     <string name="chain_source_external_output_verification">Signed external verification record</string>
     <string name="chain_source_android_usb">Android public USB APIs</string>
     <string name="chain_source_app_configuration">App configuration</string>
@@ -728,6 +731,7 @@
     <string name="chain_method_pcm_data_rate">Sample rate × channel count × PCM bytes per sample</string>
     <string name="chain_method_process_cpu">Process CPU time change over elapsed time, normalized to one core</string>
     <string name="chain_method_rate_conversion">Compares decoder input and AudioTrack output sample rates</string>
+    <string name="chain_method_usb_declared_rates">Inferred from the sample rates the device declares</string>
     <string name="chain_method_decoder_path">Derived from Android decoder software, hardware-acceleration and vendor flags</string>
     <string name="chain_method_current_times_voltage">Battery current multiplied by battery voltage; whole-device estimate</string>
     <string name="chain_method_position_from_last_event">Last Media3 event position advanced by elapsed time while playing</string>
@@ -749,6 +753,13 @@
     <string name="chain_text_ready">Ready</string>
     <string name="chain_text_ended">Ended</string>
     <string name="chain_text_none">None</string>
+    <string name="chain_text_uac1">UAC1</string>
+    <string name="chain_text_uac2">UAC2</string>
+    <string name="chain_text_sync_adaptive">Adaptive</string>
+    <string name="chain_text_sync_asynchronous">Asynchronous</string>
+    <string name="chain_text_sync_synchronous">Synchronous</string>
+    <string name="chain_text_resampling_inferred">Inferred: resampled</string>
+    <string name="chain_text_resampling_undetermined">Cannot tell</string>
     <string name="chain_thermal_light">Light</string>
     <string name="chain_thermal_moderate">Moderate</string>
     <string name="chain_thermal_severe">Severe</string>
@@ -893,6 +904,18 @@
     <string name="chain_metric_usb_host_supported">USB host supported</string>
     <string name="chain_metric_usb_audio_device_count">USB audio devices</string>
     <string name="chain_metric_usb_device_inventory">USB device inventory</string>
+    <string name="chain_metric_usb_direct_wire_sample_rate">Wire sample rate</string>
+    <string name="chain_metric_usb_direct_wire_bit_depth">Wire bit depth</string>
+    <string name="chain_metric_usb_direct_wire_subslot">Subslot width</string>
+    <string name="chain_metric_usb_direct_wire_channels">Wire channels</string>
+    <string name="chain_metric_usb_direct_protocol">USB audio protocol</string>
+    <string name="chain_metric_usb_direct_sync_type">Sync type</string>
+    <string name="chain_metric_usb_direct_hardware_volume">DAC hardware volume</string>
+    <string name="chain_metric_usb_direct_delivered_frames">Frames delivered</string>
+    <string name="chain_metric_usb_direct_underruns">USB underruns</string>
+    <string name="chain_metric_usb_direct_lost_frames">Frames lost</string>
+    <string name="chain_metric_usb_direct_failed_packets">Failed transfer packets</string>
+    <string name="chain_metric_route_system_resampling">System resampling</string>
     <string name="edit_track_order">Edit order</string>
     <string name="custom_track_order">Custom order</string>
     <string name="drag_track_order">Drag to reorder</string>

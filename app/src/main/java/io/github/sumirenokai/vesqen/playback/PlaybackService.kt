@@ -253,6 +253,7 @@ class PlaybackService : MediaSessionService() {
         // M7-4: off in release builds until 2.0.0-beta.1 (`vesqen.directUsb`).
         val directRoute = if (BuildConfig.DIRECT_USB_ENABLED) AndroidDirectUsbRoute(this) else null
         directUsbRoute = directRoute
+        directRoute?.let { route -> (application as VesqenApplication).directUsbReadings.attach(route::readings) }
         val outputCoordinator = UsbOutputCoordinator(
             this,
             outputStateRepository,
@@ -419,6 +420,7 @@ class PlaybackService : MediaSessionService() {
         (application as VesqenApplication).usbOutputStateRepository.removeListener(outputStateListener)
         usbOutputCoordinator?.close()
         usbOutputCoordinator = null
+        (application as VesqenApplication).directUsbReadings.detach()
         directUsbRoute?.close()
         directUsbRoute = null
         playbackStateKeeper?.stop()

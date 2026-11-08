@@ -7,6 +7,35 @@ import org.junit.Test
 
 class TelemetryMetricCatalogTest {
     @Test
+    fun `own USB output readings and the resampling inference stay on the device`() {
+        val local = TelemetryMetricCatalog.allIds.filter { it.value.startsWith("usb.direct_") } + TelemetryMetricCatalog.ROUTE_SYSTEM_RESAMPLING
+        assertEquals(12, local.size)
+        local.forEach { id ->
+            assertEquals(id.value, TelemetryExportPolicy.LOCAL_ONLY, TelemetryMetricCatalog.descriptor(id).exportPolicy)
+            assertFalse(id.value, id in TelemetryMetricCatalog.exportableIds)
+        }
+        assertEquals(TelemetryMetricCatalog.allIds - local.toSet(), TelemetryMetricCatalog.exportableIds)
+        // Only the hardware volume uses decibels, so the report vocabulary does not list them.
+        assertEquals(setOf(TelemetryUnit.DECIBELS), TelemetryMetricCatalog.localOnlyUnits)
+    }
+
+    @Test
+    fun `the system is inferred to resample only a rate the USB device does not declare`() {
+        fun endpoint(vararg rates: Int, arbitrary: Boolean = false) = UsbAudioOutputEndpointReading(
+            snapshotKey = "usb-1", productName = null, type = "usb_device",
+            sampleRatesHz = rates.toList(), arbitrarySampleRate = arbitrary,
+            channelCounts = listOf(2), arbitraryChannelCount = false, encodings = listOf("pcm_16bit"), arbitraryEncoding = false,
+        )
+        val jbl = listOf(endpoint(48_000))
+        assertEquals("resampled", systemResamplingToken(192_000, jbl))
+        assertEquals("resampled", systemResamplingToken(44_100, jbl))
+        // A declared rate does not prove Android keeps it, so the answer stays open.
+        assertEquals("undetermined", systemResamplingToken(48_000, jbl))
+        assertEquals("undetermined", systemResamplingToken(192_000, listOf(endpoint(arbitrary = true))))
+        assertEquals("undetermined", systemResamplingToken(192_000, emptyList()))
+    }
+
+    @Test
     fun `probe demand sets contain only known metrics`() {
         assertTrue(TelemetryMetricCatalog.allIds.containsAll(TelemetryMetricCatalog.systemProbeIds))
         assertTrue(TelemetryMetricCatalog.allIds.containsAll(TelemetryMetricCatalog.outputProbeIds))

@@ -216,7 +216,10 @@ internal object DeviceReportPrivacy {
         return mapOf(
             "capturedAtEpochMs" to snapshot.capturedAtEpochMs,
             "capturedAtElapsedRealtimeMs" to snapshot.capturedAtElapsedRealtimeMs,
-            "metrics" to snapshot.metrics.filter { it.id in ids }.sortedBy { it.id.value }.map(::metric),
+            "metrics" to snapshot.metrics
+                .filter { it.id in ids && it.id in Metrics.exportableIds }
+                .sortedBy { it.id.value }
+                .map(::metric),
         )
     }
 

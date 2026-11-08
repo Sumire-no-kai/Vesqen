@@ -510,6 +510,7 @@
     <string name="chain_unit_display_raw">原始基础单位</string>
     <string name="chain_pinned_metrics">置顶指标</string>
     <string name="chain_pinned_handoff">交给系统</string>
+    <string name="chain_pinned_handoff_direct">送往 DAC</string>
     <string name="chain_pinned_output">输出</string>
     <string name="chain_pinned_underruns">欠载次数</string>
     <string name="chain_pinned_output_speaker">扬声器</string>
@@ -644,6 +645,7 @@
     <string name="chain_unit_volts">%1$s V</string>
     <string name="chain_unit_milliamperes">%1$s mA</string>
     <string name="chain_unit_milliwatts">%1$s mW</string>
+    <string name="chain_unit_decibels">%1$s dB</string>
     <string name="chain_unit_seconds">%1$s 秒</string>
     <string name="chain_usb_inventory_summary">%1$s · %2$s</string>
     <plurals name="chain_usb_host_device_count">
@@ -692,6 +694,7 @@
     <string name="chain_source_android_direct_capability">Android 直出能力 API</string>
     <string name="chain_source_android_mixer_attributes">Android 混音器属性能力 API</string>
     <string name="chain_source_output_coordinator">Vesqen 输出协调器</string>
+    <string name="chain_source_direct_usb">Vesqen USB 输出</string>
     <string name="chain_source_external_output_verification">签名的外部验证记录</string>
     <string name="chain_source_android_usb">Android 公共 USB API</string>
     <string name="chain_source_app_configuration">应用配置</string>
@@ -704,6 +707,7 @@
     <string name="chain_method_pcm_data_rate">采样率 × 声道数 × 每个 PCM 样本字节数</string>
     <string name="chain_method_process_cpu">进程 CPU 时间变化除以经过时间，并按单个核心归一化</string>
     <string name="chain_method_rate_conversion">比较解码输入与 AudioTrack 输出采样率</string>
+    <string name="chain_method_usb_declared_rates">按设备声明的采样率推断</string>
     <string name="chain_method_decoder_path">根据 Android 解码器的软件、硬件加速和厂商标志推导</string>
     <string name="chain_method_current_times_voltage">电池电流乘以电池电压；属于整机估算</string>
     <string name="chain_method_position_from_last_event">播放期间，根据最近的 Media3 事件位置与经过时间推算</string>
@@ -725,6 +729,13 @@
     <string name="chain_text_ready">就绪</string>
     <string name="chain_text_ended">已结束</string>
     <string name="chain_text_none">无</string>
+    <string name="chain_text_uac1">UAC1</string>
+    <string name="chain_text_uac2">UAC2</string>
+    <string name="chain_text_sync_adaptive">自适应</string>
+    <string name="chain_text_sync_asynchronous">异步</string>
+    <string name="chain_text_sync_synchronous">同步</string>
+    <string name="chain_text_resampling_inferred">推断会重采样</string>
+    <string name="chain_text_resampling_undetermined">无法判断</string>
     <string name="chain_thermal_light">轻微</string>
     <string name="chain_thermal_moderate">中等</string>
     <string name="chain_thermal_severe">严重</string>
@@ -869,6 +880,18 @@
     <string name="chain_metric_usb_host_supported">支持 USB 主机</string>
     <string name="chain_metric_usb_audio_device_count">USB 音频设备</string>
     <string name="chain_metric_usb_device_inventory">USB 设备清单</string>
+    <string name="chain_metric_usb_direct_wire_sample_rate">线路采样率</string>
+    <string name="chain_metric_usb_direct_wire_bit_depth">线路位深</string>
+    <string name="chain_metric_usb_direct_wire_subslot">子槽宽度</string>
+    <string name="chain_metric_usb_direct_wire_channels">线路声道数</string>
+    <string name="chain_metric_usb_direct_protocol">USB 音频协议</string>
+    <string name="chain_metric_usb_direct_sync_type">同步方式</string>
+    <string name="chain_metric_usb_direct_hardware_volume">DAC 硬件音量</string>
+    <string name="chain_metric_usb_direct_delivered_frames">已交付帧数</string>
+    <string name="chain_metric_usb_direct_underruns">USB 欠载次数</string>
+    <string name="chain_metric_usb_direct_lost_frames">丢失帧数</string>
+    <string name="chain_metric_usb_direct_failed_packets">失败的传输包</string>
+    <string name="chain_metric_route_system_resampling">系统是否会重采样</string>
     <string name="edit_track_order">编辑顺序</string>
     <string name="custom_track_order">自定义顺序</string>
     <string name="drag_track_order">拖动调整顺序</string>

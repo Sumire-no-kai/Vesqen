@@ -155,6 +155,11 @@ private val ChainPinnedMetricIds = setOf(
     Metrics.ROUTE_ANTICIPATED_TYPE,
     Metrics.ROUTE_SELECTED_SYSTEM_NAME,
     Metrics.PLAYBACK_UNDERRUN_COUNT,
+    Metrics.USB_DIRECT_WIRE_SAMPLE_RATE,
+    Metrics.USB_DIRECT_WIRE_BIT_DEPTH,
+    Metrics.USB_DIRECT_PROTOCOL,
+    Metrics.USB_DIRECT_SYNC_TYPE,
+    Metrics.USB_DIRECT_UNDERRUNS,
 )
 
 /** The codec Android reports for a Bluetooth route (#73), stated in the system's part. */
@@ -762,7 +767,13 @@ private fun ChainPinnedMetrics(
  * One pinned card: a short [value] in the large digits and the remaining facts in [detail]. [evidence]
  * holds what the card read, so its confidence is that of the weakest fact it shows.
  */
-private class PinnedContent(val value: String?, val detail: String?, val evidence: List<TelemetryEvidence?>)
+private class PinnedContent(
+    val value: String?,
+    val detail: String?,
+    val evidence: List<TelemetryEvidence?>,
+    /** Replaces the card's usual title, as on Vesqen's own USB output, where nothing goes to Android. */
+    @StringRes val label: Int? = null,
+)
 
 private fun pinnedContent(
     context: Context,
@@ -774,6 +785,29 @@ private fun pinnedContent(
     fun evidence(id: TelemetryMetricId) = metrics[id]?.evidence
     fun text(id: TelemetryMetricId) = evidence(id)?.takeUnless { it is TelemetryEvidence.Unavailable }
         ?.let { formatTelemetryReading(context, it.reading, unitDisplayMode) }
+    // While Vesqen's own USB output holds the DAC, the AudioTrack facts describe nothing that plays:
+    // the cards read what the own output sends and counts instead.
+    if (text(Metrics.USB_DIRECT_WIRE_SAMPLE_RATE) != null) {
+        when (reading) {
+            ChainPinnedReading.HANDOFF -> return PinnedContent(
+                value = text(Metrics.USB_DIRECT_WIRE_SAMPLE_RATE),
+                detail = text(Metrics.USB_DIRECT_WIRE_BIT_DEPTH),
+                evidence = listOf(Metrics.USB_DIRECT_WIRE_SAMPLE_RATE, Metrics.USB_DIRECT_WIRE_BIT_DEPTH).map(::evidence),
+                label = R.string.chain_pinned_handoff_direct,
+            )
+            ChainPinnedReading.OUTPUT -> return PinnedContent(
+                value = usbOutputStatus.deviceName ?: context.getString(R.string.chain_pinned_output_wired),
+                detail = listOf(Metrics.USB_DIRECT_PROTOCOL, Metrics.USB_DIRECT_SYNC_TYPE).mapNotNull(::text).joinToString(" · ").ifEmpty { null },
+                evidence = listOf(Metrics.USB_DIRECT_PROTOCOL, Metrics.USB_DIRECT_SYNC_TYPE).map(::evidence),
+            )
+            ChainPinnedReading.UNDERRUNS -> return PinnedContent(
+                value = text(Metrics.USB_DIRECT_UNDERRUNS),
+                detail = null,
+                evidence = listOf(evidence(Metrics.USB_DIRECT_UNDERRUNS)),
+            )
+            ChainPinnedReading.SOURCE -> Unit
+        }
+    }
     return when (reading) {
         ChainPinnedReading.SOURCE -> {
             // As in the Now notes: a lossless file is described by its bit depth, a lossy one by its bit rate.
@@ -875,7 +909,7 @@ private fun ChainPinnedCard(
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                text = stringResource(reading.label),
+                text = stringResource(content.label ?: reading.label),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,

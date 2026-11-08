@@ -25,6 +25,7 @@ import io.github.sumirenokai.vesqen.usb.descriptor.SampleRates
 import io.github.sumirenokai.vesqen.usb.descriptor.UacDescriptorParser
 import io.github.sumirenokai.vesqen.usb.descriptor.UacFunction
 import io.github.sumirenokai.vesqen.usb.descriptor.UacParseResult
+import io.github.sumirenokai.vesqen.usb.descriptor.UacSyncType
 import io.github.sumirenokai.vesqen.usb.descriptor.UacVersion
 import io.github.sumirenokai.vesqen.usb.descriptor.UsbAudioTopology
 import io.github.sumirenokai.vesqen.usb.engine.StreamPreflight
@@ -137,6 +138,24 @@ internal fun DirectUsbDetails.withOffer(function: UacFunction): DirectUsbDetails
     )
 }
 
+internal fun UacFunction.protocolToken(): String = when (version) {
+    UacVersion.UAC1 -> "uac1"
+    UacVersion.UAC2 -> "uac2"
+    UacVersion.OTHER -> "other"
+}
+
+/** How the plan's data endpoint keeps time with the device, as its descriptor declares. */
+internal fun UacFunction.syncToken(plan: StreamingPlan): String {
+    val endpoint = streamingInterfaces.firstOrNull { it.interfaceNumber == plan.interfaceNumber }
+        ?.alternateSettings?.firstOrNull { it.alternateSetting == plan.alternateSetting }?.dataEndpoint
+    return when (endpoint?.syncType) {
+        UacSyncType.ADAPTIVE -> "adaptive"
+        UacSyncType.ASYNCHRONOUS -> "asynchronous"
+        UacSyncType.SYNCHRONOUS -> "synchronous"
+        UacSyncType.NONE, null -> "none"
+    }
+}
+
 private operator fun SampleRates.contains(rateHz: Int): Boolean = when (this) {
     is SampleRates.Discrete -> rateHz in ratesHz
     is SampleRates.Continuous -> rateHz in minHz..maxHz
@@ -182,6 +201,9 @@ internal interface DirectUsbRoute {
     /** USB Host lists an audio-class device, whether or not Android has an audio route for it (#293). */
     fun hasUsbAudioDevice(): Boolean
 
+    /** While streaming, what Chain shows about the own output. Any thread. */
+    fun readings(): DirectUsbReadings? = null
+
     /** Shows the system's permission dialog for the device; only for a user's own action. */
     fun requestPermission(onResult: (granted: Boolean) -> Unit)
 
@@ -214,6 +236,12 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
 
     /** The last session given back, which may still wait for its URBs; the next one takes over after it (#289). */
     private var previousSession: DirectUsbSession? = null
+
+    /** What [readings] reports, set once a takeover is ready and cleared on release. */
+    private class StreamingFacts(val session: DirectUsbSession, val plan: StreamingPlan, val protocol: String, val syncType: String, val volume: Int)
+
+    @Volatile
+    private var streamingFacts: StreamingFacts? = null
     private var permissionCallback: ((Boolean) -> Unit)? = null
 
     @Volatile
@@ -376,6 +404,7 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
                 if (session !== next) return@post
                 when (result) {
                     is DirectUsbSession.Takeover.Ready -> {
+                        streamingFacts = StreamingFacts(next, target.plan, target.function.protocolToken(), target.function.syncToken(target.plan), result.volumeNow)
                         sessionProvider = DirectUsbAudioOutputProvider(
                             target.plan,
                             openOutput = { next.openOutput()?.also { listener?.onOutputOpened() } },
@@ -397,7 +426,27 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
         }
     }
 
+    override fun readings(): DirectUsbReadings? {
+        val facts = streamingFacts ?: return null
+        val totals = facts.session.totals()
+        return DirectUsbReadings(
+            sampleRateHz = facts.plan.sampleRateHz,
+            bitDepth = facts.plan.bitResolution,
+            subslotBytes = facts.plan.subslotBytes,
+            channelCount = facts.plan.channels,
+            protocol = facts.protocol,
+            syncType = facts.syncType,
+            // UAC volume is in 1/256 dB.
+            hardwareVolumeDb = facts.volume / 256.0,
+            deliveredFrames = totals.deliveredFrames,
+            underruns = totals.underruns,
+            lostFrames = totals.lostFrames,
+            failedPackets = totals.failedPackets,
+        )
+    }
+
     override fun release() {
+        streamingFacts = null
         streaming = false
         sessionProvider = null
         val current = session

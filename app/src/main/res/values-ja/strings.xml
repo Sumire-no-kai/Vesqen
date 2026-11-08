@@ -510,6 +510,7 @@
     <string name="chain_unit_display_raw">基本単位（換算なし）</string>
     <string name="chain_pinned_metrics">固定した指標</string>
     <string name="chain_pinned_handoff">システムに渡す形式</string>
+    <string name="chain_pinned_handoff_direct">DAC へ送る形式</string>
     <string name="chain_pinned_output">出力</string>
     <string name="chain_pinned_underruns">アンダーラン回数</string>
     <string name="chain_pinned_output_speaker">スピーカー</string>
@@ -644,6 +645,7 @@
     <string name="chain_unit_volts">%1$s V</string>
     <string name="chain_unit_milliamperes">%1$s mA</string>
     <string name="chain_unit_milliwatts">%1$s mW</string>
+    <string name="chain_unit_decibels">%1$s dB</string>
     <string name="chain_unit_seconds">%1$s 秒</string>
     <string name="chain_usb_inventory_summary">%1$s · %2$s</string>
     <plurals name="chain_usb_host_device_count">
@@ -692,6 +694,7 @@
     <string name="chain_source_android_direct_capability">Android のダイレクト再生対応 API</string>
     <string name="chain_source_android_mixer_attributes">Android のミキサー属性取得 API</string>
     <string name="chain_source_output_coordinator">Vesqen の出力コーディネーター</string>
+    <string name="chain_source_direct_usb">Vesqen の USB 出力</string>
     <string name="chain_source_external_output_verification">署名付きの外部検証記録</string>
     <string name="chain_source_android_usb">Android の公開 USB API</string>
     <string name="chain_source_app_configuration">アプリの設定</string>
@@ -704,6 +707,7 @@
     <string name="chain_method_pcm_data_rate">サンプルレート × チャンネル数 × PCM サンプルあたりのバイト数</string>
     <string name="chain_method_process_cpu">プロセスの CPU 時間の増分を経過時間で割り、1 コアを 100% として算出</string>
     <string name="chain_method_rate_conversion">デコーダー入力と AudioTrack 出力のサンプルレートを比較</string>
+    <string name="chain_method_usb_declared_rates">デバイスが申告するサンプルレートから推定</string>
     <string name="chain_method_decoder_path">Android のデコーダーのソフトウェア、ハードウェアアクセラレーション、ベンダーのフラグから算出</string>
     <string name="chain_method_current_times_voltage">バッテリーの電流 × バッテリーの電圧。端末全体の推定値</string>
     <string name="chain_method_position_from_last_event">再生中、最後の Media3 イベントの位置に経過時間を加えた値</string>
@@ -725,6 +729,13 @@
     <string name="chain_text_ready">準備完了</string>
     <string name="chain_text_ended">終了</string>
     <string name="chain_text_none">なし</string>
+    <string name="chain_text_uac1">UAC1</string>
+    <string name="chain_text_uac2">UAC2</string>
+    <string name="chain_text_sync_adaptive">アダプティブ</string>
+    <string name="chain_text_sync_asynchronous">非同期</string>
+    <string name="chain_text_sync_synchronous">同期</string>
+    <string name="chain_text_resampling_inferred">リサンプリングされると推定</string>
+    <string name="chain_text_resampling_undetermined">判断できません</string>
     <string name="chain_thermal_light">軽度</string>
     <string name="chain_thermal_moderate">中程度</string>
     <string name="chain_thermal_severe">重度</string>
@@ -869,6 +880,18 @@
     <string name="chain_metric_usb_host_supported">USB ホストに対応</string>
     <string name="chain_metric_usb_audio_device_count">USB オーディオデバイス</string>
     <string name="chain_metric_usb_device_inventory">USB デバイスの一覧</string>
+    <string name="chain_metric_usb_direct_wire_sample_rate">伝送サンプルレート</string>
+    <string name="chain_metric_usb_direct_wire_bit_depth">伝送ビット深度</string>
+    <string name="chain_metric_usb_direct_wire_subslot">サブスロット幅</string>
+    <string name="chain_metric_usb_direct_wire_channels">伝送チャンネル数</string>
+    <string name="chain_metric_usb_direct_protocol">USB オーディオプロトコル</string>
+    <string name="chain_metric_usb_direct_sync_type">同期方式</string>
+    <string name="chain_metric_usb_direct_hardware_volume">DAC のハードウェア音量</string>
+    <string name="chain_metric_usb_direct_delivered_frames">送出済みフレーム数</string>
+    <string name="chain_metric_usb_direct_underruns">USB アンダーラン回数</string>
+    <string name="chain_metric_usb_direct_lost_frames">失われたフレーム数</string>
+    <string name="chain_metric_usb_direct_failed_packets">失敗した転送パケット</string>
+    <string name="chain_metric_route_system_resampling">システムによるリサンプリング</string>
     <string name="edit_track_order">順番を編集</string>
     <string name="custom_track_order">カスタムの順番</string>
     <string name="drag_track_order">ドラッグして並べ替え</string>

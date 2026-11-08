@@ -35,7 +35,7 @@ internal object DeviceReportContract {
                 "usbOutputFailureOrigin" to UsbOutputFailureOrigin.entries.map { it.name },
                 "telemetryUnavailableReason" to TelemetryUnavailableReason.entries.map { it.name },
                 "telemetryConfidence" to TelemetryConfidence.entries.map { it.name },
-                "telemetryUnit" to TelemetryUnit.entries.map { it.name },
+                "telemetryUnit" to TelemetryUnit.entries.filterNot { it in TelemetryMetricCatalog.localOnlyUnits }.map { it.name },
             ).apply { putAll(words.appSegmentEnums) },
             "text" to linkedMapOf(
                 "containers" to words.containers.sorted(),
@@ -58,7 +58,8 @@ internal object DeviceReportContract {
                 "classNamePattern" to CrashCapture.CLASS_NAME_PATTERN,
                 "methodNamePattern" to CrashCapture.METHOD_NAME_PATTERN,
             ),
-            "metrics" to TelemetryMetricCatalog.allIds.sortedBy { it.value }.map { id ->
+            // Local-only metrics never reach a report, so the server need not know them.
+            "metrics" to TelemetryMetricCatalog.exportableIds.sortedBy { it.value }.map { id ->
                 val descriptor = TelemetryMetricCatalog.descriptor(id)
                 linkedMapOf(
                     "id" to id.value,
