@@ -292,7 +292,7 @@ class DirectUsbSessionTest {
         session.release()
         assertTrue(waitUntil { events.contains("stream not destroyed") })
 
-        val second = nextSession()
+        val second = nextSession(after = session)
         val refused = takeOver(second)
 
         assertEquals(DirectUsbSession.Takeover.Failed::class, refused::class)
@@ -306,13 +306,38 @@ class DirectUsbSessionTest {
 
         // Once the first session has given everything back, the next takeover goes ahead.
         events.clear()
-        val third = nextSession()
+        val third = nextSession(after = second)
         assertEquals(DirectUsbSession.Takeover.Ready::class, takeOver(third)::class)
         assertEquals("marker volume -2560", events.last { it.startsWith("marker") })
     }
 
-    /** Another session for the same device after [session], sharing its control thread and marker store. */
-    private fun nextSession(): DirectUsbSession {
+    @Test
+    fun `a retry after a refused takeover still waits for the session that holds the device`() {
+        // #297 review: the route makes each refused session the next one's predecessor, so C only saw the
+        // released B and took over while A still waited for its URBs.
+        takeOver()
+        stream.destroyAnswers.addAll(List(10) { false })
+        session.release()
+        assertTrue(waitUntil { events.contains("stream not destroyed") })
+        val second = nextSession(after = session)
+        assertEquals(DirectUsbSession.Takeover.Failed::class, takeOver(second)::class)
+
+        val third = nextSession(after = second)
+        assertEquals(DirectUsbSession.Takeover.Failed::class, takeOver(third)::class)
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertEquals(
+            "Neither retry wrote the marker the first session clears",
+            listOf("marker volume null", "marker volume -2560", "marker cleared"),
+            events.filter { it.startsWith("marker") },
+        )
+
+        events.clear()
+        assertEquals(DirectUsbSession.Takeover.Ready::class, takeOver(nextSession(after = third))::class)
+        assertEquals("marker volume -2560", events.last { it.startsWith("marker") })
+    }
+
+    /** Another session for the same device after [after], sharing the control thread and marker store. */
+    private fun nextSession(after: DirectUsbSession): DirectUsbSession {
         val nextStream = FakeStream(CopyOnWriteArrayList())
         return DirectUsbSession(
             device = UsbDeviceIdentity(deviceId = 1004, vendorId = 0x0ecb, productId = 0x2107),
@@ -322,7 +347,7 @@ class DirectUsbSessionTest {
             control = control,
             streams = { _, _ -> UsbStreamFactory.Creation.Created(nextStream) },
             timing = DirectUsbSession.Timing(monitorPeriodMs = 10, retireTimeoutMs = 150, destroyTimeoutMs = 1, destroyRetryMs = 20),
-            after = session,
+            after = after,
         )
     }
 

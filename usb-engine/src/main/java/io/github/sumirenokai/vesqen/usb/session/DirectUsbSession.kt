@@ -54,11 +54,15 @@ class DirectUsbSession(
     private val listener: Listener = object : Listener {},
     private val nanoTime: () -> Long = System::nanoTime,
     /**
-     * The previous session on the same control thread and marker store. Until it has given everything
-     * back, this one does not take over: the architecture's safety barrier, and the one marker slot (#289).
+     * The previous session on the same control thread and marker store. Until it, and every session it
+     * waited for, has given everything back, this one does not take over: the architecture's safety
+     * barrier, and the one marker slot (#289).
      */
-    private val after: DirectUsbSession? = null,
+    after: DirectUsbSession? = null,
 ) {
+    /** Cut once every earlier session is released, so a long run of takeovers keeps no chain. */
+    private var predecessor: DirectUsbSession? = after
+
     data class Timing(
         /** How often a running stream is checked for errors and for retirements that never finish. */
         val monitorPeriodMs: Long = 250,
@@ -151,8 +155,8 @@ class DirectUsbSession(
     private fun takeOverNow(plan: StreamingPlan, startVolume: Int, onDone: (Takeover) -> Unit) {
         if (state != State.Idle) return onDone(failed(Reason.USB_ENGINE_UNAVAILABLE, "the session was released before its takeover"))
         state = State.TakingOver
-        // On the control thread, so the previous session's own cleanup attempts have run in order.
-        val result = if (after != null && after.state !is State.Released) {
+        // On the control thread, so the earlier sessions' own cleanup attempts have run in order.
+        val result = if (!predecessorsReleased()) {
             failed(Reason.USB_TRANSFER_FAILED, "the previous takeover has not given the device back")
         } else {
             claimAndStart(plan, startVolume)
@@ -253,6 +257,18 @@ class DirectUsbSession(
     }
 
     private fun failed(reason: Reason, detail: String) = Takeover.Failed(DirectUsbFailure(reason, detail))
+
+    /**
+     * On [control]. A refused session is released at once without having held anything, and the route
+     * then waits on it; the one that still holds the device is further back (#297 review), so the whole
+     * chain is checked.
+     */
+    private fun predecessorsReleased(): Boolean {
+        val previous = predecessor ?: return true
+        if (previous.state !is State.Released || !previous.predecessorsReleased()) return false
+        predecessor = null
+        return true
+    }
 
     /** On [control]: errors the stream reported, and retirements that never finish. */
     private fun check() {
