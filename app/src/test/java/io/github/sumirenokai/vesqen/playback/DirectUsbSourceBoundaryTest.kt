@@ -114,6 +114,27 @@ class DirectUsbSourceBoundaryTest {
     private val step24 = 1f / 8_388_608f
 
     @Test
+    fun `a next track that needs trimming reaches the failure callback and writes nothing`() {
+        // #294: the strict sink refused trimming before asking the provider, so no reason reached the state.
+        val failures = mutableListOf<DirectUsbFailure>()
+        val handle = RecordingHandle()
+        val provider = DirectUsbAudioOutputProvider(plan, openOutput = { handle }, source = { flac(16) }, onFailure = { failures += it })
+        val sink = StrictPcmAudioSink(provider)
+        sink.configure(AudioSink.AudioSinkConfig.Builder(decoded).build())
+        assertTrue(sink.handleBuffer(floats(0f, 0f), 0, 1))
+        val written = handle.received.size()
+
+        listOf(decoded.buildUpon().setEncoderPadding(1).build(), decoded.buildUpon().setEncoderDelay(1).build()).forEach { trimmed ->
+            assertThrows(AudioSink.ConfigurationException::class.java) {
+                sink.configure(AudioSink.AudioSinkConfig.Builder(trimmed).build())
+            }
+        }
+
+        assertEquals(List(2) { DirectUsbFailure.Reason.SOURCE_FORMAT_UNSUPPORTED }, failures.map { it.reason })
+        assertEquals("Nothing of the refused track is written", written, handle.received.size())
+    }
+
+    @Test
     fun `a 24-bit track after a 16-bit one keeps its low bits`() {
         val run = naturalChange(firstBits = 16, secondBits = 24)
         assertTrue(run.sink.handleBuffer(floats(step24, step24), 21, 1))

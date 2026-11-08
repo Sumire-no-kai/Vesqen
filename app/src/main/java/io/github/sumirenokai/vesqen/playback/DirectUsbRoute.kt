@@ -84,8 +84,7 @@ internal fun directRefusal(
         StreamingRefusal.SPEED_UNSUPPORTED in refusals -> DirectUsbInspection.Refused("speed_unsupported")
         StreamingRefusal.PACKET_TOO_SMALL in refusals -> DirectUsbInspection.Refused("format_exceeds_bus", formatRefused = true)
         else -> {
-            val details = DirectUsbDetails(sourceSampleRateHz = source.sampleRateHz, sourceBitDepth = source.bitDepth)
-                .withOffer(function)
+            val details = source.toDirectDetails().withOffer(function)
             when {
                 details.deviceSampleRatesHz.isEmpty() -> DirectUsbInspection.Refused("no_matching_format", formatRefused = true)
                 details.deviceMaxBitsAtSourceRate == null ->
@@ -96,11 +95,26 @@ internal fun directRefusal(
     }
 }
 
+/**
+ * Whether this plan carries [source] unchanged: its rate, at least its depth (#65), and its channel
+ * count, since strict output does not mix (#295).
+ */
+internal fun StreamingPlan.carries(source: SourcePcmFormat): Boolean =
+    sampleRateHz == source.sampleRateHz && bitResolution >= source.bitDepth && channels == source.channelCount
+
 /** What the source is, from the library's facts. */
 internal fun TelemetrySourceFacts.toDirectDetails() = DirectUsbDetails(
     sourceCodec = codecLabel?.takeIf(String::isNotBlank),
     sourceSampleRateHz = sampleRateHz?.takeIf { it > 0 },
     sourceBitDepth = bitDepth?.takeIf { it > 0 },
+    sourceChannelCount = channelCount?.takeIf { it > 0 },
+)
+
+/** What the source is, as the service planned for it. */
+internal fun SourcePcmFormat.toDirectDetails() = DirectUsbDetails(
+    sourceSampleRateHz = sampleRateHz,
+    sourceBitDepth = bitDepth,
+    sourceChannelCount = channelCount,
 )
 
 /**
@@ -119,6 +133,7 @@ internal fun DirectUsbDetails.withOffer(function: UacFunction): DirectUsbDetails
             .distinct()
             .sortedBy { it.first },
         deviceMaxBitsAtSourceRate = rate?.let { formats.filter { format -> rate in format.sampleRates }.maxOfOrNull { it.bitResolution } },
+        deviceChannelCount = formats.map { it.channels }.distinct().singleOrNull(),
     )
 }
 
@@ -164,6 +179,9 @@ internal interface DirectUsbRoute {
 
     fun inspect(source: SourcePcmFormat): DirectUsbInspection
 
+    /** USB Host lists an audio-class device, whether or not Android has an audio route for it (#293). */
+    fun hasUsbAudioDevice(): Boolean
+
     /** Shows the system's permission dialog for the device; only for a user's own action. */
     fun requestPermission(onResult: (granted: Boolean) -> Unit)
 
@@ -193,6 +211,9 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
 
     private var prepared: Prepared? = null
     private var session: DirectUsbSession? = null
+
+    /** The last session given back, which may still wait for its URBs; the next one takes over after it (#289). */
+    private var previousSession: DirectUsbSession? = null
     private var permissionCallback: ((Boolean) -> Unit)? = null
 
     @Volatile
@@ -262,6 +283,8 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
         }
     }
 
+    override fun hasUsbAudioDevice(): Boolean = usbManager.deviceList.values.any(UsbDevice::isUsbAudioDevice)
+
     override fun inspect(source: SourcePcmFormat): DirectUsbInspection {
         val devices = usbManager.deviceList.values.filter(UsbDevice::isUsbAudioDevice)
         val device = when (devices.size) {
@@ -271,9 +294,7 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
         }
         if (!usbManager.hasPermission(device)) return DirectUsbInspection.PermissionNeeded(device.displayName())
         val held = prepared
-        if (held != null && streaming && held.device.deviceId == device.deviceId &&
-            held.plan.sampleRateHz == source.sampleRateHz && held.plan.bitResolution >= source.bitDepth
-        ) {
+        if (held != null && streaming && held.device.deviceId == device.deviceId && held.plan.carries(source)) {
             return DirectUsbInspection.Ready(device.displayName(), held.plan)
         }
         release()
@@ -292,6 +313,17 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
         for (bits in WIRE_DEPTHS.filter { it >= source.bitDepth }) {
             when (val preflight = StreamPreflight.run(parsed.topology, speed, source.sampleRateHz, bits)) {
                 is StreamPreflight.Ready -> {
+                    // The settings the own output streams through are stereo, so a known mono or
+                    // multichannel source is refused here, before anything is claimed (#295).
+                    if (!preflight.plan.carries(source)) {
+                        connection.close()
+                        return DirectUsbInspection.Refused(
+                            "channels_unsupported",
+                            formatRefused = true,
+                            deviceName = name,
+                            details = source.toDirectDetails().withOffer(preflight.function),
+                        )
+                    }
                     prepared = Prepared(device, connection, preflight.function, preflight.plan)
                     return DirectUsbInspection.Ready(name, preflight.plan)
                 }
@@ -330,6 +362,7 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
             function = target.function,
             markers = markers,
             control = control,
+            after = previousSession,
             listener = object : DirectUsbSession.Listener {
                 // A session given back on purpose may still report; only the current one counts.
                 override fun onFailed(failure: DirectUsbFailure) {
@@ -371,7 +404,12 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
         session = null
         val held = prepared
         prepared = null
-        if (current != null) current.release() else held?.connection?.close()
+        if (current != null) {
+            previousSession = current
+            current.release()
+        } else {
+            held?.connection?.close()
+        }
     }
 
     override fun close() {
