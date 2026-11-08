@@ -251,7 +251,9 @@ class PlaybackService : MediaSessionService() {
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory, VesqenExtractorsFactory())
         val outputStateRepository = (application as VesqenApplication).usbOutputStateRepository
         // M7-4: off in release builds until 2.0.0-beta.1 (`vesqen.directUsb`).
-        val directRoute = if (BuildConfig.DIRECT_USB_ENABLED) AndroidDirectUsbRoute(this) else null
+        val directRoute = if (BuildConfig.DIRECT_USB_ENABLED) {
+            AndroidDirectUsbRoute(this, (application as VesqenApplication).directUsbMarkers)
+        } else null
         directUsbRoute = directRoute
         val outputCoordinator = UsbOutputCoordinator(
             this,

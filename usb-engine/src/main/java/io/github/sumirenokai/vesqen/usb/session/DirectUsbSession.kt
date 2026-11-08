@@ -53,16 +53,7 @@ class DirectUsbSession(
     private val timing: Timing = Timing(),
     private val listener: Listener = object : Listener {},
     private val nanoTime: () -> Long = System::nanoTime,
-    /**
-     * The previous session on the same control thread and marker store. Until it, and every session it
-     * waited for, has given everything back, this one does not take over: the architecture's safety
-     * barrier, and the one marker slot (#289).
-     */
-    after: DirectUsbSession? = null,
 ) {
-    /** Cut once every earlier session is released, so a long run of takeovers keeps no chain. */
-    private var predecessor: DirectUsbSession? = after
-
     data class Timing(
         /** How often a running stream is checked for errors and for retirements that never finish. */
         val monitorPeriodMs: Long = 250,
@@ -121,31 +112,10 @@ class DirectUsbSession(
     private var newestEpoch = UsbStreamEngine.FIRST_EPOCH
     private var newestEpochTaken = false
     private var retiredAtNanos: Long? = null
-    private var finishedTotals = UsbStreamTotals.NONE
+    @Volatile private var finalTotals = UsbStreamTotals.NONE
+    private val releaseCallbacks = mutableListOf<(CleanupRecord) -> Unit>()
 
-    /**
-     * The last retired output and its latest numbers, until native moves on to the next epoch. Packets
-     * of it can still finish in the meantime, and it must not be read live as well (#296).
-     */
-    private var retiring: Pair<Long, UsbStreamTotals>? = null
-
-    /** Over every output so far, the current one included, each counted once. */
-    fun totals(): UsbStreamTotals = synchronized(epochLock) {
-        val live = stream?.readStats()?.also(::observe)
-        finishedTotals + (retiring?.second ?: UsbStreamTotals.NONE) +
-            (live?.takeIf { it.epoch == newestEpoch }?.totals() ?: UsbStreamTotals.NONE)
-    }
-
-    /** Under [epochLock]: keeps a retiring output's latest numbers, and folds them in once native moves on. */
-    private fun observe(stats: UsbStreamStats) {
-        val (epoch, _) = retiring ?: return
-        if (stats.epoch == epoch) {
-            retiring = epoch to stats.totals()
-        } else if (stats.epoch == newestEpoch) {
-            finishedTotals += retiring!!.second
-            retiring = null
-        }
-    }
+    fun totals(): UsbStreamTotals = stream?.readStats()?.sessionTotals ?: finalTotals
 
     fun takeOver(plan: StreamingPlan, startVolume: Int, onDone: (Takeover) -> Unit) {
         check(takeOverAsked.compareAndSet(false, true)) { "A session takes over once" }
@@ -155,12 +125,7 @@ class DirectUsbSession(
     private fun takeOverNow(plan: StreamingPlan, startVolume: Int, onDone: (Takeover) -> Unit) {
         if (state != State.Idle) return onDone(failed(Reason.USB_ENGINE_UNAVAILABLE, "the session was released before its takeover"))
         state = State.TakingOver
-        // On the control thread, so the earlier sessions' own cleanup attempts have run in order.
-        val result = if (!predecessorsReleased()) {
-            failed(Reason.USB_TRANSFER_FAILED, "the previous takeover has not given the device back")
-        } else {
-            claimAndStart(plan, startVolume)
-        }
+        val result = claimAndStart(plan, startVolume)
         when (result) {
             is Takeover.Ready -> {
                 state = State.Streaming(plan)
@@ -190,7 +155,13 @@ class DirectUsbSession(
     }
 
     /** Gives the device back. The callback comes once every interface is released, which can wait for the kernel. */
-    fun release() = control.execute {
+    fun release(onReleased: ((CleanupRecord) -> Unit)? = null) = control.execute {
+        val done = state as? State.Released
+        if (done != null) {
+            onReleased?.invoke(done.cleanup)
+            return@execute
+        }
+        if (onReleased != null) releaseCallbacks.add(onReleased)
         if (state is State.Streaming || state == State.Idle) {
             state = State.Releasing(null)
             cleanUp()
@@ -201,7 +172,9 @@ class DirectUsbSession(
     fun onDeviceDetached() = control.execute { fail(DirectUsbFailure(Reason.DEVICE_DISCONNECTED, "the device was detached")) }
 
     private fun claimAndStart(plan: StreamingPlan, startVolume: Int): Takeover {
-        markers.write(TakeoverMarker(device, volumeBefore = null, mutedBefore = null))
+        if (!markers.acquire(TakeoverMarker(device, volumeBefore = null, mutedBefore = null))) {
+            return failed(Reason.USB_TRANSFER_FAILED, "the takeover marker is unavailable or awaiting recovery")
+        }
         markerWritten = true
         val interfaces = (listOf(function.controlInterface) + function.streamingInterfaces.map { it.interfaceNumber }).distinct()
         for (number in interfaces) {
@@ -218,7 +191,9 @@ class DirectUsbSession(
         val volumeBefore = client.volume(unit.id, controlInterface)
         if (range == null || volumeBefore == null) return failed(Reason.VOLUME_CONTROL_FAILED, "the volume could not be read")
         val mutedBefore = client.mute(unit.id, controlInterface)
-        markers.write(TakeoverMarker(device, volumeBefore, mutedBefore))
+        if (!markers.write(TakeoverMarker(device, volumeBefore, mutedBefore))) {
+            return failed(Reason.USB_TRANSFER_FAILED, "the original hardware volume could not be saved")
+        }
         restoreVolume = {
             val mutedAgain = mutedBefore != true || client.setMute(unit.id, controlInterface, true)
             client.setVolume(unit.id, controlInterface, volumeBefore) && mutedAgain
@@ -258,27 +233,12 @@ class DirectUsbSession(
 
     private fun failed(reason: Reason, detail: String) = Takeover.Failed(DirectUsbFailure(reason, detail))
 
-    /**
-     * On [control]. A refused session is released at once without having held anything, and the route
-     * then waits on it; the one that still holds the device is further back (#297 review), so the whole
-     * chain is checked.
-     */
-    private fun predecessorsReleased(): Boolean {
-        val previous = predecessor ?: return true
-        if (previous.state !is State.Released || !previous.predecessorsReleased()) return false
-        predecessor = null
-        return true
-    }
-
     /** On [control]: errors the stream reported, and retirements that never finish. */
     private fun check() {
         if (state !is State.Streaming) return
         val stats = stream?.readStats() ?: return
         stats.asFailure()?.let { return fail(it) }
-        val waitingSince = synchronized(epochLock) {
-            observe(stats)
-            retiredAtNanos
-        } ?: return
+        val waitingSince = synchronized(epochLock) { retiredAtNanos } ?: return
         if (stats.epoch == stats.requestedEpoch) {
             synchronized(epochLock) { if (newestEpoch == stats.epoch) retiredAtNanos = null }
         } else if (nanoTime() - waitingSince > TimeUnit.MILLISECONDS.toNanos(timing.retireTimeoutMs)) {
@@ -312,6 +272,7 @@ class DirectUsbSession(
                 }
                 return
             }
+            finalTotals = current.readStats()?.sessionTotals ?: UsbStreamTotals.NONE
             stream = null
             cleanupSteps += CleanupStep("stream reclaimed", true)
         }
@@ -333,20 +294,17 @@ class DirectUsbSession(
         link.close()
         // Only a device with every interface back may lose its marker; otherwise the next start recovers it.
         if (markerWritten) {
-            if (allReleased) markers.clear()
-            cleanupSteps += CleanupStep("takeover marker cleared", allReleased)
+            cleanupSteps += CleanupStep("takeover marker cleared", markers.finish(allReleased))
         }
         val record = CleanupRecord(cleanupSteps.toList())
         val failure = (state as? State.Releasing)?.failure
         state = State.Released(record, failure)
         listener.onReleased(record, failure)
+        releaseCallbacks.forEach { it(record) }
+        releaseCallbacks.clear()
     }
 
     private fun retireNewest(current: UsbStream) {
-        val stats = current.readStats()?.also(::observe)
-        // An earlier output that native skipped past without reporting again keeps its last numbers.
-        retiring?.let { finishedTotals += it.second }
-        retiring = stats?.takeIf { it.epoch == newestEpoch }?.let { it.epoch to it.totals() }
         newestEpoch = current.retireOutput()
         newestEpochTaken = false
         retiredAtNanos = nanoTime()
@@ -395,5 +353,3 @@ class DirectUsbSession(
         }
     }
 }
-
-private fun UsbStreamStats.totals() = UsbStreamTotals(mediaFramesLost, underruns, packetsFailed, mediaFramesDelivered)

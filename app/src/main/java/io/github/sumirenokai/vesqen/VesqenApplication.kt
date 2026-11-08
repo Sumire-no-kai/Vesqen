@@ -16,6 +16,7 @@ import io.github.sumirenokai.vesqen.lyrics.LyricsStore
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryRecorder
 import io.github.sumirenokai.vesqen.playback.PlaybackStateStore
 import io.github.sumirenokai.vesqen.playback.PlaybackTrackMerges
+import io.github.sumirenokai.vesqen.playback.PreferencesTakeoverMarkerStore
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStateRepository
 import io.github.sumirenokai.vesqen.premium.ActivationCodes
@@ -68,6 +69,7 @@ class VesqenApplication : Application() {
     }
     val usageStatistics: io.github.sumirenokai.vesqen.usage.UsageStatistics get() = usageRuntime.statistics
 
+    internal val directUsbMarkers by lazy { PreferencesTakeoverMarkerStore(this) }
     val usbOutputStateRepository = UsbOutputStateRepository()
 
     /** #119: the trial and paid-feature state; the betas build it with enforcement off. */

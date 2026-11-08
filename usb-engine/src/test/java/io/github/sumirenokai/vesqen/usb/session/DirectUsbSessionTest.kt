@@ -292,7 +292,7 @@ class DirectUsbSessionTest {
         session.release()
         assertTrue(waitUntil { events.contains("stream not destroyed") })
 
-        val second = nextSession(after = session)
+        val second = nextSession()
         val refused = takeOver(second)
 
         assertEquals(DirectUsbSession.Takeover.Failed::class, refused::class)
@@ -306,23 +306,22 @@ class DirectUsbSessionTest {
 
         // Once the first session has given everything back, the next takeover goes ahead.
         events.clear()
-        val third = nextSession(after = second)
+        val third = nextSession()
         assertEquals(DirectUsbSession.Takeover.Ready::class, takeOver(third)::class)
         assertEquals("marker volume -2560", events.last { it.startsWith("marker") })
     }
 
     @Test
     fun `a retry after a refused takeover still waits for the session that holds the device`() {
-        // #297 review: the route makes each refused session the next one's predecessor, so C only saw the
-        // released B and took over while A still waited for its URBs.
+        // Several refused sessions may go away while the original owner is still releasing.
         takeOver()
         stream.destroyAnswers.addAll(List(10) { false })
         session.release()
         assertTrue(waitUntil { events.contains("stream not destroyed") })
-        val second = nextSession(after = session)
+        val second = nextSession()
         assertEquals(DirectUsbSession.Takeover.Failed::class, takeOver(second)::class)
 
-        val third = nextSession(after = second)
+        val third = nextSession()
         assertEquals(DirectUsbSession.Takeover.Failed::class, takeOver(third)::class)
         assertTrue(released.await(2, TimeUnit.SECONDS))
         assertEquals(
@@ -332,12 +331,60 @@ class DirectUsbSessionTest {
         )
 
         events.clear()
-        assertEquals(DirectUsbSession.Takeover.Ready::class, takeOver(nextSession(after = third))::class)
+        assertEquals(DirectUsbSession.Takeover.Ready::class, takeOver(nextSession())::class)
         assertEquals("marker volume -2560", events.last { it.startsWith("marker") })
     }
 
-    /** Another session for the same device after [after], sharing the control thread and marker store. */
-    private fun nextSession(after: DirectUsbSession): DirectUsbSession {
+    @Test
+    fun `another service cannot replace a marker while the old executor is stopped`() {
+        takeOver()
+        stream.destroyAnswers.add(false)
+        stream.onDestroy = { control.shutdown() }
+        session.release()
+        assertTrue(waitUntil { failures.isNotEmpty() })
+        assertTrue(session.state is DirectUsbSession.State.Releasing)
+
+        val recreatedControl = Executors.newSingleThreadScheduledExecutor()
+        try {
+            val newLink = FakeLink(events, FakeUac1Device(events)).also { it.failingClaims += 1 }
+            val next = DirectUsbSession(UsbDeviceIdentity(1003, 0x0ecb, 0x2107), newLink, JBL, markers, recreatedControl)
+            events.clear()
+            assertTrue(takeOver(next) is DirectUsbSession.Takeover.Failed)
+            assertEquals(listOf("close"), events.toList())
+            assertEquals(-2560, markers.persisted?.volumeBefore)
+        } finally {
+            recreatedControl.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `a failed interface release preserves the old marker on the next attempt`() {
+        takeOver()
+        link.failingReleases += 2
+        val (cleanup, _) = release()
+        assertEquals("interface 2 released", cleanup.firstFailure?.name)
+        val original = checkNotNull(markers.persisted)
+        assertTrue(takeOver(nextSession()) is DirectUsbSession.Takeover.Failed)
+        assertEquals(original, markers.persisted)
+    }
+
+    @Test
+    fun `a final packet delivered between Kotlin polls survives an epoch reset`() {
+        takeOver()
+        val first = checkNotNull(session.openOutput())
+        stream.delivered[0] = 3
+        stream.acknowledgeRetirements = false
+        first.release()
+        stream.delivered[0] = 4
+        stream.acknowledgeRetirements = true
+        assertEquals(1L, stream.readStats().epoch)
+        assertEquals(4L, session.totals().deliveredFrames)
+        release()
+        assertEquals(4L, session.totals().deliveredFrames)
+    }
+
+    /** Another session sharing the control thread and marker store. */
+    private fun nextSession(): DirectUsbSession {
         val nextStream = FakeStream(CopyOnWriteArrayList())
         return DirectUsbSession(
             device = UsbDeviceIdentity(deviceId = 1004, vendorId = 0x0ecb, productId = 0x2107),
@@ -347,7 +394,6 @@ class DirectUsbSessionTest {
             control = control,
             streams = { _, _ -> UsbStreamFactory.Creation.Created(nextStream) },
             timing = DirectUsbSession.Timing(monitorPeriodMs = 10, retireTimeoutMs = 150, destroyTimeoutMs = 1, destroyRetryMs = 20),
-            after = after,
         )
     }
 
@@ -610,6 +656,7 @@ class DirectUsbSessionTest {
         var onDestroy: () -> Unit = {}
         val writes = CopyOnWriteArrayList<Pair<Long, Int>>()
         val lost = java.util.concurrent.ConcurrentHashMap<Long, Long>()
+        val delivered = java.util.concurrent.ConcurrentHashMap<Long, Long>()
         private var requested = 0L
         private var acknowledged = 0L
         var retirements = 0
@@ -647,6 +694,7 @@ class DirectUsbSessionTest {
                 mediaFramesLost = lost[acknowledged] ?: 0, silenceFramesInserted = 0, usbFramesDelivered = 0, underruns = 0,
                 urbsCompleted = 0, packetsFailed = 0, failure = failure, failureErrno = 0, threadNice = 0, threadSchedulerPolicy = 0,
                 epoch = acknowledged, requestedEpoch = requested,
+                sessionTotals = UsbStreamTotals(lost.values.sum(), 0, 0, delivered.values.sum()),
             )
         }
 
@@ -662,13 +710,19 @@ class DirectUsbSessionTest {
         }
     }
 
-    private class FakeMarkers(private val events: MutableList<String>) : TakeoverMarkerStore {
-        override fun write(marker: TakeoverMarker) {
+    private class FakeMarkers(private val events: MutableList<String>) : TakeoverMarkerStore() {
+        var persisted: TakeoverMarker? = null
+        override fun hasPendingRecovery() = persisted != null
+        override fun write(marker: TakeoverMarker): Boolean {
+            persisted = marker
             events += "marker volume ${marker.volumeBefore}"
+            return true
         }
 
-        override fun clear() {
+        override fun clear(): Boolean {
+            persisted = null
             events += "marker cleared"
+            return true
         }
     }
 

@@ -40,10 +40,32 @@ data class UsbDeviceIdentity(val deviceId: Int, val vendorId: Int, val productId
  */
 data class TakeoverMarker(val device: UsbDeviceIdentity, val volumeBefore: Int?, val mutedBefore: Boolean?)
 
-interface TakeoverMarkerStore {
-    fun write(marker: TakeoverMarker)
+abstract class TakeoverMarkerStore {
+    private var held = false
 
-    fun clear()
+    @Synchronized
+    fun isOccupied(): Boolean = held || hasPendingRecovery()
+
+    /** One store owns the marker for the application's lifetime, across service instances. */
+    @Synchronized
+    fun acquire(marker: TakeoverMarker): Boolean {
+        if (isOccupied() || !write(marker)) return false
+        held = true
+        return true
+    }
+
+    abstract fun write(marker: TakeoverMarker): Boolean
+    protected abstract fun hasPendingRecovery(): Boolean
+    protected abstract fun clear(): Boolean
+
+    /** Only the session that acquired the slot can finish it. A failed release keeps its record. */
+    @Synchronized
+    fun finish(allReleased: Boolean): Boolean {
+        check(held)
+        val cleared = allReleased && clear()
+        held = false
+        return cleared
+    }
 }
 
 /** Totals over every output of a session, for diagnostics. */
