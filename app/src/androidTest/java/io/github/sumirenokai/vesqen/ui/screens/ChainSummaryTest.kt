@@ -191,6 +191,40 @@ class ChainSummaryTest {
     }
 
     @Test
+    fun on_the_own_usb_output_the_cards_read_what_vesqen_sends_to_the_dac() {
+        val status = UsbOutputStatus(
+            mode = UsbOutputMode.STRICT_BIT_PERFECT,
+            phase = UsbOutputPhase.ACTIVE,
+            deviceName = "JBL Flip 7",
+            decisionCode = "direct_usb.active",
+            generation = 1,
+        )
+        show(
+            snapshot(
+                Metrics.USB_DIRECT_WIRE_SAMPLE_RATE to TelemetryReading.Integer(48_000, TelemetryUnit.HERTZ),
+                Metrics.USB_DIRECT_WIRE_BIT_DEPTH to TelemetryReading.Integer(24, TelemetryUnit.BITS),
+                Metrics.USB_DIRECT_PROTOCOL to TelemetryReading.Text("uac1"),
+                Metrics.USB_DIRECT_SYNC_TYPE to TelemetryReading.Text("adaptive"),
+                Metrics.USB_DIRECT_UNDERRUNS to TelemetryReading.Integer(2, TelemetryUnit.COUNT),
+                Metrics.PLAYBACK_UNDERRUN_COUNT to TelemetryReading.Integer(0, TelemetryUnit.COUNT),
+            ),
+            playback = playing.copy(usbOutputStatus = status),
+        )
+
+        scrollTo("vesqen.chain.pinned")
+        // Nothing goes to Android here, so the card says where the audio goes instead.
+        composeRule.onNodeWithText(string(R.string.chain_pinned_handoff_direct)).assertExists()
+        composeRule.onAllNodesWithText(string(R.string.chain_pinned_handoff)).assertCountEquals(0)
+        pinned("value", ChainPinnedReading.HANDOFF).assertTextEquals(reading(TelemetryReading.Integer(48_000, TelemetryUnit.HERTZ)))
+        pinned("detail", ChainPinnedReading.HANDOFF).assertTextEquals(reading(TelemetryReading.Integer(24, TelemetryUnit.BITS)))
+        pinned("value", ChainPinnedReading.OUTPUT).assertTextEquals("JBL Flip 7")
+        pinned("detail", ChainPinnedReading.OUTPUT).assertTextEquals(
+            "${reading(TelemetryReading.Text("uac1"))} · ${reading(TelemetryReading.Text("adaptive"))}",
+        )
+        pinned("value", ChainPinnedReading.UNDERRUNS).assertTextEquals(reading(TelemetryReading.Integer(2, TelemetryUnit.COUNT)))
+    }
+
+    @Test
     fun a_lossy_source_is_described_by_its_bit_rate() {
         show(
             snapshot(

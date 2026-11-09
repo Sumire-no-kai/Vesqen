@@ -13,6 +13,7 @@ import io.github.sumirenokai.vesqen.library.TrackMergeFollowers
 import io.github.sumirenokai.vesqen.lyrics.LocalLyricsResolver
 import io.github.sumirenokai.vesqen.lyrics.mediaStoreCoveringDocumentUri
 import io.github.sumirenokai.vesqen.lyrics.LyricsStore
+import io.github.sumirenokai.vesqen.playback.DirectUsbReadingsSource
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryRecorder
 import io.github.sumirenokai.vesqen.playback.PlaybackStateStore
 import io.github.sumirenokai.vesqen.playback.PlaybackTrackMerges
@@ -71,6 +72,9 @@ class VesqenApplication : Application() {
 
     internal val directUsbMarkers by lazy { PreferencesTakeoverMarkerStore(this) }
     val usbOutputStateRepository = UsbOutputStateRepository()
+
+    /** The playback service's own USB output, for Chain; empty while it is not running. */
+    val directUsbReadings = DirectUsbReadingsSource()
 
     /** #119: the trial and paid-feature state; the betas build it with enforcement off. */
     val premiumAccess: PremiumAccess by lazy {
@@ -175,6 +179,7 @@ class VesqenApplication : Application() {
             this,
             usbOutputStateRepository,
             outputVerificationLookup = outputVerificationRepository::match,
+            directUsbReadings = directUsbReadings::read,
         )
     }
 

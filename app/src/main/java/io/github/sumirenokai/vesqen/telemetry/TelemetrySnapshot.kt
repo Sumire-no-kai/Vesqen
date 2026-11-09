@@ -58,6 +58,9 @@ enum class TelemetryUnit {
     VOLTS,
     MILLIAMPERES,
     MILLIWATTS,
+
+    /** A level relative to the device's own reference, as UAC volume controls report it. */
+    DECIBELS,
 }
 
 sealed interface TelemetryReading {

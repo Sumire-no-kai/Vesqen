@@ -71,7 +71,8 @@ object DiagnosticJsonExporter {
             number("capturedAtEpochMs", snapshot.capturedAtEpochMs)
             number("capturedAtElapsedRealtimeMs", snapshot.capturedAtElapsedRealtimeMs)
             nullableString("playbackSession", aliases.alias(snapshot.playbackSessionId))
-            arrayField("metrics", snapshot.metrics.sortedBy { it.id.value }) { metric ->
+            val exported = snapshot.metrics.filter { it.id in TelemetryMetricCatalog.exportableIds }
+            arrayField("metrics", exported.sortedBy { it.id.value }) { metric ->
                 metricValue(metric, usbAliases)
             }
         }

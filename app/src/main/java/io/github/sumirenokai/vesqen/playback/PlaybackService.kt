@@ -255,6 +255,7 @@ class PlaybackService : MediaSessionService() {
             AndroidDirectUsbRoute(this, (application as VesqenApplication).directUsbMarkers)
         } else null
         directUsbRoute = directRoute
+        directRoute?.let { route -> (application as VesqenApplication).directUsbReadings.attach(route::readings) }
         val outputCoordinator = UsbOutputCoordinator(
             this,
             outputStateRepository,
@@ -421,6 +422,7 @@ class PlaybackService : MediaSessionService() {
         (application as VesqenApplication).usbOutputStateRepository.removeListener(outputStateListener)
         usbOutputCoordinator?.close()
         usbOutputCoordinator = null
+        (application as VesqenApplication).directUsbReadings.detach()
         directUsbRoute?.close()
         directUsbRoute = null
         playbackStateKeeper?.stop()

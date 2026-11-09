@@ -92,8 +92,8 @@ internal class AndroidDeviceReportRuntime(
                 var latest: TelemetrySnapshot? = null
                 withTimeoutOrNull(5_000) {
                     telemetry().observe(TelemetryObservation(selection = TelemetryMetricSelection.Explicit(
-                        if (options.chainEvidence) TelemetryMetricCatalog.allIds else
-                            TelemetryMetricCatalog.allIds.filterTo(linkedSetOf()) { it.value.startsWith("route.") || it.value.startsWith("usb.") },
+                        if (options.chainEvidence) TelemetryMetricCatalog.exportableIds else
+                            TelemetryMetricCatalog.exportableIds.filterTo(linkedSetOf()) { it.value.startsWith("route.") || it.value.startsWith("usb.") },
                     ))).first { snapshot ->
                         latest = snapshot
                         snapshot.metrics.none {

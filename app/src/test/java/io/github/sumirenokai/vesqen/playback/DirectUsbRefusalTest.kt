@@ -169,6 +169,21 @@ class DirectUsbRefusalTest {
     }
 
     @Test
+    fun `Chain names the protocol and the plan's synchronisation`() {
+        val plan = StreamingPlan(
+            interfaceNumber = 2, alternateSetting = 1, endpointAddress = 3, endpointSetsSampleRate = true, sampleRateHz = 48_000,
+            channels = 2, subslotBytes = 2, bitResolution = 16, serviceIntervalUs = 1000, maxPacketBytes = 192,
+            packetsPerUrb = 32, urbCount = 3, ringFrames = 24_000,
+        )
+        val jbl = function(alt(16), alt(24, alternate = 2))
+        assertEquals("uac1", jbl.protocolToken())
+        assertEquals("adaptive", jbl.syncToken(plan))
+        assertEquals("asynchronous", function(alt(16, sync = UacSyncType.ASYNCHRONOUS)).syncToken(plan))
+        assertEquals("uac2", function(alt(16), version = UacVersion.UAC2).protocolToken())
+        assertEquals("none", jbl.syncToken(plan.copy(alternateSetting = 9)))
+    }
+
+    @Test
     fun `settings the own output cannot stream at all leave the format reason general`() {
         val mono = function(alt(16, channels = 1))
 

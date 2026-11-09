@@ -142,6 +142,43 @@ data class DirectUsbDetails(
     }
 }
 
+/**
+ * What Vesqen's own USB output is doing while it holds the DAC, for Chain only (never exported): the
+ * stream's format, the protocol and synchronisation the descriptors declare, the hardware volume read
+ * back after takeover, and the engine's totals over the session.
+ */
+data class DirectUsbReadings(
+    val sampleRateHz: Int,
+    val bitDepth: Int,
+    val subslotBytes: Int,
+    val channelCount: Int,
+    /** `uac1`, `uac2` or `other`. */
+    val protocol: String,
+    /** `adaptive`, `asynchronous`, `synchronous` or `none`. */
+    val syncType: String,
+    val hardwareVolumeDb: Double?,
+    val deliveredFrames: Long,
+    val underruns: Long,
+    val lostFrames: Long,
+    val failedPackets: Long,
+)
+
+/** Hands the playback service's route to telemetry, which lives as long as the process. */
+class DirectUsbReadingsSource {
+    @Volatile
+    private var provider: (() -> DirectUsbReadings?)? = null
+
+    fun attach(provider: () -> DirectUsbReadings?) {
+        this.provider = provider
+    }
+
+    fun detach() {
+        provider = null
+    }
+
+    fun read(): DirectUsbReadings? = provider?.invoke()
+}
+
 /** Cleanup evidence is independent of the failure that stopped strict playback. */
 data class MixerCleanupStatus(
     val pendingCount: Int = 0,

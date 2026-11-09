@@ -12,6 +12,12 @@ enum class TelemetryExportPolicy {
     INCLUDE,
     REDACT_TEXT,
     REDACT_DEVICE_IDENTIFIERS,
+
+    /**
+     * Shown on the device only: never in a device report, its vocabulary, or a diagnostic export.
+     * Vesqen's own USB output readings stay here until the owner decides on uploading them (2026-11-09).
+     */
+    LOCAL_ONLY,
 }
 
 data class TelemetryMetricDescriptor(
@@ -151,6 +157,20 @@ object TelemetryMetricCatalog {
     val USB_AUDIO_DEVICE_COUNT = id("usb.audio_device_count")
     val USB_DEVICE_INVENTORY = id("usb.device_inventory")
 
+    // Vesqen's own USB output (M7), on the device only.
+    val USB_DIRECT_WIRE_SAMPLE_RATE = id("usb.direct_wire_sample_rate")
+    val USB_DIRECT_WIRE_BIT_DEPTH = id("usb.direct_wire_bit_depth")
+    val USB_DIRECT_WIRE_SUBSLOT = id("usb.direct_wire_subslot")
+    val USB_DIRECT_WIRE_CHANNELS = id("usb.direct_wire_channels")
+    val USB_DIRECT_PROTOCOL = id("usb.direct_protocol")
+    val USB_DIRECT_SYNC_TYPE = id("usb.direct_sync_type")
+    val USB_DIRECT_HARDWARE_VOLUME = id("usb.direct_hardware_volume")
+    val USB_DIRECT_DELIVERED_FRAMES = id("usb.direct_delivered_frames")
+    val USB_DIRECT_UNDERRUNS = id("usb.direct_underruns")
+    val USB_DIRECT_LOST_FRAMES = id("usb.direct_lost_frames")
+    val USB_DIRECT_FAILED_PACKETS = id("usb.direct_failed_packets")
+    val ROUTE_SYSTEM_RESAMPLING = id("route.system_resampling")
+
     val descriptors: List<TelemetryMetricDescriptor> = listOf(
         safeText(SOURCE_CONTAINER, TelemetrySection.SOURCE, defaultVisible = true),
         safeText(SOURCE_CODEC_MIME, TelemetrySection.SOURCE),
@@ -263,6 +283,18 @@ object TelemetryMetricCatalog {
         flag(USB_HOST_SUPPORTED, TelemetrySection.USB),
         integer(USB_AUDIO_DEVICE_COUNT, TelemetrySection.USB, TelemetryUnit.COUNT, 0.0, defaultVisible = true),
         usbInventory(USB_DEVICE_INVENTORY, TelemetrySection.USB),
+        integer(USB_DIRECT_WIRE_SAMPLE_RATE, TelemetrySection.USB, TelemetryUnit.HERTZ, 1.0).localOnly(),
+        integer(USB_DIRECT_WIRE_BIT_DEPTH, TelemetrySection.USB, TelemetryUnit.BITS, 1.0, 32.0).localOnly(),
+        integer(USB_DIRECT_WIRE_SUBSLOT, TelemetrySection.USB, TelemetryUnit.BYTES, 1.0, 4.0).localOnly(),
+        integer(USB_DIRECT_WIRE_CHANNELS, TelemetrySection.USB, TelemetryUnit.COUNT, 1.0).localOnly(),
+        safeText(USB_DIRECT_PROTOCOL, TelemetrySection.USB).localOnly(),
+        safeText(USB_DIRECT_SYNC_TYPE, TelemetrySection.USB).localOnly(),
+        decimal(USB_DIRECT_HARDWARE_VOLUME, TelemetrySection.USB, TelemetryUnit.DECIBELS, -128.0, 128.0).localOnly(),
+        integer(USB_DIRECT_DELIVERED_FRAMES, TelemetrySection.USB, TelemetryUnit.COUNT, 0.0).localOnly(),
+        integer(USB_DIRECT_UNDERRUNS, TelemetrySection.USB, TelemetryUnit.COUNT, 0.0).localOnly(),
+        integer(USB_DIRECT_LOST_FRAMES, TelemetrySection.USB, TelemetryUnit.COUNT, 0.0).localOnly(),
+        integer(USB_DIRECT_FAILED_PACKETS, TelemetrySection.USB, TelemetryUnit.COUNT, 0.0).localOnly(),
+        safeText(ROUTE_SYSTEM_RESAMPLING, TelemetrySection.ROUTE).localOnly(),
     )
 
     private val byId = descriptors.associateBy(TelemetryMetricDescriptor::id).also { indexed ->
@@ -270,6 +302,17 @@ object TelemetryMetricCatalog {
     }
 
     val allIds: Set<TelemetryMetricId> = byId.keys
+
+    /** What a device report may hold: every metric except those kept on the device. */
+    val exportableIds: Set<TelemetryMetricId> = descriptors
+        .filterNot { it.exportPolicy == TelemetryExportPolicy.LOCAL_ONLY }
+        .mapTo(linkedSetOf(), TelemetryMetricDescriptor::id)
+
+    /** Units only local-only metrics use, which the report vocabulary therefore never lists. */
+    val localOnlyUnits: Set<TelemetryUnit> = run {
+        val exported = descriptors.filter { it.id in exportableIds }.mapNotNullTo(mutableSetOf(), TelemetryMetricDescriptor::unit)
+        descriptors.filter { it.id !in exportableIds }.mapNotNullTo(linkedSetOf(), TelemetryMetricDescriptor::unit) - exported
+    }
     val defaultIds: Set<TelemetryMetricId> = descriptors.filterTo(linkedSetOf()) {
         it.defaultVisible
     }.mapTo(linkedSetOf(), TelemetryMetricDescriptor::id)
@@ -319,6 +362,8 @@ object TelemetryMetricCatalog {
         USB_HOST_SUPPORTED,
         USB_AUDIO_DEVICE_COUNT,
         USB_DEVICE_INVENTORY,
+        // Compares the source with the rates the USB device declares to Android (the inventory).
+        ROUTE_SYSTEM_RESAMPLING,
     )
 
     fun descriptor(id: TelemetryMetricId): TelemetryMetricDescriptor = requireNotNull(byId[id]) {
@@ -445,6 +490,8 @@ object TelemetryMetricCatalog {
         chartable = chartable,
         exportPolicy = TelemetryExportPolicy.INCLUDE,
     )
+
+    private fun TelemetryMetricDescriptor.localOnly() = copy(exportPolicy = TelemetryExportPolicy.LOCAL_ONLY)
 
     private fun usbInventory(
         id: TelemetryMetricId,

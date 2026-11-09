@@ -28,6 +28,7 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.source.MediaSource
 import io.github.sumirenokai.vesqen.audio.AudioRouteSource
+import io.github.sumirenokai.vesqen.playback.DirectUsbReadings
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.playback.UsbOutputStateRepository
@@ -65,6 +66,8 @@ class AndroidPlaybackTelemetry internal constructor(
     context: Context,
     private val usbOutputStateRepository: UsbOutputStateRepository = UsbOutputStateRepository(),
     private val outputVerificationLookup: (UsbOutputStatus) -> OutputVerificationMatch? = { null },
+    /** Vesqen's own USB output while it streams; read with the USB status, before the capture time. */
+    private val directUsbReadings: () -> DirectUsbReadings? = { null },
     private val clock: TelemetryClock = AndroidTelemetryClock,
     audioRouteSource: AudioRouteSource = AudioRouteSource(context),
 ) : PlaybackTelemetry, AnalyticsListener, TransferListener {
@@ -318,6 +321,7 @@ class AndroidPlaybackTelemetry internal constructor(
         // USB status or codec report arriving between the capture and a later snapshot build (each
         // observer builds its own, possibly from a replayed sample) would otherwise make it invalid.
         val usbOutputStatus = usbOutputStateRepository.snapshot()
+        val directUsb = directUsbReadings()
         val bluetoothCodec = BluetoothCodecSample(
             supported = bluetoothCodecs.supported,
             permissionGranted = bluetoothCodecs.permissionGranted,
@@ -333,6 +337,7 @@ class AndroidPlaybackTelemetry internal constructor(
             outputRequested = demand.includeOutput,
             usbOutputStatus = usbOutputStatus,
             bluetoothCodec = bluetoothCodec,
+            directUsb = directUsb,
         )
     }
 
@@ -1115,6 +1120,7 @@ class AndroidPlaybackTelemetry internal constructor(
 
         addSystemMetrics(metrics, raw, rateTracker)
         addOutputMetrics(metrics, raw)
+        addDirectUsbMetrics(metrics, raw)
 
         val selected = when (val selection = observation.selection) {
             TelemetryMetricSelection.Default -> TelemetryMetricCatalog.defaultIds
@@ -1418,6 +1424,7 @@ class AndroidPlaybackTelemetry internal constructor(
             TelemetryMetricCatalog.USB_HOST_SUPPORTED,
             TelemetryMetricCatalog.USB_AUDIO_DEVICE_COUNT,
             TelemetryMetricCatalog.USB_DEVICE_INVENTORY,
+            TelemetryMetricCatalog.ROUTE_SYSTEM_RESAMPLING,
             ).forEach { id -> metrics.unavailable(id, reason, raw.instant) }
             return
         }
@@ -1590,6 +1597,85 @@ class AndroidPlaybackTelemetry internal constructor(
             output.observedAt,
             ANDROID_USB,
         )
+        addSystemResampling(metrics, raw, output)
+    }
+
+    /**
+     * On system output to a USB device, whether Android must resample: only when the source's rate is
+     * not among those the device declares to Android. A declared rate does not mean Android keeps it,
+     * since its mixer may run at another rate, so the other answer is "undetermined".
+     */
+    private fun addSystemResampling(
+        metrics: MutableMap<TelemetryMetricId, TelemetryMetric>,
+        raw: RawTelemetrySample,
+        output: OutputTelemetrySnapshot,
+    ) {
+        val id = TelemetryMetricCatalog.ROUTE_SYSTEM_RESAMPLING
+        val endpoints = output.usbInventory?.audioOutputEndpoints.orEmpty()
+        val sourceRate = (metrics[TelemetryMetricCatalog.SOURCE_SAMPLE_RATE]?.evidence?.reading as? TelemetryReading.Integer)?.value
+        val reason = systemResamplingUnavailableReason(raw.usbOutputStatus.phase, output, sourceRate)
+        if (reason != null || sourceRate == null) {
+            metrics.unavailable(id, reason ?: TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT, output.observedAt, ANDROID_USB)
+            return
+        }
+        metrics.putMetric(
+            id,
+            TelemetryEvidence.Estimated(
+                reading = TelemetryReading.Text(systemResamplingToken(sourceRate, endpoints)),
+                source = ANDROID_USB,
+                observedAtEpochMs = output.observedAt.epochMs,
+                observedAtElapsedRealtimeMs = output.observedAt.elapsedRealtimeMs,
+                methodId = "route.compare_source_rate_with_usb_declared_rates",
+                inputMetricIds = setOf(
+                    TelemetryMetricCatalog.SOURCE_SAMPLE_RATE,
+                    TelemetryMetricCatalog.ROUTE_ANTICIPATED_TYPE,
+                    TelemetryMetricCatalog.USB_DEVICE_INVENTORY,
+                ),
+            ),
+        )
+    }
+
+    /** What Vesqen's own USB output reports while it holds the DAC; otherwise these do not apply. */
+    private fun addDirectUsbMetrics(
+        metrics: MutableMap<TelemetryMetricId, TelemetryMetric>,
+        raw: RawTelemetrySample,
+    ) {
+        val direct = raw.directUsb
+        val instant = raw.instant
+        if (direct == null) {
+            listOf(
+                TelemetryMetricCatalog.USB_DIRECT_WIRE_SAMPLE_RATE,
+                TelemetryMetricCatalog.USB_DIRECT_WIRE_BIT_DEPTH,
+                TelemetryMetricCatalog.USB_DIRECT_WIRE_SUBSLOT,
+                TelemetryMetricCatalog.USB_DIRECT_WIRE_CHANNELS,
+                TelemetryMetricCatalog.USB_DIRECT_PROTOCOL,
+                TelemetryMetricCatalog.USB_DIRECT_SYNC_TYPE,
+                TelemetryMetricCatalog.USB_DIRECT_HARDWARE_VOLUME,
+                TelemetryMetricCatalog.USB_DIRECT_DELIVERED_FRAMES,
+                TelemetryMetricCatalog.USB_DIRECT_UNDERRUNS,
+                TelemetryMetricCatalog.USB_DIRECT_LOST_FRAMES,
+                TelemetryMetricCatalog.USB_DIRECT_FAILED_PACKETS,
+            ).forEach { id -> metrics.unavailable(id, TelemetryUnavailableReason.NOT_APPLICABLE, instant, VESQEN_DIRECT_USB) }
+            return
+        }
+        metrics.measuredInteger(TelemetryMetricCatalog.USB_DIRECT_WIRE_SAMPLE_RATE, direct.sampleRateHz.toLong(), TelemetryUnit.HERTZ, VESQEN_DIRECT_USB, instant)
+        metrics.measuredInteger(TelemetryMetricCatalog.USB_DIRECT_WIRE_BIT_DEPTH, direct.bitDepth.toLong(), TelemetryUnit.BITS, VESQEN_DIRECT_USB, instant)
+        metrics.measuredInteger(TelemetryMetricCatalog.USB_DIRECT_WIRE_SUBSLOT, direct.subslotBytes.toLong(), TelemetryUnit.BYTES, VESQEN_DIRECT_USB, instant)
+        metrics.measuredInteger(TelemetryMetricCatalog.USB_DIRECT_WIRE_CHANNELS, direct.channelCount.toLong(), TelemetryUnit.COUNT, VESQEN_DIRECT_USB, instant)
+        metrics.measuredText(TelemetryMetricCatalog.USB_DIRECT_PROTOCOL, direct.protocol, VESQEN_DIRECT_USB, instant)
+        metrics.measuredText(TelemetryMetricCatalog.USB_DIRECT_SYNC_TYPE, direct.syncType, VESQEN_DIRECT_USB, instant)
+        metrics.measuredDecimalOrUnavailable(
+            TelemetryMetricCatalog.USB_DIRECT_HARDWARE_VOLUME,
+            direct.hardwareVolumeDb,
+            TelemetryUnit.DECIBELS,
+            VESQEN_DIRECT_USB,
+            instant,
+            TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT,
+        )
+        metrics.measuredInteger(TelemetryMetricCatalog.USB_DIRECT_DELIVERED_FRAMES, direct.deliveredFrames, TelemetryUnit.COUNT, VESQEN_DIRECT_USB, instant)
+        metrics.measuredInteger(TelemetryMetricCatalog.USB_DIRECT_UNDERRUNS, direct.underruns, TelemetryUnit.COUNT, VESQEN_DIRECT_USB, instant)
+        metrics.measuredInteger(TelemetryMetricCatalog.USB_DIRECT_LOST_FRAMES, direct.lostFrames, TelemetryUnit.COUNT, VESQEN_DIRECT_USB, instant)
+        metrics.measuredInteger(TelemetryMetricCatalog.USB_DIRECT_FAILED_PACKETS, direct.failedPackets, TelemetryUnit.COUNT, VESQEN_DIRECT_USB, instant)
     }
 
     override fun onMediaItemTransition(
@@ -2170,6 +2256,7 @@ class AndroidPlaybackTelemetry internal constructor(
         )
         val ANDROID_USB = TelemetryDataSource(TelemetrySourceId("android.usb_public_api"))
         val APP_CONFIGURATION = TelemetryDataSource(TelemetrySourceId("vesqen.configuration"))
+        val VESQEN_DIRECT_USB = TelemetryDataSource(TelemetrySourceId("vesqen.direct_usb"))
         val VESQEN_OUTPUT_COORDINATOR = TelemetryDataSource(
             id = TelemetrySourceId("vesqen.output_coordinator"),
             detail = "Service decision combining Media3 output format, Android mixer readback, and AudioTrack route; not external signal verification",
@@ -2240,6 +2327,36 @@ private object AndroidTelemetryClock : TelemetryClock {
     override fun processCpuTimeMs(): Long = Process.getElapsedCpuTime()
 }
 
+/** Why the resampling inference does not apply to this sample, or null when it does. */
+internal fun systemResamplingUnavailableReason(
+    phase: UsbOutputPhase,
+    output: OutputTelemetrySnapshot,
+    sourceRateHz: Long?,
+): TelemetryUnavailableReason? = when {
+    phase != UsbOutputPhase.SYSTEM -> TelemetryUnavailableReason.NOT_APPLICABLE
+    // The selected route's own type says only "wired or USB"; the device Android routes media to
+    // (Android 13+) is the one that names a USB device.
+    output.anticipatedRouteType == null -> output.routeUnavailableReason ?: TelemetryUnavailableReason.TEMPORARILY_UNAVAILABLE
+    output.anticipatedRouteType !in USB_MEDIA_DEVICE_TYPES -> TelemetryUnavailableReason.NOT_APPLICABLE
+    output.usbInventory == null -> output.usbInventoryUnavailableReason ?: TelemetryUnavailableReason.TEMPORARILY_UNAVAILABLE
+    output.usbInventory.audioOutputEndpoints.isEmpty() -> TelemetryUnavailableReason.NOT_APPLICABLE
+    sourceRateHz == null -> TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT
+    else -> null
+}
+
+private val USB_MEDIA_DEVICE_TYPES = setOf("usb_device", "usb_headset")
+
+/**
+ * `resampled` when the source's rate is not among those the USB devices declare to Android, so its
+ * mixer cannot keep it; `undetermined` otherwise, including a device that accepts any rate.
+ */
+internal fun systemResamplingToken(sourceRateHz: Long, endpoints: List<UsbAudioOutputEndpointReading>): String {
+    val declared = endpoints.flatMap { it.sampleRatesHz }
+    val resampled = endpoints.isNotEmpty() && endpoints.none { it.arbitrarySampleRate } &&
+        declared.isNotEmpty() && sourceRateHz !in declared.map(Int::toLong)
+    return if (resampled) "resampled" else "undetermined"
+}
+
 private data class RawTelemetrySample(
     val instant: TelemetryInstant,
     val media: MediaTelemetrySnapshot,
@@ -2249,6 +2366,7 @@ private data class RawTelemetrySample(
     val outputRequested: Boolean,
     val usbOutputStatus: UsbOutputStatus,
     val bluetoothCodec: BluetoothCodecSample,
+    val directUsb: DirectUsbReadings? = null,
 )
 
 /** The codec state as of the capture: the last report, observed no later than [RawTelemetrySample.instant]. */

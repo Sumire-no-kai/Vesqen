@@ -464,6 +464,7 @@ private fun formatTelemetryNumberAuto(context: Context, value: Double, unit: Tel
         TelemetryUnit.VOLTS -> context.getString(R.string.chain_unit_volts, formatNumber(context, value))
         TelemetryUnit.MILLIAMPERES -> context.getString(R.string.chain_unit_milliamperes, formatNumber(context, value))
         TelemetryUnit.MILLIWATTS -> context.getString(R.string.chain_unit_milliwatts, formatNumber(context, value))
+        TelemetryUnit.DECIBELS -> context.getString(R.string.chain_unit_decibels, formatNumber(context, value, maximumFractionDigits = 1))
     }
 }
 
@@ -498,6 +499,7 @@ internal fun decimalEngineeringPresentation(value: Double, unit: TelemetryUnit):
         TelemetryUnit.PERCENT,
         TelemetryUnit.COUNT,
         TelemetryUnit.COUNT_PER_SECOND,
+        TelemetryUnit.DECIBELS,
         TelemetryUnit.CELSIUS,
         -> return null
     }
@@ -572,6 +574,7 @@ private fun formatTelemetryNumberRaw(context: Context, formattedValue: String, u
         TelemetryUnit.VOLTS -> context.getString(R.string.chain_unit_volts, formattedValue)
         TelemetryUnit.MILLIAMPERES -> context.getString(R.string.chain_unit_milliamperes, formattedValue)
         TelemetryUnit.MILLIWATTS -> context.getString(R.string.chain_unit_milliwatts, formattedValue)
+        TelemetryUnit.DECIBELS -> context.getString(R.string.chain_unit_decibels, formattedValue)
     }
 
 internal fun formatSeconds(context: Context, seconds: Double): String = context.getString(
@@ -628,6 +631,13 @@ private val TEXT_LABEL_RESOURCES: Map<String, Int> = mapOf(
     "ready" to R.string.chain_text_ready,
     "ended" to R.string.chain_text_ended,
     "none" to R.string.chain_text_none,
+    "uac1" to R.string.chain_text_uac1,
+    "uac2" to R.string.chain_text_uac2,
+    "adaptive" to R.string.chain_text_sync_adaptive,
+    "asynchronous" to R.string.chain_text_sync_asynchronous,
+    "synchronous" to R.string.chain_text_sync_synchronous,
+    "resampled" to R.string.chain_text_resampling_inferred,
+    "undetermined" to R.string.chain_text_resampling_undetermined,
     "unknown" to R.string.chain_text_unknown,
     "light" to R.string.chain_thermal_light,
     "moderate" to R.string.chain_thermal_moderate,
@@ -705,6 +715,7 @@ private val ESTIMATED_METHOD_LABEL_RESOURCES = mapOf(
     "media3.position_from_last_event" to R.string.chain_method_position_from_last_event,
     "audio_track.request_format_pcm_data_rate" to R.string.chain_method_pcm_data_rate,
     "processing.compare_decoder_input_and_audio_track_rates" to R.string.chain_method_rate_conversion,
+    "route.compare_source_rate_with_usb_declared_rates" to R.string.chain_method_usb_declared_rates,
     LDAC_NOMINAL_BITRATE_METHOD to R.string.chain_method_ldac_nominal_bitrate,
     PCM_BYPASS_DECODER_PATH_METHOD to R.string.chain_method_pcm_bypass,
 )
@@ -731,6 +742,7 @@ private val SOURCE_LABEL_RESOURCES = mapOf(
     "android.usb_public_api" to R.string.chain_source_android_usb,
     "vesqen.configuration" to R.string.chain_source_app_configuration,
     "vesqen.output_coordinator" to R.string.chain_source_output_coordinator,
+    "vesqen.direct_usb" to R.string.chain_source_direct_usb,
     "vesqen.external_output_verification" to R.string.chain_source_external_output_verification,
 )
 
@@ -846,4 +858,16 @@ private val METRIC_LABEL_RESOURCES: Map<String, Int> = mapOf(
     "usb.host_supported" to R.string.chain_metric_usb_host_supported,
     "usb.audio_device_count" to R.string.chain_metric_usb_audio_device_count,
     "usb.device_inventory" to R.string.chain_metric_usb_device_inventory,
+    "usb.direct_wire_sample_rate" to R.string.chain_metric_usb_direct_wire_sample_rate,
+    "usb.direct_wire_bit_depth" to R.string.chain_metric_usb_direct_wire_bit_depth,
+    "usb.direct_wire_subslot" to R.string.chain_metric_usb_direct_wire_subslot,
+    "usb.direct_wire_channels" to R.string.chain_metric_usb_direct_wire_channels,
+    "usb.direct_protocol" to R.string.chain_metric_usb_direct_protocol,
+    "usb.direct_sync_type" to R.string.chain_metric_usb_direct_sync_type,
+    "usb.direct_hardware_volume" to R.string.chain_metric_usb_direct_hardware_volume,
+    "usb.direct_delivered_frames" to R.string.chain_metric_usb_direct_delivered_frames,
+    "usb.direct_underruns" to R.string.chain_metric_usb_direct_underruns,
+    "usb.direct_lost_frames" to R.string.chain_metric_usb_direct_lost_frames,
+    "usb.direct_failed_packets" to R.string.chain_metric_usb_direct_failed_packets,
+    "route.system_resampling" to R.string.chain_metric_route_system_resampling,
 )
