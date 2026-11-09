@@ -16,6 +16,7 @@ interface UsbStream {
     /** Ends the current output and returns the next one's epoch, or -1 once destroyed. Never waits. */
     fun retireOutput(): Long
 
+    /** After successful destruction, the final snapshot includes packets completed during teardown. */
     fun readStats(): UsbStreamStats?
 
     /** False means URBs are still the kernel's: nothing was freed, and the call can be repeated. */

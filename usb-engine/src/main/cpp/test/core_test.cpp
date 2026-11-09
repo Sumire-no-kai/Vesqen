@@ -624,6 +624,27 @@ void testARetirementWhoseUrbsNeverComeBackNeverLetsTheNextOutputWrite() {
     CHECK(mediaNumbers(transport.snapshot(), afterRetire).empty());
 }
 
+void testFinalDeliveredPacketsSurviveEpochResetWithoutPolling() {
+    FakeTransport transport;
+    transport.paceMs = 2;
+    transport.ignoreDiscard = true;  // The controller completes already-submitted packets successfully.
+    StreamEngine engine(config48kNumbered(), transport);
+    CHECK(engine.start());
+    writeAll(engine, numbered(1, 20'000));
+    engine.setRunning(0, true);
+    CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) >= 1'000; }));
+
+    transport.hold = true;
+    const int64_t next = engine.retireOutput();
+    const auto submitted = stat(engine, kStatMediaFramesSubmitted);
+    CHECK(stat(engine, kStatMediaFramesDelivered) < submitted);
+    transport.hold = false;
+    CHECK(waitUntil([&] { return stat(engine, kStatEpoch) == next; }));
+    CHECK_EQ(stat(engine, kStatMediaFramesDelivered), 0);
+    CHECK_EQ(stat(engine, kStatTotalMediaFramesDelivered), submitted);
+    CHECK(engine.stop(2000));
+}
+
 void testANaturalEndPlaysTheTailBeforeTheOutputIsRetired() {
     FakeTransport transport;
     StreamEngine engine(config48kNumbered(), transport);
@@ -637,6 +658,9 @@ void testANaturalEndPlaysTheTailBeforeTheOutputIsRetired() {
     const int64_t next = engine.retireOutput();
     CHECK(waitUntil([&] { return stat(engine, kStatEpoch) == next; }));
 
+    CHECK_EQ(stat(engine, kStatMediaFramesDelivered), 0);
+    CHECK_EQ(stat(engine, kStatTotalMediaFramesDelivered), 3'000);
+
     // The last output's start and end do not carry over: running before any audio is no underrun,
     // and a gap after this output's audio is one, because it has not ended.
     engine.setRunning(next, true);
@@ -647,6 +671,8 @@ void testANaturalEndPlaysTheTailBeforeTheOutputIsRetired() {
     CHECK(waitUntil([&] { return stat(engine, kStatUnderruns) == 1; }));
     CHECK(engine.stop(2000));
 
+    CHECK_EQ(stat(engine, kStatTotalMediaFramesDelivered), 4'000);
+    CHECK_EQ(stat(engine, kStatTotalUnderruns), 1);
     const auto numbers = mediaNumbers(transport.snapshot(), 0);
     CHECK_EQ(numbers.size(), 4'000);
     bool inOrder = true;
@@ -768,6 +794,7 @@ int main() {
     testPartialFramesAreRefused();
     testASecondSeekWhileTheFirstIsReclaimedStartsAtItsOwnFirstFrame();
     testARetirementWhoseUrbsNeverComeBackNeverLetsTheNextOutputWrite();
+    testFinalDeliveredPacketsSurviveEpochResetWithoutPolling();
     testANaturalEndPlaysTheTailBeforeTheOutputIsRetired();
     testARetiredOutputsCommandsChangeNothing();
     testEveryRetirementCancelsWhatIsInFlight();

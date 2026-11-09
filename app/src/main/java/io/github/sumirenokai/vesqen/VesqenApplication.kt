@@ -17,6 +17,7 @@ import io.github.sumirenokai.vesqen.playback.DirectUsbReadingsSource
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryRecorder
 import io.github.sumirenokai.vesqen.playback.PlaybackStateStore
 import io.github.sumirenokai.vesqen.playback.PlaybackTrackMerges
+import io.github.sumirenokai.vesqen.playback.PreferencesTakeoverMarkerStore
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStateRepository
 import io.github.sumirenokai.vesqen.premium.ActivationCodes
@@ -69,6 +70,7 @@ class VesqenApplication : Application() {
     }
     val usageStatistics: io.github.sumirenokai.vesqen.usage.UsageStatistics get() = usageRuntime.statistics
 
+    internal val directUsbMarkers by lazy { PreferencesTakeoverMarkerStore(this) }
     val usbOutputStateRepository = UsbOutputStateRepository()
 
     /** The playback service's own USB output, for Chain; empty while it is not running. */

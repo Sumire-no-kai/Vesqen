@@ -40,10 +40,48 @@ data class UsbDeviceIdentity(val deviceId: Int, val vendorId: Int, val productId
  */
 data class TakeoverMarker(val device: UsbDeviceIdentity, val volumeBefore: Int?, val mutedBefore: Boolean?)
 
-interface TakeoverMarkerStore {
-    fun write(marker: TakeoverMarker)
+abstract class TakeoverMarkerStore {
+    private var held = false
 
-    fun clear()
+    /** Set by the first takeover in this process; a record found before that was left by a process that died. */
+    private var wroteHere = false
+
+    @Synchronized
+    fun isOccupied(): Boolean = held || hasPendingRecovery()
+
+    /**
+     * One store owns the marker for the application's lifetime, across service instances. Returns the
+     * record now stored for [device], or null while the slot is occupied.
+     *
+     * A record that a process which died left for this same connection is taken over with the volume it
+     * saved, so the release still restores the volume from before that process took the device. A record
+     * this process kept after a failed release, or one for another connected device, keeps blocking.
+     */
+    @Synchronized
+    fun acquire(device: UsbDeviceIdentity): TakeoverMarker? {
+        if (held) return null
+        val left = if (hasPendingRecovery()) read() else null
+        if (left != null && (wroteHere || left.device != device)) return null
+        val marker = TakeoverMarker(device, left?.volumeBefore, left?.mutedBefore)
+        if (!write(marker)) return null
+        held = true
+        wroteHere = true
+        return marker
+    }
+
+    abstract fun write(marker: TakeoverMarker): Boolean
+    protected abstract fun read(): TakeoverMarker?
+    protected abstract fun hasPendingRecovery(): Boolean
+    protected abstract fun clear(): Boolean
+
+    /** Only the session that acquired the slot can finish it. A failed release keeps its record. */
+    @Synchronized
+    fun finish(allReleased: Boolean): Boolean {
+        check(held)
+        val cleared = allReleased && clear()
+        held = false
+        return cleared
+    }
 }
 
 /** Totals over every output of a session, for diagnostics. */

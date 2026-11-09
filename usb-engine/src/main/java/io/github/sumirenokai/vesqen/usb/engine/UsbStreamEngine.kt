@@ -2,6 +2,7 @@ package io.github.sumirenokai.vesqen.usb.engine
 
 import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
 import io.github.sumirenokai.vesqen.usb.plan.UsbBusSpeed
+import io.github.sumirenokai.vesqen.usb.session.UsbStreamTotals
 import java.nio.ByteBuffer
 
 /** The order matches `enum Stat` in core/stream_engine.h. */
@@ -24,6 +25,7 @@ data class UsbStreamStats(
     val epoch: Long,
     /** The newest output handed out; it differs from [epoch] until the last one's URBs are back. */
     val requestedEpoch: Long,
+    val sessionTotals: UsbStreamTotals = UsbStreamTotals(mediaFramesLost, underruns, packetsFailed, mediaFramesDelivered),
 ) {
     /** The order matches `enum StreamFailure` in core/stream_engine.h. */
     enum class Failure { NONE, THREAD_START, SUBMIT, DEVICE_GONE, REAP }
@@ -83,8 +85,10 @@ class UsbStreamEngine private constructor(private var handle: Long) : UsbStream 
         if (handle == 0L) -1 else nativeRetireOutput(handle)
     }
 
+    private var finalStats: UsbStreamStats? = null
+
     override fun readStats(): UsbStreamStats? = synchronized(lock) {
-        if (handle == 0L) return null
+        if (handle == 0L) return finalStats
         val values = LongArray(STAT_COUNT)
         nativeReadStats(handle, values)
         var index = 0
@@ -104,7 +108,8 @@ class UsbStreamEngine private constructor(private var handle: Long) : UsbStream 
             threadNice = values[index++],
             threadSchedulerPolicy = values[index++],
             epoch = values[index++],
-            requestedEpoch = values[index],
+            requestedEpoch = values[index++],
+            sessionTotals = UsbStreamTotals(values[index++], values[index++], values[index++], values[index]),
         )
     }
 
@@ -118,6 +123,7 @@ class UsbStreamEngine private constructor(private var handle: Long) : UsbStream 
         if (current == 0L) return true
         if (!nativeStop(current, timeoutMs)) return false
         synchronized(lock) {
+            finalStats = readStats()
             handle = 0L
             nativeDestroy(current)
         }
@@ -126,7 +132,7 @@ class UsbStreamEngine private constructor(private var handle: Long) : UsbStream 
 
     companion object {
         const val FIRST_EPOCH = 0L
-        private const val STAT_COUNT = 16
+        private const val STAT_COUNT = 20
 
         /** Loaded on first use only (D5), so ordinary playback never depends on it. Null once loaded. */
         private val libraryError: String? by lazy {

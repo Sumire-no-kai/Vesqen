@@ -299,6 +299,7 @@ void StreamEngine::fill(IsoUrb& urb) {
         } else if (running && mediaStarted_ && !endOfStream_.load(std::memory_order_acquire) && !inUnderrun_) {
             inUnderrun_ = true;
             add(kStatUnderruns, 1);
+            add(kStatTotalUnderruns, 1);
         }
     }
 }
@@ -312,11 +313,14 @@ void StreamEngine::account(const IsoUrb& urb, bool cancelling) {
         if (delivered) {
             add(kStatMediaFramesProcessed, packet.mediaFrames);
             add(kStatMediaFramesDelivered, packet.mediaFrames);
+            add(kStatTotalMediaFramesDelivered, packet.mediaFrames);
             add(kStatUsbFramesDelivered, packet.length / frameBytes);
         } else if (!cancelling) {
             add(kStatMediaFramesProcessed, packet.mediaFrames);
             add(kStatMediaFramesLost, packet.mediaFrames);
+            add(kStatTotalMediaFramesLost, packet.mediaFrames);
             add(kStatPacketsFailed, 1);
+            add(kStatTotalPacketsFailed, 1);
         }
     }
 }
