@@ -1613,14 +1613,7 @@ class AndroidPlaybackTelemetry internal constructor(
         val id = TelemetryMetricCatalog.ROUTE_SYSTEM_RESAMPLING
         val endpoints = output.usbInventory?.audioOutputEndpoints.orEmpty()
         val sourceRate = (metrics[TelemetryMetricCatalog.SOURCE_SAMPLE_RATE]?.evidence?.reading as? TelemetryReading.Integer)?.value
-        val reason = when {
-            raw.usbOutputStatus.phase != UsbOutputPhase.SYSTEM -> TelemetryUnavailableReason.NOT_APPLICABLE
-            output.selectedSystemRouteType !in USB_ROUTE_TYPES -> TelemetryUnavailableReason.NOT_APPLICABLE
-            output.usbInventory == null -> output.usbInventoryUnavailableReason ?: TelemetryUnavailableReason.TEMPORARILY_UNAVAILABLE
-            endpoints.isEmpty() -> TelemetryUnavailableReason.NOT_APPLICABLE
-            sourceRate == null -> TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT
-            else -> null
-        }
+        val reason = systemResamplingUnavailableReason(raw.usbOutputStatus.phase, output, sourceRate)
         if (reason != null || sourceRate == null) {
             metrics.unavailable(id, reason ?: TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT, output.observedAt, ANDROID_USB)
             return
@@ -1633,7 +1626,11 @@ class AndroidPlaybackTelemetry internal constructor(
                 observedAtEpochMs = output.observedAt.epochMs,
                 observedAtElapsedRealtimeMs = output.observedAt.elapsedRealtimeMs,
                 methodId = "route.compare_source_rate_with_usb_declared_rates",
-                inputMetricIds = setOf(TelemetryMetricCatalog.SOURCE_SAMPLE_RATE, TelemetryMetricCatalog.USB_DEVICE_INVENTORY),
+                inputMetricIds = setOf(
+                    TelemetryMetricCatalog.SOURCE_SAMPLE_RATE,
+                    TelemetryMetricCatalog.ROUTE_ANTICIPATED_TYPE,
+                    TelemetryMetricCatalog.USB_DEVICE_INVENTORY,
+                ),
             ),
         )
     }
@@ -2260,7 +2257,6 @@ class AndroidPlaybackTelemetry internal constructor(
         val ANDROID_USB = TelemetryDataSource(TelemetrySourceId("android.usb_public_api"))
         val APP_CONFIGURATION = TelemetryDataSource(TelemetrySourceId("vesqen.configuration"))
         val VESQEN_DIRECT_USB = TelemetryDataSource(TelemetrySourceId("vesqen.direct_usb"))
-        val USB_ROUTE_TYPES = setOf("usb_device", "usb_headset")
         val VESQEN_OUTPUT_COORDINATOR = TelemetryDataSource(
             id = TelemetrySourceId("vesqen.output_coordinator"),
             detail = "Service decision combining Media3 output format, Android mixer readback, and AudioTrack route; not external signal verification",
@@ -2330,6 +2326,25 @@ private object AndroidTelemetryClock : TelemetryClock {
     override fun elapsedRealtimeMs(): Long = SystemClock.elapsedRealtime()
     override fun processCpuTimeMs(): Long = Process.getElapsedCpuTime()
 }
+
+/** Why the resampling inference does not apply to this sample, or null when it does. */
+internal fun systemResamplingUnavailableReason(
+    phase: UsbOutputPhase,
+    output: OutputTelemetrySnapshot,
+    sourceRateHz: Long?,
+): TelemetryUnavailableReason? = when {
+    phase != UsbOutputPhase.SYSTEM -> TelemetryUnavailableReason.NOT_APPLICABLE
+    // The selected route's own type says only "wired or USB"; the device Android routes media to
+    // (Android 13+) is the one that names a USB device.
+    output.anticipatedRouteType == null -> output.routeUnavailableReason ?: TelemetryUnavailableReason.TEMPORARILY_UNAVAILABLE
+    output.anticipatedRouteType !in USB_MEDIA_DEVICE_TYPES -> TelemetryUnavailableReason.NOT_APPLICABLE
+    output.usbInventory == null -> output.usbInventoryUnavailableReason ?: TelemetryUnavailableReason.TEMPORARILY_UNAVAILABLE
+    output.usbInventory.audioOutputEndpoints.isEmpty() -> TelemetryUnavailableReason.NOT_APPLICABLE
+    sourceRateHz == null -> TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT
+    else -> null
+}
+
+private val USB_MEDIA_DEVICE_TYPES = setOf("usb_device", "usb_headset")
 
 /**
  * `resampled` when the source's rate is not among those the USB devices declare to Android, so its

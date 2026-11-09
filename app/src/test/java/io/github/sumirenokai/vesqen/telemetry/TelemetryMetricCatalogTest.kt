@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.telemetry
 
+import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -33,6 +34,46 @@ class TelemetryMetricCatalogTest {
         assertEquals("undetermined", systemResamplingToken(48_000, jbl))
         assertEquals("undetermined", systemResamplingToken(192_000, listOf(endpoint(arbitrary = true))))
         assertEquals("undetermined", systemResamplingToken(192_000, emptyList()))
+    }
+
+    @Test
+    fun `the resampling inference applies when Android routes media to a USB device`() {
+        val jbl = UsbAudioOutputEndpointReading(
+            snapshotKey = "usb-1", productName = null, type = "usb_headset",
+            sampleRatesHz = listOf(48_000), arbitrarySampleRate = false,
+            channelCounts = listOf(2), arbitraryChannelCount = false, encodings = listOf("pcm_16bit"), arbitraryEncoding = false,
+        )
+        // As the iQOO 9 (Android 15) reports a USB DAC: the selected route's type is only "wired or USB".
+        fun output(mediaDevice: String?, routeReason: TelemetryUnavailableReason? = null) = OutputTelemetrySnapshot(
+            observedAt = TelemetryInstant(epochMs = 1, elapsedRealtimeMs = 1),
+            selectedSystemRouteName = "USB", selectedSystemRouteType = "wired_or_usb", selectedSystemRouteTypeUnavailableReason = null,
+            anticipatedRouteName = null, anticipatedRouteType = mediaDevice,
+            connectedRouteTypes = null, connectedRouteTypesUnavailableReason = null, routeUnavailableReason = routeReason,
+            directSupported = null, directModes = null, directUnavailableReason = null,
+            mixerProfileCount = null, preferredMixerProfile = null, mixerUnavailableReason = null,
+            systemMusicVolumePercent = null, systemMusicMuted = null, usbHostSupported = true,
+            usbAudioDeviceCount = 1, usbAudioDeviceCountUnavailableReason = null,
+            usbInventory = UsbInventoryReading(hostDevices = emptyList(), audioOutputEndpoints = listOf(jbl)),
+            usbInventoryUnavailableReason = null,
+            bluetoothConnectedNames = null, bluetoothConnectedTypes = null, bluetoothUnavailableReason = null,
+        )
+        assertEquals(null, systemResamplingUnavailableReason(UsbOutputPhase.SYSTEM, output("usb_headset"), 192_000))
+        assertEquals(null, systemResamplingUnavailableReason(UsbOutputPhase.SYSTEM, output("usb_device"), 192_000))
+        assertEquals(
+            TelemetryUnavailableReason.NOT_APPLICABLE,
+            systemResamplingUnavailableReason(UsbOutputPhase.SYSTEM, output("wired_headphones"), 192_000),
+        )
+        assertEquals(
+            TelemetryUnavailableReason.NOT_APPLICABLE,
+            systemResamplingUnavailableReason(UsbOutputPhase.ACTIVE, output("usb_headset"), 192_000),
+        )
+        // Before Android 13 Android does not name the media device, and the reason says so.
+        assertEquals(
+            TelemetryUnavailableReason.UNSUPPORTED_ANDROID_VERSION,
+            systemResamplingUnavailableReason(
+                UsbOutputPhase.SYSTEM, output(null, TelemetryUnavailableReason.UNSUPPORTED_ANDROID_VERSION), 192_000,
+            ),
+        )
     }
 
     @Test
