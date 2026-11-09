@@ -12,7 +12,6 @@ import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
-import androidx.core.content.edit
 import androidx.media3.common.C
 import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
@@ -157,7 +156,7 @@ private fun SampleRates.ranges(): List<IntRange> = when (this) {
 internal interface DirectUsbRoute {
     interface Listener {
         /** Media3 opened an output on the session. Called on the playback thread. */
-        fun onOutputOpened() = Unit
+        fun onOutputOpened(periodUid: Any) = Unit
 
         /**
          * The session failed, or the format gate refused what Media3 configured; [details] then name
@@ -171,6 +170,9 @@ internal interface DirectUsbRoute {
 
     /** From a finished takeover until release. The selecting sink reads it on the playback thread. */
     val streaming: Boolean
+
+    /** A current or unresolved takeover must give the device back before Android can play. */
+    val recoveryPending: Boolean
 
     var listener: Listener?
 
@@ -189,7 +191,7 @@ internal interface DirectUsbRoute {
     fun takeOver(onDone: (DirectUsbFailure?) -> Unit)
 
     /** Gives the device back. Safe to call at any time and more than once. */
-    fun release()
+    fun release(onReleased: ((Boolean) -> Unit)? = null)
 
     fun close()
 }
@@ -200,20 +202,16 @@ internal interface DirectUsbRoute {
  * volume (about -30 dB) since no remembered volume exists yet.
  */
 @UnstableApi
-internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
+internal class AndroidDirectUsbRoute(context: Context, private val markers: TakeoverMarkerStore) : DirectUsbRoute {
     private val appContext = context.applicationContext
     private val usbManager = appContext.getSystemService(UsbManager::class.java)
     private val main = Handler(Looper.getMainLooper())
-    private val control = Executors.newSingleThreadScheduledExecutor { Thread(it, "usb-control") }
-    private val markers = PreferencesTakeoverMarkerStore(appContext)
 
     private class Prepared(val device: UsbDevice, val connection: UsbDeviceConnection, val function: UacFunction, val plan: StreamingPlan)
 
     private var prepared: Prepared? = null
     private var session: DirectUsbSession? = null
 
-    /** The last session given back, which may still wait for its URBs; the next one takes over after it (#289). */
-    private var previousSession: DirectUsbSession? = null
     private var permissionCallback: ((Boolean) -> Unit)? = null
 
     @Volatile
@@ -221,6 +219,8 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
 
     @Volatile
     private var configuringSource: TelemetrySourceFacts? = null
+
+    private var configuringPeriodUid: Any? = null
 
     @Volatile
     override var streaming = false
@@ -275,6 +275,7 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
     }
 
     override fun onSinkConfigured(config: AudioSink.AudioSinkConfig) {
+        configuringPeriodUid = config.mediaPeriodId?.periodUid
         configuringSource = config.mediaPeriodId?.takeIf { !config.timeline.isEmpty }?.let { period ->
             val index = config.timeline.getIndexOfPeriod(period.periodUid).takeIf { it != C.INDEX_UNSET }
                 ?: return@let null
@@ -282,6 +283,8 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
             TelemetryMediaItemExtras.read(window.mediaItem.mediaMetadata.extras)
         }
     }
+
+    override val recoveryPending: Boolean get() = markers.isOccupied()
 
     override fun hasUsbAudioDevice(): Boolean = usbManager.deviceList.values.any(UsbDevice::isUsbAudioDevice)
 
@@ -362,7 +365,6 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
             function = target.function,
             markers = markers,
             control = control,
-            after = previousSession,
             listener = object : DirectUsbSession.Listener {
                 // A session given back on purpose may still report; only the current one counts.
                 override fun onFailed(failure: DirectUsbFailure) {
@@ -378,7 +380,12 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
                     is DirectUsbSession.Takeover.Ready -> {
                         sessionProvider = DirectUsbAudioOutputProvider(
                             target.plan,
-                            openOutput = { next.openOutput()?.also { listener?.onOutputOpened() } },
+                            openOutput = {
+                                next.openOutput()?.also {
+                                    val uid = configuringPeriodUid
+                                    if (uid != null) main.post { if (session === next) listener?.onOutputOpened(uid) }
+                                }
+                            },
                             source = { configuringSource },
                             onFailure = { failure ->
                                 val details = configuringSource?.toDirectDetails()?.withOffer(target.function)
@@ -397,7 +404,7 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
         }
     }
 
-    override fun release() {
+    override fun release(onReleased: ((Boolean) -> Unit)?) {
         streaming = false
         sessionProvider = null
         val current = session
@@ -405,10 +412,14 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
         val held = prepared
         prepared = null
         if (current != null) {
-            previousSession = current
-            current.release()
+            if (onReleased == null) {
+                current.release()
+            } else {
+                current.release { cleanup -> main.post { onReleased(cleanup.firstFailure == null) } }
+            }
         } else {
             held?.connection?.close()
+            onReleased?.invoke(true)
         }
     }
 
@@ -416,12 +427,13 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
         release()
         runCatching { appContext.unregisterReceiver(permissionReceiver) }
         runCatching { appContext.unregisterReceiver(detachReceiver) }
-        control.shutdown()
     }
 
     private fun UsbDevice.displayName(): String = productName?.takeIf(String::isNotBlank) ?: "USB audio $deviceId"
 
     private companion object {
+        // Cleanup retries must survive PlaybackService destruction. The executor starts on first use.
+        val control = Executors.newSingleThreadScheduledExecutor { Thread(it, "usb-control") }
         const val ACTION_PERMISSION = "io.github.sumirenokai.vesqen.playback.USB_PERMISSION"
 
         /** D4 without a remembered volume: about -30 dB, in the UAC unit of 1/256 dB. */
@@ -431,18 +443,35 @@ internal class AndroidDirectUsbRoute(context: Context) : DirectUsbRoute {
 }
 
 /** Survives the process, so a later start can give back a device a crash left claimed (M7-4). */
-private class PreferencesTakeoverMarkerStore(context: Context) : TakeoverMarkerStore {
+internal class PreferencesTakeoverMarkerStore(context: Context) : TakeoverMarkerStore() {
+    private val usbManager = context.getSystemService(UsbManager::class.java)
     private val preferences = context.getSharedPreferences("direct_usb_takeover", Context.MODE_PRIVATE)
 
-    override fun write(marker: TakeoverMarker) = preferences.edit(commit = true) {
+    override fun hasPendingRecovery(): Boolean {
+        if (!preferences.contains(DEVICE_ID)) return false
+        // A physically removed connection cannot be restored. A still-live owner is protected by acquire().
+        val id = preferences.getInt(DEVICE_ID, -1)
+        return usbManager.deviceList.values.any { it.deviceId == id }
+    }
+
+    override fun read(): TakeoverMarker? {
+        if (!preferences.contains(DEVICE_ID)) return null
+        return TakeoverMarker(
+            UsbDeviceIdentity(preferences.getInt(DEVICE_ID, -1), preferences.getInt(VENDOR_ID, -1), preferences.getInt(PRODUCT_ID, -1)),
+            volumeBefore = if (preferences.contains(VOLUME_BEFORE)) preferences.getInt(VOLUME_BEFORE, 0) else null,
+            mutedBefore = if (preferences.contains(MUTED_BEFORE)) preferences.getBoolean(MUTED_BEFORE, false) else null,
+        )
+    }
+
+    override fun write(marker: TakeoverMarker) = preferences.edit().apply {
         putInt(DEVICE_ID, marker.device.deviceId)
         putInt(VENDOR_ID, marker.device.vendorId)
         putInt(PRODUCT_ID, marker.device.productId)
         marker.volumeBefore?.let { putInt(VOLUME_BEFORE, it) } ?: remove(VOLUME_BEFORE)
         marker.mutedBefore?.let { putBoolean(MUTED_BEFORE, it) } ?: remove(MUTED_BEFORE)
-    }
+    }.commit()
 
-    override fun clear() = preferences.edit(commit = true) { clear() }
+    override fun clear() = preferences.edit().clear().commit()
 
     private companion object {
         const val DEVICE_ID = "device_id"

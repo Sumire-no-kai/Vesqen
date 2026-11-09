@@ -34,17 +34,28 @@ internal class ChainUsb(
     private val report: (String) -> Unit,
 ) {
     private val control = Executors.newSingleThreadScheduledExecutor { Thread(it, "usb-control") }
-    private val markers = object : TakeoverMarkerStore {
-        override fun write(marker: TakeoverMarker) = report("Takeover marker: $marker")
+    private val markers = object : TakeoverMarkerStore() {
+        private var stored: TakeoverMarker? = null
+        override fun read() = stored
+        override fun hasPendingRecovery() = stored != null
+        override fun write(marker: TakeoverMarker): Boolean {
+            stored = marker
+            report("Takeover marker: $marker")
+            return true
+        }
 
-        override fun clear() = report("Takeover marker cleared")
+        override fun clear(): Boolean {
+            stored = null
+            report("Takeover marker cleared")
+            return true
+        }
     }
     private val opened = AtomicInteger()
     private val created = AtomicInteger()
     private var connection: UsbDeviceConnection? = firstConnection
     private val totalsLock = Any()
     private var finished = UsbStreamTotals.NONE
-    private val counted = mutableSetOf<DirectUsbSession>()
+    private val unfinished = mutableSetOf<DirectUsbSession>()
 
     @Volatile
     private var session: DirectUsbSession? = null
@@ -71,7 +82,8 @@ internal class ChainUsb(
         connection = null
         val done = CountDownLatch(1)
         released = done
-        val next = DirectUsbSession(
+        lateinit var next: DirectUsbSession
+        next = DirectUsbSession(
             device = UsbDeviceIdentity(device.deviceId, device.vendorId, device.productId),
             link = AndroidUsbLink(device, link),
             function = function,
@@ -80,15 +92,16 @@ internal class ChainUsb(
             listener = object : DirectUsbSession.Listener {
                 override fun onFailed(failure: DirectUsbFailure) {
                     report("Session failed: ${failure.reason} (${failure.detail})")
-                    session?.let(::count)
                 }
 
                 override fun onReleased(cleanup: CleanupRecord, failure: DirectUsbFailure?) {
+                    count(next)
                     report("Device given back: ${cleanup.steps.joinToString { "${it.name} ${if (it.succeeded) "ok" else "FAILED"}" }}")
                     done.countDown()
                 }
             },
         )
+        synchronized(totalsLock) { unfinished.add(next) }
         session = next
         next.takeOver(plan, startVolume) { result ->
             report("Takeover: $result")
@@ -101,7 +114,6 @@ internal class ChainUsb(
     /** Gives the device back. It is free once every interface is released, which [shutdown] waits for. */
     fun giveBack() {
         val current = session ?: return
-        count(current)
         current.release()
     }
 
@@ -117,9 +129,9 @@ internal class ChainUsb(
         return ready
     }
 
-    /** A session's totals count once, taken while its stream still exists. */
+    /** A session's totals count once, taken after the last USB request has been reclaimed. */
     private fun count(current: DirectUsbSession) = synchronized(totalsLock) {
-        if (counted.add(current)) finished += current.totals()
+        if (unfinished.remove(current)) finished += current.totals()
     }
 
     fun onDetached() {
@@ -137,8 +149,7 @@ internal class ChainUsb(
     fun latestStats(): UsbStreamStats? = newest?.readStats()?.also { newestStats = it } ?: newestStats
 
     fun totals(): UsbStreamTotals = synchronized(totalsLock) {
-        val current = session?.takeIf { it !in counted && it.state is DirectUsbSession.State.Streaming }
-        finished + (current?.totals() ?: UsbStreamTotals.NONE)
+        unfinished.fold(finished) { sum, current -> sum + current.totals() }
     }
 
     /** Gives the device back if it is still held and waits until every interface is released. */

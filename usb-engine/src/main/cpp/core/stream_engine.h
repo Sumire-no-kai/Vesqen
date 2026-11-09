@@ -86,6 +86,11 @@ enum Stat : size_t {
     kStatEpoch,
     /** The newest output handed out. It differs from kStatEpoch until the last one's URBs are back. */
     kStatRequestedEpoch,
+    // Session counters survive epoch resets, including completions during retirement.
+    kStatTotalMediaFramesLost,
+    kStatTotalUnderruns,
+    kStatTotalPacketsFailed,
+    kStatTotalMediaFramesDelivered,
     kStatCount,
 };
 
