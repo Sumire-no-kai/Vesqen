@@ -43,18 +43,34 @@ data class TakeoverMarker(val device: UsbDeviceIdentity, val volumeBefore: Int?,
 abstract class TakeoverMarkerStore {
     private var held = false
 
+    /** Set by the first takeover in this process; a record found before that was left by a process that died. */
+    private var wroteHere = false
+
     @Synchronized
     fun isOccupied(): Boolean = held || hasPendingRecovery()
 
-    /** One store owns the marker for the application's lifetime, across service instances. */
+    /**
+     * One store owns the marker for the application's lifetime, across service instances. Returns the
+     * record now stored for [device], or null while the slot is occupied.
+     *
+     * A record that a process which died left for this same connection is taken over with the volume it
+     * saved, so the release still restores the volume from before that process took the device. A record
+     * this process kept after a failed release, or one for another connected device, keeps blocking.
+     */
     @Synchronized
-    fun acquire(marker: TakeoverMarker): Boolean {
-        if (isOccupied() || !write(marker)) return false
+    fun acquire(device: UsbDeviceIdentity): TakeoverMarker? {
+        if (held) return null
+        val left = if (hasPendingRecovery()) read() else null
+        if (left != null && (wroteHere || left.device != device)) return null
+        val marker = TakeoverMarker(device, left?.volumeBefore, left?.mutedBefore)
+        if (!write(marker)) return null
         held = true
-        return true
+        wroteHere = true
+        return marker
     }
 
     abstract fun write(marker: TakeoverMarker): Boolean
+    protected abstract fun read(): TakeoverMarker?
     protected abstract fun hasPendingRecovery(): Boolean
     protected abstract fun clear(): Boolean
 

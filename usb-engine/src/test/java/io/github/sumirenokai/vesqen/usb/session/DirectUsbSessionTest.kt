@@ -369,6 +369,28 @@ class DirectUsbSessionTest {
     }
 
     @Test
+    fun `a marker a dead process left for this connection is taken over with its saved volume`() {
+        // The process died while it held the DAC: the device still has the level it set (-2560 in the fake).
+        markers.persisted = TakeoverMarker(UsbDeviceIdentity(1003, 0x0ecb, 0x2107), volumeBefore = -1280, mutedBefore = false)
+
+        assertEquals(DirectUsbSession.Takeover.Ready(volumeBefore = -1280, volumeNow = -15400), takeOver())
+        assertEquals(listOf("marker volume -1280", "marker volume -1280"), events.filter { it.startsWith("marker") })
+        events.clear()
+        release()
+        assertTrue(events.containsAll(listOf("set volume -1280", "marker cleared")))
+    }
+
+    @Test
+    fun `a marker left for another connected device still blocks the takeover`() {
+        val other = TakeoverMarker(UsbDeviceIdentity(2001, 0x1234, 0x5678), volumeBefore = -1280, mutedBefore = false)
+        markers.persisted = other
+
+        assertTrue(takeOver() is DirectUsbSession.Takeover.Failed)
+        assertEquals(other, markers.persisted)
+        assertFalse(events.any { it.startsWith("claim") })
+    }
+
+    @Test
     fun `a final packet delivered between Kotlin polls survives an epoch reset`() {
         takeOver()
         val first = checkNotNull(session.openOutput())
@@ -712,6 +734,7 @@ class DirectUsbSessionTest {
 
     private class FakeMarkers(private val events: MutableList<String>) : TakeoverMarkerStore() {
         var persisted: TakeoverMarker? = null
+        override fun read() = persisted
         override fun hasPendingRecovery() = persisted != null
         override fun write(marker: TakeoverMarker): Boolean {
             persisted = marker

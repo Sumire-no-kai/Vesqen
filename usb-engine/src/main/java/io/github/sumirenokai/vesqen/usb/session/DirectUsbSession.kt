@@ -172,9 +172,8 @@ class DirectUsbSession(
     fun onDeviceDetached() = control.execute { fail(DirectUsbFailure(Reason.DEVICE_DISCONNECTED, "the device was detached")) }
 
     private fun claimAndStart(plan: StreamingPlan, startVolume: Int): Takeover {
-        if (!markers.acquire(TakeoverMarker(device, volumeBefore = null, mutedBefore = null))) {
-            return failed(Reason.USB_TRANSFER_FAILED, "the takeover marker is unavailable or awaiting recovery")
-        }
+        val taken = markers.acquire(device)
+            ?: return failed(Reason.USB_TRANSFER_FAILED, "the takeover marker is unavailable or awaiting recovery")
         markerWritten = true
         val interfaces = (listOf(function.controlInterface) + function.streamingInterfaces.map { it.interfaceNumber }).distinct()
         for (number in interfaces) {
@@ -188,9 +187,12 @@ class DirectUsbSession(
             ?: return failed(Reason.VOLUME_CONTROL_FAILED, "no master volume on the path")
         val controlInterface = function.controlInterface
         val range = client.volumeRange(unit.id, controlInterface)
-        val volumeBefore = client.volume(unit.id, controlInterface)
-        if (range == null || volumeBefore == null) return failed(Reason.VOLUME_CONTROL_FAILED, "the volume could not be read")
-        val mutedBefore = client.mute(unit.id, controlInterface)
+        val volumeNow = client.volume(unit.id, controlInterface)
+        if (range == null || volumeNow == null) return failed(Reason.VOLUME_CONTROL_FAILED, "the volume could not be read")
+        // A record taken over from a process that died holds the volume from before that process's takeover;
+        // the device still has the level that process set.
+        val volumeBefore = taken.volumeBefore ?: volumeNow
+        val mutedBefore = if (taken.volumeBefore != null) taken.mutedBefore else client.mute(unit.id, controlInterface)
         if (!markers.write(TakeoverMarker(device, volumeBefore, mutedBefore))) {
             return failed(Reason.USB_TRANSFER_FAILED, "the original hardware volume could not be saved")
         }

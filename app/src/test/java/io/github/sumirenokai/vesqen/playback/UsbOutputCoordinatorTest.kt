@@ -39,6 +39,7 @@ import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
@@ -1515,24 +1516,44 @@ class UsbOutputCoordinatorTest {
     }
 
     @Test
-    fun `a persisted recovery marker blocks a new owner until its device is unplugged`() {
+    fun `a persisted recovery marker blocks another device until its own device is unplugged`() {
         attachUsbHardware("/dev/bus/usb/001/002", vendorId = 0x1234, productId = 0x5678)
         val manager = context.getSystemService(UsbManager::class.java)
         val device = manager.deviceList.values.single()
         val original = TakeoverMarker(UsbDeviceIdentity(device.deviceId, device.vendorId, device.productId), -2560, false)
         val store = PreferencesTakeoverMarkerStore(context)
-        assertTrue(store.acquire(original))
+        assertNotNull(store.acquire(original.device))
+        assertTrue(store.write(original))
         assertFalse(store.finish(allReleased = false))
+        // The same process keeps blocking after its own failed release.
+        assertNull(store.acquire(original.device))
 
         val reopened = PreferencesTakeoverMarkerStore(context)
-        val other = TakeoverMarker(UsbDeviceIdentity(device.deviceId + 1, 22, 33), null, null)
-        assertFalse(reopened.acquire(other))
+        val other = UsbDeviceIdentity(device.deviceId + 1, 22, 33)
+        assertNull(reopened.acquire(other))
         val prefs = context.getSharedPreferences("direct_usb_takeover", Context.MODE_PRIVATE)
         assertEquals(-2560, prefs.getInt("volume_before", 0))
         shadowOf(manager).removeUsbDevice(device)
-        assertTrue(reopened.acquire(other))
+        assertEquals(TakeoverMarker(other, null, null), reopened.acquire(other))
         assertTrue(reopened.finish(allReleased = true))
         assertTrue(prefs.all.isEmpty())
+    }
+
+    @Test
+    fun `a marker a dead process left is taken over by the same connection with its saved volume`() {
+        attachUsbHardware("/dev/bus/usb/001/002", vendorId = 0x1234, productId = 0x5678)
+        val device = context.getSystemService(UsbManager::class.java).deviceList.values.single()
+        val original = TakeoverMarker(UsbDeviceIdentity(device.deviceId, device.vendorId, device.productId), -2560, true)
+        val store = PreferencesTakeoverMarkerStore(context)
+        assertNotNull(store.acquire(original.device))
+        assertTrue(store.write(original))
+        // The process dies here: nothing finishes the slot, and the DAC stays attached.
+
+        val restarted = PreferencesTakeoverMarkerStore(context)
+        assertTrue(restarted.isOccupied())
+        assertEquals(original, restarted.acquire(original.device))
+        assertTrue(restarted.finish(allReleased = true))
+        assertTrue(context.getSharedPreferences("direct_usb_takeover", Context.MODE_PRIVATE).all.isEmpty())
     }
 
     private class FakeDirectRoute : DirectUsbRoute {

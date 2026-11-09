@@ -454,6 +454,15 @@ internal class PreferencesTakeoverMarkerStore(context: Context) : TakeoverMarker
         return usbManager.deviceList.values.any { it.deviceId == id }
     }
 
+    override fun read(): TakeoverMarker? {
+        if (!preferences.contains(DEVICE_ID)) return null
+        return TakeoverMarker(
+            UsbDeviceIdentity(preferences.getInt(DEVICE_ID, -1), preferences.getInt(VENDOR_ID, -1), preferences.getInt(PRODUCT_ID, -1)),
+            volumeBefore = if (preferences.contains(VOLUME_BEFORE)) preferences.getInt(VOLUME_BEFORE, 0) else null,
+            mutedBefore = if (preferences.contains(MUTED_BEFORE)) preferences.getBoolean(MUTED_BEFORE, false) else null,
+        )
+    }
+
     override fun write(marker: TakeoverMarker) = preferences.edit().apply {
         putInt(DEVICE_ID, marker.device.deviceId)
         putInt(VENDOR_ID, marker.device.vendorId)

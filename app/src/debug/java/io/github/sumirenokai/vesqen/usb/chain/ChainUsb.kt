@@ -35,16 +35,17 @@ internal class ChainUsb(
 ) {
     private val control = Executors.newSingleThreadScheduledExecutor { Thread(it, "usb-control") }
     private val markers = object : TakeoverMarkerStore() {
-        private var pending = false
-        override fun hasPendingRecovery() = pending
+        private var stored: TakeoverMarker? = null
+        override fun read() = stored
+        override fun hasPendingRecovery() = stored != null
         override fun write(marker: TakeoverMarker): Boolean {
-            pending = true
+            stored = marker
             report("Takeover marker: $marker")
             return true
         }
 
         override fun clear(): Boolean {
-            pending = false
+            stored = null
             report("Takeover marker cleared")
             return true
         }
