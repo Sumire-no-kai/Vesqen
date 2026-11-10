@@ -59,6 +59,17 @@ class AppSegmentAssessmentTest {
         assertEquals(changes.size, all.checks.count { it.status == AppSegmentStatus.MODIFIED })
     }
 
+    @Test
+    fun `direct USB excludes the parallel Android route from the playback assessment`() {
+        listOf("bluetooth", "bluetooth_a2dp", "phone_speaker", "wired_or_usb").forEach { route ->
+            val result = assess(ownOutput(overrides = mapOf(Metrics.ROUTE_SELECTED_SYSTEM_TYPE to measured(TelemetryReading.Text(route)))))
+            assertTrue(result.ownOutput)
+            assertEquals(RouteKind.OTHER, result.route)
+            assertNull(result.bluetooth)
+            assertTrue(result.routeEvidence.isEmpty())
+        }
+    }
+
     /** A 16-bit FLAC on Vesqen's own USB output: no AudioTrack, the wire format in its place (iQOO 9 x JBL Flip 7). */
     private fun ownOutput(
         wireRate: Long = 44_100,

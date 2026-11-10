@@ -239,6 +239,7 @@ class ChainSummaryTest {
                 Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE to noTrack,
                 Metrics.PLAYBACK_AUDIO_TRACK_CHANNEL_MASK to noTrack,
                 Metrics.PLAYBACK_AUDIO_TRACK_ENCODING to noTrack,
+                Metrics.ROUTE_SELECTED_SYSTEM_TYPE to measured(TelemetryReading.Text("bluetooth_a2dp")),
                 // The 16-bit, 44.1 kHz stereo FLAC of FakeAppSegmentTelemetry, sent to the DAC as 24 bits.
                 Metrics.USB_DIRECT_WIRE_SAMPLE_RATE to measured(TelemetryReading.Integer(44_100, TelemetryUnit.HERTZ)),
                 Metrics.USB_DIRECT_WIRE_BIT_DEPTH to measured(TelemetryReading.Integer(24, TelemetryUnit.BITS)),
@@ -263,6 +264,8 @@ class ChainSummaryTest {
         composeRule.onNodeWithTag("vesqen.chain.core-value.${Metrics.USB_DIRECT_WIRE_BIT_DEPTH.value}", useUnmergedTree = true)
             .assertTextEquals(reading(TelemetryReading.Integer(24, TelemetryUnit.BITS)))
         composeRule.onAllNodesWithTag("vesqen.chain.core.${Metrics.PLAYBACK_AUDIO_TRACK_ENCODING.value}").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("vesqen.chain.path.route").assertCountEquals(0)
+        composeRule.onAllNodesWithTag(SystemSegment).assertCountEquals(0)
     }
 
     @Test
