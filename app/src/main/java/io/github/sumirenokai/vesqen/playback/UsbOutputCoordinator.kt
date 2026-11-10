@@ -1201,7 +1201,9 @@ internal class UsbOutputCoordinator(
             return
         }
         val route = directRoute
-        if (route != null && (wasDirect || route.streaming || route.recoveryPending)) {
+        // A recovery marker gates a transition from strict. Selecting an already active system
+        // route starts no new playback and must leave both the player and the marker intact.
+        if (route != null && (wasDirect || route.streaming || (rebuild && route.recoveryPending))) {
             returnDirect(route, UsbOutputMode.SYSTEM, resume, UsbOutputFailureOrigin.USER_MODE_CHANGE)
         } else {
             route?.release()

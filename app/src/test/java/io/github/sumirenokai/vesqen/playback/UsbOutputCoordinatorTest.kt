@@ -899,6 +899,42 @@ class UsbOutputCoordinatorTest {
     }
 
     @Test
+    fun `selecting system again keeps ordinary playback when only a recovery record remains`() {
+        direct.recoveryPending = true
+        start(direct = direct)
+        loadTrack()
+        player.play()
+        idle()
+        assertEquals(UsbOutputMode.SYSTEM, status().mode)
+        playerCalls.clear()
+
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        idle()
+
+        assertStatus(UsbOutputPhase.SYSTEM, "system_audio_route")
+        assertTrue(player.playWhenReady)
+        assertFalse("stop" in playerCalls || "prepare" in playerCalls)
+        assertTrue(direct.recoveryPending)
+    }
+
+    @Test
+    fun `switching from strict still requires recovery after a failed session is gone`() {
+        start(direct = direct)
+        loadTrack()
+        requestStrict()
+        direct.recoveryPending = true
+        playerCalls.clear()
+
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        idle()
+
+        assertStatus(UsbOutputPhase.FAILED, "direct_usb.usb_transfer_failed")
+        assertEquals(UsbOutputMode.STRICT_BIT_PERFECT, status().mode)
+        assertFalse("prepare" in playerCalls || "play" in playerCalls)
+        assertTrue(direct.recoveryPending)
+    }
+
+    @Test
     fun `returning to system while paused stays paused`() {
         prepareStrictPlan(play = false)
         playerCalls.clear()
