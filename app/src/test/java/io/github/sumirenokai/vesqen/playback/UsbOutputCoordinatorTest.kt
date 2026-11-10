@@ -93,7 +93,9 @@ class UsbOutputCoordinatorTest {
         }
     }).build()
     private val playerCalls = mutableListOf<String>()
-    private val player = recordingPlayer(realPlayer, playerCalls)
+    /** Robolectric cannot play an item to its end, so a natural change sets the period Media3 would report. */
+    private var playingPeriodIndex: Int? = null
+    private val player = recordingPlayer(realPlayer, playerCalls) { playingPeriodIndex }
     private val dac = audioDevice(id = 11)
     private var strictAllowed = true
     private lateinit var coordinator: UsbOutputCoordinator
@@ -1347,8 +1349,107 @@ class UsbOutputCoordinatorTest {
         assertEquals(UsbOutputPhase.ACTIVE, status().phase)
     }
 
+    // A1 (#314): a reused output still delivers the previous item's tail, about half a second of
+    // ring, after the next item's output is registered. Media3 and the delivery position reach the
+    // boundary within a few milliseconds of each other, in either order.
+
+    @Test
+    fun `the next item reaching the DAC before Media3 moves on keeps ACTIVE`() {
+        reachDirectActive(listOf(mediaItem(mediaId = "first"), mediaItem(mediaId = "second")))
+        val (first, second) = periodUids()
+        val previous = checkNotNull(deliveredOutput)
+        val next = Any()
+        val from = published.size
+        val listener = checkNotNull(direct.listener)
+        listener.onOutputOpened(second, next, follows = previous)
+        idle()
+        listener.onOutputActive(second, next, true)
+        listener.onOutputActive(first, previous, false)
+        idle()
+        naturalChangeToNext()
+        idle()
+        assertStatus(UsbOutputPhase.ACTIVE, "direct_usb.active")
+        assertOnlyActiveSince(from)
+    }
+
+    @Test
+    fun `Media3 moving on before the next item reaches the DAC keeps ACTIVE`() {
+        reachDirectActive(listOf(mediaItem(mediaId = "first"), mediaItem(mediaId = "second")))
+        val (first, second) = periodUids()
+        val previous = checkNotNull(deliveredOutput)
+        val next = Any()
+        val from = published.size
+        val listener = checkNotNull(direct.listener)
+        listener.onOutputOpened(second, next, follows = previous)
+        idle()
+        naturalChangeToNext()
+        idle()
+        listener.onOutputActive(second, next, true)
+        listener.onOutputActive(first, previous, false)
+        idle()
+        assertStatus(UsbOutputPhase.ACTIVE, "direct_usb.active")
+        assertOnlyActiveSince(from)
+    }
+
+    @Test
+    fun `a next item that never reaches the DAC does not inherit ACTIVE`() {
+        reachDirectActive(listOf(mediaItem(mediaId = "first"), mediaItem(mediaId = "second")))
+        val (first, second) = periodUids()
+        val previous = checkNotNull(deliveredOutput)
+        val listener = checkNotNull(direct.listener)
+        listener.onOutputOpened(second, Any(), follows = previous)
+        idle()
+        naturalChangeToNext()
+        idle()
+        listener.onOutputActive(first, previous, false) // the tail ran out, nothing of the second item followed
+        idle()
+        assertStatus(UsbOutputPhase.APPLYING, "direct_usb.configured_not_playing")
+    }
+
+    @Test
+    fun `repeating one item on a reused output keeps ACTIVE`() {
+        reachDirectActive()
+        val period = player.currentTimeline.getUidOfPeriod(player.currentPeriodIndex)
+        val previous = checkNotNull(deliveredOutput)
+        val again = Any()
+        val from = published.size
+        val listener = checkNotNull(direct.listener)
+        listener.onOutputOpened(period, again, follows = previous)
+        idle()
+        listener.onOutputActive(period, again, true)
+        listener.onOutputActive(period, previous, false)
+        idle()
+        coordinator.onMediaItemTransition(player.currentMediaItem, androidx.media3.common.Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT)
+        idle()
+        assertStatus(UsbOutputPhase.ACTIVE, "direct_usb.active")
+        assertOnlyActiveSince(from)
+        listener.onOutputActive(period, again, false)
+        idle()
+        assertEquals(UsbOutputPhase.APPLYING, status().phase)
+    }
+
+    private fun periodUids(): Pair<Any, Any> =
+        player.currentTimeline.getUidOfPeriod(0) to player.currentTimeline.getUidOfPeriod(1)
+
+    /** What Media3 does at the end of an item; seekToNextMediaItem() would be a user discontinuity. */
+    private fun naturalChangeToNext() {
+        val next = player.currentPeriodIndex + 1
+        playingPeriodIndex = next
+        val item = player.currentTimeline.getWindow(next, androidx.media3.common.Timeline.Window()).mediaItem
+        coordinator.onMediaItemTransition(item, androidx.media3.common.Player.MEDIA_ITEM_TRANSITION_REASON_AUTO)
+    }
+
+    private fun assertOnlyActiveSince(index: Int) {
+        val phases = published.drop(index).map { it.phase }
+        assertTrue("Left ACTIVE while one item handed over to the next: $phases", phases.all { it == UsbOutputPhase.ACTIVE })
+    }
+
+    /** The token of the output [notifyDeliveredOutput] opened last. Tokens compare by identity. */
+    private var deliveredOutput: Any? = null
+
     private fun notifyDeliveredOutput() {
         val uid = player.currentTimeline.getUidOfPeriod(player.currentPeriodIndex)
+        deliveredOutput = uid
         checkNotNull(direct.listener).onOutputOpened(uid)
         checkNotNull(direct.listener).onOutputActive(uid, active = true)
     }
@@ -2142,11 +2243,12 @@ class UsbOutputCoordinatorTest {
         }
 
         /** Keeps ExoPlayer's real state and callback order while recording the commands it receives. */
-        fun recordingPlayer(delegate: ExoPlayer, calls: MutableList<String>): ExoPlayer =
+        fun recordingPlayer(delegate: ExoPlayer, calls: MutableList<String>, periodIndex: () -> Int? = { null }): ExoPlayer =
             Proxy.newProxyInstance(
                 ExoPlayer::class.java.classLoader,
                 arrayOf(ExoPlayer::class.java),
             ) { _, method, arguments ->
+                if (method.name == "getCurrentPeriodIndex") periodIndex()?.let { return@newProxyInstance it }
                 when (method.name) {
                     in RECORDED_COMMANDS -> calls += method.name
                     "setPreferredAudioDevice" ->

@@ -111,9 +111,9 @@ internal class UsbOutputCoordinator(
     /** Output identity and delivery are separate: opening or retaining a session alone is not ACTIVE. */
     private var directOutputOpened = false
     @Volatile private var directSourceGeneration = 0L
-    private var directOutputToken: Any? = null
-    private var directOutputPeriod: Any? = null
-    private var directOutputActive = false
+
+    /** Main thread: the sources the route reported since the current output instance opened. */
+    private val directSources = mutableListOf<DirectSource>()
     private var returnTarget: UsbOutputMode? = null
 
     /**
@@ -170,18 +170,28 @@ internal class UsbOutputCoordinator(
         audioManager.registerAudioDeviceCallback(deviceCallback, mainHandler)
         directRoute?.let { route ->
             route.listener = object : DirectUsbRoute.Listener {
-                override fun onOutputOpened(periodUid: Any, output: Any) {
+                override fun onOutputOpened(periodUid: Any, output: Any, follows: Any?) {
                     if (closed || !directPath || player.currentTimeline.getIndexOfPeriod(periodUid) == C.INDEX_UNSET) return
-                    directOutputToken = output
-                    directOutputPeriod = periodUid
-                    directOutputActive = false
+                    val predecessor = directSources.lastOrNull { it.token === follows }.takeIf { directOutputOpened }
+                    // A new output comes only after Media3 released the previous one. A reused output
+                    // keeps the source it continues and any that is still playing.
+                    if (predecessor == null) {
+                        directSources.clear()
+                    } else {
+                        directSources.retainAll { it === predecessor || it.delivering }
+                    }
+                    directSources += DirectSource(output, periodUid, predecessor?.token, predecessor?.period)
                     directOutputOpened = true
                     publishDirectActiveIfPlaying()
                 }
 
                 override fun onOutputActive(periodUid: Any, output: Any, active: Boolean) {
-                    if (closed || directOutputToken !== output || directOutputPeriod != periodUid) return
-                    directOutputActive = active
+                    val source = directSources.lastOrNull { it.token === output }
+                    if (closed || source == null || source.period != periodUid) return
+                    // One source plays at a time; the output reports a successor before its predecessor retires.
+                    if (active) directSources.forEach { it.delivering = false }
+                    source.delivering = active
+                    if (active) source.delivered = true
                     publishDirectActiveIfPlaying()
                 }
 
@@ -193,7 +203,7 @@ internal class UsbOutputCoordinator(
                         if (periodUid != null && sourceGeneration != directSourceGeneration &&
                             player.currentTimeline.getIndexOfPeriod(periodUid) != player.currentPeriodIndex) return@post
                         if (periodUid != null && player.currentTimeline.getIndexOfPeriod(periodUid) == C.INDEX_UNSET) return@post
-                        if (output != null && output !== directOutputToken) return@post
+                        if (output != null && directSources.none { it.token === output }) return@post
                         val (reason, code) = failure.toStrictFailure()
                         failClosed(reason, code, expectedGeneration = generation, directDetails = details)
                     }
@@ -255,10 +265,10 @@ internal class UsbOutputCoordinator(
         directSourceGeneration++
         val timeline = player?.currentTimeline
         val currentPeriod = if (timeline == null || timeline.isEmpty) null else timeline.getUidOfPeriod(checkNotNull(player).currentPeriodIndex)
-        if (directOutputPeriod != currentPeriod) {
-            directOutputToken = null
-            directOutputActive = false
-        }
+        val natural = reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO || reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT
+        // A natural change keeps the previous item's source while its tail still plays, and the next
+        // ones whose frames have not arrived yet. Other changes keep only the current item's sources.
+        directSources.removeAll { it.period != currentPeriod && (!natural || it.delivered && !it.delivering) }
         updateSource(mediaItem)
         if (returnTarget != null) return
         // The own output checks every item where its PCM begins (#282) and keeps the DAC between
@@ -370,8 +380,7 @@ internal class UsbOutputCoordinator(
         if (reason == Player.DISCONTINUITY_REASON_SEEK || reason == Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT ||
             reason == Player.DISCONTINUITY_REASON_REMOVE) {
             directRoute?.invalidateOutput()
-            directOutputToken = null
-            directOutputActive = false
+            directSources.clear()
             publishDirectActiveIfPlaying()
         }
     }
@@ -380,7 +389,7 @@ internal class UsbOutputCoordinator(
         if (directOutputOpened && playbackState == player?.playbackState &&
             (playbackState == Player.STATE_IDLE || playbackState == Player.STATE_ENDED)) {
             directRoute?.invalidateOutput()
-            directOutputActive = false
+            directSources.clear()
             publishDirectActiveIfPlaying()
         }
     }
@@ -1259,8 +1268,7 @@ internal class UsbOutputCoordinator(
         val generation = synchronized(lock) {
             mode = UsbOutputMode.STRICT_BIT_PERFECT
             directPath = false
-            directOutputOpened = false
-            directOutputActive = false
+            directOutputOpened = false // The next output starts a new list of sources.
             resumeAfterConfiguration = resume
             configurationOrigin = origin
             ++configurationGeneration
@@ -1433,7 +1441,12 @@ internal class UsbOutputCoordinator(
         val activePlayer = player ?: return
         val timeline = activePlayer.currentTimeline
         val period = if (timeline.isEmpty) null else timeline.getUidOfPeriod(activePlayer.currentPeriodIndex)
-        val active = directOutputOpened && directOutputActive && directOutputPeriod == period &&
+        val playing = directSources.lastOrNull { it.delivering }
+        // At a natural change Media3 and the delivered position pass the boundary a few milliseconds
+        // apart, in either order. Either way one item hands over to the next without a gap (A1, #314).
+        val delivering = playing != null && (playing.period == period || playing.followsPeriod == period ||
+            directSources.any { it.followsToken === playing.token && it.period == period })
+        val active = directOutputOpened && delivering &&
             activePlayer.playWhenReady && activePlayer.playbackState != Player.STATE_IDLE && activePlayer.playbackState != Player.STATE_ENDED
         publishDirect(
             if (active) UsbOutputPhase.ACTIVE else UsbOutputPhase.APPLYING,
@@ -1694,6 +1707,15 @@ private data class RoutingAttachment(
     val output: StrictGatedAudioOutput?,
     val listener: AudioRouting.OnRoutingChangedListener?,
 )
+
+/**
+ * One playlist item's PCM on the own output, as the route reports it. A reused output names the
+ * source it continues ([followsToken], kept by token so finished sources do not chain up).
+ */
+private class DirectSource(val token: Any, val period: Any, val followsToken: Any?, val followsPeriod: Any?) {
+    var delivering = false
+    var delivered = false
+}
 
 private data class FailedOutputState(
     val device: AudioDeviceInfo?,
