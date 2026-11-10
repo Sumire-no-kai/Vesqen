@@ -365,6 +365,7 @@ internal class UsbOutputCoordinator(
     override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
         if (reason == Player.DISCONTINUITY_REASON_SEEK || reason == Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT ||
             reason == Player.DISCONTINUITY_REASON_REMOVE) {
+            directRoute?.invalidateOutput()
             directOutputToken = null
             directOutputActive = false
             publishDirectActiveIfPlaying()
@@ -374,6 +375,7 @@ internal class UsbOutputCoordinator(
     override fun onPlaybackStateChanged(playbackState: Int) {
         if (directOutputOpened && playbackState == player?.playbackState &&
             (playbackState == Player.STATE_IDLE || playbackState == Player.STATE_ENDED)) {
+            directRoute?.invalidateOutput()
             directOutputActive = false
             publishDirectActiveIfPlaying()
         }

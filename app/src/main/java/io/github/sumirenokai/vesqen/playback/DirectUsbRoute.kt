@@ -201,6 +201,9 @@ internal interface DirectUsbRoute {
     /** Playback thread: Media3 is configuring the sink for the item that [config] names (#282). */
     fun onSinkConfigured(config: AudioSink.AudioSinkConfig)
 
+    /** User discontinuities invalidate even output-created notifications still queued on the main thread. */
+    fun invalidateOutput() = Unit
+
     fun inspect(source: SourcePcmFormat): DirectUsbInspection
 
     /** USB Host lists an audio-class device, whether or not Android has an audio route for it (#293). */
@@ -273,6 +276,10 @@ internal class AndroidDirectUsbRoute(
     private var configuringSource: TelemetrySourceFacts? = null
 
     private var configuringPeriodUid: Any? = null
+    @Volatile private var outputGeneration = 0L
+    private var configuringGeneration = 0L
+
+    override fun invalidateOutput() { outputGeneration++ }
 
     @Volatile
     override var streaming = false
@@ -331,6 +338,7 @@ internal class AndroidDirectUsbRoute(
     }
 
     override fun onSinkConfigured(config: AudioSink.AudioSinkConfig) {
+        configuringGeneration = outputGeneration
         configuringPeriodUid = config.mediaPeriodId?.periodUid
         configuringSource = config.mediaPeriodId?.takeIf { !config.timeline.isEmpty }?.let { period ->
             val index = config.timeline.getIndexOfPeriod(period.periodUid).takeIf { it != C.INDEX_UNSET }
@@ -445,22 +453,23 @@ internal class AndroidDirectUsbRoute(
                             source = { configuringSource },
                             onFailure = { failure ->
                                 val details = configuringSource?.toDirectDetails()?.withOffer(target.function)
-                                listener?.onFailed(failure, details, configuringPeriodUid)
+                                if (configuringGeneration == outputGeneration) listener?.onFailed(failure, details, configuringPeriodUid)
                             },
                             listenerFactory = {
                                 val uid = configuringPeriodUid
+                                val generation = outputGeneration
                                 val token = Any()
                                 val details = configuringSource?.toDirectDetails()?.withOffer(target.function)
-                                if (uid != null) main.post { if (session === next) listener?.onOutputOpened(uid, token) }
+                                if (uid != null) main.post { if (session === next && outputGeneration == generation) listener?.onOutputOpened(uid, token) }
                                 object : DirectUsbAudioOutput.PlaybackListener {
                                     override fun onActiveChanged(active: Boolean) {
                                         if (uid != null) main.post {
-                                            if (session === next) listener?.onOutputActive(uid, token, active)
+                                            if (session === next && outputGeneration == generation) listener?.onOutputActive(uid, token, active)
                                         }
                                     }
 
                                     override fun onFailed(failure: DirectUsbFailure) {
-                                        if (session === next) listener?.onFailed(failure, details, uid, token)
+                                        if (session === next && outputGeneration == generation) listener?.onFailed(failure, details, uid, token)
                                     }
                                 }
                             },
