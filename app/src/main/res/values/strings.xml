@@ -74,7 +74,9 @@
     <string name="settings_strict_usb_available">%1$s supports strict output.</string>
     <string name="settings_strict_usb_applying">Preparing strict output for %1$s…</string>
     <string name="settings_strict_usb_active">Active on %1$s, %2$s. Based on Android’s data, not externally verified.</string>
-    <string name="settings_strict_usb_active_direct">Active on %1$s, %2$s. Based on Vesqen’s own configuration and readback of the device, not externally verified.</string>
+    <string name="settings_strict_usb_active_direct">Active on %1$s, %2$s. Based on Vesqen’s own configuration and readback of the device, not externally verified. The volume bar and the volume keys change the hardware volume of %1$s. The phone’s media volume has no effect on this output.</string>
+    <string name="usb_volume_label">DAC volume</string>
+    <string name="usb_volume_state">%1$s decibels</string>
     <string name="settings_strict_usb_failed">Playback stopped: %1$s For normal playback, choose System output.</string>
     <string name="settings_usb_device_unknown">USB audio device</string>
     <string name="settings_format_unknown">format pending</string>

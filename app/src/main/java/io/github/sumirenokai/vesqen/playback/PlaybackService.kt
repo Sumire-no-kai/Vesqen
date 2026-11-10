@@ -129,7 +129,7 @@ class PlaybackService : MediaSessionService() {
             if (controller.packageName != packageName) {
                 return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
             }
-            val player = (session.player as PlayOrderSessionPlayer).exoPlayer
+            val player = session.exoPlayer()
             return when (customCommand.customAction) {
                 UsbOutputSessionContract.SET_MODE_ACTION -> UsbOutputSessionContract.readMode(args)
                     ?.let(::applyUsbOutputMode)
@@ -252,7 +252,12 @@ class PlaybackService : MediaSessionService() {
         val outputStateRepository = (application as VesqenApplication).usbOutputStateRepository
         // M7-4: off in release builds until 2.0.0-beta.1 (`vesqen.directUsb`).
         val directRoute = if (BuildConfig.DIRECT_USB_ENABLED) {
-            AndroidDirectUsbRoute(this, (application as VesqenApplication).directUsbMarkers)
+            AndroidDirectUsbRoute(
+                this,
+                (application as VesqenApplication).directUsbMarkers,
+                (application as VesqenApplication).directUsbVolume,
+                (application as VesqenApplication).directUsbVolumeMemory,
+            )
         } else null
         directUsbRoute = directRoute
         directRoute?.let { route -> (application as VesqenApplication).directUsbReadings.attach(route::readings) }
@@ -314,7 +319,12 @@ class PlaybackService : MediaSessionService() {
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val trackMerges = (application as VesqenApplication).playbackTrackMerges
-        mediaSession = MediaSession.Builder(this, PlayOrderSessionPlayer(player, trackMerges::mergedTrackId))
+        val orderedPlayer = PlayOrderSessionPlayer(player, trackMerges::mergedTrackId)
+        // With the own USB output, the session also reports the DAC's hardware volume (D4).
+        val sessionPlayer = if (directRoute != null) {
+            DeviceVolumeSessionPlayer(orderedPlayer, (application as VesqenApplication).directUsbVolume)
+        } else orderedPlayer
+        mediaSession = MediaSession.Builder(this, sessionPlayer)
             .setBitmapLoader(artworkLoader)
             .setSessionActivity(sessionActivity)
             .setCallback(sessionCallback)
@@ -428,7 +438,8 @@ class PlaybackService : MediaSessionService() {
         playbackStateKeeper?.stop()
         playbackStateKeeper = null
         mediaSession?.run {
-            val exoPlayer = (player as PlayOrderSessionPlayer).exoPlayer
+            val exoPlayer = exoPlayer()
+            (player as? DeviceVolumeSessionPlayer)?.stopReporting()
             exoPlayer.removeListener(playbackListener)
             (application as VesqenApplication).telemetryRuntime.detachPlayer(exoPlayer)
             exoPlayer.release()
@@ -446,4 +457,11 @@ class PlaybackService : MediaSessionService() {
         /** Media3 uses 1001 for the media notification and 20938 for its own stop notification. */
         const val REJECTED_START_NOTIFICATION_ID = 20939
     }
+}
+
+/** The service's ExoPlayer behind the session's player wrappers. */
+@UnstableApi
+private fun MediaSession.exoPlayer(): ExoPlayer {
+    val ordered = (player as? DeviceVolumeSessionPlayer)?.wrappedPlayer ?: player
+    return (ordered as PlayOrderSessionPlayer).exoPlayer
 }

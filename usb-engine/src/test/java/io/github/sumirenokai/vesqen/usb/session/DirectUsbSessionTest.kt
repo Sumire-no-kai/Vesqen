@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.usb.session
 
+import io.github.sumirenokai.vesqen.usb.control.UacVolumeRange
 import io.github.sumirenokai.vesqen.usb.control.UsbControlTransfer
 import io.github.sumirenokai.vesqen.usb.descriptor.UacDescriptorParser
 import io.github.sumirenokai.vesqen.usb.descriptor.UacFunction
@@ -391,6 +392,56 @@ class DirectUsbSessionTest {
     }
 
     @Test
+    fun `a volume change goes to the setting at or below the request and answers the read-back`() {
+        assertNull(session.volumeRange)
+        takeOver()
+        assertEquals(UacVolumeRange(minimum = -15400, maximum = 0, resolution = 154), session.volumeRange)
+        events.clear()
+
+        assertEquals(-5082, setVolume(-5000))
+        assertEquals(0, setVolume(500))
+        assertEquals(-15400, setVolume(-20000))
+        assertEquals(listOf("set volume -5082", "set volume 0", "set volume -15400"), events.filter { it.startsWith("set volume") })
+        assertTrue(session.state is DirectUsbSession.State.Streaming)
+
+        // The release still restores the level from before the takeover, not the user's last one.
+        setVolume(-5000)
+        events.clear()
+        release()
+        assertEquals(listOf("set volume -2560"), events.filter { it.startsWith("set volume") })
+    }
+
+    @Test
+    fun `a refused volume write answers the unchanged level and playback goes on`() {
+        takeOver()
+        device.failVolumeWrites = true
+
+        assertEquals(-15400, setVolume(-5000))
+        assertTrue(session.state is DirectUsbSession.State.Streaming)
+        assertTrue(failures.isEmpty())
+    }
+
+    @Test
+    fun `a volume that cannot be read back after a change fails closed`() {
+        takeOver()
+        device.failVolumeReads = true
+
+        assertNull(setVolume(-5000))
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertEquals(DirectUsbFailure.Reason.VOLUME_CONTROL_FAILED, failures.single().reason)
+    }
+
+    @Test
+    fun `a volume change outside streaming answers nothing and writes nothing`() {
+        assertNull(setVolume(-5000))
+        takeOver()
+        release()
+        events.clear()
+        assertNull(setVolume(-5000))
+        assertFalse(events.any { it.startsWith("set volume") })
+    }
+
+    @Test
     fun `a final packet delivered between Kotlin polls survives an epoch reset`() {
         takeOver()
         val first = checkNotNull(session.openOutput())
@@ -551,6 +602,17 @@ class DirectUsbSessionTest {
         return result.get()
     }
 
+    private fun setVolume(target: Int): Int? {
+        val result = AtomicReference<Int?>()
+        val done = CountDownLatch(1)
+        session.setVolume(target) {
+            result.set(it)
+            done.countDown()
+        }
+        assertTrue(done.await(2, TimeUnit.SECONDS))
+        return result.get()
+    }
+
     private fun release(): Pair<CleanupRecord, DirectUsbFailure?> {
         session.release()
         assertTrue(released.await(2, TimeUnit.SECONDS))
@@ -595,6 +657,9 @@ class DirectUsbSessionTest {
         @Volatile
         var failVolumeWrites = false
 
+        @Volatile
+        var failVolumeReads = false
+
         /** Added to every volume read after the first write, as a device that rounds badly would. */
         @Volatile
         var volumeReadBackOffset = 0
@@ -619,6 +684,7 @@ class DirectUsbSessionTest {
             val control = value shr 8
             return when (requestType) {
                 0xA1 -> {
+                    if (failVolumeReads && control == 0x02 && request == 0x81) return -1
                     val answer = when {
                         control == 0x02 && request == 0x82 -> -15400
                         control == 0x02 && request == 0x83 -> 0

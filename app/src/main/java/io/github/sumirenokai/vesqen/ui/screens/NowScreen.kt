@@ -127,6 +127,7 @@ import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
 import io.github.sumirenokai.vesqen.playback.PlaybackProblem
+import io.github.sumirenokai.vesqen.playback.DirectUsbVolume
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
@@ -252,7 +253,7 @@ internal fun nowTrackAnimationIdentity(
 
 /**
  * Portrait sizing for Now. The page never scrolls (PRD F3): the cover takes what is left after
- * identity, progress, transport and the liner-notes header, up to the content width and at most
+ * identity, progress, transport, the volume bar when there is one, and the liner-notes header, up to the content width and at most
  * 360 dp, and shrinks to at most 164 dp while the notes are open (B spec §4.2). A cover under 64 dp
  * is dropped rather than squeezed. Compact mode is for short windows and very large text. Height
  * the cover cannot use is shared above and below it, so the controls sit at the bottom.
@@ -263,10 +264,15 @@ internal data class NowPortraitLayout(
     val compact: Boolean,
 )
 
-internal fun nowPortraitLayout(height: Dp, width: Dp, fontScale: Float): NowPortraitLayout {
-    val roomy = 236f + 78f * fontScale + maxOf(56f, 46f * fontScale)
+internal fun nowPortraitLayout(height: Dp, width: Dp, fontScale: Float, volumeBar: Boolean = false): NowPortraitLayout {
+    // The own USB output's volume bar is one more fixed row under the transport.
+    val volumeRow = if (volumeBar) DirectUsbVolumeBarHeight.value else 0f
+    val roomy = 236f + 78f * fontScale + maxOf(56f, 46f * fontScale) + volumeRow
     val compact = height.value < roomy + 64f
-    val fixed = if (compact) 164f + 43f * fontScale + maxOf(48f, 40f * fontScale) else roomy
+    // Measured on the compact page (2026-11-10): its rows need 228 + 52 x font scale. The earlier sum was
+    // about 25 dp short at normal text, which squeezed the liner-notes row under a cover.
+    val compactRows = maxOf(164f + 43f * fontScale + maxOf(48f, 40f * fontScale), 228f + 52f * fontScale)
+    val fixed = if (compact) compactRows + volumeRow else roomy
     val available = height.value - fixed
     // Budget the three evidence rows and the claim chip; the rest of the open notes scrolls.
     val notesContent = 3 * maxOf(42f, 38f * fontScale) + 60f * fontScale
@@ -327,6 +333,9 @@ fun NowScreen(
         return
     }
 
+    // Null unless Vesqen's own USB output holds a DAC (D4).
+    val usbVolumeControl = LocalDirectUsbVolume.current
+    val usbVolume = usbVolumeControl?.state?.collectAsStateWithLifecycle()?.value
     var showDetails by rememberSaveable { mutableStateOf(false) }
     var showQueue by rememberSaveable { mutableStateOf(false) }
     var showOutputMode by rememberSaveable { mutableStateOf(false) }
@@ -425,6 +434,8 @@ fun NowScreen(
                     motionPolicy = motionPolicy,
                     actions = actions,
                     height = maxHeight,
+                    usbVolume = usbVolume,
+                    onSetUsbVolume = usbVolumeControl?.let { it::set } ?: {},
                 )
             } else {
                 NowPortraitPage(
@@ -436,6 +447,8 @@ fun NowScreen(
                     telemetry = playbackTelemetry,
                     motionPolicy = motionPolicy,
                     actions = actions,
+                    usbVolume = usbVolume,
+                    onSetUsbVolume = usbVolumeControl?.let { it::set } ?: {},
                 )
             }
             PlaybackOrderFeedback(
@@ -549,6 +562,8 @@ private fun NowPortraitPage(
     telemetry: PlaybackTelemetry?,
     motionPolicy: VesqenMotionPolicy,
     actions: NowActions,
+    usbVolume: DirectUsbVolume?,
+    onSetUsbVolume: (Int) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -565,7 +580,7 @@ private fun NowPortraitPage(
                 .clipToBounds()
                 .padding(horizontal = VesqenSpacing.lg),
         ) {
-            val layout = nowPortraitLayout(maxHeight, maxWidth, LocalDensity.current.fontScale)
+            val layout = nowPortraitLayout(maxHeight, maxWidth, LocalDensity.current.fontScale, volumeBar = usbVolume != null)
             val artworkSize by animateDpAsState(
                 targetValue = if (notesOpen) layout.notesArtwork else layout.artwork,
                 animationSpec = tween(motionPolicy.notesExpandMillis, easing = PaperEasing),
@@ -641,6 +656,7 @@ private fun NowPortraitPage(
                     motionPolicy = motionPolicy,
                     modifier = Modifier.padding(top = VesqenSpacing.xs),
                 )
+                if (usbVolume != null) DirectUsbVolumeBar(usbVolume, onSetUsbVolume)
                 NowLinerNotes(
                     snapshot = snapshot,
                     currentTrack = currentTrack,
@@ -655,6 +671,8 @@ private fun NowPortraitPage(
     }
 }
 
+private val LANDSCAPE_VOLUME_BAR_MIN_HEIGHT = 360.dp
+
 /** Landscape keeps the cover beside the controls; open notes take the cover's place. */
 @Composable
 private fun NowLandscapePage(
@@ -667,8 +685,12 @@ private fun NowLandscapePage(
     motionPolicy: VesqenMotionPolicy,
     actions: NowActions,
     height: Dp,
+    usbVolume: DirectUsbVolume?,
+    onSetUsbVolume: (Int) -> Unit,
 ) {
     val compressed = LocalDensity.current.fontScale >= 1.5f || height < 320.dp
+    // A short landscape window has no room for one more row; the volume keys still change the level.
+    val volumeBar = usbVolume?.takeIf { !compressed && height >= LANDSCAPE_VOLUME_BAR_MIN_HEIGHT }
     Row(
         modifier = Modifier
             .fillMaxSize()
@@ -736,6 +758,7 @@ private fun NowLandscapePage(
                 motionPolicy = motionPolicy,
                 modifier = Modifier.widthIn(max = 400.dp),
             )
+            if (volumeBar != null) DirectUsbVolumeBar(volumeBar, onSetUsbVolume, Modifier.widthIn(max = 400.dp))
             NowLinerNotesHeader(
                 currentTrack = currentTrack,
                 snapshot = snapshot,
