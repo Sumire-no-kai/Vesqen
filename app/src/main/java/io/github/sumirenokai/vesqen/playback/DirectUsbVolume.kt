@@ -60,6 +60,13 @@ class DirectUsbVolumeControl {
     @Volatile
     private var setter: ((Int) -> Unit)? = null
 
+    /**
+     * The last level asked for that the device has not answered yet. A key press builds on it, so
+     * presses that come faster than the read-backs add up instead of all starting from the same level.
+     */
+    @Volatile
+    private var requested: Int? = null
+
     /** Main thread: the session's player, which reports the volume to the media session. */
     @Volatile
     internal var onChanged: ((DirectUsbVolume?) -> Unit)? = null
@@ -75,8 +82,12 @@ class DirectUsbVolumeControl {
         publish(null)
     }
 
-    /** Main thread. */
-    internal fun publish(volume: DirectUsbVolume?) {
+    /**
+     * Main thread. [settled] is false while the route still has a newer request for the device; once it
+     * has none, the read-back is the level the next key press starts from, whatever was asked for.
+     */
+    internal fun publish(volume: DirectUsbVolume?, settled: Boolean = true) {
+        if (settled || volume == null) requested = null
         if (mutableState.value == volume) return
         mutableState.value = volume
         onChanged?.invoke(volume)
@@ -84,13 +95,15 @@ class DirectUsbVolumeControl {
 
     /** Asks for [target] (1/256 dB); the device's answer arrives through [state]. */
     fun set(target: Int) {
-        setter?.invoke(target)
+        val send = setter ?: return
+        requested = target
+        send(target)
     }
 
     /** [presses] volume-key presses, up when positive. False while there is no volume to change. */
     fun pressKeys(presses: Int, shown: Boolean = true): Boolean {
         val volume = mutableState.value ?: return false
-        set(volume.afterKeys(presses))
+        set(volume.copy(current = (requested ?: volume.current).coerceIn(volume.minimum, volume.maximum)).afterKeys(presses))
         if (shown) mutableKeyPresses.value += 1
         return true
     }

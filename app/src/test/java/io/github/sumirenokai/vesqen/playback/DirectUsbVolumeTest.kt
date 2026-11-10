@@ -75,7 +75,7 @@ class DirectUsbVolumeTest {
         assertTrue(control.pressKeys(1))
         assertTrue(control.pressKeys(-1, shown = false))
         control.set(-5000)
-        assertEquals(listOf(-7238, -8162, -5000), asked)
+        assertEquals("An up and a down press end where they began", listOf(-7238, -7700, -5000), asked)
         assertEquals("Only the press the UI should show is counted", 1L, control.keyPresses.value)
 
         // A route that is no longer the attached one ends nothing.
@@ -84,6 +84,39 @@ class DirectUsbVolumeTest {
         control.detach(setter)
         assertNull(control.state.value)
         assertFalse(control.pressKeys(1))
+    }
+
+    @Test
+    fun `key presses add up while the device has not answered the one before`() {
+        val control = DirectUsbVolumeControl()
+        val asked = mutableListOf<Int>()
+        control.attach { asked += it }
+        control.publish(jbl)
+
+        // A held key: the second press comes before the first read-back.
+        control.pressKeys(1)
+        control.pressKeys(1)
+        assertEquals(listOf(-7238, -6776), asked)
+        // The first read-back arrives while the second request still waits: the next press builds on the request.
+        control.publish(jbl.copy(current = -7238), settled = false)
+        control.pressKeys(1)
+        assertEquals(-6314, asked.last())
+
+        // Once the device has answered the last request, its read-back is the base again, whatever was asked.
+        control.publish(jbl.copy(current = -6468), settled = true)
+        control.pressKeys(1)
+        assertEquals(-6006, asked.last())
+
+        // A refused write settles on the unchanged level, so the next press asks for the same step again.
+        control.publish(jbl.copy(current = -6468), settled = true)
+        control.pressKeys(1)
+        assertEquals(-6006, asked.last())
+
+        // A press right after a slider request builds on that request, and never leaves the range.
+        control.set(-300)
+        control.pressKeys(1)
+        control.pressKeys(1)
+        assertEquals(listOf(-300, 0, 0), asked.takeLast(3))
     }
 
     @Test
@@ -157,7 +190,7 @@ class DirectUsbVolumeTest {
         sessionPlayer.decreaseDeviceVolume(0)
         sessionPlayer.setDeviceVolume(34, 0)
         sessionPlayer.setDeviceMuted(true, 0)
-        assertEquals(listOf(-7238, -8162, 0), asked)
+        assertEquals(listOf(-7238, -7700, 0), asked)
         assertEquals("A session key press is not shown by the app's overlay", 0L, control.keyPresses.value)
 
         // Less than one key step is no new index for the session.

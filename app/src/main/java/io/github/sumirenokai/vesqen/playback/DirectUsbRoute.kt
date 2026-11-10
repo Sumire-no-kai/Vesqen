@@ -251,7 +251,11 @@ internal class AndroidDirectUsbRoute(
 
     /** Main thread: one volume request goes to the device at a time, and only the newest waits. */
     private var volumeInFlight = false
-    private val volumeSetter: (Int) -> Unit = { target -> main.post { setVolume(target) } }
+    // At once on the main thread, so a request counts as waiting before the read-back of the one before
+    // it settles the control's level (key presses and read-backs both arrive there).
+    private val volumeSetter: (Int) -> Unit = { target ->
+        if (Looper.myLooper() == main.looper) setVolume(target) else main.post { setVolume(target) }
+    }
     private var volumeWaiting: Int? = null
 
     @Volatile
@@ -487,15 +491,14 @@ internal class AndroidDirectUsbRoute(
         facts.session.setVolume(target) { readBack ->
             main.post {
                 volumeInFlight = false
+                val waiting = volumeWaiting
+                volumeWaiting = null
                 if (streamingFacts === facts && readBack != null) {
                     facts.volume = readBack
-                    volumes.state.value?.let { volumes.publish(it.copy(current = readBack)) }
+                    volumes.state.value?.let { volumes.publish(it.copy(current = readBack), settled = waiting == null) }
                     volumeMemory.remember(facts.device, readBack)
                 }
-                volumeWaiting?.let { waiting ->
-                    volumeWaiting = null
-                    setVolume(waiting)
-                }
+                if (waiting != null) setVolume(waiting)
             }
         }
     }
