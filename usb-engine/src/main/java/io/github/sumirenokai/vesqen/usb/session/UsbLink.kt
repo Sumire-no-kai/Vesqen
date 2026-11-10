@@ -9,6 +9,7 @@ import io.github.sumirenokai.vesqen.usb.control.UsbControlTransfer
 interface UsbLink {
     /** Lent to the native stream, so [close] must wait until the stream is destroyed. */
     val permissionGranted: Boolean get() = true
+    val connected: Boolean get() = true
     val fileDescriptor: Int
     val control: UsbControlTransfer
 
@@ -27,8 +28,10 @@ class AndroidUsbLink(
     private val device: UsbDevice,
     private val connection: UsbDeviceConnection,
     private val permission: () -> Boolean = { true },
+    private val connectionPresent: () -> Boolean = { true },
 ) : UsbLink {
     override val permissionGranted: Boolean get() = permission()
+    override val connected: Boolean get() = connectionPresent()
     override val fileDescriptor: Int get() = connection.fileDescriptor
 
     override val control = UsbControlTransfer { requestType, request, value, index, buffer, length, timeoutMs ->

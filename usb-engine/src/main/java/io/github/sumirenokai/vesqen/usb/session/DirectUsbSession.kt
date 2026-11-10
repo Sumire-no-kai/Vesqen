@@ -125,6 +125,7 @@ class DirectUsbSession(
     private var newestEpochTaken = false
     private var retiredAtNanos: Long? = null
     @Volatile private var finalTotals = UsbStreamTotals.NONE
+    @Volatile private var finalStats: UsbStreamStats? = null
     private val releaseCallbacks = mutableListOf<(CleanupRecord) -> Unit>()
 
     fun totals(): UsbStreamTotals = stream?.readStats()?.sessionTotals ?: finalTotals
@@ -283,6 +284,7 @@ class DirectUsbSession(
     private fun check() {
         if (state !is State.Streaming) return
         val permission = try { link.permissionGranted } catch (_: SecurityException) { false }
+        if (!link.connected) return fail(DirectUsbFailure(Reason.DEVICE_DISCONNECTED, "the device was detached"))
         if (!permission) return fail(DirectUsbFailure(Reason.USB_PERMISSION_REVOKED, "USB access was revoked"))
         val stats = stream?.readStats() ?: return
         stats.asFailure()?.let { return fail(it) }
@@ -320,7 +322,8 @@ class DirectUsbSession(
                 }
                 return
             }
-            finalTotals = current.readStats()?.sessionTotals ?: UsbStreamTotals.NONE
+            finalStats = current.readStats()
+            finalTotals = finalStats?.sessionTotals ?: UsbStreamTotals.NONE
             stream = null
             cleanupSteps += CleanupStep("stream reclaimed", true)
         }
@@ -397,7 +400,7 @@ class DirectUsbSession(
             if (!released) stream?.markEndOfStream(epoch)
         }
 
-        override fun readStats(): UsbStreamStats? = stream?.readStats()?.takeIf { it.epoch == epoch }
+        override fun readStats(): UsbStreamStats? = (stream?.readStats() ?: finalStats)?.takeIf { it.epoch == epoch }
 
         override val failure: DirectUsbFailure?
             get() = when (val current = state) {

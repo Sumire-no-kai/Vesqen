@@ -1063,4 +1063,5 @@
     <string name="lyrics_source_unreadable">無法讀取</string>
     <string name="usb_recovery_in_progress">正在恢復 USB 裝置及接管前的音量。恢復完成後才能開始播放。</string>
     <string name="usb_failure_permission_revoked">USB 存取權限已被撤銷。播放已停止，正在歸還裝置。</string>
+    <string name="usb_output_interrupted">嚴格 USB 輸出已暫時停止，正在等待通話結束或音訊焦點恢復。</string>
 </resources>
