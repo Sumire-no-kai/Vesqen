@@ -343,6 +343,7 @@
     <string name="player_keep_strict_output">厳格モードのままにする</string>
     <string name="chain_core_source">01 · ソースファイル</string>
     <string name="chain_core_output">02 · システムに渡す形式</string>
+    <string name="now_notes_handoff_direct">02 · DAC へ送る形式</string>
     <string name="chain_core_route">03 · 出力と安定性</string>
     <string name="unavailable">利用不可</string>
     <string name="library_songs">曲</string>
@@ -922,6 +923,11 @@
     <string name="chain_segment_unchanged_lossless">再生開始、シーク、形式の切り替えの直後 20 ミリ秒のフェードインを除き、音声は変更していません。ロスレスです。</string>
     <string name="chain_segment_unchanged_lossy">再生開始、シーク、形式の切り替えの直後 20 ミリ秒のフェードインを除き、音声に追加の変更は加えていません。</string>
     <string name="chain_segment_unchanged">再生開始、シーク、形式の切り替えの直後 20 ミリ秒のフェードインを除き、音声は変更していません。</string>
+    <string name="chain_segment_unchanged_lossless_direct">音声は変更していません。ロスレスです。</string>
+    <string name="chain_segment_unchanged_lossy_direct">音声に追加の変更は加えていません。</string>
+    <string name="chain_segment_unchanged_direct">音声は変更していません。</string>
+    <string name="chain_segment_zero_padded">元のファイルは %1$d ビットです。DAC へ送る際に各サンプルの下位ビットをゼロで埋めて %2$d ビットに拡張しており、サンプルが表すレベルは変わりません。これによりビット深度の異なる曲で DAC の同じ設定を共有でき、曲を切り替えるたびに DAC を設定し直す必要がありません。</string>
+    <string name="chain_segment_with_note">%1$s%2$s</string>
     <string name="chain_segment_modified">音声を変更しています（%1$s）。</string>
     <string name="chain_segment_unknown">まだ判断できません（%1$s）。</string>
     <string name="chain_segment_reason_transition">曲の切り替えか出力の再起動の直後</string>

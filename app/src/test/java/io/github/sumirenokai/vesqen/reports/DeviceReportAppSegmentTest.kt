@@ -40,6 +40,23 @@ class DeviceReportAppSegmentTest {
         }
     }
 
+    @Test fun `the own output's local readings never appear in the report's verdict`() {
+        val baseline = snapshot()
+        fun local(id: TelemetryMetricId, value: Long, unit: TelemetryUnit) =
+            TelemetryMetric(id, Metrics.descriptor(id).section, TelemetryEvidence.Measured(TelemetryReading.Integer(value, unit), source, 1_000))
+        val ownOutput = baseline.copy(metrics = baseline.metrics + listOf(
+            local(Metrics.USB_DIRECT_WIRE_SAMPLE_RATE, 44_100, TelemetryUnit.HERTZ),
+            local(Metrics.USB_DIRECT_WIRE_BIT_DEPTH, 24, TelemetryUnit.BITS),
+            local(Metrics.USB_DIRECT_WIRE_CHANNELS, 2, TelemetryUnit.COUNT),
+        ))
+        val segment = DeviceReportPrivacy.document(reportData().copy(telemetry = ownOutput), DeviceReportOptions(chainEvidence = true))
+            .getValue("appSegment") as Map<*, *>
+        val named = (segment["checks"] as List<*>).flatMap { (it as Map<*, *>)["metricIds"] as List<*> }
+        assertTrue(named.toString(), named.none { it.toString().startsWith("usb.direct_") })
+        // The verdict is the one the exportable evidence supports: the same as without the local readings.
+        assertEquals(deviceReportAppSegment(baseline), segment)
+    }
+
     @Test fun `modified unavailable estimated missing and transition reasons survive without event text`() {
         val baseline = snapshot()
         val variants = listOf(

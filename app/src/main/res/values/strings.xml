@@ -349,6 +349,7 @@
     <string name="player_keep_strict_output">Keep strict output</string>
     <string name="chain_core_source">01 · Source file</string>
     <string name="chain_core_output">02 · Sent to Android</string>
+    <string name="now_notes_handoff_direct">02 · Sent to the DAC</string>
     <string name="chain_core_route">03 · Output and stability</string>
     <string name="unavailable">Unavailable</string>
     <string name="library_songs">Songs</string>
@@ -947,6 +948,11 @@
     <string name="chain_segment_unchanged_lossless">Audio unchanged and lossless, except for a 20 ms fade-in after starting, seeking or changing format.</string>
     <string name="chain_segment_unchanged_lossy">No further changes to the audio, except for a 20 ms fade-in after starting, seeking or changing format.</string>
     <string name="chain_segment_unchanged">Audio unchanged, except for a 20 ms fade-in after starting, seeking or changing format.</string>
+    <string name="chain_segment_unchanged_lossless_direct">Audio unchanged and lossless.</string>
+    <string name="chain_segment_unchanged_lossy_direct">No further changes to the audio.</string>
+    <string name="chain_segment_unchanged_direct">Audio unchanged.</string>
+    <string name="chain_segment_zero_padded">The file is %1$d-bit. On the way to the DAC each sample is padded with zeros in its low bits to %2$d bits, which keeps the level it represents. Tracks of different bit depths can then share one DAC setting, so the DAC does not need to be set again when the track changes.</string>
+    <string name="chain_segment_with_note">%1$s %2$s</string>
     <string name="chain_segment_modified">Audio changed: %1$s.</string>
     <string name="chain_segment_unknown">Not yet determined: %1$s.</string>
     <string name="chain_segment_reason_transition">a track change or output restart is in progress</string>
