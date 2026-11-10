@@ -1174,6 +1174,83 @@ class UsbOutputCoordinatorTest {
     }
 
     @Test
+    fun `the Android route returning before USB cleanup acknowledges cannot strand system playback`() {
+        reachDirectActive()
+        direct.deferTakeover = true
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        val released = checkNotNull(direct.pendingRelease)
+        shadowOf(audioManager).addOutputDevice(audioDevice(id = 12), true)
+        idle()
+        released(true)
+        idle()
+        assertStatus(UsbOutputPhase.SYSTEM, "system_audio_route")
+        assertTrue(player.playWhenReady)
+    }
+
+    @Test
+    fun `selecting system during an official handoff shares the pending device release`() {
+        beginHostOnlyTakeover()
+        mixer.profiles[dac.id] = Result.success(listOf(MIXER_48K_16))
+        shadowOf(audioManager).addOutputDevice(dac, true)
+        idle()
+        val released = checkNotNull(direct.pendingRelease)
+        direct.recoveryPending = true
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        assertStatus(UsbOutputPhase.APPLYING, "direct_usb.returning_to_system")
+        assertEquals(1, direct.calls.count { it == "release" })
+        direct.recoveryPending = false
+        released(true)
+        idle()
+        assertStatus(UsbOutputPhase.SYSTEM, "system_audio_route")
+        assertTrue(player.playWhenReady)
+    }
+
+    @Test
+    fun `a first buffer error is applied after the route posts output creation`() {
+        reachDirectActive()
+        val period = player.currentTimeline.getUidOfPeriod(player.currentPeriodIndex)
+        val token = Any()
+        val listener = checkNotNull(direct.listener)
+        Handler(Looper.getMainLooper()).post { listener.onOutputOpened(period, token) }
+        Thread {
+            listener.onFailed(DirectUsbFailure(DirectUsbFailure.Reason.PCM_NOT_EXACT, "first buffer"), periodUid = period, output = token)
+        }.also { it.start(); it.join() }
+        idle()
+        assertEquals("direct_usb.pcm_not_exact", status().decisionCode)
+        assertEquals(UsbOutputPhase.FAILED, status().phase)
+    }
+
+    @Test
+    fun `a system request can join cleanup already started after a failure`() {
+        val releases = PendingUsbReleases()
+        val results = mutableListOf<Boolean>()
+        releases.begin() // The failed session was released before the user selected system.
+        releases.await(results::add)
+        assertTrue(releases.pending)
+        assertTrue(results.isEmpty())
+        releases.complete(true)
+        assertFalse(releases.pending)
+        assertEquals(listOf(true), results)
+    }
+
+    @Test
+    fun `all outstanding sessions must finish before a waiting release is acknowledged`() {
+        val releases = PendingUsbReleases()
+        val results = mutableListOf<Boolean>()
+        releases.begin()
+        releases.begin()
+        releases.await(results::add)
+        releases.complete(false)
+        assertTrue(results.isEmpty())
+        releases.complete(true)
+        assertEquals(listOf(false), results)
+        releases.begin()
+        releases.await(results::add)
+        releases.complete(true)
+        assertEquals(listOf(false, true), results)
+    }
+
+    @Test
     fun `failed release prevents system output`() {
         reachDirectActive()
         direct.deferTakeover = true

@@ -32,6 +32,7 @@ struct IsoPacket {
     uint32_t actualLength = 0;
     int32_t status = 0;
     uint32_t mediaFrames = 0;
+    int64_t mediaEndFrame = 0;  // Exclusive end of this packet in the epoch's media sequence.
 };
 
 struct IsoUrb {
@@ -91,6 +92,7 @@ enum Stat : size_t {
     kStatTotalUnderruns,
     kStatTotalPacketsFailed,
     kStatTotalMediaFramesDelivered,
+    kStatLastDeliveredMediaFrame,
     kStatCount,
 };
 

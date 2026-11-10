@@ -138,7 +138,7 @@ class DirectUsbAudioOutput(
         // Null until the stream reached this output's epoch: none of its audio has gone out yet.
         val stats = target.readStats() ?: return 0
         stats.asFailure()?.let(::report)
-        reportActive(!released && running && !failureReported && stats.mediaFramesDelivered > sourceStartFrames)
+        reportActive(!released && running && !failureReported && stats.lastDeliveredMediaFrame > sourceStartFrames)
         val frames = clock.positionFrames(stats.mediaFramesProcessed, stats.mediaFramesSubmitted, running, nanoTime())
         return Util.sampleCountToDurationUs(frames, plan.sampleRateHz)
     }

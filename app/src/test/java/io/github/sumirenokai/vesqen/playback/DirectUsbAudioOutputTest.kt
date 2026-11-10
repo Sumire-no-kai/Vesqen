@@ -52,7 +52,13 @@ class DirectUsbAudioOutputTest {
         var ended = false
         var acknowledged = true
         var processed = 0L
+        var lastDeliveredMediaFrame = 0L
         var delivered = 0L
+            set(value) {
+                if (value > field) lastDeliveredMediaFrame = value + lost
+                field = value
+            }
+        var lost = 0L
         var submitted = 0L
         var streamFailure = UsbStreamStats.Failure.NONE
         var releases = 0
@@ -84,7 +90,8 @@ class DirectUsbAudioOutputTest {
                 mediaFramesSubmitted = submitted,
                 mediaFramesProcessed = processed,
                 mediaFramesDelivered = delivered,
-                mediaFramesLost = 0,
+                mediaFramesLost = lost,
+                lastDeliveredMediaFrame = lastDeliveredMediaFrame,
                 silenceFramesInserted = 0,
                 usbFramesDelivered = 0,
                 underruns = 0,
@@ -106,6 +113,15 @@ class DirectUsbAudioOutputTest {
 
     @Test
     fun `delivery events exclude prefill and old frames after a source boundary`() {
+        assertSourceBoundaryDelivery(lostFrames = 0)
+    }
+
+    @Test
+    fun `a delivered next track is active even after a packet of the previous track was lost`() {
+        assertSourceBoundaryDelivery(lostFrames = 48)
+    }
+
+    private fun assertSourceBoundaryDelivery(lostFrames: Long) {
         val handle = FakeHandle()
         val events = mutableListOf<Pair<Int, Boolean>>()
         var source = 1
@@ -123,13 +139,14 @@ class DirectUsbAudioOutputTest {
         handle.delivered = 1
         output.positionUs
         assertEquals(listOf(1 to true), events)
+        handle.lost = lostFrames
         source = 2
         val config = AudioOutputProvider.OutputConfig.Builder()
             .setSampleRate(48000).setEncoding(C.ENCODING_PCM_16BIT).setChannelMask(12).setBufferSize(96000).build()
         val format = Format.Builder().setSampleMimeType(MimeTypes.AUDIO_RAW)
             .setSampleRate(48000).setChannelCount(2).setPcmEncoding(C.ENCODING_PCM_16BIT).build()
         assertTrue(output.canReuseAudioOutput(config, AudioOutputProvider.FormatConfig.Builder(format).build(), config))
-        handle.delivered = prefillFrames.toLong()
+        handle.delivered = prefillFrames.toLong() - handle.lost
         output.positionUs
         assertEquals(listOf(1 to true, 1 to false), events)
         output.write(pcm(1), 1, 0)

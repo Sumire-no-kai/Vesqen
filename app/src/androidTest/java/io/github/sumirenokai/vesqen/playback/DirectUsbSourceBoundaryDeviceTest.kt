@@ -35,7 +35,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * #282 with a real Media3 queue: two FLAC tracks of different depths decode to the same float
+ * #282 with a real Media3 queue: two FLAC tracks of equal or different depths decode to the same float
  * format, so the strict sink keeps one own output across the natural change. Every byte that
  * reaches the USB handle must be the source sample at the top of a 24-bit subslot.
  *
@@ -58,6 +58,9 @@ internal class DirectUsbSourceBoundaryDeviceTest {
     @Test
     fun aSixteenBitTrackAfterATwentyFourBitOne() = naturalChange(firstBits = 24, secondBits = 16)
 
+    @Test
+    fun twoSixteenBitTracksKeepSeparateDeliveryEvidence() = naturalChange(firstBits = 16, secondBits = 16)
+
     private fun naturalChange(firstBits: Int, secondBits: Int) {
         val first = PcmFixture(PcmContainer.FLAC, 48_000, firstBits, DURATION_MS, seed = 1)
         val second = PcmFixture(PcmContainer.FLAC, 48_000, secondBits, DURATION_MS, seed = 2)
@@ -65,6 +68,8 @@ internal class DirectUsbSourceBoundaryDeviceTest {
         val handle = RecordingHandle()
         val failures = mutableListOf<DirectUsbFailure>()
         var outputsOpened = 0
+        var period: Any? = null
+        val activePeriods = linkedSetOf<Any?>()
         var source: TelemetrySourceFacts? = null
         val provider = DirectUsbAudioOutputProvider(
             PLAN,
@@ -74,8 +79,17 @@ internal class DirectUsbSourceBoundaryDeviceTest {
             },
             source = { source },
             onFailure = { failures += it },
+            listenerFactory = {
+                val outputPeriod = period
+                object : DirectUsbAudioOutput.PlaybackListener {
+                    override fun onActiveChanged(active: Boolean) {
+                        if (active) activePeriods += outputPeriod
+                    }
+                    override fun onFailed(failure: DirectUsbFailure) { failures += failure }
+                }
+            },
         )
-        val sink = StrictPcmAudioSink(provider)
+        val sink = StrictPcmAudioSink(provider) { period = it.mediaPeriodId?.periodUid }
         val renderers = RenderersFactory { handler: Handler, _, audioListener, _, _ ->
             arrayOf(
                 object : MediaCodecAudioRenderer(context, MediaCodecSelector.DEFAULT, handler, audioListener, sink) {
@@ -118,6 +132,7 @@ internal class DirectUsbSourceBoundaryDeviceTest {
             assertEquals("Own-output failures", emptyList<DirectUsbFailure.Reason>(), failures.map { it.reason })
             assertNull("Player error, caused by ${error.get()?.cause}", error.get())
             assertEquals("Both tracks share one output and its USB session", 1, outputsOpened)
+            assertEquals("Delivery for both playlist periods", 2, activePeriods.filterNotNull().size)
             assertArrayEquals(wire(first) + wire(second), handle.received.toByteArray())
         } finally {
             onThread(thread) { player.release() }

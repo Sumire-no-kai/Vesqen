@@ -174,10 +174,10 @@ private fun SampleRates.ranges(): List<IntRange> = when (this) {
 @UnstableApi
 internal interface DirectUsbRoute {
     interface Listener {
-        /** Media3 opened an output on the session. Called on the playback thread. */
+        /** The route has posted a new output to the main thread. Register it before the next failure callback. */
         fun onOutputOpened(periodUid: Any, output: Any = periodUid) = Unit
 
-        /** Media delivery, pause and retirement, bound to the output that observed them. */
+        /** Main thread: media delivery, pause and retirement, bound to the output that observed them. */
         fun onOutputActive(periodUid: Any, output: Any = periodUid, active: Boolean) = Unit
 
         /**
@@ -224,6 +224,30 @@ internal interface DirectUsbRoute {
     fun close()
 }
 
+/** Main-thread release barrier. The route drops a session before its control thread finishes cleanup. */
+internal class PendingUsbReleases {
+    private var outstanding = 0
+    private var allSucceeded = true
+    private val waiting = mutableListOf<(Boolean) -> Unit>()
+    val pending: Boolean get() = outstanding > 0
+
+    fun begin() { outstanding++ }
+
+    fun await(callback: (Boolean) -> Unit) {
+        if (pending) waiting += callback else callback(true)
+    }
+
+    fun complete(succeeded: Boolean) {
+        allSucceeded = allSucceeded && succeeded
+        if (--outstanding > 0) return
+        val result = allSucceeded
+        allSucceeded = true
+        val callbacks = waiting.toList()
+        waiting.clear()
+        callbacks.forEach { it(result) }
+    }
+}
+
 /**
  * The production route. It looks at `UsbManager` itself on every inspection rather than trusting
  * what an event said, keeps one connection from inspection to release, and starts at the D4
@@ -242,6 +266,7 @@ internal class AndroidDirectUsbRoute(
 
     private class Prepared(val device: UsbDevice, val connection: UsbDeviceConnection, val function: UacFunction, val plan: StreamingPlan)
 
+    private val releases = PendingUsbReleases()
     private var prepared: Prepared? = null
     @Volatile
     private var session: DirectUsbSession? = null
@@ -348,7 +373,7 @@ internal class AndroidDirectUsbRoute(
         }
     }
 
-    override val recoveryPending: Boolean get() = markers.isOccupied()
+    override val recoveryPending: Boolean get() = releases.pending || markers.isOccupied()
 
     override fun hasUsbAudioDevice(): Boolean = usbManager.deviceList.values.any(UsbDevice::isUsbAudioDevice)
 
@@ -539,15 +564,12 @@ internal class AndroidDirectUsbRoute(
         val held = prepared
         prepared = null
         if (current != null) {
-            if (onReleased == null) {
-                current.release()
-            } else {
-                current.release { cleanup -> main.post { onReleased(cleanup.firstFailure == null) } }
-            }
+            releases.begin()
+            current.release { cleanup -> main.post { releases.complete(cleanup.firstFailure == null) } }
         } else {
             held?.connection?.close()
-            onReleased?.invoke(true)
         }
+        onReleased?.let(releases::await)
     }
 
     override fun close() {

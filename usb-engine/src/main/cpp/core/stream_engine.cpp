@@ -228,7 +228,8 @@ bool StreamEngine::retireInFlight() {
         ring_.discardAll();
         for (Stat counter : {kStatMediaFramesWritten, kStatMediaFramesSubmitted, kStatMediaFramesProcessed,
                              kStatMediaFramesDelivered, kStatMediaFramesLost, kStatSilenceFramesInserted,
-                             kStatUsbFramesDelivered, kStatUnderruns, kStatUrbsCompleted, kStatPacketsFailed}) {
+                             kStatUsbFramesDelivered, kStatUnderruns, kStatUrbsCompleted, kStatPacketsFailed,
+                             kStatLastDeliveredMediaFrame}) {
             stats_[counter].store(0, std::memory_order_release);
         }
         mediaStarted_ = false;
@@ -292,7 +293,8 @@ void StreamEngine::fill(IsoUrb& urb) {
         out += packet.length;
 
         if (media > 0) mediaStarted_ = true;
-        add(kStatMediaFramesSubmitted, static_cast<int64_t>(media));
+        const auto count = static_cast<int64_t>(media);
+        packet.mediaEndFrame = stats_[kStatMediaFramesSubmitted].fetch_add(count, std::memory_order_relaxed) + count;
         add(kStatSilenceFramesInserted, static_cast<int64_t>(frames - media));
         if (media == frames) {
             inUnderrun_ = false;
@@ -314,6 +316,11 @@ void StreamEngine::account(const IsoUrb& urb, bool cancelling) {
             add(kStatMediaFramesProcessed, packet.mediaFrames);
             add(kStatMediaFramesDelivered, packet.mediaFrames);
             add(kStatTotalMediaFramesDelivered, packet.mediaFrames);
+            // URBs can complete out of order. A silence-only packet proves nothing about media.
+            auto& last = stats_[kStatLastDeliveredMediaFrame];
+            if (packet.mediaFrames > 0 && packet.mediaEndFrame > last.load(std::memory_order_relaxed)) {
+                last.store(packet.mediaEndFrame, std::memory_order_relaxed);
+            }
             add(kStatUsbFramesDelivered, packet.length / frameBytes);
         } else if (!cancelling) {
             add(kStatMediaFramesProcessed, packet.mediaFrames);

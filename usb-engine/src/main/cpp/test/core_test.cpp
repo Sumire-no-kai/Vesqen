@@ -407,8 +407,24 @@ void testFailedAndShortPacketsAreLostButStillProcessed() {
     const int64_t lost = stat(engine, kStatMediaFramesLost);
     CHECK(lost > 0);
     CHECK_EQ(stat(engine, kStatMediaFramesDelivered) + lost, 4000);
+    CHECK_EQ(stat(engine, kStatLastDeliveredMediaFrame), 4000);
     // A lost packet is not a stream failure by itself.
     CHECK_EQ(stat(engine, kStatFailure), kFailureNone);
+}
+
+void testLostTailAndSubsequentSilenceDoNotAdvanceDeliveryPosition() {
+    FakeTransport transport;
+    transport.failNextPacket = 1;
+    StreamEngine engine(config44k(), transport);
+    const auto input = pattern(88, 4);  // Two 44-frame packets, the second is lost.
+    CHECK_EQ(engine.write(0, input.data(), 352), 352);
+    engine.setRunning(0, true);
+    engine.markEndOfStream(0);
+    CHECK(engine.start());
+    CHECK(waitUntil([&] { return stat(engine, kStatUsbFramesDelivered) > 88; }));
+    CHECK(engine.stop(2000));
+    CHECK_EQ(stat(engine, kStatMediaFramesLost), 44);
+    CHECK_EQ(stat(engine, kStatLastDeliveredMediaFrame), 44);
 }
 
 void testStoppingReclaimsWhatIsInFlight() {
@@ -577,6 +593,7 @@ void testASecondSeekWhileTheFirstIsReclaimedStartsAtItsOwnFirstFrame() {
     transport.holdCancelled = false;
     CHECK(waitUntil([&] { return stat(engine, kStatEpoch) == second; }));
     // Each output counts from zero, so nothing of the first one shows in the second's progress.
+    CHECK_EQ(stat(engine, kStatLastDeliveredMediaFrame), 0);
     CHECK_EQ(stat(engine, kStatMediaFramesWritten), 0);
     CHECK_EQ(stat(engine, kStatMediaFramesProcessed), 0);
     CHECK_EQ(stat(engine, kStatUnderruns), 0);
@@ -785,6 +802,7 @@ int main() {
     testPauseIsNotAnUnderrun();
     testPausingWithMediaInTheRingIsNotAnUnderrun();
     testFailedAndShortPacketsAreLostButStillProcessed();
+    testLostTailAndSubsequentSilenceDoNotAdvanceDeliveryPosition();
     testStoppingReclaimsWhatIsInFlight();
     testAUrbCompletingDuringAStopIsNotSentAgain();
     testAStopThatTimesOutKeepsEverythingAliveAndCanFinishLater();
