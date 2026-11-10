@@ -152,7 +152,7 @@ private:
     void account(const IsoUrb& urb, bool cancelling);
     void fail(StreamFailure failure, int error);
     void failSubmit(int error);
-    void add(Stat stat, int64_t amount) { stats_[stat].fetch_add(amount, std::memory_order_relaxed); }
+    void add(Stat stat, int64_t amount) { stats_[stat].fetch_add(amount, std::memory_order_release); }
 
     const StreamConfig config_;
     IsoTransport& transport_;
