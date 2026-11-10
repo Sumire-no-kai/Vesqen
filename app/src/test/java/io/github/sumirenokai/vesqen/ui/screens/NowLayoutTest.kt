@@ -19,6 +19,16 @@ class NowLayoutTest {
     }
 
     @Test
+    fun theUsbVolumeBarTakesItsHeightFromTheCover() {
+        // A short phone, where height limits the cover: one more 48 dp row under the transport.
+        val without = nowPortraitLayout(640.dp, 312.dp, 1f)
+        val with = nowPortraitLayout(640.dp, 312.dp, 1f, volumeBar = true)
+        assertEquals(without.artwork - 48.dp, with.artwork)
+        // With room to spare the cover keeps its size.
+        assertEquals(312.dp, nowPortraitLayout(800.dp, 312.dp, 1f, volumeBar = true).artwork)
+    }
+
+    @Test
     fun coverNeverExceedsTheSpecifiedSizes() {
         val layout = nowPortraitLayout(2_000.dp, 600.dp, 1f)
         assertEquals(360.dp, layout.artwork)

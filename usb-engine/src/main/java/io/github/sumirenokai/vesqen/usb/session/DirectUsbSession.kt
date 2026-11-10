@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen.usb.session
 
 import io.github.sumirenokai.vesqen.usb.control.Uac1ControlClient
+import io.github.sumirenokai.vesqen.usb.control.UacVolumeRange
 import io.github.sumirenokai.vesqen.usb.descriptor.UacControlAccess
 import io.github.sumirenokai.vesqen.usb.descriptor.UacFunction
 import io.github.sumirenokai.vesqen.usb.engine.UsbStream
@@ -102,6 +103,16 @@ class DirectUsbSession(
     private val claimed = mutableListOf<Int>()
     private var streamingInterface: Int? = null
     private var restoreVolume: (() -> Boolean)? = null
+
+    /** The path's master volume, known once the takeover has read it. */
+    private class VolumeControl(val unitId: Int, val controlInterface: Int, val range: UacVolumeRange)
+
+    private var volumeControl: VolumeControl? = null
+
+    /** The settings the device's hardware volume accepts, or null before the takeover is ready. */
+    @Volatile
+    var volumeRange: UacVolumeRange? = null
+        private set
     private var monitor: ScheduledFuture<*>? = null
     private val cleanupSteps = mutableListOf<CleanupStep>()
 
@@ -152,6 +163,20 @@ class DirectUsbSession(
             newestEpochTaken = true
             Output(newestEpoch)
         }
+    }
+
+    /**
+     * Sets the hardware volume to the device's setting at or below [target] (1/256 dB) and answers what
+     * the device reads back, or null when the session is not streaming. A device that no longer answers
+     * the read plays at an unknown level, so the session then fails closed (D4).
+     */
+    fun setVolume(target: Int, onDone: (Int?) -> Unit) = control.execute {
+        val volume = volumeControl
+        if (state !is State.Streaming || volume == null) return@execute onDone(null)
+        client.setVolume(volume.unitId, volume.controlInterface, volume.range.settingAtOrBelow(target))
+        val readBack = client.volume(volume.unitId, volume.controlInterface)
+        onDone(readBack)
+        if (readBack == null) fail(DirectUsbFailure(Reason.VOLUME_CONTROL_FAILED, "the volume could not be read after a change"))
     }
 
     /** Gives the device back. The callback comes once every interface is released, which can wait for the kernel. */
@@ -210,6 +235,8 @@ class DirectUsbSession(
         if (mutedBefore == true && !client.setMute(unit.id, controlInterface, false)) {
             return failed(Reason.VOLUME_CONTROL_FAILED, "the device stayed muted")
         }
+        volumeControl = VolumeControl(unit.id, controlInterface, range)
+        volumeRange = range
 
         if (!link.selectAlternate(plan.interfaceNumber, plan.alternateSetting)) {
             return failed(Reason.INTERFACE_CLAIM_FAILED, "alternate setting ${plan.alternateSetting} of interface ${plan.interfaceNumber}")

@@ -221,10 +221,15 @@ internal interface DirectUsbRoute {
 /**
  * The production route. It looks at `UsbManager` itself on every inspection rather than trusting
  * what an event said, keeps one connection from inspection to release, and starts at the D4
- * volume (about -30 dB) since no remembered volume exists yet.
+ * volume ([DirectUsbVolumeMemory]). The listener's changes go through [volumes].
  */
 @UnstableApi
-internal class AndroidDirectUsbRoute(context: Context, private val markers: TakeoverMarkerStore) : DirectUsbRoute {
+internal class AndroidDirectUsbRoute(
+    context: Context,
+    private val markers: TakeoverMarkerStore,
+    private val volumes: DirectUsbVolumeControl,
+    private val volumeMemory: DirectUsbVolumeMemory,
+) : DirectUsbRoute {
     private val appContext = context.applicationContext
     private val usbManager = appContext.getSystemService(UsbManager::class.java)
     private val main = Handler(Looper.getMainLooper())
@@ -235,7 +240,23 @@ internal class AndroidDirectUsbRoute(context: Context, private val markers: Take
     private var session: DirectUsbSession? = null
 
     /** What [readings] reports, set once a takeover is ready and cleared on release. */
-    private class StreamingFacts(val session: DirectUsbSession, val plan: StreamingPlan, val protocol: String, val syncType: String, val volume: Int)
+    private class StreamingFacts(
+        val session: DirectUsbSession,
+        val device: UsbDeviceIdentity,
+        val plan: StreamingPlan,
+        val protocol: String,
+        val syncType: String,
+        @Volatile var volume: Int,
+    )
+
+    /** Main thread: one volume request goes to the device at a time, and only the newest waits. */
+    private var volumeInFlight = false
+    // At once on the main thread, so a request counts as waiting before the read-back of the one before
+    // it settles the control's level (key presses and read-backs both arrive there).
+    private val volumeSetter: (Int) -> Unit = { target ->
+        if (Looper.myLooper() == main.looper) setVolume(target) else main.post { setVolume(target) }
+    }
+    private var volumeWaiting: Int? = null
 
     @Volatile
     private var streamingFacts: StreamingFacts? = null
@@ -267,7 +288,10 @@ internal class AndroidDirectUsbRoute(context: Context, private val markers: Take
     private val detachReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val detached = IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java) ?: return
-            if (detached.deviceId == prepared?.device?.deviceId) session?.onDeviceDetached()
+            if (detached.deviceId == prepared?.device?.deviceId) {
+                volumeMemory.forgetConnection()
+                session?.onDeviceDetached()
+            }
         }
     }
 
@@ -279,6 +303,7 @@ internal class AndroidDirectUsbRoute(context: Context, private val markers: Take
             IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED),
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
+        volumes.attach(volumeSetter)
     }
 
     override val provider: AudioOutputProvider = object : AudioOutputProvider {
@@ -385,9 +410,10 @@ internal class AndroidDirectUsbRoute(context: Context, private val markers: Take
 
     override fun takeOver(onDone: (DirectUsbFailure?) -> Unit) {
         val target = prepared ?: return onDone(DirectUsbFailure(DirectUsbFailure.Reason.USB_TRANSFER_FAILED, "nothing was inspected"))
+        val identity = UsbDeviceIdentity(target.device.deviceId, target.device.vendorId, target.device.productId)
         lateinit var next: DirectUsbSession
         next = DirectUsbSession(
-            device = UsbDeviceIdentity(target.device.deviceId, target.device.vendorId, target.device.productId),
+            device = identity,
             link = AndroidUsbLink(target.device, target.connection),
             function = target.function,
             markers = markers,
@@ -400,12 +426,15 @@ internal class AndroidDirectUsbRoute(context: Context, private val markers: Take
             },
         )
         session = next
-        next.takeOver(target.plan, START_VOLUME) { result ->
+        next.takeOver(target.plan, volumeMemory.startVolume(identity)) { result ->
             main.post {
                 if (session !== next) return@post
                 when (result) {
                     is DirectUsbSession.Takeover.Ready -> {
-                        streamingFacts = StreamingFacts(next, target.plan, target.function.protocolToken(), target.function.syncToken(target.plan), result.volumeNow)
+                        streamingFacts = StreamingFacts(
+                            next, identity, target.plan, target.function.protocolToken(), target.function.syncToken(target.plan), result.volumeNow,
+                        )
+                        next.volumeRange?.let { volumes.publish(DirectUsbVolume(result.volumeNow, it.minimum, it.maximum, it.resolution)) }
                         sessionProvider = DirectUsbAudioOutputProvider(
                             target.plan,
                             openOutput = {
@@ -451,8 +480,33 @@ internal class AndroidDirectUsbRoute(context: Context, private val markers: Take
         )
     }
 
+    /** Main thread. The device's read-back, not the request, is what gets published and remembered. */
+    private fun setVolume(target: Int) {
+        val facts = streamingFacts ?: return
+        if (volumeInFlight) {
+            volumeWaiting = target
+            return
+        }
+        volumeInFlight = true
+        facts.session.setVolume(target) { readBack ->
+            main.post {
+                volumeInFlight = false
+                val waiting = volumeWaiting
+                volumeWaiting = null
+                if (streamingFacts === facts && readBack != null) {
+                    facts.volume = readBack
+                    volumes.state.value?.let { volumes.publish(it.copy(current = readBack), settled = waiting == null) }
+                    volumeMemory.remember(facts.device, readBack)
+                }
+                if (waiting != null) setVolume(waiting)
+            }
+        }
+    }
+
     override fun release(onReleased: ((Boolean) -> Unit)?) {
         streamingFacts = null
+        volumeWaiting = null
+        volumes.publish(null)
         streaming = false
         sessionProvider = null
         val current = session
@@ -473,6 +527,7 @@ internal class AndroidDirectUsbRoute(context: Context, private val markers: Take
 
     override fun close() {
         release()
+        volumes.detach(volumeSetter)
         runCatching { appContext.unregisterReceiver(permissionReceiver) }
         runCatching { appContext.unregisterReceiver(detachReceiver) }
     }
@@ -484,8 +539,6 @@ internal class AndroidDirectUsbRoute(context: Context, private val markers: Take
         val control = Executors.newSingleThreadScheduledExecutor { Thread(it, "usb-control") }
         const val ACTION_PERMISSION = "io.github.sumirenokai.vesqen.playback.USB_PERMISSION"
 
-        /** D4 without a remembered volume: about -30 dB, in the UAC unit of 1/256 dB. */
-        const val START_VOLUME = -30 * 256
         val WIRE_DEPTHS = listOf(32, 24, 16)
     }
 }

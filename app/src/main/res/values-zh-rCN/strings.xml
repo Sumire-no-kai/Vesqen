@@ -72,7 +72,9 @@
     <string name="settings_strict_usb_available">%1$s 支持严格输出。</string>
     <string name="settings_strict_usb_applying">正在为 %1$s 准备严格输出…</string>
     <string name="settings_strict_usb_active">已在 %1$s 上生效，%2$s。此结果依据 Android 提供的数据，未经外部验证。</string>
-    <string name="settings_strict_usb_active_direct">已在 %1$s 上生效，%2$s。此结果依据 Vesqen 对设备的配置和读回，未经外部验证。</string>
+    <string name="settings_strict_usb_active_direct">已在 %1$s 上生效，%2$s。此结果依据 Vesqen 对设备的配置和读回，未经外部验证。音量条和音量键调节的是 %1$s 的硬件音量。手机的媒体音量对这条输出不起作用。</string>
+    <string name="usb_volume_label">DAC 音量</string>
+    <string name="usb_volume_state">%1$s 分贝</string>
     <string name="settings_strict_usb_failed">播放已停止：%1$s如需正常播放，请选择“系统输出”。</string>
     <string name="settings_usb_device_unknown">USB 音频设备</string>
     <string name="settings_format_unknown">格式待确认</string>
