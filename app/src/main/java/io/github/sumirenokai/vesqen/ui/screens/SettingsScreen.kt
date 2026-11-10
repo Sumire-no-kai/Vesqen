@@ -311,6 +311,7 @@ private fun verificationFailureLabel(failure: OutputVerificationImportFailure): 
 
 @Composable
 internal fun strictUsbOutputBody(status: UsbOutputStatus): String {
+    if (status.decisionCode == "direct_usb.recovering") return stringResource(R.string.usb_recovery_in_progress)
     if (status.mode != UsbOutputMode.STRICT_BIT_PERFECT) {
         status.strictUnavailablePlatform?.let { support ->
             return stringResource(

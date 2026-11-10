@@ -38,13 +38,43 @@ data class UsbDeviceIdentity(val deviceId: Int, val vendorId: Int, val productId
  * Written before the first interface is claimed and cleared only once every interface is released, so a
  * process that dies in between leaves enough to give the device back and restore its volume (M7-4).
  */
-data class TakeoverMarker(val device: UsbDeviceIdentity, val volumeBefore: Int?, val mutedBefore: Boolean?)
+data class TakeoverMarker(
+    val device: UsbDeviceIdentity,
+    val volumeBefore: Int?,
+    val mutedBefore: Boolean?,
+    val controlInterface: Int? = null,
+    val volumeUnitId: Int? = null,
+)
 
 abstract class TakeoverMarkerStore {
     private var held = false
 
     /** Set by the first takeover in this process; a record found before that was left by a process that died. */
     private var wroteHere = false
+    private val idleCallbacks = mutableListOf<() -> Unit>()
+
+    /** Waits for the old service's native safety barrier and cleanup, without polling. */
+    @Synchronized
+    fun whenIdle(callback: () -> Unit) {
+        if (held) idleCallbacks += callback else callback()
+    }
+
+    @Synchronized
+    fun recoveryRecord(): TakeoverMarker? {
+        if (hasPendingRecovery()) return read()
+        if (!held && read() != null) clear()
+        return null
+    }
+
+    /** Recovery can retry a closed connection's cleanup, but cannot touch a live session. */
+    @Synchronized
+    fun acquireRecovery(device: UsbDeviceIdentity): TakeoverMarker? {
+        if (held) return null
+        val marker = recoveryRecord()?.takeIf { it.device == device } ?: return null
+        held = true
+        wroteHere = true
+        return marker
+    }
 
     @Synchronized
     fun isOccupied(): Boolean = held || hasPendingRecovery()
@@ -62,7 +92,7 @@ abstract class TakeoverMarkerStore {
         if (held) return null
         val left = if (hasPendingRecovery()) read() else null
         if (left != null && (wroteHere || left.device != device)) return null
-        val marker = TakeoverMarker(device, left?.volumeBefore, left?.mutedBefore)
+        val marker = left ?: TakeoverMarker(device, null, null)
         if (!write(marker)) return null
         held = true
         wroteHere = true
@@ -82,6 +112,9 @@ abstract class TakeoverMarkerStore {
         // Interfaces are back: the same connection may retry its saved settings on the next takeover.
         wroteHere = !allReleased
         held = false
+        val callbacks = idleCallbacks.toList()
+        idleCallbacks.clear()
+        callbacks.forEach { it() }
         return cleared
     }
 }

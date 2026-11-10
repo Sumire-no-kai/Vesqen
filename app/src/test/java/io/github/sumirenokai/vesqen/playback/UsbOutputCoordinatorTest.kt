@@ -122,6 +122,79 @@ class UsbOutputCoordinatorTest {
         RoutableAudioTrackShadow.routingListenersAccepted = Int.MAX_VALUE
     }
 
+    @Test
+    fun `startup recovers the device before restoring a system playback queue`() {
+        direct.recoveryPending = true
+        direct.deferRecovery = true
+        start(direct = direct)
+        loadTrack()
+        player.play()
+        idle()
+        assertStatus(UsbOutputPhase.APPLYING, "direct_usb.recovering")
+        assertFalse("prepare" in playerCalls)
+        direct.recoveryPending = false
+        checkNotNull(direct.pendingRecovery)(DirectUsbRecoveryResult())
+        idle()
+        assertStatus(UsbOutputPhase.SYSTEM, "system_audio_route")
+        assertTrue(player.playWhenReady)
+    }
+
+    @Test
+    fun `a pause while startup recovery waits cancels automatic playback`() {
+        direct.recoveryPending = true
+        direct.deferRecovery = true
+        start(direct = direct)
+        loadTrack()
+        player.play()
+        player.pause()
+        direct.recoveryPending = false
+        checkNotNull(direct.pendingRecovery)(DirectUsbRecoveryResult())
+        idle()
+        assertStatus(UsbOutputPhase.SYSTEM, "system_audio_route")
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `a recovery result cannot rebuild a closed playback service`() {
+        direct.recoveryPending = true
+        direct.deferRecovery = true
+        start(direct = direct)
+        val done = checkNotNull(direct.pendingRecovery)
+        coordinator.close()
+        playerCalls.clear()
+        done(DirectUsbRecoveryResult())
+        idle()
+        assertFalse("prepare" in playerCalls || "play" in playerCalls)
+    }
+
+    @Test
+    fun `startup recovery reports missing permission without opening a dialog`() {
+        direct.recoveryPending = true
+        direct.recoveryResult = DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_required")
+        start(direct = direct)
+        idle()
+        assertStatus(UsbOutputPhase.FAILED, "direct_usb.permission_required")
+        assertFalse("permission" in direct.calls)
+    }
+
+    @Test
+    fun `startup recovery is completed before the official mixer can be requested`() {
+        connectDacWithMixer()
+        direct.recoveryPending = true
+        direct.deferRecovery = true
+        start(direct = direct)
+        loadTrack()
+        coordinator.requestMode(UsbOutputMode.STRICT_BIT_PERFECT)
+        player.play()
+        idle()
+        assertFalse(mixer.calls.any { it.startsWith("setPreferred") })
+        direct.recoveryPending = false
+        checkNotNull(direct.pendingRecovery)(DirectUsbRecoveryResult())
+        idle()
+        assertEquals(UsbOutputMode.STRICT_BIT_PERFECT, status().mode)
+        assertTrue(status().phase != UsbOutputPhase.FAILED)
+    }
+
     // System output
 
     @Test
@@ -900,10 +973,10 @@ class UsbOutputCoordinatorTest {
 
     @Test
     fun `selecting system again keeps ordinary playback when only a recovery record remains`() {
-        direct.recoveryPending = true
         start(direct = direct)
         loadTrack()
         player.play()
+        direct.recoveryPending = true
         idle()
         assertEquals(UsbOutputMode.SYSTEM, status().mode)
         playerCalls.clear()
@@ -1880,6 +1953,14 @@ class UsbOutputCoordinatorTest {
         var pendingTakeover: ((DirectUsbFailure?) -> Unit)? = null
         var pendingRelease: ((Boolean) -> Unit)? = null
         var usbAudioDevicePresent = false
+        var deferRecovery = false
+        var pendingRecovery: ((DirectUsbRecoveryResult) -> Unit)? = null
+        var recoveryResult = DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed")
+
+        override fun recover(onDone: (DirectUsbRecoveryResult) -> Unit) {
+            calls += "recover"
+            if (deferRecovery) pendingRecovery = onDone else onDone(recoveryResult)
+        }
 
         override val provider: AudioOutputProvider = object : AudioOutputProvider {
             override fun getFormatSupport(formatConfig: AudioOutputProvider.FormatConfig) = throw UnsupportedOperationException()

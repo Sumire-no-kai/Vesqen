@@ -220,7 +220,7 @@ class DirectUsbSession(
         // the device still has the level that process set.
         val volumeBefore = taken.volumeBefore ?: volumeNow
         val mutedBefore = if (taken.volumeBefore != null) taken.mutedBefore else client.mute(unit.id, controlInterface)
-        if (!markers.write(TakeoverMarker(device, volumeBefore, mutedBefore))) {
+        if (!markers.write(TakeoverMarker(device, volumeBefore, mutedBefore, controlInterface, unit.id))) {
             return failed(Reason.USB_TRANSFER_FAILED, "the original hardware volume could not be saved")
         }
         restorePending = true
