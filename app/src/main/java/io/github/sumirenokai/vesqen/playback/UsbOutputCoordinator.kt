@@ -108,15 +108,19 @@ internal class UsbOutputCoordinator(
     private var directDeviceName: String? = null
     private var directPlan: StreamingPlan? = null
 
-    /** Media3 opened an output on the current takeover; until then nothing has reached the DAC. */
+    /** Output identity and delivery are separate: opening or retaining a session alone is not ACTIVE. */
     private var directOutputOpened = false
+    @Volatile private var directSourceGeneration = 0L
+    private var directOutputToken: Any? = null
+    private var directOutputPeriod: Any? = null
+    private var directOutputActive = false
+    private var returnTarget: UsbOutputMode? = null
 
     /**
      * Set when the own path gave the device back after a failure. Android then shows the USB route
      * again, which must not start another takeover; a real plug-in (a USB attach) clears it.
      */
     private var awaitingReattach = false
-    private var returningDirectForOfficial = false
 
     private val usbAttachReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -134,7 +138,7 @@ internal class UsbOutputCoordinator(
     private val deviceCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
             if (currentMode() != UsbOutputMode.STRICT_BIT_PERFECT || addedDevices.none(AudioDeviceInfo::isUsbAudioOutput)) return
-            if (synchronized(lock) { awaitingReattach } || returningDirectForOfficial) return
+            if (synchronized(lock) { awaitingReattach } || returnTarget != null) return
             if (synchronized(lock) { directPath }) {
                 // Once playback owns the DAC, later route events do not interrupt it. Before
                 // that point a newly visible official mixer still has priority (#298).
@@ -166,19 +170,33 @@ internal class UsbOutputCoordinator(
         audioManager.registerAudioDeviceCallback(deviceCallback, mainHandler)
         directRoute?.let { route ->
             route.listener = object : DirectUsbRoute.Listener {
-                override fun onOutputOpened(periodUid: Any) {
-                    val generation = synchronized(lock) { configurationGeneration }
-                    mainHandler.post {
-                        val timeline = player.currentTimeline
-                        if (!isGenerationCurrent(generation) || timeline.getIndexOfPeriod(periodUid) == C.INDEX_UNSET) return@post
-                        synchronized(lock) { if (directPath) directOutputOpened = true }
-                        publishDirectActiveIfPlaying()
-                    }
+                override fun onOutputOpened(periodUid: Any, output: Any) {
+                    if (closed || !directPath || player.currentTimeline.getIndexOfPeriod(periodUid) == C.INDEX_UNSET) return
+                    directOutputToken = output
+                    directOutputPeriod = periodUid
+                    directOutputActive = false
+                    directOutputOpened = true
+                    publishDirectActiveIfPlaying()
                 }
 
-                override fun onFailed(failure: DirectUsbFailure, details: DirectUsbDetails?) {
-                    val (reason, code) = failure.toStrictFailure()
-                    failClosed(reason, code, directDetails = details)
+                override fun onOutputActive(periodUid: Any, output: Any, active: Boolean) {
+                    if (closed || directOutputToken !== output || directOutputPeriod != periodUid) return
+                    directOutputActive = active
+                    publishDirectActiveIfPlaying()
+                }
+
+                override fun onFailed(failure: DirectUsbFailure, details: DirectUsbDetails?, periodUid: Any?, output: Any?) {
+                    val generation = synchronized(lock) { configurationGeneration }
+                    val sourceGeneration = directSourceGeneration
+                    mainHandler.post {
+                        if (!isGenerationCurrent(generation)) return@post
+                        if (periodUid != null && sourceGeneration != directSourceGeneration &&
+                            player.currentTimeline.getIndexOfPeriod(periodUid) != player.currentPeriodIndex) return@post
+                        if (periodUid != null && player.currentTimeline.getIndexOfPeriod(periodUid) == C.INDEX_UNSET) return@post
+                        if (output != null && output !== directOutputToken) return@post
+                        val (reason, code) = failure.toStrictFailure()
+                        failClosed(reason, code, expectedGeneration = generation, directDetails = details)
+                    }
                 }
             }
             ContextCompat.registerReceiver(
@@ -202,6 +220,18 @@ internal class UsbOutputCoordinator(
             return
         }
         if (closed) return
+        if (returnTarget != null) {
+            // The connection is already being returned. Use the latest selection when it is back.
+            if (returnTarget != requestedMode) {
+                returnTarget = requestedMode
+                if (requestedMode == UsbOutputMode.STRICT_BIT_PERFECT) {
+                    preferences.edit { putString(MODE_KEY, requestedMode.name) }
+                }
+                publishReturning(requestedMode)
+            }
+            synchronized(lock) { configurationOrigin = UsbOutputFailureOrigin.USER_MODE_CHANGE }
+            return
+        }
         if (requestedMode == UsbOutputMode.SYSTEM) {
             val previousMode = synchronized(lock) {
                 val previous = mode
@@ -222,7 +252,15 @@ internal class UsbOutputCoordinator(
     fun currentStatus(): UsbOutputStatus = stateRepository.snapshot()
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+        directSourceGeneration++
+        val timeline = player?.currentTimeline
+        val currentPeriod = if (timeline == null || timeline.isEmpty) null else timeline.getUidOfPeriod(checkNotNull(player).currentPeriodIndex)
+        if (directOutputPeriod != currentPeriod) {
+            directOutputToken = null
+            directOutputActive = false
+        }
         updateSource(mediaItem)
+        if (returnTarget != null) return
         // The own output checks every item where its PCM begins (#282) and keeps the DAC between
         // items, so a transition rebuilds nothing; the status only takes the new item's source.
         if (synchronized(lock) { directPath } && directRoute?.streaming == true) {
@@ -244,8 +282,7 @@ internal class UsbOutputCoordinator(
                 )
                 return
             }
-            val current = stateRepository.snapshot()
-            publishDirect(current.phase, current.decisionCode)
+            publishDirectActiveIfPlaying()
             return
         }
         if (currentMode() == UsbOutputMode.STRICT_BIT_PERFECT) {
@@ -259,6 +296,10 @@ internal class UsbOutputCoordinator(
     }
 
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+        if (returnTarget != null) {
+            resumeAfterConfiguration = playWhenReady
+            return
+        }
         if (!playWhenReady) {
             synchronized(lock) {
                 if (internalPauseInProgress) {
@@ -303,6 +344,10 @@ internal class UsbOutputCoordinator(
             internalResumeInProgress = false
         }
         if (currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
+        if (!strictOutputAllowed()) {
+            failClosed(UsbOutputFailure.TRIAL_ENDED, "strict_usb.trial_ended", origin = UsbOutputFailureOrigin.USER_PLAYBACK)
+            return
+        }
         if (synchronized(lock) { directPath } && directRoute?.streaming == true &&
             stateRepository.snapshot().phase == UsbOutputPhase.APPLYING
         ) {
@@ -318,6 +363,25 @@ internal class UsbOutputCoordinator(
                 scheduleRouteVerificationTimeout(track)
             }
             UsbOutputPhase.ACTIVE -> Unit
+        }
+    }
+
+    override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+        if (reason == Player.DISCONTINUITY_REASON_SEEK || reason == Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT ||
+            reason == Player.DISCONTINUITY_REASON_REMOVE) {
+            directRoute?.invalidateOutput()
+            directOutputToken = null
+            directOutputActive = false
+            publishDirectActiveIfPlaying()
+        }
+    }
+
+    override fun onPlaybackStateChanged(playbackState: Int) {
+        if (directOutputOpened && playbackState == player?.playbackState &&
+            (playbackState == Player.STATE_IDLE || playbackState == Player.STATE_ENDED)) {
+            directRoute?.invalidateOutput()
+            directOutputActive = false
+            publishDirectActiveIfPlaying()
         }
     }
 
@@ -344,6 +408,7 @@ internal class UsbOutputCoordinator(
             mainHandler.post { scheduleReconfigure(resume, origin) }
             return
         }
+        if (returnTarget != null) return
         val activePlayer = player
         val wasPlaying = activePlayer?.playWhenReady == true
         val scheduled = synchronized(lock) {
@@ -404,7 +469,7 @@ internal class UsbOutputCoordinator(
     }
 
     private fun reconfigureStrictOutput() {
-        if (closed || returningDirectForOfficial || currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
+        if (closed || returnTarget != null || currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
         val generation = synchronized(lock) { configurationGeneration }
         val activePlayer = player ?: return
         updateSource(activePlayer.currentMediaItem)
@@ -1074,6 +1139,7 @@ internal class UsbOutputCoordinator(
             directOutputOpened = false
             state
         } ?: return
+        returnTarget = null
         directRoute?.release()
         detachRoutingListener()
         if (attemptMixerCleanup) synchronized(mixerMutationLock) {
@@ -1102,6 +1168,7 @@ internal class UsbOutputCoordinator(
     private fun restoreSystemOutput(rebuild: Boolean) {
         val activePlayer = player
         val resume = activePlayer?.playWhenReady == true || synchronized(lock) { resumeAfterConfiguration }
+        val wasDirect = synchronized(lock) { directPath }
         val oldState = synchronized(lock) { FailedOutputState(selectedDevice, selectedMixerFormat) }
         detachRoutingListener()
         val cleanupSucceeded = synchronized(mixerMutationLock) {
@@ -1109,7 +1176,6 @@ internal class UsbOutputCoordinator(
                 false
             } else {
                 synchronized(lock) {
-                    mode = UsbOutputMode.SYSTEM
                     directPath = false
                     directOutputOpened = false
                     selectedDevice = null
@@ -1134,8 +1200,24 @@ internal class UsbOutputCoordinator(
             )
             return
         }
+        val route = directRoute
+        // A recovery marker gates a transition from strict. Selecting an already active system
+        // route starts no new playback and must leave both the player and the marker intact.
+        if (route != null && (wasDirect || route.streaming || (rebuild && route.recoveryPending))) {
+            returnDirect(route, UsbOutputMode.SYSTEM, resume, UsbOutputFailureOrigin.USER_MODE_CHANGE)
+        } else {
+            route?.release()
+            completeSystemOutput(rebuild, resume)
+        }
+    }
+
+    private fun completeSystemOutput(rebuild: Boolean, resume: Boolean) {
+        synchronized(lock) {
+            mode = UsbOutputMode.SYSTEM
+            resumeAfterConfiguration = false
+        }
         preferences.edit { putString(MODE_KEY, UsbOutputMode.SYSTEM.name) }
-        directRoute?.release()
+        val activePlayer = player
         activePlayer?.setPreferredAudioDevice(null)
         publishSystem()
         if (rebuild && activePlayer != null && activePlayer.mediaItemCount > 0) {
@@ -1167,23 +1249,42 @@ internal class UsbOutputCoordinator(
             devices.any { mixerAdapter.profiles(it).getOrNull()?.any(MixerProfile::bitPerfect) == true }
 
     private fun returnDirectForOfficial(route: DirectUsbRoute) {
-        if (returningDirectForOfficial) return
-        returningDirectForOfficial = true
-        synchronized(lock) {
-            ++configurationGeneration // Ignore the obsolete takeover completion.
+        val resume = synchronized(lock) { resumeAfterConfiguration } || player?.playWhenReady == true
+        returnDirect(route, UsbOutputMode.STRICT_BIT_PERFECT, resume, UsbOutputFailureOrigin.ROUTE_CHANGE)
+    }
+
+    private fun returnDirect(route: DirectUsbRoute, target: UsbOutputMode, resume: Boolean, origin: UsbOutputFailureOrigin) {
+        if (returnTarget != null) return
+        returnTarget = target
+        val generation = synchronized(lock) {
+            mode = UsbOutputMode.STRICT_BIT_PERFECT
             directPath = false
             directOutputOpened = false
-            resumeAfterConfiguration = resumeAfterConfiguration || player?.playWhenReady == true
+            directOutputActive = false
+            resumeAfterConfiguration = resume
+            configurationOrigin = origin
+            ++configurationGeneration
         }
+        player?.stop()
+        publishReturning(target)
         route.release { released ->
-            returningDirectForOfficial = false
-            if (closed || currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return@release
-            if (!released) {
-                failClosed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed")
-            } else if (stateRepository.snapshot().phase != UsbOutputPhase.FAILED) {
-                scheduleReconfigure(resume = false, origin = UsbOutputFailureOrigin.ROUTE_CHANGE)
+            if (!isGenerationCurrent(generation)) return@release
+            val selected = returnTarget ?: return@release
+            returnTarget = null
+            if (!released || route.recoveryPending) {
+                synchronized(lock) { awaitingReattach = true }
+                failClosed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed", origin = configurationOrigin)
+            } else if (selected == UsbOutputMode.SYSTEM) {
+                completeSystemOutput(rebuild = true, resume = resumeAfterConfiguration)
+            } else {
+                scheduleReconfigure(resume = resumeAfterConfiguration, origin = configurationOrigin)
             }
         }
+    }
+
+    private fun publishReturning(target: UsbOutputMode) {
+        val code = if (target == UsbOutputMode.SYSTEM) "direct_usb.returning_to_system" else "strict_usb.reconfiguration_requested"
+        publishDirect(UsbOutputPhase.APPLYING, code)
     }
 
     private fun reconfigureDirectOutput(route: DirectUsbRoute, generation: Long, activePlayer: ExoPlayer) {
@@ -1324,12 +1425,20 @@ internal class UsbOutputCoordinator(
         if (resume) activePlayer.play()
     }
 
-    /** ACTIVE once the own output exists and the player plays; Media3 opens it on its first buffer. */
+    /** Playback-thread delivery evidence belongs to the current period and output, not the retained session. */
     private fun publishDirectActiveIfPlaying() {
         val route = directRoute ?: return
-        if (!synchronized(lock) { directPath && directOutputOpened } || !route.streaming || player?.playWhenReady != true) return
-        if (player?.currentMediaItem == null || stateRepository.snapshot().phase == UsbOutputPhase.FAILED) return
-        publishDirect(UsbOutputPhase.ACTIVE, "direct_usb.active")
+        if (!synchronized(lock) { directPath } || !route.streaming || currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
+        if (stateRepository.snapshot().phase == UsbOutputPhase.FAILED) return
+        val activePlayer = player ?: return
+        val timeline = activePlayer.currentTimeline
+        val period = if (timeline.isEmpty) null else timeline.getUidOfPeriod(activePlayer.currentPeriodIndex)
+        val active = directOutputOpened && directOutputActive && directOutputPeriod == period &&
+            activePlayer.playWhenReady && activePlayer.playbackState != Player.STATE_IDLE && activePlayer.playbackState != Player.STATE_ENDED
+        publishDirect(
+            if (active) UsbOutputPhase.ACTIVE else UsbOutputPhase.APPLYING,
+            if (active) "direct_usb.active" else "direct_usb.configured_not_playing",
+        )
     }
 
     private fun publishDirect(phase: UsbOutputPhase, code: String, source: SourcePcmFormat? = sourceFormat) {

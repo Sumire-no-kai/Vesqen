@@ -59,6 +59,27 @@ class DirectUsbSessionTest {
         )
     }
 
+    @Test
+    fun `a failed restoration retains the original level after a user volume change`() {
+        takeOver()
+        assertEquals(0, setVolume(0))
+        device.failVolumeWrites = true
+        val (record, _) = release()
+        assertEquals("volume restored", record.firstFailure?.name)
+        assertTrue(events.containsAll(listOf("release 2", "release 1", "close")))
+        assertEquals(-2560, markers.persisted?.volumeBefore)
+        device.failVolumeWrites = false
+        val retried = DirectUsbSession(
+            UsbDeviceIdentity(1003, 0x0ecb, 0x2107), FakeLink(events, device), JBL, markers, control,
+            streams = { _, _ -> UsbStreamFactory.Creation.Created(FakeStream(events)) },
+        )
+        assertEquals(-2560, (takeOver(retried) as DirectUsbSession.Takeover.Ready).volumeBefore)
+        retried.release()
+        control.submit {}.get(2, TimeUnit.SECONDS)
+        assertNull(markers.persisted)
+        assertTrue(events.contains("set volume -2560"))
+    }
+
     @After
     fun stopControl() {
         control.shutdownNow()
@@ -124,7 +145,8 @@ class DirectUsbSessionTest {
         val (record, _) = release()
 
         assertEquals("volume restored", record.firstFailure?.name)
-        assertTrue(events.containsAll(listOf("release 2", "release 1", "close", "marker cleared")))
+        assertTrue(events.containsAll(listOf("release 2", "release 1", "close")))
+        assertEquals(-2560, markers.persisted?.volumeBefore)
     }
 
     @Test

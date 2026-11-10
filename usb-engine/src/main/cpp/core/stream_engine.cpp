@@ -109,7 +109,12 @@ void StreamEngine::readStats(int64_t* out) const {
     // before and after has one epoch's values. (No fence: GCC refuses one under ThreadSanitizer.)
     for (int attempt = 0; attempt < 16; ++attempt) {
         const int64_t before = acknowledgedEpoch_.load(std::memory_order_acquire);
-        for (size_t i = 0; i < kStatCount; ++i) out[i] = stats_[i].load(std::memory_order_acquire);
+        // Read completions before the upstream counters that bound them. Each published completion
+        // then carries its submission and write into this snapshot even if the stream advances.
+        for (size_t i = kStatMediaFramesDelivered; i < kStatCount; ++i) out[i] = stats_[i].load(std::memory_order_acquire);
+        out[kStatMediaFramesProcessed] = stats_[kStatMediaFramesProcessed].load(std::memory_order_acquire);
+        out[kStatMediaFramesSubmitted] = stats_[kStatMediaFramesSubmitted].load(std::memory_order_acquire);
+        out[kStatMediaFramesWritten] = stats_[kStatMediaFramesWritten].load(std::memory_order_acquire);
         const int64_t after = acknowledgedEpoch_.load(std::memory_order_acquire);
         if (before == after) {
             out[kStatEpoch] = before;
@@ -228,7 +233,8 @@ bool StreamEngine::retireInFlight() {
         ring_.discardAll();
         for (Stat counter : {kStatMediaFramesWritten, kStatMediaFramesSubmitted, kStatMediaFramesProcessed,
                              kStatMediaFramesDelivered, kStatMediaFramesLost, kStatSilenceFramesInserted,
-                             kStatUsbFramesDelivered, kStatUnderruns, kStatUrbsCompleted, kStatPacketsFailed}) {
+                             kStatUsbFramesDelivered, kStatUnderruns, kStatUrbsCompleted, kStatPacketsFailed,
+                             kStatLastDeliveredMediaFrame}) {
             stats_[counter].store(0, std::memory_order_release);
         }
         mediaStarted_ = false;
@@ -292,7 +298,8 @@ void StreamEngine::fill(IsoUrb& urb) {
         out += packet.length;
 
         if (media > 0) mediaStarted_ = true;
-        add(kStatMediaFramesSubmitted, static_cast<int64_t>(media));
+        const auto count = static_cast<int64_t>(media);
+        packet.mediaEndFrame = stats_[kStatMediaFramesSubmitted].fetch_add(count, std::memory_order_release) + count;
         add(kStatSilenceFramesInserted, static_cast<int64_t>(frames - media));
         if (media == frames) {
             inUnderrun_ = false;
@@ -312,8 +319,13 @@ void StreamEngine::account(const IsoUrb& urb, bool cancelling) {
         const bool delivered = packet.status == 0 && packet.actualLength == packet.length;
         if (delivered) {
             add(kStatMediaFramesProcessed, packet.mediaFrames);
-            add(kStatMediaFramesDelivered, packet.mediaFrames);
+            // URBs can complete out of order. A silence-only packet proves nothing about media.
+            auto& last = stats_[kStatLastDeliveredMediaFrame];
+            if (packet.mediaFrames > 0 && packet.mediaEndFrame > last.load(std::memory_order_relaxed)) {
+                last.store(packet.mediaEndFrame, std::memory_order_release);
+            }
             add(kStatTotalMediaFramesDelivered, packet.mediaFrames);
+            add(kStatMediaFramesDelivered, packet.mediaFrames);
             add(kStatUsbFramesDelivered, packet.length / frameBytes);
         } else if (!cancelling) {
             add(kStatMediaFramesProcessed, packet.mediaFrames);

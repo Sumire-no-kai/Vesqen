@@ -26,6 +26,8 @@ data class UsbStreamStats(
     /** The newest output handed out; it differs from [epoch] until the last one's URBs are back. */
     val requestedEpoch: Long,
     val sessionTotals: UsbStreamTotals = UsbStreamTotals(mediaFramesLost, underruns, packetsFailed, mediaFramesDelivered),
+    /** Furthest media-frame position delivered in this epoch, excluding lost and silence-only packets. */
+    val lastDeliveredMediaFrame: Long = mediaFramesDelivered,
 ) {
     /** The order matches `enum StreamFailure` in core/stream_engine.h. */
     enum class Failure { NONE, THREAD_START, SUBMIT, DEVICE_GONE, REAP }
@@ -109,7 +111,8 @@ class UsbStreamEngine private constructor(private var handle: Long) : UsbStream 
             threadSchedulerPolicy = values[index++],
             epoch = values[index++],
             requestedEpoch = values[index++],
-            sessionTotals = UsbStreamTotals(values[index++], values[index++], values[index++], values[index]),
+            sessionTotals = UsbStreamTotals(values[index++], values[index++], values[index++], values[index++]),
+            lastDeliveredMediaFrame = values[index],
         )
     }
 
@@ -132,7 +135,7 @@ class UsbStreamEngine private constructor(private var handle: Long) : UsbStream 
 
     companion object {
         const val FIRST_EPOCH = 0L
-        private const val STAT_COUNT = 20
+        private const val STAT_COUNT = 21
 
         /** Loaded on first use only (D5), so ordinary playback never depends on it. Null once loaded. */
         private val libraryError: String? by lazy {

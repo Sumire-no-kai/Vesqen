@@ -174,14 +174,17 @@ private fun SampleRates.ranges(): List<IntRange> = when (this) {
 @UnstableApi
 internal interface DirectUsbRoute {
     interface Listener {
-        /** Media3 opened an output on the session. Called on the playback thread. */
-        fun onOutputOpened(periodUid: Any) = Unit
+        /** The route has posted a new output to the main thread. Register it before the next failure callback. */
+        fun onOutputOpened(periodUid: Any, output: Any = periodUid) = Unit
+
+        /** Main thread: media delivery, pause and retirement, bound to the output that observed them. */
+        fun onOutputActive(periodUid: Any, output: Any = periodUid, active: Boolean) = Unit
 
         /**
          * The session failed, or the format gate refused what Media3 configured; [details] then name
          * the item the gate checked and what the DAC offers. Any thread.
          */
-        fun onFailed(failure: DirectUsbFailure, details: DirectUsbDetails? = null) = Unit
+        fun onFailed(failure: DirectUsbFailure, details: DirectUsbDetails? = null, periodUid: Any? = null, output: Any? = null) = Unit
     }
 
     /** What the strict sink plays through: the current session's outputs. */
@@ -197,6 +200,9 @@ internal interface DirectUsbRoute {
 
     /** Playback thread: Media3 is configuring the sink for the item that [config] names (#282). */
     fun onSinkConfigured(config: AudioSink.AudioSinkConfig)
+
+    /** User discontinuities invalidate even output-created notifications still queued on the main thread. */
+    fun invalidateOutput() = Unit
 
     fun inspect(source: SourcePcmFormat): DirectUsbInspection
 
@@ -218,6 +224,30 @@ internal interface DirectUsbRoute {
     fun close()
 }
 
+/** Main-thread release barrier. The route drops a session before its control thread finishes cleanup. */
+internal class PendingUsbReleases {
+    private var outstanding = 0
+    private var allSucceeded = true
+    private val waiting = mutableListOf<(Boolean) -> Unit>()
+    val pending: Boolean get() = outstanding > 0
+
+    fun begin() { outstanding++ }
+
+    fun await(callback: (Boolean) -> Unit) {
+        if (pending) waiting += callback else callback(true)
+    }
+
+    fun complete(succeeded: Boolean) {
+        allSucceeded = allSucceeded && succeeded
+        if (--outstanding > 0) return
+        val result = allSucceeded
+        allSucceeded = true
+        val callbacks = waiting.toList()
+        waiting.clear()
+        callbacks.forEach { it(result) }
+    }
+}
+
 /**
  * The production route. It looks at `UsbManager` itself on every inspection rather than trusting
  * what an event said, keeps one connection from inspection to release, and starts at the D4
@@ -236,7 +266,9 @@ internal class AndroidDirectUsbRoute(
 
     private class Prepared(val device: UsbDevice, val connection: UsbDeviceConnection, val function: UacFunction, val plan: StreamingPlan)
 
+    private val releases = PendingUsbReleases()
     private var prepared: Prepared? = null
+    @Volatile
     private var session: DirectUsbSession? = null
 
     /** What [readings] reports, set once a takeover is ready and cleared on release. */
@@ -269,6 +301,10 @@ internal class AndroidDirectUsbRoute(
     private var configuringSource: TelemetrySourceFacts? = null
 
     private var configuringPeriodUid: Any? = null
+    @Volatile private var outputGeneration = 0L
+    private var configuringGeneration = 0L
+
+    override fun invalidateOutput() { outputGeneration++ }
 
     @Volatile
     override var streaming = false
@@ -327,6 +363,7 @@ internal class AndroidDirectUsbRoute(
     }
 
     override fun onSinkConfigured(config: AudioSink.AudioSinkConfig) {
+        configuringGeneration = outputGeneration
         configuringPeriodUid = config.mediaPeriodId?.periodUid
         configuringSource = config.mediaPeriodId?.takeIf { !config.timeline.isEmpty }?.let { period ->
             val index = config.timeline.getIndexOfPeriod(period.periodUid).takeIf { it != C.INDEX_UNSET }
@@ -336,7 +373,7 @@ internal class AndroidDirectUsbRoute(
         }
     }
 
-    override val recoveryPending: Boolean get() = markers.isOccupied()
+    override val recoveryPending: Boolean get() = releases.pending || markers.isOccupied()
 
     override fun hasUsbAudioDevice(): Boolean = usbManager.deviceList.values.any(UsbDevice::isUsbAudioDevice)
 
@@ -437,16 +474,29 @@ internal class AndroidDirectUsbRoute(
                         next.volumeRange?.let { volumes.publish(DirectUsbVolume(result.volumeNow, it.minimum, it.maximum, it.resolution)) }
                         sessionProvider = DirectUsbAudioOutputProvider(
                             target.plan,
-                            openOutput = {
-                                next.openOutput()?.also {
-                                    val uid = configuringPeriodUid
-                                    if (uid != null) main.post { if (session === next) listener?.onOutputOpened(uid) }
-                                }
-                            },
+                            openOutput = next::openOutput,
                             source = { configuringSource },
                             onFailure = { failure ->
                                 val details = configuringSource?.toDirectDetails()?.withOffer(target.function)
-                                listener?.onFailed(failure, details)
+                                if (configuringGeneration == outputGeneration) listener?.onFailed(failure, details, configuringPeriodUid)
+                            },
+                            listenerFactory = {
+                                val uid = configuringPeriodUid
+                                val generation = outputGeneration
+                                val token = Any()
+                                val details = configuringSource?.toDirectDetails()?.withOffer(target.function)
+                                if (uid != null) main.post { if (session === next && outputGeneration == generation) listener?.onOutputOpened(uid, token) }
+                                object : DirectUsbAudioOutput.PlaybackListener {
+                                    override fun onActiveChanged(active: Boolean) {
+                                        if (uid != null) main.post {
+                                            if (session === next && outputGeneration == generation) listener?.onOutputActive(uid, token, active)
+                                        }
+                                    }
+
+                                    override fun onFailed(failure: DirectUsbFailure) {
+                                        if (session === next && outputGeneration == generation) listener?.onFailed(failure, details, uid, token)
+                                    }
+                                }
                             },
                         )
                         streaming = true
@@ -514,15 +564,12 @@ internal class AndroidDirectUsbRoute(
         val held = prepared
         prepared = null
         if (current != null) {
-            if (onReleased == null) {
-                current.release()
-            } else {
-                current.release { cleanup -> main.post { onReleased(cleanup.firstFailure == null) } }
-            }
+            releases.begin()
+            current.release { cleanup -> main.post { releases.complete(cleanup.firstFailure == null) } }
         } else {
             held?.connection?.close()
-            onReleased?.invoke(true)
         }
+        onReleased?.let(releases::await)
     }
 
     override fun close() {

@@ -42,7 +42,18 @@ class DirectUsbAudioOutput(
      * configuration was refused. Read when the sink keeps this output for that format (#282).
      */
     private val configuredSourceBits: () -> Int = { sourceBits },
+    private val listenerFactory: (() -> PlaybackListener)? = null,
 ) : AudioOutput {
+    interface PlaybackListener {
+        fun onActiveChanged(active: Boolean)
+        fun onFailed(failure: DirectUsbFailure)
+    }
+
+    private var playbackListener = listenerFactory?.invoke()
+    private var reportedActive = false
+    // A reused output must deliver beyond the previous source's accepted frames before it can
+    // support the next source's declaration. Lost frames cannot count as delivery evidence.
+    private var sourceStartFrames = 0L
     private var latticeBits = sourceBits
     private var converter = ExactPcmConverter(encoding, plan.channels, sourceBits, plan.bitResolution, plan.subslotBytes)
     private val clock = UsbMediaClock(plan.sampleRateHz)
@@ -65,6 +76,7 @@ class DirectUsbAudioOutput(
 
     override fun pause() {
         wantRunning = false
+        reportActive(false)
         handle?.let(::settle)
     }
 
@@ -109,6 +121,7 @@ class DirectUsbAudioOutput(
     override fun release() {
         if (released) return
         released = true
+        reportActive(false)
         handle?.release()
         listeners.forEach(AudioOutput.Listener::onReleased)
     }
@@ -125,6 +138,7 @@ class DirectUsbAudioOutput(
         // Null until the stream reached this output's epoch: none of its audio has gone out yet.
         val stats = target.readStats() ?: return 0
         stats.asFailure()?.let(::report)
+        reportActive(!released && running && !failureReported && stats.lastDeliveredMediaFrame > sourceStartFrames)
         val frames = clock.positionFrames(stats.mediaFramesProcessed, stats.mediaFramesSubmitted, running, nanoTime())
         return Util.sampleCountToDurationUs(frames, plan.sampleRateHz)
     }
@@ -143,6 +157,9 @@ class DirectUsbAudioOutput(
         if (newConfig != currentConfig) return false
         val bits = configuredSourceBits()
         if (bits <= 0) return false
+        reportActive(false)
+        sourceStartFrames = acceptedFrames
+        playbackListener = listenerFactory?.invoke()
         if (bits != latticeBits) {
             converter = ExactPcmConverter(encoding, plan.channels, bits, plan.bitResolution, plan.subslotBytes)
             latticeBits = bits
@@ -202,10 +219,18 @@ class DirectUsbAudioOutput(
         }
     }
 
+    private fun reportActive(active: Boolean) {
+        if (reportedActive == active) return
+        reportedActive = active
+        playbackListener?.onActiveChanged(active)
+    }
+
     private fun report(failure: DirectUsbFailure) {
         if (failureReported) return
         failureReported = true
-        onFailure(failure)
+        reportActive(false)
+        val listener = playbackListener
+        if (listener != null) listener.onFailed(failure) else onFailure(failure)
     }
 
     companion object {
@@ -233,6 +258,7 @@ internal class DirectUsbAudioOutputProvider(
     private val source: () -> TelemetrySourceFacts?,
     private val onFailure: (DirectUsbFailure) -> Unit = {},
     private val onVolumeIgnored: (Float) -> Unit = {},
+    private val listenerFactory: (() -> DirectUsbAudioOutput.PlaybackListener)? = null,
 ) : AudioOutputProvider {
     /**
      * Set by [getOutputConfig] for the format being configured, and 0 while that format is refused.
@@ -298,6 +324,7 @@ internal class DirectUsbAudioOutputProvider(
             onFailure,
             onVolumeIgnored,
             configuredSourceBits = { acceptedSourceBits },
+            listenerFactory = listenerFactory,
         )
     }
 

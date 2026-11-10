@@ -55,7 +55,7 @@ abstract class TakeoverMarkerStore {
      *
      * A record that a process which died left for this same connection is taken over with the volume it
      * saved, so the release still restores the volume from before that process took the device. A record
-     * this process kept after a failed release, or one for another connected device, keeps blocking.
+     * kept after an incomplete interface release, or one for another connected device, keeps blocking.
      */
     @Synchronized
     fun acquire(device: UsbDeviceIdentity): TakeoverMarker? {
@@ -76,9 +76,11 @@ abstract class TakeoverMarkerStore {
 
     /** Only the session that acquired the slot can finish it. A failed release keeps its record. */
     @Synchronized
-    fun finish(allReleased: Boolean): Boolean {
+    fun finish(allReleased: Boolean, settingsRestored: Boolean = true): Boolean {
         check(held)
-        val cleared = allReleased && clear()
+        val cleared = allReleased && settingsRestored && clear()
+        // Interfaces are back: the same connection may retry its saved settings on the next takeover.
+        wroteHere = !allReleased
         held = false
         return cleared
     }

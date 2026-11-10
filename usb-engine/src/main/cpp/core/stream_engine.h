@@ -32,6 +32,7 @@ struct IsoPacket {
     uint32_t actualLength = 0;
     int32_t status = 0;
     uint32_t mediaFrames = 0;
+    int64_t mediaEndFrame = 0;  // Exclusive end of this packet in the epoch's media sequence.
 };
 
 struct IsoUrb {
@@ -91,6 +92,7 @@ enum Stat : size_t {
     kStatTotalUnderruns,
     kStatTotalPacketsFailed,
     kStatTotalMediaFramesDelivered,
+    kStatLastDeliveredMediaFrame,
     kStatCount,
 };
 
@@ -150,7 +152,7 @@ private:
     void account(const IsoUrb& urb, bool cancelling);
     void fail(StreamFailure failure, int error);
     void failSubmit(int error);
-    void add(Stat stat, int64_t amount) { stats_[stat].fetch_add(amount, std::memory_order_relaxed); }
+    void add(Stat stat, int64_t amount) { stats_[stat].fetch_add(amount, std::memory_order_release); }
 
     const StreamConfig config_;
     IsoTransport& transport_;

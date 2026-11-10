@@ -373,15 +373,17 @@ void testPauseIsNotAnUnderrun() {
 /** Audio is still waiting here, so a mistaken count would show even at the very first silent packet. */
 void testPausingWithMediaInTheRingIsNotAnUnderrun() {
     FakeTransport transport;
-    transport.paceMs = 1;
+    transport.hold = true;
     StreamEngine engine(config44k(), transport);
     const std::vector<uint8_t> input = pattern(4000, 4);
     CHECK_EQ(engine.write(0, input.data(), 16'000), 16'000);
     engine.setRunning(0, true);
     CHECK(engine.start());
-    CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) >= 400; }));
+    // Keep the first three URBs in flight so the ring cannot drain before the pause.
+    CHECK(waitUntil([&] { return transport.submitted == 3; }));
 
     engine.setRunning(0, false);
+    transport.hold = false;
     const int64_t completed = stat(engine, kStatUrbsCompleted);
     CHECK(waitUntil([&] { return stat(engine, kStatUrbsCompleted) >= completed + 6; }));
     CHECK(stat(engine, kStatMediaFramesSubmitted) < 4000);
@@ -407,8 +409,24 @@ void testFailedAndShortPacketsAreLostButStillProcessed() {
     const int64_t lost = stat(engine, kStatMediaFramesLost);
     CHECK(lost > 0);
     CHECK_EQ(stat(engine, kStatMediaFramesDelivered) + lost, 4000);
+    CHECK_EQ(stat(engine, kStatLastDeliveredMediaFrame), 4000);
     // A lost packet is not a stream failure by itself.
     CHECK_EQ(stat(engine, kStatFailure), kFailureNone);
+}
+
+void testLostTailAndSubsequentSilenceDoNotAdvanceDeliveryPosition() {
+    FakeTransport transport;
+    transport.failNextPacket = 1;
+    StreamEngine engine(config44k(), transport);
+    const auto input = pattern(88, 4);  // Two 44-frame packets, the second is lost.
+    CHECK_EQ(engine.write(0, input.data(), 352), 352);
+    engine.setRunning(0, true);
+    engine.markEndOfStream(0);
+    CHECK(engine.start());
+    CHECK(waitUntil([&] { return stat(engine, kStatUsbFramesDelivered) > 88; }));
+    CHECK(engine.stop(2000));
+    CHECK_EQ(stat(engine, kStatMediaFramesLost), 44);
+    CHECK_EQ(stat(engine, kStatLastDeliveredMediaFrame), 44);
 }
 
 void testStoppingReclaimsWhatIsInFlight() {
@@ -577,6 +595,7 @@ void testASecondSeekWhileTheFirstIsReclaimedStartsAtItsOwnFirstFrame() {
     transport.holdCancelled = false;
     CHECK(waitUntil([&] { return stat(engine, kStatEpoch) == second; }));
     // Each output counts from zero, so nothing of the first one shows in the second's progress.
+    CHECK_EQ(stat(engine, kStatLastDeliveredMediaFrame), 0);
     CHECK_EQ(stat(engine, kStatMediaFramesWritten), 0);
     CHECK_EQ(stat(engine, kStatMediaFramesProcessed), 0);
     CHECK_EQ(stat(engine, kStatUnderruns), 0);
@@ -734,7 +753,10 @@ void testStatsNeverMixTwoOutputs() {
             engine.readStats(values);
             if (values[kStatEpoch] < 0) continue;
             if (values[kStatMediaFramesSubmitted] > values[kStatMediaFramesWritten] ||
-                values[kStatMediaFramesProcessed] > values[kStatMediaFramesSubmitted]) {
+                values[kStatMediaFramesProcessed] > values[kStatMediaFramesSubmitted] ||
+                values[kStatLastDeliveredMediaFrame] > values[kStatMediaFramesSubmitted] ||
+                values[kStatMediaFramesDelivered] > values[kStatLastDeliveredMediaFrame] ||
+                values[kStatMediaFramesDelivered] + values[kStatMediaFramesLost] > values[kStatMediaFramesProcessed]) {
                 ++mixed;
             }
         }
@@ -785,6 +807,7 @@ int main() {
     testPauseIsNotAnUnderrun();
     testPausingWithMediaInTheRingIsNotAnUnderrun();
     testFailedAndShortPacketsAreLostButStillProcessed();
+    testLostTailAndSubsequentSilenceDoNotAdvanceDeliveryPosition();
     testStoppingReclaimsWhatIsInFlight();
     testAUrbCompletingDuringAStopIsNotSentAgain();
     testAStopThatTimesOutKeepsEverythingAliveAndCanFinishLater();
