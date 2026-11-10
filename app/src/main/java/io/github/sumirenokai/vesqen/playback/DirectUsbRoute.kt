@@ -175,13 +175,16 @@ private fun SampleRates.ranges(): List<IntRange> = when (this) {
 internal interface DirectUsbRoute {
     interface Listener {
         /** Media3 opened an output on the session. Called on the playback thread. */
-        fun onOutputOpened(periodUid: Any) = Unit
+        fun onOutputOpened(periodUid: Any, output: Any = periodUid) = Unit
+
+        /** Media delivery, pause and retirement, bound to the output that observed them. */
+        fun onOutputActive(periodUid: Any, output: Any = periodUid, active: Boolean) = Unit
 
         /**
          * The session failed, or the format gate refused what Media3 configured; [details] then name
          * the item the gate checked and what the DAC offers. Any thread.
          */
-        fun onFailed(failure: DirectUsbFailure, details: DirectUsbDetails? = null) = Unit
+        fun onFailed(failure: DirectUsbFailure, details: DirectUsbDetails? = null, periodUid: Any? = null, output: Any? = null) = Unit
     }
 
     /** What the strict sink plays through: the current session's outputs. */
@@ -237,6 +240,7 @@ internal class AndroidDirectUsbRoute(
     private class Prepared(val device: UsbDevice, val connection: UsbDeviceConnection, val function: UacFunction, val plan: StreamingPlan)
 
     private var prepared: Prepared? = null
+    @Volatile
     private var session: DirectUsbSession? = null
 
     /** What [readings] reports, set once a takeover is ready and cleared on release. */
@@ -437,16 +441,28 @@ internal class AndroidDirectUsbRoute(
                         next.volumeRange?.let { volumes.publish(DirectUsbVolume(result.volumeNow, it.minimum, it.maximum, it.resolution)) }
                         sessionProvider = DirectUsbAudioOutputProvider(
                             target.plan,
-                            openOutput = {
-                                next.openOutput()?.also {
-                                    val uid = configuringPeriodUid
-                                    if (uid != null) main.post { if (session === next) listener?.onOutputOpened(uid) }
-                                }
-                            },
+                            openOutput = next::openOutput,
                             source = { configuringSource },
                             onFailure = { failure ->
                                 val details = configuringSource?.toDirectDetails()?.withOffer(target.function)
-                                listener?.onFailed(failure, details)
+                                listener?.onFailed(failure, details, configuringPeriodUid)
+                            },
+                            listenerFactory = {
+                                val uid = configuringPeriodUid
+                                val token = Any()
+                                val details = configuringSource?.toDirectDetails()?.withOffer(target.function)
+                                if (uid != null) main.post { if (session === next) listener?.onOutputOpened(uid, token) }
+                                object : DirectUsbAudioOutput.PlaybackListener {
+                                    override fun onActiveChanged(active: Boolean) {
+                                        if (uid != null) main.post {
+                                            if (session === next) listener?.onOutputActive(uid, token, active)
+                                        }
+                                    }
+
+                                    override fun onFailed(failure: DirectUsbFailure) {
+                                        if (session === next) listener?.onFailed(failure, details, uid, token)
+                                    }
+                                }
                             },
                         )
                         streaming = true

@@ -16,11 +16,18 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import androidx.core.content.edit
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.SilenceMediaSource
+import androidx.media3.exoplayer.source.WrappingMediaSource
+import androidx.media3.exoplayer.source.SinglePeriodTimeline
+import androidx.media3.exoplayer.drm.DrmSessionManagerProvider
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.exoplayer.audio.AudioOutput
 import androidx.media3.exoplayer.audio.AudioOutputProvider
 import androidx.media3.exoplayer.audio.AudioSink
@@ -72,7 +79,19 @@ class UsbOutputCoordinatorTest {
     private val repository = UsbOutputStateRepository()
     private val published = mutableListOf<UsbOutputStatus>()
     private val mixer = FakeMixerAdapter()
-    private val realPlayer = ExoPlayer.Builder(context).build()
+    // Stable in-memory sources keep asynchronous file-not-found errors out of lifecycle tests.
+    private val realPlayer = ExoPlayer.Builder(context).setMediaSourceFactory(object : MediaSource.Factory {
+        override fun setDrmSessionManagerProvider(provider: DrmSessionManagerProvider) = this
+        override fun setLoadErrorHandlingPolicy(policy: LoadErrorHandlingPolicy) = this
+        override fun getSupportedTypes() = intArrayOf(C.CONTENT_TYPE_OTHER)
+        override fun createMediaSource(item: MediaItem): MediaSource {
+            val source = SilenceMediaSource(60_000_000).apply { updateMediaItem(item) }
+            return object : WrappingMediaSource(source) {
+                // Publish the concrete period immediately, before the playback thread prepares it.
+                override fun getInitialTimeline() = SinglePeriodTimeline(60_000_000, true, false, false, null, item)
+            }
+        }
+    }).build()
     private val playerCalls = mutableListOf<String>()
     private val player = recordingPlayer(realPlayer, playerCalls)
     private val dac = audioDevice(id = 11)
@@ -996,7 +1015,8 @@ class UsbOutputCoordinatorTest {
         assertEquals("clearPreferred(11)", mixer.calls.last())
         assertFalse(output.write(pcm(), 1, 0))
         assertTrue("removeListener" in playerCalls)
-        assertTrue(ReflectionHelpers.getField<Set<*>>(shadowOf(audioManager), "audioDeviceCallbacks").isEmpty())
+        val callbacks = ReflectionHelpers.getField<Set<*>>(shadowOf(audioManager), "audioDeviceCallbacks")
+        assertFalse(callbacks.contains(ReflectionHelpers.getField<Any>(coordinator, "deviceCallback")))
     }
 
     @Test
@@ -1048,6 +1068,178 @@ class UsbOutputCoordinatorTest {
 
     // Vesqen's own USB output (M7-4)
 
+    @Test
+    fun `an expired trial blocks an explicit resume on a retained session`() {
+        reachDirectActive()
+        player.pause()
+        idle()
+        strictAllowed = false
+        player.play()
+        idle()
+        assertStatus(UsbOutputPhase.FAILED, "strict_usb.trial_ended")
+    }
+
+    @Test
+    fun `atomic queue replacement waits for its own output delivery`() {
+        reachDirectActive()
+        player.setMediaItem(mediaItem(mediaId = "replacement"))
+        idle()
+        assertFalse("Replacement was ACTIVE before its output opened: " + status(), status().phase == UsbOutputPhase.ACTIVE)
+    }
+
+    @Test
+    fun `stopping a retained queue revokes ACTIVE`() {
+        reachDirectActive()
+        player.stop()
+        idle()
+        assertEquals(androidx.media3.common.Player.STATE_IDLE, player.playbackState)
+        assertFalse("Stopped stream still ACTIVE: " + status(), status().phase == UsbOutputPhase.ACTIVE)
+    }
+
+    @Test
+    fun `system playback cannot prepare before DAC release`() {
+        reachDirectActive()
+        direct.deferTakeover = true // the existing fake also defers release acknowledgements in this mode
+        direct.recoveryPending = true
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        idle()
+        assertFalse("System playback restarted while device release is unconfirmed: " + playerCalls,
+            playerCalls.contains("prepare") && player.playWhenReady)
+    }
+
+    @Test
+    fun `a queued old source failure cannot stop a replacement track`() {
+        reachDirectActive(listOf(mediaItem(mediaId = "old")))
+        // An old provider reports a data-dependent error from the playback thread.
+        val oldListener = checkNotNull(direct.listener)
+        val oldPeriod = player.currentTimeline.getUidOfPeriod(player.currentPeriodIndex)
+        val playbackThread = Thread {
+            oldListener.onFailed(DirectUsbFailure(DirectUsbFailure.Reason.PCM_NOT_EXACT, "old item"), periodUid = oldPeriod)
+        }
+        playbackThread.start()
+        playbackThread.join()
+        // A main-thread play-selection already in progress replaces the old timeline before draining callbacks.
+        player.setMediaItem(mediaItem(mediaId = "fresh"))
+        player.prepare()
+        player.play()
+        idle()
+        assertEquals("fresh", player.currentMediaItem?.mediaId)
+        assertFalse("Old PCM failure stopped fresh selection: " + status(), status().phase == UsbOutputPhase.FAILED)
+    }
+
+    @Test
+    fun `opening an output without delivery cannot activate strict playback`() {
+        connect(dac)
+        start(direct = direct)
+        loadTrack()
+        requestStrict()
+        player.play()
+        idle()
+        checkNotNull(direct.listener).onOutputOpened(player.currentTimeline.getUidOfPeriod(player.currentPeriodIndex))
+        idle()
+        assertEquals(0L, direct.readings().deliveredFrames)
+        assertFalse("Zero delivered media frames still activated strict output: " + status(), status().phase == UsbOutputPhase.ACTIVE)
+    }
+
+    @Test
+    fun `system mode selected during takeover waits even before streaming starts`() {
+        beginHostOnlyTakeover()
+        playerCalls.clear()
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        idle()
+        assertFalse(playerCalls.contains("prepare"))
+        checkNotNull(direct.pendingRelease)(true)
+        idle()
+        assertEquals(UsbOutputPhase.SYSTEM, status().phase)
+    }
+
+    @Test
+    fun `system output waits for release then honors the latest pause intent`() {
+        reachDirectActive()
+        direct.deferTakeover = true
+        direct.recoveryPending = true
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        idle()
+        assertEquals(UsbOutputPhase.APPLYING, status().phase)
+        assertFalse(playerCalls.contains("prepare"))
+        coordinator.requestMode(UsbOutputMode.SYSTEM) // repeated selection must keep waiting
+        player.play()
+        player.pause()
+        val done = checkNotNull(direct.pendingRelease)
+        direct.recoveryPending = false
+        done(true)
+        idle()
+        assertEquals(UsbOutputPhase.SYSTEM, status().phase)
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `failed release prevents system output`() {
+        reachDirectActive()
+        direct.deferTakeover = true
+        direct.recoveryPending = true
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        idle()
+        checkNotNull(direct.pendingRelease)(false)
+        idle()
+        assertFailedAfterActive(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed", UsbOutputFailureOrigin.USER_MODE_CHANGE)
+        assertFalse(playerCalls.contains("prepare"))
+    }
+
+    @Test
+    fun `a system release callback cannot resume after service closure`() {
+        reachDirectActive()
+        direct.deferTakeover = true
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        val done = checkNotNull(direct.pendingRelease)
+        coordinator.close()
+        playerCalls.clear()
+        done(true)
+        idle()
+        assertFalse(playerCalls.contains("prepare"))
+        assertFalse(playerCalls.contains("play"))
+    }
+
+    @Test
+    fun `seeking invalidates the previous output before its replacement opens`() {
+        reachDirectActive()
+        val uid = player.currentTimeline.getUidOfPeriod(player.currentPeriodIndex)
+        player.seekTo(500)
+        checkNotNull(direct.listener).onOutputActive(uid, active = true)
+        checkNotNull(direct.listener).onFailed(DirectUsbFailure(DirectUsbFailure.Reason.PCM_NOT_EXACT, "old output"), periodUid = uid, output = uid)
+        idle()
+        assertEquals(UsbOutputPhase.APPLYING, status().phase)
+        notifyDeliveredOutput()
+        idle()
+        assertEquals(UsbOutputPhase.ACTIVE, status().phase)
+    }
+
+    @Test
+    fun `a retired output cannot activate or fail a successor in the same period`() {
+        reachDirectActive()
+        val uid = player.currentTimeline.getUidOfPeriod(player.currentPeriodIndex)
+        val obsolete = Any()
+        val current = Any()
+        checkNotNull(direct.listener).onOutputOpened(uid, obsolete)
+        checkNotNull(direct.listener).onOutputOpened(uid, current)
+        checkNotNull(direct.listener).onOutputActive(uid, obsolete, true)
+        checkNotNull(direct.listener).onFailed(DirectUsbFailure(DirectUsbFailure.Reason.PCM_NOT_EXACT, "old output"), periodUid = uid, output = obsolete)
+        idle()
+        assertEquals(UsbOutputPhase.APPLYING, status().phase)
+        checkNotNull(direct.listener).onOutputActive(uid, current, true)
+        idle()
+        assertEquals(UsbOutputPhase.ACTIVE, status().phase)
+        checkNotNull(direct.listener).onOutputActive(uid, obsolete, false)
+        idle()
+        assertEquals(UsbOutputPhase.ACTIVE, status().phase)
+    }
+
+    private fun notifyDeliveredOutput() {
+        val uid = player.currentTimeline.getUidOfPeriod(player.currentPeriodIndex)
+        checkNotNull(direct.listener).onOutputOpened(uid)
+        checkNotNull(direct.listener).onOutputActive(uid, active = true)
+    }
+
     private val direct = FakeDirectRoute()
 
     private fun reachDirectActive(items: List<MediaItem> = listOf(mediaItem())) {
@@ -1059,7 +1251,7 @@ class UsbOutputCoordinatorTest {
         requestStrict()
         player.play()
         idle()
-        checkNotNull(direct.listener).onOutputOpened(player.currentTimeline.getUidOfPeriod(player.currentPeriodIndex))
+        notifyDeliveredOutput()
         idle()
         assertStatus(UsbOutputPhase.ACTIVE, "direct_usb.active")
         playerCalls.clear()
@@ -1080,12 +1272,12 @@ class UsbOutputCoordinatorTest {
 
         player.play()
         idle()
-        assertStatus(UsbOutputPhase.APPLYING, "direct_usb.taking_over")
+        assertStatus(UsbOutputPhase.APPLYING, "direct_usb.configured_not_playing")
         assertEquals(listOf("inspect", "inspect", "takeOver"), direct.calls)
         assertEquals(listOf("stop", "prepare", "play"), playerCalls.takeLast(3))
         assertTrue("The player plays on, now through the strict sink", player.playWhenReady)
 
-        checkNotNull(direct.listener).onOutputOpened(player.currentTimeline.getUidOfPeriod(player.currentPeriodIndex))
+        notifyDeliveredOutput()
         idle()
         assertStatus(UsbOutputPhase.ACTIVE, "direct_usb.active")
     }
@@ -1330,6 +1522,9 @@ class UsbOutputCoordinatorTest {
 
         player.seekToNextMediaItem()
         idle()
+        assertEquals(UsbOutputPhase.APPLYING, status().phase)
+        notifyDeliveredOutput()
+        idle()
 
         assertEquals(UsbOutputPhase.ACTIVE, status().phase)
         assertEquals("24-bit source", status().sourceFormat?.encoding)
@@ -1354,6 +1549,9 @@ class UsbOutputCoordinatorTest {
         reachDirectActive(listOf(mediaItem(mediaId = "first"), mediaItem(mediaId = "second")))
 
         player.seekToNextMediaItem()
+        idle()
+        assertEquals(UsbOutputPhase.APPLYING, status().phase)
+        notifyDeliveredOutput()
         idle()
 
         assertFalse(playerCalls.contains("stop"))
@@ -1382,6 +1580,9 @@ class UsbOutputCoordinatorTest {
 
         player.seekToNextMediaItem()
         idle()
+        assertEquals(UsbOutputPhase.APPLYING, status().phase)
+        notifyDeliveredOutput()
+        idle()
 
         assertEquals(UsbOutputPhase.ACTIVE, status().phase)
         assertTrue(direct.calls.isEmpty())
@@ -1404,7 +1605,7 @@ class UsbOutputCoordinatorTest {
         player.play()
         idle()
         assertEquals(UsbOutputPhase.APPLYING, status().phase)
-        checkNotNull(direct.listener).onOutputOpened(player.currentTimeline.getUidOfPeriod(player.currentPeriodIndex))
+        notifyDeliveredOutput()
         idle()
         assertStatus(UsbOutputPhase.ACTIVE, "direct_usb.active")
     }
@@ -1463,7 +1664,7 @@ class UsbOutputCoordinatorTest {
         checkNotNull(direct.listener).onOutputOpened(old)
         idle()
         assertEquals(UsbOutputPhase.APPLYING, status().phase)
-        checkNotNull(direct.listener).onOutputOpened(player.currentTimeline.getUidOfPeriod(player.currentPeriodIndex))
+        notifyDeliveredOutput()
         idle()
         assertStatus(UsbOutputPhase.ACTIVE, "direct_usb.active")
     }
@@ -1499,7 +1700,7 @@ class UsbOutputCoordinatorTest {
         idle()
         assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed")
         requestStrict()
-        assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed")
+        assertFailedAfterActive(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed", UsbOutputFailureOrigin.USER_MODE_CHANGE)
         assertFalse(playerCalls.contains("prepare"))
     }
 
@@ -1561,6 +1762,7 @@ class UsbOutputCoordinatorTest {
         var inspection: DirectUsbInspection = DirectUsbInspection.Ready("JBL Flip 7", PLAN_48K_24)
         var permissionGranted = true
         var takeoverFailure: DirectUsbFailure? = null
+        override fun readings() = DirectUsbReadings(48000, 24, 3, 2, "uac1", "adaptive", -30.0, 0, 0, 0, 0)
         var deferTakeover = false
         var pendingTakeover: ((DirectUsbFailure?) -> Unit)? = null
         var pendingRelease: ((Boolean) -> Unit)? = null

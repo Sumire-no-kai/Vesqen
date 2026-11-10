@@ -103,6 +103,7 @@ class DirectUsbSession(
     private val claimed = mutableListOf<Int>()
     private var streamingInterface: Int? = null
     private var restoreVolume: (() -> Boolean)? = null
+    private var restorePending = false
 
     /** The path's master volume, known once the takeover has read it. */
     private class VolumeControl(val unitId: Int, val controlInterface: Int, val range: UacVolumeRange)
@@ -200,6 +201,7 @@ class DirectUsbSession(
         val taken = markers.acquire(device)
             ?: return failed(Reason.USB_TRANSFER_FAILED, "the takeover marker is unavailable or awaiting recovery")
         markerWritten = true
+        restorePending = taken.volumeBefore != null
         val interfaces = (listOf(function.controlInterface) + function.streamingInterfaces.map { it.interfaceNumber }).distinct()
         for (number in interfaces) {
             if (!link.claim(number)) return failed(Reason.INTERFACE_CLAIM_FAILED, "interface $number")
@@ -221,6 +223,7 @@ class DirectUsbSession(
         if (!markers.write(TakeoverMarker(device, volumeBefore, mutedBefore))) {
             return failed(Reason.USB_TRANSFER_FAILED, "the original hardware volume could not be saved")
         }
+        restorePending = true
         restoreVolume = {
             val mutedAgain = mutedBefore != true || client.setMute(unit.id, controlInterface, true)
             client.setVolume(unit.id, controlInterface, volumeBefore) && mutedAgain
@@ -310,7 +313,9 @@ class DirectUsbSession(
             streamingInterface = null
         }
         restoreVolume?.let { restore ->
-            cleanupSteps += CleanupStep("volume restored", runCatching(restore).getOrDefault(false))
+            val restored = runCatching(restore).getOrDefault(false)
+            restorePending = !restored
+            cleanupSteps += CleanupStep("volume restored", restored)
             restoreVolume = null
         }
         var allReleased = true
@@ -323,7 +328,7 @@ class DirectUsbSession(
         link.close()
         // Only a device with every interface back may lose its marker; otherwise the next start recovers it.
         if (markerWritten) {
-            cleanupSteps += CleanupStep("takeover marker cleared", markers.finish(allReleased))
+            cleanupSteps += CleanupStep("takeover marker cleared", markers.finish(allReleased, settingsRestored = !restorePending))
         }
         val record = CleanupRecord(cleanupSteps.toList())
         val failure = (state as? State.Releasing)?.failure
