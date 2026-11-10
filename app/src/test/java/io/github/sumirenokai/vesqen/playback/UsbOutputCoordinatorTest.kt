@@ -1392,6 +1392,27 @@ class UsbOutputCoordinatorTest {
     }
 
     @Test
+    fun `items shorter than the ring hand over one by one without a gap`() {
+        reachDirectActive(listOf("a", "b", "c", "d").map { mediaItem(mediaId = it) })
+        val periods = (0 until 4).map { player.currentTimeline.getUidOfPeriod(it) }
+        val tokens = listOf(checkNotNull(deliveredOutput), Any(), Any(), Any())
+        val from = published.size
+        val listener = checkNotNull(direct.listener)
+        // The first item still plays while the next three are written into the reused output's ring.
+        for (index in 1..3) listener.onOutputOpened(periods[index], tokens[index], follows = tokens[index - 1])
+        idle()
+        for (index in 1..3) {
+            listener.onOutputActive(periods[index], tokens[index], true)
+            listener.onOutputActive(periods[index - 1], tokens[index - 1], false)
+            idle()
+            naturalChangeToNext()
+            idle()
+        }
+        assertStatus(UsbOutputPhase.ACTIVE, "direct_usb.active")
+        assertOnlyActiveSince(from)
+    }
+
+    @Test
     fun `a next item that never reaches the DAC does not inherit ACTIVE`() {
         reachDirectActive(listOf(mediaItem(mediaId = "first"), mediaItem(mediaId = "second")))
         val (first, second) = periodUids()

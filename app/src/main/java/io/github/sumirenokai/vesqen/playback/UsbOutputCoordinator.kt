@@ -174,12 +174,8 @@ internal class UsbOutputCoordinator(
                     if (closed || !directPath || player.currentTimeline.getIndexOfPeriod(periodUid) == C.INDEX_UNSET) return
                     val predecessor = directSources.lastOrNull { it.token === follows }.takeIf { directOutputOpened }
                     // A new output comes only after Media3 released the previous one. A reused output
-                    // keeps the source it continues and any that is still playing.
-                    if (predecessor == null) {
-                        directSources.clear()
-                    } else {
-                        directSources.retainAll { it === predecessor || it.delivering }
-                    }
+                    // keeps every source it has not retired: with short items the ring can hold several.
+                    if (predecessor == null) directSources.clear()
                     directSources += DirectSource(output, periodUid, predecessor?.token, predecessor?.period)
                     directOutputOpened = true
                     publishDirectActiveIfPlaying()
@@ -188,10 +184,13 @@ internal class UsbOutputCoordinator(
                 override fun onOutputActive(periodUid: Any, output: Any, active: Boolean) {
                     val source = directSources.lastOrNull { it.token === output }
                     if (closed || source == null || source.period != periodUid) return
-                    // One source plays at a time; the output reports a successor before its predecessor retires.
-                    if (active) directSources.forEach { it.delivering = false }
+                    // One source plays at a time. Delivery retires the sources before it, as in the output,
+                    // which reports the successor first; the predecessor's own retirement then finds nothing.
+                    if (active) {
+                        directSources.subList(0, directSources.indexOf(source)).clear()
+                        source.delivered = true
+                    }
                     source.delivering = active
-                    if (active) source.delivered = true
                     publishDirectActiveIfPlaying()
                 }
 
