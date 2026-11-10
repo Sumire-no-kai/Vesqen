@@ -343,6 +343,7 @@
     <string name="player_keep_strict_output">保留嚴格模式</string>
     <string name="chain_core_source">01 · 來源檔案</string>
     <string name="chain_core_output">02 · 交給系統</string>
+    <string name="now_notes_handoff_direct">02 · 送往 DAC</string>
     <string name="chain_core_route">03 · 輸出與穩定性</string>
     <string name="unavailable">無法使用</string>
     <string name="library_songs">歌曲</string>
@@ -922,6 +923,11 @@
     <string name="chain_segment_unchanged_lossless">除開始播放、定位或切換格式後的前 20 毫秒淡入外，未改動音訊，無損。</string>
     <string name="chain_segment_unchanged_lossy">除開始播放、定位或切換格式後的前 20 毫秒淡入外，未進一步改動音訊。</string>
     <string name="chain_segment_unchanged">除開始播放、定位或切換格式後的前 20 毫秒淡入外，未改動音訊。</string>
+    <string name="chain_segment_unchanged_lossless_direct">未改動音訊，無損。</string>
+    <string name="chain_segment_unchanged_lossy_direct">未進一步改動音訊。</string>
+    <string name="chain_segment_unchanged_direct">未改動音訊。</string>
+    <string name="chain_segment_zero_padded">來源檔案為 %1$d 位元，送往 DAC 時每個樣本在低位補零，擴展為 %2$d 位元，樣本所代表的電平不變。這樣不同位元深度的曲目可以共用 DAC 的同一設定，切換曲目時不必重新設定 DAC。</string>
+    <string name="chain_segment_with_note">%1$s%2$s</string>
     <string name="chain_segment_modified">改動了音訊：%1$s。</string>
     <string name="chain_segment_unknown">暫時無法判斷：%1$s。</string>
     <string name="chain_segment_reason_transition">正在切換曲目或重新開啟輸出</string>

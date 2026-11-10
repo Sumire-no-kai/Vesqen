@@ -16,7 +16,10 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot
 internal fun deviceReportAppSegment(snapshot: TelemetrySnapshot?): Map<String, Any?> {
     val assessment = if (snapshot != null) {
         // Evaluate the captured instant, not the later preview/send time. No second observation.
-        assessAppSegment(snapshot, nowElapsedRealtimeMs = snapshot.capturedAtElapsedRealtimeMs, maxSnapshotAgeMs = 0)
+        // Only exportable metrics: the own output's readings stay on the device (owner, 2026-11-09),
+        // so a report neither names them nor bases its verdict on them.
+        val exportable = snapshot.copy(metrics = snapshot.metrics.filter { it.id in Metrics.exportableIds })
+        assessAppSegment(exportable, nowElapsedRealtimeMs = snapshot.capturedAtElapsedRealtimeMs, maxSnapshotAgeMs = 0)
     } else {
         // Without a snapshot even the absence of a transition is unknown. Do not synthesize a
         // healthy empty snapshot; chainEvidence retains the specific capture-unavailable reason.

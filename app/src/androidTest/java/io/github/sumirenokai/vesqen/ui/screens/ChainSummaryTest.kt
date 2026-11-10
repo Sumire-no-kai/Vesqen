@@ -225,6 +225,47 @@ class ChainSummaryTest {
     }
 
     @Test
+    fun on_the_own_usb_output_the_verdict_names_the_zero_padding_and_station_four_reads_the_wire() {
+        val status = UsbOutputStatus(
+            mode = UsbOutputMode.STRICT_BIT_PERFECT,
+            phase = UsbOutputPhase.ACTIVE,
+            deviceName = "JBL Flip 7",
+            decisionCode = "direct_usb.active",
+            generation = 1,
+        )
+        val noTrack = unavailable(TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT)
+        show(
+            snapshotWith(
+                Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE to noTrack,
+                Metrics.PLAYBACK_AUDIO_TRACK_CHANNEL_MASK to noTrack,
+                Metrics.PLAYBACK_AUDIO_TRACK_ENCODING to noTrack,
+                // The 16-bit, 44.1 kHz stereo FLAC of FakeAppSegmentTelemetry, sent to the DAC as 24 bits.
+                Metrics.USB_DIRECT_WIRE_SAMPLE_RATE to measured(TelemetryReading.Integer(44_100, TelemetryUnit.HERTZ)),
+                Metrics.USB_DIRECT_WIRE_BIT_DEPTH to measured(TelemetryReading.Integer(24, TelemetryUnit.BITS)),
+                Metrics.USB_DIRECT_WIRE_CHANNELS to measured(TelemetryReading.Integer(2, TelemetryUnit.COUNT)),
+            ),
+            playback = playing.copy(usbOutputStatus = status),
+        )
+
+        // No Media3 fade-in on this output, and the padding is said in so many words (owner, 2026-11-10).
+        segment(AppSegment).assertTextContains(
+            context.getString(
+                R.string.chain_segment_with_note,
+                string(R.string.chain_segment_unchanged_lossless_direct),
+                context.getString(R.string.chain_segment_zero_padded, 16, 24),
+            ),
+        )
+        composeRule.onAllNodesWithText(string(R.string.chain_segment_unchanged_lossless), substring = true).assertCountEquals(0)
+
+        scrollTo("vesqen.chain.path.audio-track")
+        composeRule.onNodeWithText("04 · ${string(R.string.chain_pinned_handoff_direct)}").assertExists()
+        composeRule.onAllNodesWithText("04 · ${string(R.string.chain_station_audio_track)}").assertCountEquals(0)
+        composeRule.onNodeWithTag("vesqen.chain.core-value.${Metrics.USB_DIRECT_WIRE_BIT_DEPTH.value}", useUnmergedTree = true)
+            .assertTextEquals(reading(TelemetryReading.Integer(24, TelemetryUnit.BITS)))
+        composeRule.onAllNodesWithTag("vesqen.chain.core.${Metrics.PLAYBACK_AUDIO_TRACK_ENCODING.value}").assertCountEquals(0)
+    }
+
+    @Test
     fun a_lossy_source_is_described_by_its_bit_rate() {
         show(
             snapshot(

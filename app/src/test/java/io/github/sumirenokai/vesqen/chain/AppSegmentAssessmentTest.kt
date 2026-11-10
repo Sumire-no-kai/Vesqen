@@ -16,6 +16,7 @@ import io.github.sumirenokai.vesqen.ui.chain.FakeAppSegmentTelemetry.measured
 import io.github.sumirenokai.vesqen.ui.chain.FakeAppSegmentTelemetry.snapshot
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog as Metrics
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -56,6 +57,78 @@ class AppSegmentAssessmentTest {
         }
         val all = assess(snapshot(changes.mapValues { measured(it.value) }))
         assertEquals(changes.size, all.checks.count { it.status == AppSegmentStatus.MODIFIED })
+    }
+
+    /** A 16-bit FLAC on Vesqen's own USB output: no AudioTrack, the wire format in its place (iQOO 9 x JBL Flip 7). */
+    private fun ownOutput(
+        wireRate: Long = 44_100,
+        wireBits: Long = 24,
+        wireChannels: Long = 2,
+        overrides: Map<TelemetryMetricId, TelemetryEvidence> = emptyMap(),
+    ): TelemetrySnapshot {
+        val noTrack = TelemetryEvidence.Unavailable(TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT, CapturedAtMs)
+        return snapshot(
+            mapOf(
+                Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE to noTrack,
+                Metrics.PLAYBACK_AUDIO_TRACK_CHANNEL_MASK to noTrack,
+                Metrics.PLAYBACK_AUDIO_TRACK_ENCODING to noTrack,
+                Metrics.USB_DIRECT_WIRE_SAMPLE_RATE to measured(TelemetryReading.Integer(wireRate, TelemetryUnit.HERTZ)),
+                Metrics.USB_DIRECT_WIRE_BIT_DEPTH to measured(TelemetryReading.Integer(wireBits, TelemetryUnit.BITS)),
+                Metrics.USB_DIRECT_WIRE_CHANNELS to measured(TelemetryReading.Integer(wireChannels, TelemetryUnit.COUNT)),
+                Metrics.ROUTE_SELECTED_SYSTEM_TYPE to measured(TelemetryReading.Text("wired_or_usb")),
+            ) + overrides,
+        )
+    }
+
+    @Test
+    fun `on the own USB output a 16-bit source padded to 24 bits for the DAC is unchanged and says so`() {
+        val result = assess(ownOutput())
+        assertEquals(AppSegmentStatus.UNCHANGED, result.status)
+        assertTrue(result.ownOutput)
+        assertEquals(ZeroPadding(sourceBits = 16, wireBits = 24), result.zeroPadding)
+        val precision = result.checks.single { it.condition == AppSegmentCondition.PCM_PRECISION }
+        assertTrue(precision.evidence.containsKey(Metrics.USB_DIRECT_WIRE_BIT_DEPTH))
+        val rate = result.checks.single { it.condition == AppSegmentCondition.SAMPLE_RATE }
+        assertTrue(rate.evidence.containsKey(Metrics.USB_DIRECT_WIRE_SAMPLE_RATE))
+    }
+
+    @Test
+    fun `on the own USB output the same depth on the wire needs no padding note`() {
+        val result = assess(ownOutput(wireBits = 16))
+        assertEquals(AppSegmentStatus.UNCHANGED, result.status)
+        assertNull(result.zeroPadding)
+    }
+
+    @Test
+    fun `on the own USB output a different rate, channel count or a narrower wire is a change`() {
+        mapOf(
+            AppSegmentCondition.SAMPLE_RATE to ownOutput(wireRate = 48_000),
+            AppSegmentCondition.CHANNELS to ownOutput(wireChannels = 1),
+            AppSegmentCondition.PCM_PRECISION to ownOutput(
+                wireBits = 16,
+                overrides = mapOf(Metrics.DECODER_INPUT_PCM_ENCODING to measured(TelemetryReading.Text("pcm-24"))),
+            ),
+        ).forEach { (condition, snapshot) ->
+            val result = assess(snapshot)
+            assertEquals(condition.name, AppSegmentStatus.MODIFIED, result.status)
+            assertEquals(condition, result.checks.single { it.status == AppSegmentStatus.MODIFIED }.condition)
+            assertNull(result.zeroPadding)
+        }
+    }
+
+    @Test
+    fun `on the own USB output a source width that is not stated stays unknown`() {
+        val unstated = TelemetryEvidence.Unavailable(TelemetryUnavailableReason.NOT_APPLICABLE, CapturedAtMs)
+        val result = assess(ownOutput(overrides = mapOf(Metrics.DECODER_INPUT_PCM_ENCODING to unstated)))
+        assertEquals(AppSegmentStatus.UNKNOWN, result.status)
+        assertNull(result.zeroPadding)
+    }
+
+    @Test
+    fun `without the own output's wire facts the AudioTrack is the reference as before`() {
+        val result = assess(snapshot())
+        assertFalse(result.ownOutput)
+        assertNull(result.zeroPadding)
     }
 
     @Test

@@ -184,6 +184,10 @@ private val NotesMetricIds = setOf(
     TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURATION,
     TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURED_BITRATE,
     TelemetryMetricCatalog.PLAYBACK_UNDERRUN_COUNT,
+    // Vesqen's own USB output (local only): what it sends the DAC and the engine's underruns.
+    TelemetryMetricCatalog.USB_DIRECT_WIRE_BIT_DEPTH,
+    TelemetryMetricCatalog.USB_DIRECT_WIRE_SAMPLE_RATE,
+    TelemetryMetricCatalog.USB_DIRECT_UNDERRUNS,
 )
 
 @Immutable
@@ -1187,23 +1191,33 @@ private fun NowLinerNotesBody(
             TelemetryMetricCatalog.SOURCE_AVERAGE_BITRATE.takeIf { lossy },
         ),
     )
+    // On Vesqen's own USB output nothing goes to Android: the rows say what goes to the DAC, name the
+    // DAC and count the USB engine's underruns, as the Chain page's cards do.
+    val ownOutput = value(TelemetryMetricCatalog.USB_DIRECT_WIRE_SAMPLE_RATE).let { it != null && it !is TelemetryEvidence.Unavailable }
     val audioTrack = row(
-        listOf(TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_ENCODING, TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE),
+        if (ownOutput) {
+            listOf(TelemetryMetricCatalog.USB_DIRECT_WIRE_BIT_DEPTH, TelemetryMetricCatalog.USB_DIRECT_WIRE_SAMPLE_RATE)
+        } else {
+            listOf(TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_ENCODING, TelemetryMetricCatalog.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE)
+        },
     )
     val routeEvidence = value(TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_NAME)
-    val underruns = value(TelemetryMetricCatalog.PLAYBACK_UNDERRUN_COUNT)
+    val underruns = value(if (ownOutput) TelemetryMetricCatalog.USB_DIRECT_UNDERRUNS else TelemetryMetricCatalog.PLAYBACK_UNDERRUN_COUNT)
     val output = outputRoute(metrics)
     val routeKind = output?.kind
     // The output by kind, named as the Chain page's Output card names it; the system's own route
     // name ("Phone") only stands in for other kinds of route (#35).
-    val outputName = when (routeKind) {
-        OutputRouteKind.SPEAKER -> stringResource(R.string.chain_pinned_output_speaker)
-        OutputRouteKind.WIRED -> stringResource(R.string.chain_pinned_output_wired)
-        OutputRouteKind.BLUETOOTH -> stringResource(R.string.chain_pinned_output_bluetooth)
-        OutputRouteKind.OTHER, null -> routeEvidence?.takeUnless { it is TelemetryEvidence.Unavailable }
-            ?.let { formatTelemetryReading(context, it.reading) }
+    val outputName = when {
+        ownOutput -> snapshot.usbOutputStatus.deviceName ?: stringResource(R.string.chain_pinned_output_wired)
+        else -> when (routeKind) {
+            OutputRouteKind.SPEAKER -> stringResource(R.string.chain_pinned_output_speaker)
+            OutputRouteKind.WIRED -> stringResource(R.string.chain_pinned_output_wired)
+            OutputRouteKind.BLUETOOTH -> stringResource(R.string.chain_pinned_output_bluetooth)
+            OutputRouteKind.OTHER, null -> routeEvidence?.takeUnless { it is TelemetryEvidence.Unavailable }
+                ?.let { formatTelemetryReading(context, it.reading) }
+        }
     }
-    val outputEvidence = output?.evidence ?: routeEvidence
+    val outputEvidence = if (ownOutput) value(TelemetryMetricCatalog.USB_DIRECT_WIRE_SAMPLE_RATE) else output?.evidence ?: routeEvidence
     val route = when {
         outputName == null -> row(listOf(TelemetryMetricCatalog.ROUTE_SELECTED_SYSTEM_NAME))
         underruns != null && underruns !is TelemetryEvidence.Unavailable -> pluralStringResource(
@@ -1217,7 +1231,7 @@ private fun NowLinerNotesBody(
     }
 
     NotesRow(stringResource(R.string.chain_core_source), source, "source")
-    NotesRow(stringResource(R.string.chain_core_output), audioTrack, "audio-track")
+    NotesRow(stringResource(if (ownOutput) R.string.now_notes_handoff_direct else R.string.chain_core_output), audioTrack, "audio-track")
     NotesRow(stringResource(R.string.chain_core_route), route, "route")
     when {
         routeKind == OutputRouteKind.BLUETOOTH -> {
@@ -1234,8 +1248,9 @@ private fun NowLinerNotesBody(
             if (bluetoothCodecNeedsPermission(codec)) BluetoothCodecPermissionButton()
         }
         // Android shares no post-mixer format; only strict USB knows what reaches the DAC.
-        routeKind == OutputRouteKind.WIRED -> {
-            val strictFormat = snapshot.usbOutputStatus.takeIf { it.phase == UsbOutputPhase.ACTIVE }?.sinkFormat?.displayName
+        ownOutput || routeKind == OutputRouteKind.WIRED -> {
+            val active = snapshot.usbOutputStatus.takeIf { it.phase == UsbOutputPhase.ACTIVE }
+            val strictFormat = active?.let { if (it.usesDirectUsb) directUsbWireFormat(it) else it.sinkFormat?.displayName }
             val text = strictFormat?.let { stringResource(R.string.now_notes_output_format_bit_perfect, it) }
                 ?: stringResource(R.string.now_notes_output_format_hidden)
             NotesRow(stringResource(R.string.now_notes_output_format), text to "", "output-format")

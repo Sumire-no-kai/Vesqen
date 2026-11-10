@@ -343,6 +343,7 @@
     <string name="player_keep_strict_output">保留严格模式</string>
     <string name="chain_core_source">01 · 源文件</string>
     <string name="chain_core_output">02 · 交给系统</string>
+    <string name="now_notes_handoff_direct">02 · 送往 DAC</string>
     <string name="chain_core_route">03 · 输出与稳定性</string>
     <string name="unavailable">不可用</string>
     <string name="library_songs">歌曲</string>
@@ -922,6 +923,11 @@
     <string name="chain_segment_unchanged_lossless">除开始播放、跳转或切换格式后的前 20 毫秒淡入外，未改动音频，无损。</string>
     <string name="chain_segment_unchanged_lossy">除开始播放、跳转或切换格式后的前 20 毫秒淡入外，未进一步改动音频。</string>
     <string name="chain_segment_unchanged">除开始播放、跳转或切换格式后的前 20 毫秒淡入外，未改动音频。</string>
+    <string name="chain_segment_unchanged_lossless_direct">未改动音频，无损。</string>
+    <string name="chain_segment_unchanged_lossy_direct">未进一步改动音频。</string>
+    <string name="chain_segment_unchanged_direct">未改动音频。</string>
+    <string name="chain_segment_zero_padded">源文件为 %1$d 位，送往 DAC 时每个样本在低位补零，扩展为 %2$d 位，样本所表示的电平不变。这样不同位深的曲目可以共用 DAC 的同一设置，切换曲目时不必重新设置 DAC。</string>
+    <string name="chain_segment_with_note">%1$s%2$s</string>
     <string name="chain_segment_modified">已改动音频：%1$s。</string>
     <string name="chain_segment_unknown">暂时无法判断：%1$s。</string>
     <string name="chain_segment_reason_transition">正在切换曲目或重新打开输出</string>

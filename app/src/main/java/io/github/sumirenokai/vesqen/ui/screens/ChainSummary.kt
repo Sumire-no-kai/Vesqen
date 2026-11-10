@@ -123,6 +123,12 @@ internal enum class ChainStation(@StringRes val label: Int, val tag: String) {
     ROUTE(R.string.chain_station_route, "route"),
 }
 
+/** On Vesqen's own USB output there is no AudioTrack: its station shows what goes to the DAC. */
+private val DirectHandoffFacts = listOf(Metrics.USB_DIRECT_WIRE_SAMPLE_RATE, Metrics.USB_DIRECT_WIRE_BIT_DEPTH)
+
+private fun Map<TelemetryMetricId, TelemetryMetric>.ownOutputPlays(): Boolean =
+    this[Metrics.USB_DIRECT_WIRE_SAMPLE_RATE]?.evidence.let { it != null && it !is TelemetryEvidence.Unavailable }
+
 /** Facts each station shows; processing summarises its flags instead (see [ChainProcessingFact]). */
 internal val ChainStationFacts: Map<ChainStation, List<TelemetryMetricId>> = mapOf(
     ChainStation.SOURCE to listOf(Metrics.SOURCE_CODEC_LABEL, Metrics.SOURCE_SAMPLE_RATE, Metrics.SOURCE_BIT_DEPTH),
@@ -488,6 +494,9 @@ private fun ChainStationRow(
 ) {
     val ink = MaterialTheme.colorScheme.onSurface
     val index = ChainStation.entries.indexOf(station) + 1
+    val directHandoff = station == ChainStation.AUDIO_TRACK && metrics.ownOutputPlays()
+    val label = if (directHandoff) R.string.chain_pinned_handoff_direct else station.label
+    val facts = if (directHandoff) DirectHandoffFacts else ChainStationFacts.getValue(station)
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -508,7 +517,7 @@ private fun ChainStationRow(
         }
         Column(Modifier.weight(1f).padding(bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                text = "${index.toString().padStart(2, '0')} · ${stringResource(station.label)}",
+                text = "${index.toString().padStart(2, '0')} · ${stringResource(label)}",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.semantics { heading() },
@@ -516,8 +525,8 @@ private fun ChainStationRow(
             if (station == ChainStation.PROCESSING) {
                 ChainProcessingFact(assessment, metrics, unitDisplayMode, expanded, onToggle)
             } else {
-                ChainStationFacts.getValue(station).forEach { id ->
-                    ChainFact(id, metrics, unitDisplayMode, expanded, onToggle, prominent = id == ChainStationFacts.getValue(station).first())
+                facts.forEach { id ->
+                    ChainFact(id, metrics, unitDisplayMode, expanded, onToggle, prominent = id == facts.first())
                 }
             }
         }
@@ -642,6 +651,23 @@ private fun ChainProcessingFact(
 @Composable
 private fun appSegmentVerdict(assessment: AppSegmentAssessment?, waiting: Boolean): String = when {
     waiting || assessment == null -> stringResource(R.string.chain_segment_waiting)
+    // The own output's strict sink has no Media3 fade-in, and zero padding is stated (owner, 2026-11-10).
+    assessment.status == AppSegmentStatus.UNCHANGED && assessment.ownOutput -> {
+        val verdict = stringResource(
+            when (assessment.sourceCompression) {
+                SourceCompression.LOSSLESS -> R.string.chain_segment_unchanged_lossless_direct
+                SourceCompression.LOSSY -> R.string.chain_segment_unchanged_lossy_direct
+                SourceCompression.UNKNOWN -> R.string.chain_segment_unchanged_direct
+            },
+        )
+        assessment.zeroPadding?.let { padding ->
+            stringResource(
+                R.string.chain_segment_with_note,
+                verdict,
+                stringResource(R.string.chain_segment_zero_padded, padding.sourceBits, padding.wireBits),
+            )
+        } ?: verdict
+    }
     assessment.status == AppSegmentStatus.UNCHANGED -> stringResource(
         when (assessment.sourceCompression) {
             SourceCompression.LOSSLESS -> R.string.chain_segment_unchanged_lossless

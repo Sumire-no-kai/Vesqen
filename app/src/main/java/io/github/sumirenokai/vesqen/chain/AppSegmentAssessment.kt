@@ -45,6 +45,9 @@ internal data class BluetoothSegmentAssessment(
     val reportedCodecEvidence: TelemetryEvidence? = null,
 )
 
+/** Samples of [sourceBits] sent to the DAC as [wireBits], zeros below them: the level each one stands for is kept. */
+internal data class ZeroPadding(val sourceBits: Int, val wireBits: Int)
+
 internal data class AppSegmentAssessment(
     val status: AppSegmentStatus,
     /** Chooses the wording only ("lossless" or "not altered further"); it never gates [status]. */
@@ -54,6 +57,13 @@ internal data class AppSegmentAssessment(
     val bluetooth: BluetoothSegmentAssessment?,
     val routeEvidence: Map<TelemetryMetricId, TelemetryEvidence>,
     val routeIssues: List<SegmentEvidenceIssue>,
+    /**
+     * Vesqen's own USB output: the segment ends at the DAC, not at an AudioTrack, and Media3's
+     * fade-in does not apply (the strict sink has none).
+     */
+    val ownOutput: Boolean = false,
+    /** Own output only, and only when the samples kept their values (owner decision 2026-11-10). */
+    val zeroPadding: ZeroPadding? = null,
 )
 
 /** Every metric the assessment reads; Chain must request them explicitly while it shows the result. */
@@ -66,6 +76,8 @@ internal val AppSegmentMetricIds: List<TelemetryMetricId> = listOf(
     Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE,
     Metrics.PLAYBACK_AUDIO_TRACK_CHANNEL_MASK, Metrics.PLAYBACK_AUDIO_TRACK_ENCODING,
     Metrics.ROUTE_SELECTED_SYSTEM_TYPE,
+    // Local only (they never reach a report); present while Vesqen's own USB output plays.
+    Metrics.USB_DIRECT_WIRE_SAMPLE_RATE, Metrics.USB_DIRECT_WIRE_BIT_DEPTH, Metrics.USB_DIRECT_WIRE_CHANNELS,
 )
 
 /** Events after which the output may still carry the previous item, a seek or a re-opened track. */
@@ -91,6 +103,9 @@ private val transitionEvents = setOf(
  *   DefaultAudioSink fades in the first 20 ms after a start, seek, re-prepare or format change
  *   with no switch to turn it off, and telemetry does not observe samples. It is therefore not a
  *   condition here, and the verdict text states it instead (#242).
+ * - On Vesqen's own USB output there is no AudioTrack: the format sent to the DAC takes its place.
+ *   The strict sink adds no fade, and the format gate and the exact converter fail closed before
+ *   any sample loses its value, so a wider wire depth than the source's is zero padding (#65).
  */
 internal fun assessAppSegment(
     snapshot: TelemetrySnapshot,
@@ -157,7 +172,9 @@ internal fun assessAppSegment(
     // The decoder's measured output rate (#72) tells an AAC decoder's SBR from Vesqen resampling.
     val decodedRate = reader.measuredInteger(Metrics.DECODER_OUTPUT_SAMPLE_RATE)
     val losslessInput = inputMime?.let(::sourceCompression) == SourceCompression.LOSSLESS
-    check(AppSegmentCondition.SAMPLE_RATE, listOf(Metrics.DECODER_INPUT_SAMPLE_RATE, Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE)) {
+    val ownOutput = reader.measuredInteger(Metrics.USB_DIRECT_WIRE_SAMPLE_RATE) != null
+    val outputRate = if (ownOutput) Metrics.USB_DIRECT_WIRE_SAMPLE_RATE else Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE
+    check(AppSegmentCondition.SAMPLE_RATE, listOf(Metrics.DECODER_INPUT_SAMPLE_RATE, outputRate)) {
         val input = (it[0] as TelemetryReading.Integer).value
         val output = (it[1] as TelemetryReading.Integer).value
         when {
@@ -172,13 +189,18 @@ internal fun assessAppSegment(
             else -> Verdict.Changed
         }
     }
-    check(AppSegmentCondition.CHANNELS, listOf(Metrics.DECODER_INPUT_CHANNEL_COUNT, Metrics.PLAYBACK_AUDIO_TRACK_CHANNEL_MASK)) {
-        val output = channelCount((it[1] as TelemetryReading.Text).value)
-            ?: return@check Verdict.Unresolved(null)
-        val same = (it[0] as TelemetryReading.Integer).value == output.toLong()
+    val outputChannels = if (ownOutput) Metrics.USB_DIRECT_WIRE_CHANNELS else Metrics.PLAYBACK_AUDIO_TRACK_CHANNEL_MASK
+    check(AppSegmentCondition.CHANNELS, listOf(Metrics.DECODER_INPUT_CHANNEL_COUNT, outputChannels)) {
+        val output = when (val reading = it[1]) {
+            is TelemetryReading.Integer -> reading.value
+            is TelemetryReading.Text -> channelCount(reading.value)?.toLong()
+            else -> null
+        } ?: return@check Verdict.Unresolved(null)
+        val same = (it[0] as TelemetryReading.Integer).value == output
         if (!same && codecMayChangeFormat) Verdict.Unresolved(SegmentReason.DECODER_MAY_CHANGE_FORMAT) else Verdict.of(same)
     }
-    checks += precisionCheck(reader)
+    val precision = if (ownOutput) wirePrecisionCheck(reader) else (precisionCheck(reader) to null)
+    checks += precision.first
     checks += transitionCheck(snapshot, snapshotIssue)
 
     val route = reader.read(listOf(Metrics.ROUTE_SELECTED_SYSTEM_TYPE))
@@ -189,20 +211,56 @@ internal fun assessAppSegment(
         isBluetoothRouteType(routeType) -> RouteKind.BLUETOOTH
         else -> RouteKind.OTHER
     }
+    val status = when {
+        checks.any { it.status == AppSegmentStatus.MODIFIED } -> AppSegmentStatus.MODIFIED
+        checks.any { it.status == AppSegmentStatus.UNKNOWN } -> AppSegmentStatus.UNKNOWN
+        else -> AppSegmentStatus.UNCHANGED
+    }
     return AppSegmentAssessment(
-        status = when {
-            checks.any { it.status == AppSegmentStatus.MODIFIED } -> AppSegmentStatus.MODIFIED
-            checks.any { it.status == AppSegmentStatus.UNKNOWN } -> AppSegmentStatus.UNKNOWN
-            else -> AppSegmentStatus.UNCHANGED
-        },
+        status = status,
         sourceCompression = inputMime?.let(::sourceCompression) ?: SourceCompression.UNKNOWN,
         checks = checks,
         route = routeKind,
         bluetooth = if (routeKind == RouteKind.BLUETOOTH) BluetoothSegmentAssessment(requireNotNull(routeEvidence)) else null,
         routeEvidence = route.evidence,
         routeIssues = route.issues,
+        ownOutput = ownOutput,
+        // The note belongs to an unchanged verdict only; any change is stated instead.
+        zeroPadding = precision.second.takeIf { status == AppSegmentStatus.UNCHANGED },
     )
 }
+
+/**
+ * Own output: the source's stated PCM width against the depth sent to the DAC. Only 16- and 24-bit
+ * lossless sources reach this output (D10); anything else, or a width not stated, stays unresolved.
+ */
+private fun wirePrecisionCheck(reader: SegmentEvidenceReader): Pair<AppSegmentCheck, ZeroPadding?> {
+    val ids = listOf(Metrics.DECODER_INPUT_PCM_ENCODING, Metrics.USB_DIRECT_WIRE_BIT_DEPTH)
+    val read = reader.read(ids)
+    val source = (read.evidence[Metrics.DECODER_INPUT_PCM_ENCODING]?.reading as? TelemetryReading.Text)?.value
+        ?.let(INTEGER_PCM_BITS::get)
+    val wire = (read.evidence[Metrics.USB_DIRECT_WIRE_BIT_DEPTH]?.reading as? TelemetryReading.Integer)?.value?.toInt()
+    val status = when {
+        read.issues.isNotEmpty() || source == null || wire == null -> AppSegmentStatus.UNKNOWN
+        wire >= source -> AppSegmentStatus.UNCHANGED
+        else -> AppSegmentStatus.MODIFIED
+    }
+    val check = AppSegmentCheck(
+        condition = AppSegmentCondition.PCM_PRECISION,
+        status = status,
+        reason = when {
+            status == AppSegmentStatus.MODIFIED -> SegmentReason.PRECISION_LOSS
+            status == AppSegmentStatus.UNKNOWN && read.issues.isEmpty() -> SegmentReason.UNSUPPORTED_VALUE
+            else -> null
+        },
+        issues = read.issues,
+        evidence = read.evidence,
+    )
+    val padding = if (status == AppSegmentStatus.UNCHANGED && wire!! > source!!) ZeroPadding(source, wire) else null
+    return check to padding
+}
+
+private val INTEGER_PCM_BITS = mapOf("pcm-8" to 8, "pcm-16" to 16, "pcm-24" to 24, "pcm-32" to 32)
 
 /**
  * Lossless input states its PCM width; compressed input has none (NOT_APPLICABLE) and decodes to
@@ -358,7 +416,7 @@ private fun channelCount(mask: String): Int? = mask.takeIf { it.startsWith("0x")
 
 /** Float32 has 24 significant binary digits, not 32 integer bits of precision. */
 internal fun preservesPcmPrecision(input: String, output: String): Boolean? {
-    val integerBits = mapOf("pcm-8" to 8, "pcm-16" to 16, "pcm-24" to 24, "pcm-32" to 32)
+    val integerBits = INTEGER_PCM_BITS
     if (input !in integerBits && input != "pcm-float") return null
     if (output !in integerBits && output != "pcm-float") return null
     if (input == "pcm-float") return output == "pcm-float"
