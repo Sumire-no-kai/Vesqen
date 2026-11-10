@@ -137,6 +137,35 @@ class DirectUsbSessionTest {
 
     private fun recover() = UsbTakeoverRecovery(UsbDeviceIdentity(1003, 0x0ecb, 0x2107), link, listOf(JBL), markers).recover()
 
+    @Test
+    fun `permission removal fails closed and releases every claimed interface`() {
+        takeOver()
+        link.permissionGranted = false
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertEquals(Reason.USB_PERMISSION_REVOKED, failures.single().reason)
+        assertTrue(events.containsAll(listOf("stream destroyed", "release 2", "release 1", "close")))
+        assertTrue(session.openOutput() == null)
+    }
+
+    @Test
+    fun `permission removal during a claim still releases earlier interfaces`() {
+        link.throwingClaims += 2
+        val result = takeOver() as DirectUsbSession.Takeover.Failed
+        assertEquals(Reason.USB_PERMISSION_REVOKED, result.failure.reason)
+        assertTrue(events.containsAll(listOf("claim 1", "claim 2", "release 1", "close")))
+    }
+
+    @Test
+    fun `an exception releasing one interface does not skip the rest or erase recovery`() {
+        takeOver()
+        link.throwingReleases += 2
+        val (record, _) = release()
+        assertEquals("interface 2 released", record.firstFailure?.name)
+        assertTrue(events.containsAll(listOf("release 2", "release 1", "close")))
+        assertEquals(-2560, markers.persisted?.volumeBefore)
+        assertTrue(markers.isOccupied())
+    }
+
     @After
     fun stopControl() {
         control.shutdownNow()
@@ -709,15 +738,20 @@ class DirectUsbSessionTest {
     private class FakeLink(private val events: MutableList<String>, override val control: UsbControlTransfer) : UsbLink {
         val failingClaims = mutableSetOf<Int>()
         val failingReleases = mutableSetOf<Int>()
+        val throwingClaims = mutableSetOf<Int>()
+        val throwingReleases = mutableSetOf<Int>()
+        @Volatile override var permissionGranted = true
         override val fileDescriptor = 42
 
         override fun claim(interfaceNumber: Int): Boolean {
             events += "claim $interfaceNumber"
+            if (interfaceNumber in throwingClaims) throw SecurityException("revoked")
             return interfaceNumber !in failingClaims
         }
 
         override fun release(interfaceNumber: Int): Boolean {
             events += "release $interfaceNumber"
+            if (interfaceNumber in throwingReleases) throw SecurityException("revoked")
             return interfaceNumber !in failingReleases
         }
 

@@ -195,6 +195,25 @@ class UsbOutputCoordinatorTest {
         assertTrue(status().phase != UsbOutputPhase.FAILED)
     }
 
+    @Test
+    fun `the noisy broadcast caused by claiming the DAC does not pause direct playback`() {
+        reachDirectActive()
+        context.sendBroadcast(Intent(android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY))
+        idle()
+        assertTrue(player.playWhenReady)
+        assertStatus(UsbOutputPhase.ACTIVE, "direct_usb.active")
+    }
+
+    @Test
+    fun `a current session permission failure stops playback and revokes ACTIVE`() {
+        reachDirectActive()
+        checkNotNull(direct.listener).onFailed(DirectUsbFailure(DirectUsbFailure.Reason.USB_PERMISSION_REVOKED, "revoked"))
+        idle()
+        assertStatus(UsbOutputPhase.FAILED, "direct_usb.usb_permission_revoked")
+        assertFalse(player.playWhenReady)
+        assertTrue("release" in direct.calls)
+    }
+
     // System output
 
     @Test

@@ -12,6 +12,7 @@ data class DirectUsbFailure(val reason: Reason, val detail: String) {
         USB_ENGINE_UNAVAILABLE,
         USB_TRANSFER_FAILED,
         DEVICE_DISCONNECTED,
+        USB_PERMISSION_REVOKED,
         // The format layers (D10), checked before an output is opened, and the samples while it runs.
         SOURCE_FORMAT_UNKNOWN,
         SOURCE_NOT_LOSSLESS,

@@ -182,6 +182,8 @@ internal data class DirectUsbRecoveryResult(
 @UnstableApi
 internal interface DirectUsbRoute {
     interface Listener {
+        fun onReleased(cleanup: CleanupRecord) = Unit
+
         /** The route has posted a new output to the main thread. Register it before the next failure callback. */
         fun onOutputOpened(periodUid: Any, output: Any = periodUid) = Unit
 
@@ -515,7 +517,7 @@ internal class AndroidDirectUsbRoute(
         lateinit var next: DirectUsbSession
         next = DirectUsbSession(
             device = identity,
-            link = AndroidUsbLink(target.device, target.connection),
+            link = AndroidUsbLink(target.device, target.connection) { usbManager.hasPermission(target.device) },
             function = target.function,
             markers = markers,
             control = control,
@@ -629,7 +631,13 @@ internal class AndroidDirectUsbRoute(
         prepared = null
         if (current != null) {
             releases.begin()
-            current.release { cleanup -> main.post { lastCleanup = cleanup; releases.complete(cleanup.firstFailure == null) } }
+            current.release { cleanup ->
+                main.post {
+                    lastCleanup = cleanup
+                    releases.complete(cleanup.firstFailure == null)
+                    listener?.onReleased(cleanup)
+                }
+            }
         } else {
             held?.connection?.close()
         }
@@ -720,5 +728,6 @@ internal fun DirectUsbFailure.toStrictFailure(): Pair<UsbOutputFailure, String> 
     DirectUsbFailure.Reason.SAMPLE_RATE_READBACK_MISMATCH,
     DirectUsbFailure.Reason.USB_ENGINE_UNAVAILABLE,
     DirectUsbFailure.Reason.USB_TRANSFER_FAILED,
+    DirectUsbFailure.Reason.USB_PERMISSION_REVOKED,
     DirectUsbFailure.Reason.PCM_NOT_EXACT -> UsbOutputFailure.PLATFORM_ERROR
 } to "direct_usb.${reason.name.lowercase()}"

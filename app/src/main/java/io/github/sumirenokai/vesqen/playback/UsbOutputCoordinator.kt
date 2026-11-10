@@ -173,6 +173,10 @@ internal class UsbOutputCoordinator(
         audioManager.registerAudioDeviceCallback(deviceCallback, mainHandler)
         directRoute?.let { route ->
             route.listener = object : DirectUsbRoute.Listener {
+                override fun onReleased(cleanup: io.github.sumirenokai.vesqen.usb.session.CleanupRecord) {
+                    if (!closed && !directPath && !route.streaming) player.setHandleAudioBecomingNoisy(true)
+                }
+
                 override fun onOutputOpened(periodUid: Any, output: Any) {
                     if (closed || !directPath || player.currentTimeline.getIndexOfPeriod(periodUid) == C.INDEX_UNSET) return
                     directOutputToken = output
@@ -1293,6 +1297,7 @@ internal class UsbOutputCoordinator(
         preferences.edit { putString(MODE_KEY, UsbOutputMode.SYSTEM.name) }
         val activePlayer = player
         activePlayer?.setPreferredAudioDevice(null)
+        activePlayer?.setHandleAudioBecomingNoisy(true)
         publishSystem()
         if (rebuild && activePlayer != null && activePlayer.mediaItemCount > 0) {
             activePlayer.pause()
@@ -1465,6 +1470,7 @@ internal class UsbOutputCoordinator(
             }
         }
         activePlayer.pause()
+        activePlayer.setHandleAudioBecomingNoisy(false)
         route.takeOver { failure ->
             if (!isGenerationCurrent(generation)) return@takeOver
             if (failure != null) {
