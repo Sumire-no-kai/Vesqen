@@ -158,6 +158,8 @@ internal class DeviceVolumeSessionPlayer(player: Player, private val volumes: Di
 
         override fun onDeviceInfoChanged(deviceInfo: DeviceInfo) = reportAgain()
 
+        override fun onAvailableCommandsChanged(availableCommands: Player.Commands) = reportAgain()
+
         // Posted, so it follows the wrapped player's own callback to the session's listeners.
         private fun reportAgain() {
             main.post { if (reported != null) report(reported, force = true) }
@@ -181,7 +183,11 @@ internal class DeviceVolumeSessionPlayer(player: Player, private val volumes: Di
         val before = reported
         reported = volume
         val rangeChanged = force || (before == null) != (volume == null) || before?.keySteps != volume?.keySteps
-        if (rangeChanged) listeners.forEach { it.onDeviceInfoChanged(deviceInfo) }
+        if (rangeChanged) {
+            // The commands first: the media session reads them when the device info makes it build its volume provider.
+            listeners.forEach { it.onAvailableCommandsChanged(availableCommands) }
+            listeners.forEach { it.onDeviceInfoChanged(deviceInfo) }
+        }
         if (rangeChanged || before?.keyIndex != volume?.keyIndex) {
             listeners.forEach { it.onDeviceVolumeChanged(deviceVolume, isDeviceMuted) }
         }
@@ -196,6 +202,16 @@ internal class DeviceVolumeSessionPlayer(player: Player, private val volumes: Di
         listeners -= listener
         super.removeListener(listener)
     }
+
+    // ExoPlayer offers no device volume commands unless it controls the stream volume itself, which
+    // Vesqen leaves off. Without them the media session reports a fixed volume and takes no key.
+    override fun getAvailableCommands(): Player.Commands {
+        val commands = super.getAvailableCommands()
+        return if (reported != null) commands.buildUpon().addAll(*DEVICE_VOLUME_COMMANDS).build() else commands
+    }
+
+    override fun isCommandAvailable(command: Int): Boolean =
+        (reported != null && command in DEVICE_VOLUME_COMMANDS) || super.isCommandAvailable(command)
 
     override fun getDeviceInfo(): DeviceInfo = reported?.let {
         DeviceInfo.Builder(DeviceInfo.PLAYBACK_TYPE_REMOTE).setMinVolume(0).setMaxVolume(it.keySteps).build()
@@ -240,5 +256,15 @@ internal class DeviceVolumeSessionPlayer(player: Player, private val volumes: Di
 
     override fun setDeviceMuted(muted: Boolean, flags: Int) {
         if (reported == null) super.setDeviceMuted(muted, flags)
+    }
+
+    private companion object {
+        val DEVICE_VOLUME_COMMANDS = intArrayOf(
+            Player.COMMAND_GET_DEVICE_VOLUME,
+            Player.COMMAND_SET_DEVICE_VOLUME,
+            Player.COMMAND_SET_DEVICE_VOLUME_WITH_FLAGS,
+            Player.COMMAND_ADJUST_DEVICE_VOLUME,
+            Player.COMMAND_ADJUST_DEVICE_VOLUME_WITH_FLAGS,
+        )
     }
 }

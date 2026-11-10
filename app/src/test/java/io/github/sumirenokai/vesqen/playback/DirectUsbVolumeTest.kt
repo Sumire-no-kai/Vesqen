@@ -114,6 +114,7 @@ class DirectUsbVolumeTest {
         control.attach { asked += it }
         val sessionPlayer = DeviceVolumeSessionPlayer(player, control)
         val infos = mutableListOf<Int>()
+        val commands = mutableListOf<Player.Commands>()
         val volumes = mutableListOf<Int>()
         sessionPlayer.addListener(object : Player.Listener {
             override fun onDeviceInfoChanged(deviceInfo: DeviceInfo) {
@@ -123,14 +124,29 @@ class DirectUsbVolumeTest {
             override fun onDeviceVolumeChanged(volume: Int, muted: Boolean) {
                 volumes += volume
             }
+
+            override fun onAvailableCommandsChanged(availableCommands: Player.Commands) {
+                commands += availableCommands
+            }
         })
         idle()
         infos.clear()
         volumes.clear()
         assertEquals(DeviceInfo.PLAYBACK_TYPE_LOCAL, sessionPlayer.deviceInfo.playbackType)
+        assertFalse(sessionPlayer.isCommandAvailable(Player.COMMAND_ADJUST_DEVICE_VOLUME_WITH_FLAGS))
 
         control.publish(jbl)
         assertEquals(listOf(DeviceInfo.PLAYBACK_TYPE_REMOTE), infos)
+        // Without these the media session's volume is fixed and it takes no volume key (iQOO 9, 2026-11-10).
+        val deviceVolumeCommands = listOf(
+            Player.COMMAND_GET_DEVICE_VOLUME,
+            Player.COMMAND_SET_DEVICE_VOLUME_WITH_FLAGS,
+            Player.COMMAND_ADJUST_DEVICE_VOLUME_WITH_FLAGS,
+        )
+        deviceVolumeCommands.forEach { command ->
+            assertTrue(sessionPlayer.isCommandAvailable(command))
+            assertTrue(commands.last().contains(command))
+        }
         assertEquals(listOf(17), volumes)
         assertEquals(34, sessionPlayer.deviceInfo.maxVolume)
         assertEquals(17, sessionPlayer.deviceVolume)
@@ -153,6 +169,7 @@ class DirectUsbVolumeTest {
         control.publish(null)
         assertEquals(listOf(DeviceInfo.PLAYBACK_TYPE_REMOTE, DeviceInfo.PLAYBACK_TYPE_LOCAL), infos)
         assertEquals(DeviceInfo.PLAYBACK_TYPE_LOCAL, sessionPlayer.deviceInfo.playbackType)
+        assertFalse(commands.last().contains(Player.COMMAND_ADJUST_DEVICE_VOLUME_WITH_FLAGS))
         sessionPlayer.stopReporting()
     }
 
