@@ -202,6 +202,15 @@ private val ProcessingFlags = listOf(
 internal fun chainSummaryShownMetricIds(metrics: Map<TelemetryMetricId, TelemetryMetric>): Set<TelemetryMetricId> {
     fun read(id: TelemetryMetricId) = metrics[id]?.evidence?.reading != null
     return buildSet {
+        if (metrics.ownOutputPlays()) {
+            addAll(ChainStationFacts.getValue(ChainStation.SOURCE))
+            addAll(ChainStationFacts.getValue(ChainStation.DECODER))
+            addAll(DirectHandoffFacts)
+            addAll(listOf(Metrics.USB_DIRECT_PROTOCOL, Metrics.USB_DIRECT_SYNC_TYPE, Metrics.USB_DIRECT_UNDERRUNS))
+            ProcessingFlags.mapTo(this) { it.second }
+            if (!read(Metrics.SOURCE_BIT_DEPTH)) add(Metrics.SOURCE_AVERAGE_BITRATE)
+            return@buildSet
+        }
         addAll(ChainStationFacts.values.flatten())
         ProcessingFlags.mapTo(this) { it.second }
         add(Metrics.ROUTE_SELECTED_SYSTEM_TYPE)
@@ -416,7 +425,8 @@ private fun ChainPath(
                 tag = "vesqen.chain.segment.app",
                 hairline = hairline,
             )
-            ChainStation.entries.forEach { station ->
+            val stations = if (metrics.ownOutputPlays()) ChainStation.entries.filter { it != ChainStation.ROUTE } else ChainStation.entries
+            stations.forEach { station ->
                 if (station == ChainStation.ROUTE) {
                     val codec = metrics[Metrics.ROUTE_BLUETOOTH_CODEC]?.evidence
                     ChainSegmentLabel(
@@ -441,8 +451,8 @@ private fun ChainPath(
                     expanded = expanded == station,
                     onToggle = { onToggle(station) },
                     hairline = hairline,
-                    last = station == ChainStation.ROUTE,
-                    modifier = if (station == ChainStation.ROUTE) Modifier.onSizeChanged { lastRowHeight = it.height } else Modifier,
+                    last = station == stations.last(),
+                    modifier = if (station == stations.last()) Modifier.onSizeChanged { lastRowHeight = it.height } else Modifier,
                 )
             }
         }

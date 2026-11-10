@@ -203,10 +203,11 @@ internal fun assessAppSegment(
     checks += precision.first
     checks += transitionCheck(snapshot, snapshotIssue)
 
-    val route = reader.read(listOf(Metrics.ROUTE_SELECTED_SYSTEM_TYPE))
+    val route = if (ownOutput) SegmentEvidenceRead(emptyMap(), emptyList()) else reader.read(listOf(Metrics.ROUTE_SELECTED_SYSTEM_TYPE))
     val routeEvidence = route.evidence[Metrics.ROUTE_SELECTED_SYSTEM_TYPE]
     val routeType = (routeEvidence?.reading as? TelemetryReading.Text)?.value
     val routeKind = when {
+        ownOutput -> RouteKind.OTHER
         route.issues.isNotEmpty() || routeType == null -> RouteKind.UNKNOWN
         isBluetoothRouteType(routeType) -> RouteKind.BLUETOOTH
         else -> RouteKind.OTHER

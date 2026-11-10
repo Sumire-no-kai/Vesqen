@@ -37,14 +37,14 @@ class NowNotesDirectUsbUiTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
-    fun theNotesNameTheDacItsWireFormatAndTheEnginesUnderruns() {
+    fun theNotesUseTheDacEvenWhenAndroidSelectsBluetooth() {
         val noTrack = TelemetryEvidence.Unavailable(TelemetryUnavailableReason.SOURCE_DID_NOT_REPORT, CapturedAtMs)
         val telemetry = FakePlaybackTelemetry(
             FakeAppSegmentTelemetry.speakerSession(
                 mapOf(
                     Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE to noTrack,
                     Metrics.PLAYBACK_AUDIO_TRACK_ENCODING to noTrack,
-                    Metrics.ROUTE_SELECTED_SYSTEM_TYPE to measured(TelemetryReading.Text("wired_or_usb")),
+                    Metrics.ROUTE_SELECTED_SYSTEM_TYPE to measured(TelemetryReading.Text("bluetooth_a2dp")),
                     Metrics.USB_DIRECT_WIRE_SAMPLE_RATE to measured(TelemetryReading.Integer(48_000, TelemetryUnit.HERTZ)),
                     Metrics.USB_DIRECT_WIRE_BIT_DEPTH to measured(TelemetryReading.Integer(24, TelemetryUnit.BITS)),
                     Metrics.USB_DIRECT_UNDERRUNS to measured(TelemetryReading.Integer(3, TelemetryUnit.COUNT)),
@@ -92,6 +92,7 @@ class NowNotesDirectUsbUiTest {
         compose.onNodeWithTag("vesqen.now.notes.route").assertTextContains(
             context.resources.getQuantityString(R.plurals.now_notes_route_underruns, 3, "JBL Flip 7", "3"),
         )
+        compose.onNodeWithTag("vesqen.now.notes.bluetooth-codec").assertDoesNotExist()
         compose.onNodeWithTag("vesqen.now.notes.output-format").assertTextContains(
             context.getString(R.string.now_notes_output_format_bit_perfect, context.getString(R.string.usb_wire_format, "48 kHz", 24)),
         )

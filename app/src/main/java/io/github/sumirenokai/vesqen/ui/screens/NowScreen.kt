@@ -1234,7 +1234,7 @@ private fun NowLinerNotesBody(
     NotesRow(stringResource(if (ownOutput) R.string.now_notes_handoff_direct else R.string.chain_core_output), audioTrack, "audio-track")
     NotesRow(stringResource(R.string.chain_core_route), route, "route")
     when {
-        routeKind == OutputRouteKind.BLUETOOTH -> {
+        !ownOutput && routeKind == OutputRouteKind.BLUETOOTH -> {
             val codec = value(TelemetryMetricCatalog.ROUTE_BLUETOOTH_CODEC)
             val configuration = value(TelemetryMetricCatalog.ROUTE_BLUETOOTH_CONFIGURATION)
             val summary = bluetoothCodecSummary(context, codec, configuration)
