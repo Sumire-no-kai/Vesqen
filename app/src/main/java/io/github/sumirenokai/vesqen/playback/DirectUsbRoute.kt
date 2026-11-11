@@ -184,8 +184,13 @@ internal interface DirectUsbRoute {
     interface Listener {
         fun onReleased(cleanup: CleanupRecord) = Unit
 
-        /** The route has posted a new output to the main thread. Register it before the next failure callback. */
-        fun onOutputOpened(periodUid: Any, output: Any = periodUid) = Unit
+        /**
+         * The route has posted a new output to the main thread. Register it before the next failure
+         * callback. [follows] names the source a reused output continues from; its tail still plays
+         * until this one's first frame is delivered. Null for a new output, which comes only after
+         * Media3 released the previous one.
+         */
+        fun onOutputOpened(periodUid: Any, output: Any = periodUid, follows: Any? = null) = Unit
 
         /** Main thread: media delivery, pause and retirement, bound to the output that observed them. */
         fun onOutputActive(periodUid: Any, output: Any = periodUid, active: Boolean) = Unit
@@ -237,6 +242,18 @@ internal interface DirectUsbRoute {
     fun release(onReleased: ((Boolean) -> Unit)? = null)
 
     fun close()
+}
+
+/** The identity the route gives one source of an output, so a reused output can say what it continues. */
+@UnstableApi
+private class OutputSource(
+    val token: Any,
+    private val onActive: (Boolean) -> Unit,
+    private val onFailure: (DirectUsbFailure) -> Unit,
+) : DirectUsbAudioOutput.PlaybackListener {
+    override fun onActiveChanged(active: Boolean) = onActive(active)
+
+    override fun onFailed(failure: DirectUsbFailure) = onFailure(failure)
 }
 
 /** Main-thread release barrier. The route drops a session before its control thread finishes cleanup. */
@@ -578,23 +595,26 @@ internal class AndroidDirectUsbRoute(
                                 val details = configuringSource?.toDirectDetails()?.withOffer(target.function)
                                 if (configuringGeneration == outputGeneration) listener?.onFailed(failure, details, configuringPeriodUid)
                             },
-                            listenerFactory = {
+                            listenerFactory = { continuing ->
                                 val uid = configuringPeriodUid
                                 val generation = outputGeneration
                                 val token = Any()
+                                val follows = (continuing as? OutputSource)?.token
                                 val details = configuringSource?.toDirectDetails()?.withOffer(target.function)
-                                if (uid != null) main.post { if (session === next && outputGeneration == generation) listener?.onOutputOpened(uid, token) }
-                                object : DirectUsbAudioOutput.PlaybackListener {
-                                    override fun onActiveChanged(active: Boolean) {
+                                if (uid != null) main.post {
+                                    if (session === next && outputGeneration == generation) listener?.onOutputOpened(uid, token, follows)
+                                }
+                                OutputSource(
+                                    token,
+                                    onActive = { active ->
                                         if (uid != null) main.post {
                                             if (session === next && outputGeneration == generation) listener?.onOutputActive(uid, token, active)
                                         }
-                                    }
-
-                                    override fun onFailed(failure: DirectUsbFailure) {
+                                    },
+                                    onFailure = { failure ->
                                         if (session === next && outputGeneration == generation) listener?.onFailed(failure, details, uid, token)
-                                    }
-                                }
+                                    },
+                                )
                             },
                         )
                         streaming = true

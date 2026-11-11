@@ -245,6 +245,7 @@ class VesqenApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        io.github.sumirenokai.vesqen.playback.UsbAttachActivity.syncEnabled(this)
         deviceReportRuntime
         developerDiagnosticRecorder
         // The updater restores an interrupted installation; usage starts recording USB connections.

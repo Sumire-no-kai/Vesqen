@@ -70,6 +70,7 @@ internal class DirectUsbSourceBoundaryDeviceTest {
         var outputsOpened = 0
         var period: Any? = null
         val activePeriods = linkedSetOf<Any?>()
+        val events = java.util.Collections.synchronizedList(mutableListOf<Pair<Any?, Boolean>>())
         var source: TelemetrySourceFacts? = null
         val provider = DirectUsbAudioOutputProvider(
             PLAN,
@@ -84,6 +85,7 @@ internal class DirectUsbSourceBoundaryDeviceTest {
                 object : DirectUsbAudioOutput.PlaybackListener {
                     override fun onActiveChanged(active: Boolean) {
                         if (active) activePeriods += outputPeriod
+                        events += outputPeriod to active
                     }
                     override fun onFailed(failure: DirectUsbFailure) { failures += failure }
                 }
@@ -133,6 +135,10 @@ internal class DirectUsbSourceBoundaryDeviceTest {
             assertNull("Player error, caused by ${error.get()?.cause}", error.get())
             assertEquals("Both tracks share one output and its USB session", 1, outputsOpened)
             assertEquals("Delivery for both playlist periods", 2, activePeriods.filterNotNull().size)
+            // A1 (#314): the first item's tail is still in the ring when the second one begins. The
+            // second is reported before the first retires, so playback never looks idle in between.
+            val playing = events.toList().runningFold(0) { count, (_, active) -> count + if (active) 1 else -1 }.drop(1)
+            assertTrue("A gap between the two items: $events", playing.dropLast(1).all { it > 0 })
             assertArrayEquals(wire(first) + wire(second), handle.received.toByteArray())
         } finally {
             onThread(thread) { player.release() }
@@ -167,10 +173,14 @@ internal class DirectUsbSourceBoundaryDeviceTest {
         return result.get()
     }
 
-    /** Takes everything at once and reports it played, so the player runs as fast as it decodes. */
+    /**
+     * Takes everything at once, so the player runs as fast as it decodes, and reports it delivered
+     * [DELIVERY_LAG_FRAMES] behind, the way a ring of queued audio would, until the end is marked.
+     */
     private class RecordingHandle : UsbOutputHandle {
         val received = ByteArrayOutputStream()
         private var frames = 0L
+        private var ended = false
         override val epoch = 0L
         override val failure: DirectUsbFailure? = null
 
@@ -185,21 +195,29 @@ internal class DirectUsbSourceBoundaryDeviceTest {
 
         override fun setRunning(running: Boolean) = Unit
 
-        override fun markEndOfStream() = Unit
+        @Synchronized
+        override fun markEndOfStream() {
+            ended = true
+        }
 
         @Synchronized
-        override fun readStats() = UsbStreamStats(
-            mediaFramesWritten = frames, mediaFramesSubmitted = frames, mediaFramesProcessed = frames,
-            mediaFramesDelivered = frames, mediaFramesLost = 0, silenceFramesInserted = 0, usbFramesDelivered = frames,
-            underruns = 0, urbsCompleted = 0, packetsFailed = 0, failure = UsbStreamStats.Failure.NONE, failureErrno = 0,
-            threadNice = 0, threadSchedulerPolicy = 0, epoch = 0, requestedEpoch = 0,
-        )
+        override fun readStats(): UsbStreamStats {
+            val delivered = if (ended) frames else maxOf(0, frames - DELIVERY_LAG_FRAMES)
+            return UsbStreamStats(
+                mediaFramesWritten = frames, mediaFramesSubmitted = frames, mediaFramesProcessed = delivered,
+                mediaFramesDelivered = delivered, mediaFramesLost = 0, silenceFramesInserted = 0, usbFramesDelivered = delivered,
+                underruns = 0, urbsCompleted = 0, packetsFailed = 0, failure = UsbStreamStats.Failure.NONE, failureErrno = 0,
+                threadNice = 0, threadSchedulerPolicy = 0, epoch = 0, requestedEpoch = 0,
+            )
+        }
 
         override fun release() = Unit
     }
 
     private companion object {
         const val DURATION_MS = 2_000
+        /** A quarter second at 48 kHz, half of PLAN's ring. */
+        const val DELIVERY_LAG_FRAMES = 12_000L
         const val TIMEOUT_S = 30L
 
         /** A 24-bit stereo wire at 48 kHz, so both source depths fit without a new configuration. */

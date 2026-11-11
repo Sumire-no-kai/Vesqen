@@ -42,18 +42,30 @@ class DirectUsbAudioOutput(
      * configuration was refused. Read when the sink keeps this output for that format (#282).
      */
     private val configuredSourceBits: () -> Int = { sourceBits },
-    private val listenerFactory: (() -> PlaybackListener)? = null,
+    /** Called for each source this output plays, with the source a reused output continues from. */
+    private val listenerFactory: ((continuing: PlaybackListener?) -> PlaybackListener)? = null,
 ) : AudioOutput {
     interface PlaybackListener {
         fun onActiveChanged(active: Boolean)
         fun onFailed(failure: DirectUsbFailure)
     }
 
-    private var playbackListener = listenerFactory?.invoke()
-    private var reportedActive = false
-    // A reused output must deliver beyond the previous source's accepted frames before it can
-    // support the next source's declaration. Lost frames cannot count as delivery evidence.
-    private var sourceStartFrames = 0L
+    /**
+     * One playlist item's PCM on this output. A reused output holds the previous item's tail, up to
+     * the whole ring, when the next one begins, so delivery decides which source is playing. Lost
+     * frames cannot count as delivery evidence.
+     */
+    private class Source(val listener: PlaybackListener?, val startFrames: Long) {
+        private var reported = false
+
+        fun report(active: Boolean) {
+            if (reported == active) return
+            reported = active
+            listener?.onActiveChanged(active)
+        }
+    }
+
+    private val sources = ArrayDeque<Source>().apply { add(Source(listenerFactory?.invoke(null), 0)) }
     private var latticeBits = sourceBits
     private var converter = ExactPcmConverter(encoding, plan.channels, sourceBits, plan.bitResolution, plan.subslotBytes)
     private val clock = UsbMediaClock(plan.sampleRateHz)
@@ -76,7 +88,7 @@ class DirectUsbAudioOutput(
 
     override fun pause() {
         wantRunning = false
-        reportActive(false)
+        reportDelivery(null)
         handle?.let(::settle)
     }
 
@@ -121,7 +133,7 @@ class DirectUsbAudioOutput(
     override fun release() {
         if (released) return
         released = true
-        reportActive(false)
+        reportDelivery(null)
         handle?.release()
         listeners.forEach(AudioOutput.Listener::onReleased)
     }
@@ -138,7 +150,7 @@ class DirectUsbAudioOutput(
         // Null until the stream reached this output's epoch: none of its audio has gone out yet.
         val stats = target.readStats() ?: return 0
         stats.asFailure()?.let(::report)
-        reportActive(!released && running && !failureReported && stats.lastDeliveredMediaFrame > sourceStartFrames)
+        reportDelivery(stats.lastDeliveredMediaFrame.takeIf { !released && running && !failureReported })
         val frames = clock.positionFrames(stats.mediaFramesProcessed, stats.mediaFramesSubmitted, running, nanoTime())
         return Util.sampleCountToDurationUs(frames, plan.sampleRateHz)
     }
@@ -157,9 +169,7 @@ class DirectUsbAudioOutput(
         if (newConfig != currentConfig) return false
         val bits = configuredSourceBits()
         if (bits <= 0) return false
-        reportActive(false)
-        sourceStartFrames = acceptedFrames
-        playbackListener = listenerFactory?.invoke()
+        sources.addLast(Source(listenerFactory?.invoke(sources.last().listener), acceptedFrames))
         if (bits != latticeBits) {
             converter = ExactPcmConverter(encoding, plan.channels, bits, plan.bitResolution, plan.subslotBytes)
             latticeBits = bits
@@ -219,17 +229,27 @@ class DirectUsbAudioOutput(
         }
     }
 
-    private fun reportActive(active: Boolean) {
-        if (reportedActive == active) return
-        reportedActive = active
-        playbackListener?.onActiveChanged(active)
+    /**
+     * [lastDelivered] is null while nothing goes out. The newest source with a delivered frame is the
+     * one playing and the sources before it have finished. The successor is reported first, so a
+     * listener never sees a gap between two items (A1, #314).
+     */
+    private fun reportDelivery(lastDelivered: Long?) {
+        val playing = if (lastDelivered == null) -1 else sources.indexOfLast { lastDelivered > it.startFrames }
+        if (playing < 0) {
+            sources.forEach { it.report(false) }
+            return
+        }
+        sources[playing].report(true)
+        repeat(playing) { sources.removeFirst().report(false) }
     }
 
+    /** A failure belongs to the source being written, the newest one. */
     private fun report(failure: DirectUsbFailure) {
         if (failureReported) return
         failureReported = true
-        reportActive(false)
-        val listener = playbackListener
+        reportDelivery(null)
+        val listener = sources.last().listener
         if (listener != null) listener.onFailed(failure) else onFailure(failure)
     }
 
@@ -258,7 +278,7 @@ internal class DirectUsbAudioOutputProvider(
     private val source: () -> TelemetrySourceFacts?,
     private val onFailure: (DirectUsbFailure) -> Unit = {},
     private val onVolumeIgnored: (Float) -> Unit = {},
-    private val listenerFactory: (() -> DirectUsbAudioOutput.PlaybackListener)? = null,
+    private val listenerFactory: ((DirectUsbAudioOutput.PlaybackListener?) -> DirectUsbAudioOutput.PlaybackListener)? = null,
 ) : AudioOutputProvider {
     /**
      * Set by [getOutputConfig] for the format being configured, and 0 while that format is refused.
