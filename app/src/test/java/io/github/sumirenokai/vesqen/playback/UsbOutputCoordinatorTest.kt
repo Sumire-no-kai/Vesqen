@@ -1805,6 +1805,41 @@ class UsbOutputCoordinatorTest {
     }
 
     @Test
+    fun `duplicate attachment signals cannot restart a pending USB takeover`() {
+        beginHostOnlyTakeover()
+        val takeover = checkNotNull(direct.pendingTakeover)
+        direct.calls.clear()
+        repeat(2) {
+            context.sendBroadcast(Intent(UsbAttachActivity.ACTION_RECHECK).setPackage(context.packageName))
+            idle()
+        }
+        assertFalse("inspect" in direct.calls || "takeOver" in direct.calls)
+        direct.streaming = true
+        takeover(null)
+        idle()
+        assertTrue(player.playWhenReady)
+    }
+
+    @Test
+    fun `an attachment during a permission prompt preserves its grant callback`() {
+        start(direct = direct)
+        loadTrack()
+        direct.usbAudioDevicePresent = true
+        direct.inspection = DirectUsbInspection.PermissionNeeded("DAC")
+        direct.deferPermission = true
+        requestStrict()
+        val result = checkNotNull(direct.pendingPermission)
+        context.sendBroadcast(Intent(UsbAttachActivity.ACTION_RECHECK).setPackage(context.packageName))
+        idle()
+        assertStatus(UsbOutputPhase.APPLYING, "direct_usb.permission_requested")
+        direct.inspection = DirectUsbInspection.Ready("DAC", PLAN_48K_24)
+        result(true)
+        idle()
+        assertStatus(UsbOutputPhase.AVAILABLE, "direct_usb.available")
+        assertEquals(1, direct.calls.count { it == "requestPermission" })
+    }
+
+    @Test
     fun `the attachment activity signal rechecks permission without reviving a paused queue`() {
         start(direct = direct)
         loadTrack()
@@ -2558,6 +2593,8 @@ class UsbOutputCoordinatorTest {
         var pendingTakeover: ((DirectUsbFailure?) -> Unit)? = null
         var pendingRelease: ((Boolean) -> Unit)? = null
         var usbAudioDevicePresent = false
+        var deferPermission = false
+        var pendingPermission: ((Boolean) -> Unit)? = null
         var deferRecovery = false
         var pendingRecovery: ((DirectUsbRecoveryResult) -> Unit)? = null
         var recoveryResult = DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed")
@@ -2598,6 +2635,10 @@ class UsbOutputCoordinatorTest {
 
         override fun requestPermission(forRecovery: Boolean, onResult: (granted: Boolean) -> Unit) {
             calls += "requestPermission"
+            if (deferPermission) {
+                pendingPermission = onResult
+                return
+            }
             if (permissionGranted) inspection = DirectUsbInspection.Ready("JBL Flip 7", PLAN_48K_24)
             beforePermissionResult?.invoke()
             onResult(permissionGranted)
