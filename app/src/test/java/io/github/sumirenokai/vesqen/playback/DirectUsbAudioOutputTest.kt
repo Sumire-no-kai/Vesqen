@@ -464,9 +464,48 @@ class DirectUsbAudioOutputTest {
 
     private val flac16 = TelemetrySourceFacts(codecMime = "audio/flac", bitDepth = 16, sampleRateHz = 48_000, channelCount = 2)
 
-    private fun formatConfig(encoding: Int = C.ENCODING_PCM_16BIT) = AudioOutputProvider.FormatConfig.Builder(
-        Format.Builder().setSampleMimeType(MimeTypes.AUDIO_RAW).setPcmEncoding(encoding).setSampleRate(48_000).setChannelCount(2).build(),
+    private fun formatConfig(encoding: Int = C.ENCODING_PCM_16BIT, sampleRate: Int = 48_000) = AudioOutputProvider.FormatConfig.Builder(
+        Format.Builder().setSampleMimeType(MimeTypes.AUDIO_RAW).setPcmEncoding(encoding).setSampleRate(sampleRate).setChannelCount(2).build(),
     ).build()
+
+    @Test
+    fun `the provider plans a new rate before requesting its new stream`() {
+        var facts = flac16
+        val opened = mutableListOf<StreamingPlan>()
+        val provider = DirectUsbAudioOutputProvider(
+            plan, openOutput = { error("the old plan must not be used") }, source = { facts },
+            planForSource = { source -> plan.copy(sampleRateHz = source.sampleRateHz) },
+            openPlannedOutput = { wire -> opened += wire; FakeHandle() },
+        )
+        val first = provider.getOutputConfig(formatConfig())
+        val old = provider.getAudioOutput(first)
+        facts = flac16.copy(sampleRateHz = 44_100)
+        val nextFormat = formatConfig(sampleRate = 44_100)
+        val next = provider.getOutputConfig(nextFormat)
+        assertEquals(listOf(48_000), opened.map { it.sampleRateHz })
+        assertFalse(old.canReuseAudioOutput(first, nextFormat, next))
+        old.release()
+        assertEquals(44_100, provider.getAudioOutput(next).sampleRate)
+        assertEquals(listOf(48_000, 44_100), opened.map { it.sampleRateHz })
+    }
+
+    @Test
+    fun `different wire formats cannot reuse an output even when decoded PCM is identical`() {
+        var facts = flac16
+        val wire16 = plan.copy(subslotBytes = 2, bitResolution = 16)
+        val wire24 = plan.copy(subslotBytes = 3, bitResolution = 24)
+        val provider = DirectUsbAudioOutputProvider(
+            wire16, openOutput = { FakeHandle() }, source = { facts },
+            planForSource = { source -> if (source.bitDepth == 16) wire16 else wire24 },
+        )
+        val format = formatConfig(C.ENCODING_PCM_FLOAT)
+        val first = provider.getOutputConfig(format)
+        val old = provider.getAudioOutput(first)
+        facts = flac16.copy(bitDepth = 24)
+        val next = provider.getOutputConfig(format)
+        assertEquals(first, next)
+        assertFalse(old.canReuseAudioOutput(first, format, next))
+    }
 
     @Test
     fun `the provider asks the session for a new output each time`() {

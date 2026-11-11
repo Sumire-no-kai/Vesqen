@@ -61,11 +61,19 @@ internal class DirectUsbSourceBoundaryDeviceTest {
     @Test
     fun twoSixteenBitTracksKeepSeparateDeliveryEvidence() = naturalChange(firstBits = 16, secondBits = 16)
 
-    private fun naturalChange(firstBits: Int, secondBits: Int) {
-        val first = PcmFixture(PcmContainer.FLAC, 48_000, firstBits, DURATION_MS, seed = 1)
-        val second = PcmFixture(PcmContainer.FLAC, 48_000, secondBits, DURATION_MS, seed = 2)
+    @Test
+    fun aFortyEightKilohertzTrackThenAFortyFourKilohertzTrack() =
+        naturalChange(16, 24, secondRate = 44_100)
+
+    @Test
+    fun aFortyFourKilohertzTrackThenAFortyEightKilohertzTrack() =
+        naturalChange(24, 16, firstRate = 44_100)
+
+    private fun naturalChange(firstBits: Int, secondBits: Int, firstRate: Int = 48_000, secondRate: Int = 48_000) {
+        val first = PcmFixture(PcmContainer.FLAC, firstRate, firstBits, DURATION_MS, seed = 1)
+        val second = PcmFixture(PcmContainer.FLAC, secondRate, secondBits, DURATION_MS, seed = 2)
         val files = listOf(first.write(directory), second.write(directory))
-        val handle = RecordingHandle()
+        val handles = mutableListOf<RecordingHandle>()
         val failures = mutableListOf<DirectUsbFailure>()
         var outputsOpened = 0
         var period: Any? = null
@@ -76,8 +84,9 @@ internal class DirectUsbSourceBoundaryDeviceTest {
             PLAN,
             openOutput = {
                 outputsOpened++
-                handle
+                RecordingHandle().also(handles::add)
             },
+            planForSource = { format -> PLAN.copy(sampleRateHz = format.sampleRateHz) },
             source = { source },
             onFailure = { failures += it },
             listenerFactory = {
@@ -133,13 +142,15 @@ internal class DirectUsbSourceBoundaryDeviceTest {
             assertTrue("Playback did not end", ended.await(TIMEOUT_S, TimeUnit.SECONDS))
             assertEquals("Own-output failures", emptyList<DirectUsbFailure.Reason>(), failures.map { it.reason })
             assertNull("Player error, caused by ${error.get()?.cause}", error.get())
-            assertEquals("Both tracks share one output and its USB session", 1, outputsOpened)
+            assertEquals("The output changes only with the wire configuration", if (firstRate == secondRate) 1 else 2, outputsOpened)
             assertEquals("Delivery for both playlist periods", 2, activePeriods.filterNotNull().size)
             // A1 (#314): the first item's tail is still in the ring when the second one begins. The
             // second is reported before the first retires, so playback never looks idle in between.
             val playing = events.toList().runningFold(0) { count, (_, active) -> count + if (active) 1 else -1 }.drop(1)
-            assertTrue("A gap between the two items: $events", playing.dropLast(1).all { it > 0 })
-            assertArrayEquals(wire(first) + wire(second), handle.received.toByteArray())
+            if (firstRate == secondRate) {
+                assertTrue("A gap between the two items: $events", playing.dropLast(1).all { it > 0 })
+            }
+            assertArrayEquals(wire(first) + wire(second), handles.fold(ByteArray(0)) { bytes, handle -> bytes + handle.received.toByteArray() })
         } finally {
             onThread(thread) { player.release() }
             thread.quitSafely()
