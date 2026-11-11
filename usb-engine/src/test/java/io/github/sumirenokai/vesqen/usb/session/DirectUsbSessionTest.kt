@@ -339,6 +339,25 @@ class DirectUsbSessionTest {
     }
 
     @Test
+    fun `session totals include each native stream once across a rate change and release`() {
+        val next = FakeStream(events)
+        var creations = 0
+        streams = UsbStreamFactory { _, _ -> UsbStreamFactory.Creation.Created(if (creations++ == 0) stream else next) }
+        takeOver()
+        stream.delivered[0] = 100
+        stream.lost[0] = 2
+        assertEquals(UsbStreamTotals(2, 0, 0, 100), session.totals())
+        val output = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        assertTrue(waitUntil { output.readStats() != null })
+        assertEquals(UsbStreamTotals(2, 0, 0, 100), session.totals())
+        next.delivered[0] = 25
+        next.lost[0] = 3
+        assertEquals(UsbStreamTotals(5, 0, 0, 125), session.totals())
+        release()
+        assertEquals(UsbStreamTotals(5, 0, 0, 125), session.totals())
+    }
+
+    @Test
     fun `the same wire plan opens another epoch without recreating the stream`() {
         var creations = 0
         streams = UsbStreamFactory { _, _ -> creations++; UsbStreamFactory.Creation.Created(stream) }

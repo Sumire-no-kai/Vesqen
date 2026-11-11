@@ -130,12 +130,18 @@ class DirectUsbSession(
     private var newestEpochTaken = false
     private var retiredAtNanos: Long? = null
     @Volatile private var finalTotals = UsbStreamTotals.NONE
+    private data class StreamProgress(val completed: UsbStreamTotals, val active: UsbStream?)
+    // Publish both parts together so a reader counts each native stream exactly once.
+    @Volatile private var progress = StreamProgress(UsbStreamTotals.NONE, null)
     @Volatile private var finalStats: UsbStreamStats? = null
     @Volatile private var finishedStream: UsbStream? = null
     private var pendingOutput: RequestedOutput? = null
     private val releaseCallbacks = mutableListOf<(CleanupRecord) -> Unit>()
 
-    fun totals(): UsbStreamTotals = finalTotals + (stream?.readStats()?.sessionTotals ?: UsbStreamTotals.NONE)
+    fun totals(): UsbStreamTotals {
+        val snapshot = progress
+        return snapshot.completed + (snapshot.active?.readStats()?.sessionTotals ?: UsbStreamTotals.NONE)
+    }
 
     fun takeOver(plan: StreamingPlan, startVolume: Int, onDone: (Takeover) -> Unit) {
         check(takeOverAsked.compareAndSet(false, true)) { "A session takes over once" }
@@ -218,6 +224,7 @@ class DirectUsbSession(
             finishedStream = current
             finalTotals += finalStats?.sessionTotals ?: UsbStreamTotals.NONE
             stream = null
+            progress = StreamProgress(finalTotals, null)
         }
         val request = checkNotNull(pendingOutput)
         if (request.released) {
@@ -405,6 +412,7 @@ class DirectUsbSession(
             is UsbStreamFactory.Creation.Unavailable -> return DirectUsbFailure(Reason.USB_ENGINE_UNAVAILABLE, creation.reason)
         }
         stream = created
+        progress = StreamProgress(finalTotals, created)
         if (detached) return DirectUsbFailure(Reason.DEVICE_DISCONNECTED, "the device was detached")
         if (!created.start()) return DirectUsbFailure(Reason.USB_ENGINE_UNAVAILABLE, "the stream thread did not start")
         return null
@@ -467,6 +475,7 @@ class DirectUsbSession(
             finishedStream = current
             finalTotals += finalStats?.sessionTotals ?: UsbStreamTotals.NONE
             stream = null
+            progress = StreamProgress(finalTotals, null)
             cleanupSteps += CleanupStep("stream reclaimed", true)
         }
         var allReleased = true
