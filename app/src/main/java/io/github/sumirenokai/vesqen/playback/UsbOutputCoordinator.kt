@@ -511,13 +511,16 @@ internal class UsbOutputCoordinator(
         }
         enforceNeutralProcessing(activePlayer)
         val route = directRoute
-        if (route != null && usesDirectPath(route)) {
-            reconfigureDirectOutput(route, generation, activePlayer)
-            return
-        }
-        if (route != null && synchronized(lock) { directPath }) {
-            returnDirectForOfficial(route)
-            return
+        if (route != null) {
+            val useDirect = probeUsb(generation) { usesDirectPath(route) } ?: return
+            if (useDirect) {
+                reconfigureDirectOutput(route, generation, activePlayer)
+                return
+            }
+            if (synchronized(lock) { directPath }) {
+                returnDirectForOfficial(route)
+                return
+            }
         }
         // Also applies after a retry or service recreation: Android may list a mixer while an
         // earlier session still owns the interfaces or has an unresolved recovery record.
@@ -1332,6 +1335,17 @@ internal class UsbOutputCoordinator(
         return !officialMixerOffered(routes)
     }
 
+    /** Permission or the connection can disappear between enumeration and opening the descriptor. */
+    private inline fun <T : Any> probeUsb(generation: Long, probe: () -> T): T? = try {
+        probe()
+    } catch (_: SecurityException) {
+        failClosed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_permission_revoked", expectedGeneration = generation)
+        null
+    } catch (_: IllegalStateException) {
+        failClosed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed", expectedGeneration = generation)
+        null
+    }
+
     private fun officialMixerOffered(devices: List<AudioDeviceInfo>): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
             devices.any { mixerAdapter.profiles(it).getOrNull()?.any(MixerProfile::bitPerfect) == true }
@@ -1393,7 +1407,7 @@ internal class UsbOutputCoordinator(
             failClosed(UsbOutputFailure.SOURCE_FORMAT_UNKNOWN, "direct_usb.source_format_unknown", expectedGeneration = generation)
             return
         }
-        when (val inspection = route.inspect(source)) {
+        when (val inspection = probeUsb(generation) { route.inspect(source) } ?: return) {
             DirectUsbInspection.NoDevice ->
                 failClosed(UsbOutputFailure.NO_USB_AUDIO_DEVICE, "direct_usb.no_usb_audio_device", expectedGeneration = generation)
             DirectUsbInspection.SeveralDevices ->

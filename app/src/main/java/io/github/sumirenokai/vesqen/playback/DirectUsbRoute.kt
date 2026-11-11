@@ -464,10 +464,16 @@ internal class AndroidDirectUsbRoute(
         release()
         val name = device.displayName()
         val connection = usbManager.openDevice(device) ?: return DirectUsbInspection.Refused("open_failed", deviceName = name)
-        val raw = connection.rawDescriptors
-        val parsed = raw?.let(UacDescriptorParser::parse)
+        try {
+            return inspectConnection(source, device, name, connection)
+        } finally {
+            if (prepared?.connection !== connection) connection.close()
+        }
+    }
+
+    private fun inspectConnection(source: SourcePcmFormat, device: UsbDevice, name: String, connection: UsbDeviceConnection): DirectUsbInspection {
+        val parsed = connection.rawDescriptors?.let(UacDescriptorParser::parse)
         if (parsed !is UacParseResult.Parsed) {
-            connection.close()
             return DirectUsbInspection.Refused("descriptors_refused", deviceName = name)
         }
         val speed = UsbStreamEngine.busSpeed(connection.fileDescriptor)
@@ -480,7 +486,6 @@ internal class AndroidDirectUsbRoute(
                     // The settings the own output streams through are stereo, so a known mono or
                     // multichannel source is refused here, before anything is claimed (#295).
                     if (!preflight.plan.carries(source)) {
-                        connection.close()
                         return DirectUsbInspection.Refused(
                             "channels_unsupported",
                             formatRefused = true,
@@ -492,13 +497,12 @@ internal class AndroidDirectUsbRoute(
                     return DirectUsbInspection.Ready(name, preflight.plan)
                 }
                 StreamPreflight.NoPlaybackFunction ->
-                    return DirectUsbInspection.Refused("no_playback_function", deviceName = name).also { connection.close() }
+                    return DirectUsbInspection.Refused("no_playback_function", deviceName = name)
                 is StreamPreflight.LibraryUnavailable ->
-                    return DirectUsbInspection.Refused("engine_unavailable", deviceName = name).also { connection.close() }
+                    return DirectUsbInspection.Refused("engine_unavailable", deviceName = name)
                 is StreamPreflight.Refused -> refusals += preflight.reason
             }
         }
-        connection.close()
         return directRefusal(parsed.topology, refusals, source).copy(deviceName = name)
     }
 
