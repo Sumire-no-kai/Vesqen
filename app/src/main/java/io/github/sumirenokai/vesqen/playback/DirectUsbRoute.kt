@@ -42,13 +42,19 @@ import io.github.sumirenokai.vesqen.usb.session.TakeoverMarker
 import io.github.sumirenokai.vesqen.usb.session.TakeoverMarkerStore
 import io.github.sumirenokai.vesqen.usb.session.CleanupRecord
 import io.github.sumirenokai.vesqen.usb.session.UsbTakeoverRecovery
+import io.github.sumirenokai.vesqen.usb.session.UsbPlaybackVolume
+import io.github.sumirenokai.vesqen.usb.session.playbackVolume
 import io.github.sumirenokai.vesqen.usb.session.UsbDeviceIdentity
 import java.util.concurrent.Executors
 
 /** What strict mode found when it looked at Vesqen's own USB path for a source (M7-4). */
 internal sealed interface DirectUsbInspection {
     /** One USB audio device with permission, and a plan that carries the source. */
-    data class Ready(val deviceName: String, val plan: StreamingPlan) : DirectUsbInspection
+    data class Ready(
+        val deviceName: String,
+        val plan: StreamingPlan,
+        val needsFixedVolumeConsent: UsbDeviceIdentity? = null,
+    ) : DirectUsbInspection
 
     data object NoDevice : DirectUsbInspection
 
@@ -236,6 +242,8 @@ internal interface DirectUsbRoute {
 
     fun inspect(source: SourcePcmFormat): DirectUsbInspection
 
+    fun confirmFixedVolume(expected: UsbDeviceIdentity): Boolean = false
+
     /** USB Host lists an audio-class device, whether or not Android has an audio route for it (#293). */
     fun hasUsbAudioDevice(): Boolean
 
@@ -332,7 +340,7 @@ internal class AndroidDirectUsbRoute(
         val device: UsbDeviceIdentity,
         @Volatile var plan: StreamingPlan,
         val function: UacFunction,
-        @Volatile var volume: Int,
+        @Volatile var volume: Int?,
     )
 
     /** Main thread: one volume request goes to the device at a time, and only the newest waits. */
@@ -528,8 +536,14 @@ internal class AndroidDirectUsbRoute(
                             details = source.toDirectDetails().withOffer(preflight.function),
                         )
                     }
+                    val identity = device.identity()
+                    val needsConsent = when (preflight.function.playbackVolume(preflight.plan)) {
+                        UsbPlaybackVolume.Unsupported -> return DirectUsbInspection.Refused("volume_control_failed", deviceName = name)
+                        UsbPlaybackVolume.Fixed -> identity.takeUnless(volumeMemory::fixedVolumeConfirmed)
+                        is UsbPlaybackVolume.Master -> null
+                    }
                     prepared = Prepared(device, connection, preflight.function, preflight.plan, preflight.speed, source)
-                    return DirectUsbInspection.Ready(name, preflight.plan)
+                    return DirectUsbInspection.Ready(name, preflight.plan, needsConsent)
                 }
                 StreamPreflight.NoPlaybackFunction ->
                     return DirectUsbInspection.Refused("no_playback_function", deviceName = name)
@@ -576,9 +590,16 @@ internal class AndroidDirectUsbRoute(
 
     override fun detailsFor(failure: DirectUsbFailure): DirectUsbDetails? = failureDetails?.takeIf { it.first === failure }?.second
 
+    private fun UsbDevice.identity() = UsbDeviceIdentity(deviceId, vendorId, productId)
+
+    override fun confirmFixedVolume(expected: UsbDeviceIdentity): Boolean {
+        val device = usbManager.deviceList.values.filter(UsbDevice::isUsbAudioDevice).singleOrNull() ?: return false
+        return device.identity() == expected && usbManager.hasPermission(device) && volumeMemory.confirmFixedVolume(expected)
+    }
+
     override fun takeOver(onDone: (DirectUsbFailure?) -> Unit) {
         val target = prepared ?: return onDone(DirectUsbFailure(DirectUsbFailure.Reason.USB_TRANSFER_FAILED, "nothing was inspected"))
-        val identity = UsbDeviceIdentity(target.device.deviceId, target.device.vendorId, target.device.productId)
+        val identity = target.device.identity()
         lateinit var next: DirectUsbSession
         next = DirectUsbSession(
             device = identity,
@@ -606,7 +627,7 @@ internal class AndroidDirectUsbRoute(
             },
         )
         session = next
-        next.takeOver(target.plan, volumeMemory.startVolume(identity)) { result ->
+        next.takeOver(target.plan, volumeMemory.startVolume(identity), volumeMemory.fixedVolumeConfirmed(identity)) { result ->
             main.post {
                 if (session !== next) return@post
                 when (result) {
@@ -614,7 +635,13 @@ internal class AndroidDirectUsbRoute(
                         streamingFacts = StreamingFacts(
                             next, identity, target.plan, target.function, result.volumeNow,
                         )
-                        next.volumeRange?.let { volumes.publish(DirectUsbVolume(result.volumeNow, it.minimum, it.maximum, it.resolution)) }
+                        val level = result.volumeNow
+                        if (level == null) {
+                            volumes.publish(null, fixed = true)
+                        } else {
+                            val range = checkNotNull(next.volumeRange)
+                            volumes.publish(DirectUsbVolume(level, range.minimum, range.maximum, range.resolution))
+                        }
                         sessionProvider = DirectUsbAudioOutputProvider(
                             target.plan,
                             openOutput = next::openOutput,
@@ -683,7 +710,7 @@ internal class AndroidDirectUsbRoute(
             protocol = facts.function.protocolToken(),
             syncType = facts.function.syncToken(plan),
             // UAC volume is in 1/256 dB.
-            hardwareVolumeDb = facts.volume / 256.0,
+            hardwareVolumeDb = facts.volume?.div(256.0),
             deliveredFrames = totals.deliveredFrames,
             underruns = totals.underruns,
             lostFrames = totals.lostFrames,
@@ -694,6 +721,7 @@ internal class AndroidDirectUsbRoute(
     /** Main thread. The device's read-back, not the request, is what gets published and remembered. */
     private fun setVolume(target: Int) {
         val facts = streamingFacts ?: return
+        if (facts.volume == null) return
         if (volumeInFlight) {
             volumeWaiting = target
             return

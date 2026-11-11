@@ -49,6 +49,7 @@ internal fun directUsbFailureSpec(status: UsbOutputStatus, device: String, rateS
         StringSpec(R.string.usb_failure_direct_channels, listOf(channels, device, deviceChannels))
     }
     return when (status.decisionCode.removePrefix(DIRECT_USB_CODE_PREFIX)) {
+        "fixed_volume_confirmation_failed" -> StringSpec(R.string.usb_fixed_volume_failed)
         "usb_permission_revoked" -> StringSpec(R.string.usb_failure_permission_revoked)
         "rate_unsupported" -> rateSpec
         "depth_unsupported" -> depthSpec

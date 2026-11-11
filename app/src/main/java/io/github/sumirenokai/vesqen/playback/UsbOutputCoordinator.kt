@@ -38,6 +38,7 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetryMediaItemExtras
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceFacts
 import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
 import io.github.sumirenokai.vesqen.usb.session.DirectUsbFailure
+import io.github.sumirenokai.vesqen.usb.session.UsbDeviceIdentity
 import java.nio.ByteBuffer
 
 /**
@@ -101,6 +102,9 @@ internal class UsbOutputCoordinator(
     private var internalPauseInProgress = false
     private var reconfigurePosted = false
     private var closed = false
+    // Main-thread only. A controller answers the displayed attempt, never supplies a USB identity.
+    private data class VolumeConsent(val device: UsbDeviceIdentity, val period: Any, val generation: Long)
+    private var pendingVolumeConsent: VolumeConsent? = null
     private var statusGeneration = stateRepository.snapshot().generation
 
     /** The current strict attempt uses Vesqen's own USB output; set from a ready inspection until it ends. */
@@ -322,6 +326,38 @@ internal class UsbOutputCoordinator(
             saveMode(requestedMode)
             scheduleReconfigure(resume = player?.playWhenReady == true, origin = UsbOutputFailureOrigin.USER_MODE_CHANGE)
         }
+    }
+
+    fun answerFixedVolume(generation: Long, observedAt: Long, accept: Boolean): Boolean {
+        val request = pendingVolumeConsent ?: return false
+        val status = currentStatus()
+        if (request.generation != generation || status.generation != generation ||
+            status.observedAtElapsedRealtimeMs != observedAt || status.decisionCode != FIXED_VOLUME_CONFIRMATION) return false
+        pendingVolumeConsent = null
+        if (!accept) {
+            publish(phase = UsbOutputPhase.AVAILABLE, decisionCode = "direct_usb.available",
+                source = sourceFormat, deviceName = status.deviceName)
+            return true
+        }
+        val active = player ?: return false
+        val timeline = active.currentTimeline
+        if (closed || reconfigurePosted || currentMode() != UsbOutputMode.STRICT_BIT_PERFECT ||
+            interrupted || focusSuppressed || communicationActive || timeline.isEmpty ||
+            timeline.getUidOfPeriod(active.currentPeriodIndex) != request.period) return false
+        val confirmed = try {
+            directRoute?.confirmFixedVolume(request.device) == true
+        } catch (_: SecurityException) {
+            false
+        } catch (_: IllegalStateException) {
+            false
+        }
+        if (!confirmed) {
+            failClosed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.fixed_volume_confirmation_failed",
+                origin = UsbOutputFailureOrigin.USER_PLAYBACK, directDevice = status.deviceName)
+            return false
+        }
+        scheduleReconfigure(resume = true, origin = UsbOutputFailureOrigin.USER_PLAYBACK)
+        return true
     }
 
     fun currentStatus(): UsbOutputStatus = stateRepository.snapshot()
@@ -573,6 +609,7 @@ internal class UsbOutputCoordinator(
             mainHandler.post { scheduleReconfigure(resume, origin) }
             return
         }
+        pendingVolumeConsent = null
         if (recoveryInProgress) {
             resumeAfterRecovery = resumeAfterRecovery || resume
             return
@@ -1662,6 +1699,27 @@ internal class UsbOutputCoordinator(
         publishDirect(UsbOutputPhase.AVAILABLE, "direct_usb.available", source)
         // As on the official path, inspection on startup or queue restoration takes nothing over.
         if (!activePlayer.playWhenReady && !synchronized(lock) { resumeAfterConfiguration }) return
+        inspection.needsFixedVolumeConsent?.let { device ->
+            val timeline = activePlayer.currentTimeline
+            val period = if (timeline.isEmpty) null else timeline.getUidOfPeriod(activePlayer.currentPeriodIndex)
+            // Preflight opened a descriptor connection only. End this attempt while the user decides.
+            val origin = synchronized(lock) {
+                configurationGeneration++
+                resumeAfterConfiguration = false
+                directPath = false
+                directOutputOpened = false
+                awaitingReattach = true
+                configurationOrigin
+            }
+            route.release()
+            activePlayer.pause()
+            activePlayer.stop()
+            communicationMonitor?.setEnabled(false)
+            publish(phase = UsbOutputPhase.AVAILABLE, source = source, decisionCode = FIXED_VOLUME_CONFIRMATION,
+                deviceName = inspection.deviceName, failureOrigin = origin)
+            if (period != null) pendingVolumeConsent = VolumeConsent(device, period, currentStatus().generation)
+            return
+        }
         publishDirect(UsbOutputPhase.APPLYING, "direct_usb.taking_over", source)
         synchronized(lock) { directOutputOpened = false }
         if (activePlayer.playWhenReady) {

@@ -26,6 +26,7 @@ import io.github.sumirenokai.vesqen.lyrics.readProviderLyrics
 import io.github.sumirenokai.vesqen.playback.PlaybackController
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryUpdate
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -537,6 +538,8 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     fun seekTo(positionMs: Long, queueEntryId: String? = null) = playbackController?.seekTo(positionMs, queueEntryId)
 
     fun cyclePlaybackOrderMode() = playbackController?.cyclePlaybackOrderMode()
+
+    fun answerFixedVolume(status: UsbOutputStatus, accept: Boolean) = playbackController().answerFixedVolume(status, accept)
 
     fun setUsbOutputMode(mode: UsbOutputMode) = playbackController().setUsbOutputMode(mode)
 

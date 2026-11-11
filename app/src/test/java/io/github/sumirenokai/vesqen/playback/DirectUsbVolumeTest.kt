@@ -36,6 +36,48 @@ class DirectUsbVolumeTest {
     }
 
     @Test
+    fun `consent survives a replug and recreation only for this vendor and product`() {
+        val first = UsbDeviceIdentity(1, 0x1234, 0x5678)
+        val memory = PreferencesDirectUsbVolumeMemory(context)
+        assertFalse(memory.fixedVolumeConfirmed(first))
+        assertTrue(memory.confirmFixedVolume(first))
+        val reopened = PreferencesDirectUsbVolumeMemory(context)
+        assertTrue(reopened.fixedVolumeConfirmed(first.copy(deviceId = 2)))
+        assertFalse(reopened.fixedVolumeConfirmed(first.copy(productId = 12)))
+        assertFalse(reopened.fixedVolumeConfirmed(first.copy(vendorId = 13)))
+        assertEquals(-30 * 256, reopened.startVolume(first))
+    }
+
+    @Test
+    fun `fixed remote provider has no adjustment commands and consumes keys without a request`() {
+        val control = DirectUsbVolumeControl()
+        control.attach { throw AssertionError("fixed output should receive no volume request") }
+        val session = DeviceVolumeSessionPlayer(player, control)
+        try {
+            control.publish(null, fixed = true)
+            assertNull(control.state.value)
+            assertEquals(DeviceInfo.PLAYBACK_TYPE_REMOTE, session.deviceInfo.playbackType)
+            assertTrue(session.isCommandAvailable(Player.COMMAND_GET_DEVICE_VOLUME))
+            for (cmd in listOf(Player.COMMAND_SET_DEVICE_VOLUME_WITH_FLAGS, Player.COMMAND_ADJUST_DEVICE_VOLUME_WITH_FLAGS)) {
+                assertFalse(session.availableCommands.contains(cmd))
+                assertFalse(session.isCommandAvailable(cmd))
+            }
+            assertTrue(control.pressKeys(1))
+            session.setDeviceVolume(10, 0)
+            session.decreaseDeviceVolume(0)
+            session.setDeviceMuted(true, 0)
+            assertEquals(0L, control.keyPresses.value)
+            control.publish(jbl)
+            assertTrue(session.isCommandAvailable(Player.COMMAND_ADJUST_DEVICE_VOLUME_WITH_FLAGS))
+            control.publish(null)
+            assertEquals(DeviceInfo.PLAYBACK_TYPE_LOCAL, session.deviceInfo.playbackType)
+            assertFalse(control.pressKeys(-1))
+        } finally {
+            session.stopReporting()
+        }
+    }
+
+    @Test
     fun `a key press is about 2 dB in whole device steps and never leaves the range`() {
         assertEquals(462, jbl.keyStep)
         assertEquals(34, jbl.keySteps)
