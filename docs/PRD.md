@@ -7,7 +7,7 @@
 - 实现进度：M1 交互与 M2 Audio Proof 已进入实现候选；Android 9 Honor 与 Android 15 iQOO 已取得真实无损音源、界面和扬声器自动化证据，详见 M1/M2_DEVICE_ACCEPTANCE。M2 尚未完整关闭：真实外设、其余系统/格式/适配矩阵、高频性能及转场体验仍开放。Library 首页快滑的具体定位与修复已纳入 M3 正式交付门禁；M3 可开始软件开发，需求和验收步骤见 M3_IMPLEMENTATION_PLAN。
 - 产品形态：Android 本地音乐播放器
 - 开源许可证：Apache License 2.0
-- 最低安装版本：Android 8.0（API 26，产品支持基线）；2026-10-19 所有者决定从 1.0 起提高到 Android 9.0（API 28），见 #149
+- 最低安装版本：从 1.0 起为 Android 9.0（API 28），见 [#149](https://github.com/Sumire-no-kai/Vesqen/issues/149)。
 - 核心直出目标：Android 14+（API 34）官方 USB bit-perfect 能力
 - 项目创建基线：`compileSdk 36`、`targetSdk 36`；后续随稳定工具链和 Google Play 要求升级
 
@@ -216,7 +216,7 @@ Vesqen 的长期差异化来自“可验证的播放链路”，而不只是格�
 | 运行环境 | 启动时选择的候选策略 | 实际启用条件 |
 | --- | --- | --- |
 | API 34+ | `OfficialMixerBitPerfectAdapter` | 已连接数字 USB DAC，ROM/HAL 暴露 bit-perfect mixer attribute，且源格式与 attribute 匹配 |
-| API 26–33，或 ROM/HAL 未暴露 bit-perfect mixer attribute 的 API 34+；M7 未提供或未启用 | `SystemUsbRouteAdapter` | 只提供 Android 常规 USB 路由，状态保持 `SYSTEM MIXED` 或其他有证据支持的非 bit-perfect 状态；严格模式失败关闭并说明原因 |
+| API 28–33，或 ROM/HAL 未暴露 bit-perfect mixer attribute 的 API 34+；M7 未提供或未启用 | `SystemUsbRouteAdapter` | 只提供 Android 常规 USB 路由，状态保持 `SYSTEM MIXED` 或其他有证据支持的非 bit-perfect 状态；严格模式失败关闭并说明原因 |
 | 同上，M7 已提供 | `DirectUsbHostAdapter` 候选 | 用户明确启用实验模式、授予 USB 权限，且 UAC 版本、endpoint、格式和设备组合经过支持矩阵确认；API 34+ 设备只有在官方路径确认不可用时才选择它 |
 
 API 34+ 并不等于有官方路径：厂商 ROM 可能不提供 bit-perfect mixer attribute。2026-10-01 实测的 iQOO V2171A（Android 15），系统音频策略里没有任何 bit-perfect 输出端口，接 JBL Flip 7 时只能走普通系统路由。
@@ -388,7 +388,7 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 
 ### F10：高级 USB 引擎（实验性可选模块）
 
-长期候选目标是在 Android 8–13 上通过 USB Host API 直接管理 UAC 设备，包括权限、interface、endpoint、连接、异步传输、格式协商和时钟行为。
+长期候选目标是在 Android 9–13 上通过 USB Host API 直接管理 UAC 设备，包括权限、interface、endpoint、连接、异步传输、格式协商和时钟行为。
 
 该模块具有显著兼容性和维护成本，只有在 Android 14+ 路径完成、设备矩阵成熟且用户价值被验证后才启动。第一版范围为 UAC1 和 UAC2 双声道 PCM，包含异步反馈（2026-11-02 决定，见 M7）；之后再评估 DSD/DoP 和多声道。
 
@@ -463,7 +463,7 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 2. 应用识别其为数字 USB Audio Class 输出。
 3. 用户主动打开 USB bit-perfect 模式。
 4. `UsbOutputStrategyResolver` 根据 API level、可选模块、DAC、权限和源格式重新生成决策。
-5. API 34+ 优先检查并配置官方 mixer attribute；API 26–33，以及 ROM/HAL 没有暴露 bit-perfect mixer attribute 的 API 34+ 设备，只有在 M7 引擎可用且设备在支持范围内时才进入自研直出路径。
+5. API 34+ 优先检查并配置官方 mixer attribute；API 28–33，以及 ROM/HAL 没有暴露 bit-perfect mixer attribute 的 API 34+ 设备，只有在 M7 引擎可用且设备在支持范围内时才进入自研直出路径。
 6. 检查成功后配置输出并开始播放，显示 `BIT-PERFECT ACTIVE`。
 7. 条件不满足时停止并解释原因；用户可以主动切换兼容模式，但应用不得静默改变策略。
 
@@ -515,14 +515,12 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 
 ### 10.5 兼容性
 
-- 最低 Android 8.0（API 26）；从 1.0 起改为 Android 9.0（API 28），2026-10-19 所有者决定（#149）。8.x 设备停在 beta.3。
-- API 26 是 Vesqen 的产品与维护基线，不是 Android USB Host 或官方 bit-perfect API 的共同最低版本。
-- Android USB Host API 从 API 12 提供；Vesqen 仍不因此下调最低安装版本。
-- Media3 1.9.0 及之后版本最低为 API 23，因此与 API 26 基线兼容。
+- 从 1.0 起，安装和维护基线为 Android 9.0（API 28，`minSdk = 28`）。1.0.0-beta.3 是支持 Android 8.0（API 26）和 8.1（API 27）的最后一个版本。见 [App 构建配置](../app/build.gradle.kts)。
+- Android USB Host API 从 API 12 提供。升级 Media3 时须保持与 API 28 的兼容性。
 - 项目创建时使用 `compileSdk 36` 和 `targetSdk 36`；API 34 音频调用必须通过版本隔离实现，不能在低版本路径直接加载。
 - 核心测试覆盖至少 Android 9（1.0 起的最低版本）、Android 13、Android 14 和当前稳定 Android 版本。
 - USB bit-perfect 官方路径只在 API 34+ 暴露，而且还要 ROM/HAL 实际提供 bit-perfect mixer attribute，部分厂商系统没有提供。
-- API 26–33，以及没有官方路径的 API 34+ 设备，默认提供普通系统播放；严格 USB 直出只有在未来高级 USB 引擎完成后才可能增加。
+- API 28–33，以及没有官方路径的 API 34+ 设备，默认提供普通系统播放；严格 USB 直出只有在未来高级 USB 引擎完成后才可能增加。
 - 启动时的 API level 检测只选择候选策略；最终决策还必须绑定 USB DAC、ROM/HAL 能力、权限、源格式和可选模块状态。
 - USB 策略必须在进程启动、设备插拔、权限变化、源格式变化和路由变化时重新计算。
 - Manifest 声明 `android.hardware.usb.host`，但核心播放器不依赖 USB，因此将该 feature 设为非必需并在运行时检测。
@@ -620,7 +618,7 @@ Vesqen 不在首版从零重写 FLAC、ALAC 等编解码算法，而是在 M1–
 
 - 首页卡顿已经定位到有 trace 与调用路径支持的具体业务根因，并提交实际修复；Honor 与 iQOO 使用同一最终 APK、相同业务场景各完成至少三轮修复前后测试，三轮中位 jank 和 p95 均有超过自然波动的改善，且曲库点播、刷新保持、索引、封面、拖动和无障碍无回归。
 - 至少两台 Android 14+ 手机和两款 USB DAC 完成能力测试。
-- API 26–33 不会加载或调用 API 34 专属 Implementation，并明确落入普通系统路由。
+- API 28–33 不会加载或调用 API 34 专属 Implementation，并明确落入普通系统路由。
 - 策略解析器的版本、设备、格式、权限和插拔组合测试通过。
 - 所有失败路径都不会错误显示 `BIT-PERFECT ACTIVE`。
 - 尚未经过外部验证的组合不得显示 `VERIFIED`。
@@ -715,7 +713,7 @@ DSD 与全盘扫描（2026-11-03 所有者决定，#249）：
 
 ### M7：高级 USB 引擎（2.0 必做）
 
-目标：在没有官方 bit-perfect 通道的设备上，评估严格 USB 直出的真实价值与成本。范围包括 Android 8–13，以及 ROM/HAL 没有暴露 bit-perfect mixer attribute 的 Android 14+ 设备（2026-10-01 扩大，起因见 F5.1 中 iQOO 的实测）。官方路径可用时，仍优先使用官方路径。
+目标：在没有官方 bit-perfect 通道的设备上，评估严格 USB 直出的真实价值与成本。范围包括 Android 9–13，以及 ROM/HAL 没有暴露 bit-perfect mixer attribute 的 Android 14+ 设备（2026-10-01 扩大，起因见 F5.1 中 iQOO 的实测）。官方路径可用时，仍优先使用官方路径。
 
 启动前置条件：
 
@@ -816,7 +814,7 @@ DSD 与全盘扫描（2026-11-03 所有者决定，#249）：
 ## 15. 待确认决策
 
 - Android 应用 ID 和 Java/Kotlin namespace 已确定为 `io.github.sumirenokai.vesqen`。
-- UI 已采用 Jetpack Compose，播放基线为 Media3；具体版本以 `gradle/libs.versions.toml` 为准，产品最低版本保持 API 26。后续版本升级需遵守 SDK 兼容性与回归验证要求。
+- UI 已采用 Jetpack Compose，播放基线为 Media3；具体版本以 `gradle/libs.versions.toml` 为准，产品最低版本为 Android 9.0（API 28）。后续版本升级需遵守 SDK 兼容性与回归验证要求。
 - 核心解码策略：平台/Media3 优先，哪些格式需要独立 native decoder。
 - M6 的首个自研替换点，以及触发替换所需的性能或兼容性证据阈值。
 - bit-perfect 验证使用的参考手机、ROM、USB DAC 和采集设备。
@@ -939,8 +937,9 @@ GitHub 版没有应用商店的统计，开发迭代又需要真实的设备和�
 
 **服务端**
 
-- 不单独租服务器：使用所有者现有的 Cloudflare 账号，部署一个 Worker（无服务器函数）加 D1 数据库，免费额度足够当前规模。这是 Vesqen 唯一的服务端组件，不涉及账号或权益判断。
-- 服务端代码放在本仓库，和应用一起开源，任何人都能核对它确实不保存 IP、只做汇总。因为客户端开源，任何人都能伪造请求，所以服务端要严格校验格式、限制大小和频率，统计数字只当作参考。
+- Cloudflare Worker 使用 D1 保存匿名使用统计的聚合数据，并按用户请求接收设备报告。使用统计不保存 IP 地址。接口校验请求格式、限制大小和频率，统计数字只作参考。见[服务端实现](../server/usage/)。
+- GitHub 版官网销售开启后，Worker 核对 Stripe 付款，为已付订单分配预签名激活码，并在收到全额退款或支付争议时标记对应已发激活码为撤销。仓库默认关闭销售接口（`ACTIVATION_INGEST=closed`），实际开放状态以部署环境为准。见[销售接口](../server/usage/src/activation.js)和[默认配置](../server/usage/wrangler.jsonc)。
+- 用户无需创建 Vesqen 账号。GitHub 版 App 在本机验证激活码签名、检查该版本随附的撤销名单并判断权益，离线可用。购买流程与撤销名单的发布方式见[激活码技术说明](ACTIVATION_CODES.md)。
 - 报告保存期限和统计汇总的保存期限写进隐私政策。
 
 **发布要求**
