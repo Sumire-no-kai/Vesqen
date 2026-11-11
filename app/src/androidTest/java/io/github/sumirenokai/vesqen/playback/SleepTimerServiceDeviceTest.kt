@@ -141,9 +141,16 @@ class SleepTimerServiceDeviceTest {
                 .buildAsync()
         }
         var controller: MediaController? = null
+        var restoreMode: UsbOutputMode? = null
         try {
             val player = withContext(Dispatchers.IO) { future.get(15, TimeUnit.SECONDS) }
             controller = player
+            // A reused device-lab install may still require the DAC from a previous test.
+            val mode = main { checkNotNull(UsbOutputSessionContract.fromBundle(player.sessionExtras)).mode }
+            if (mode != UsbOutputMode.SYSTEM) {
+                restoreMode = mode
+                setOutputMode(player, UsbOutputMode.SYSTEM)
+            }
             main {
                 assertTrue(player.isSessionCommandAvailable(command))
                 player.setMediaItems(listOf(entry(file, "current"), entry(file, "next")), 0, 1_500)
@@ -163,7 +170,11 @@ class SleepTimerServiceDeviceTest {
                     }
                     // Media3 delivers controller commands asynchronously. Drain the session's
                     // earlier player commands before releasing the binding and restoring storage.
-                    send(active, SleepTimerSessionContract.arguments(SleepTimerRequest.Cancel))
+                    try {
+                        send(active, SleepTimerSessionContract.arguments(SleepTimerRequest.Cancel))
+                    } finally {
+                        restoreMode?.let { setOutputMode(active, it) }
+                    }
                 }
             } finally {
                 main {
@@ -177,8 +188,15 @@ class SleepTimerServiceDeviceTest {
         }
     }
 
-    private suspend fun send(controller: MediaController, arguments: Bundle): SessionResult {
-        val future = main { controller.sendCustomCommand(command, arguments) }
+    private suspend fun setOutputMode(controller: MediaController, mode: UsbOutputMode) {
+        val result = send(controller, UsbOutputSessionContract.modeArguments(mode),
+            SessionCommand(UsbOutputSessionContract.SET_MODE_ACTION, Bundle.EMPTY))
+        assertEquals(SessionResult.RESULT_SUCCESS, result.resultCode)
+        assertEquals(mode, UsbOutputSessionContract.fromBundle(result.extras)?.mode)
+    }
+
+    private suspend fun send(controller: MediaController, arguments: Bundle, action: SessionCommand = command): SessionResult {
+        val future = main { controller.sendCustomCommand(action, arguments) }
         return withContext(Dispatchers.IO) { future.get(15, TimeUnit.SECONDS) }
     }
 
