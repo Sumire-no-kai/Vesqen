@@ -1313,14 +1313,18 @@ internal class UsbOutputCoordinator(
             if (mayRequestPermission && result.code == "direct_usb.permission_required" &&
                 (configurationOrigin == UsbOutputFailureOrigin.USER_PLAYBACK ||
                     configurationOrigin == UsbOutputFailureOrigin.USER_MODE_CHANGE)) {
-                route.requestPermission { granted ->
+                route.requestPermission(forRecovery = true) { granted ->
                     if (closed) return@requestPermission
-                    if (granted) {
+                    val stillPending = route.recoveryPending
+                    if (!granted || !stillPending) {
+                        resumeAfterRecovery = false
+                        resumeAfterConfiguration = false
+                        player?.pause()
+                    }
+                    if (granted || !stillPending) {
                         attemptRecovery(route, mayRequestPermission = false)
                     } else {
                         recoveryInProgress = false
-                        resumeAfterRecovery = false
-                        player?.pause()
                         publish(phase = UsbOutputPhase.FAILED, failure = UsbOutputFailure.PLATFORM_ERROR,
                             decisionCode = "direct_usb.permission_denied", failureOrigin = configurationOrigin)
                     }
