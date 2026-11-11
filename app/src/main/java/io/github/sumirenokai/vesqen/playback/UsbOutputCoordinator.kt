@@ -521,7 +521,6 @@ internal class UsbOutputCoordinator(
 
     override fun onPlaybackStateChanged(playbackState: Int) {
         if (playbackState != player?.playbackState || (playbackState != Player.STATE_IDLE && playbackState != Player.STATE_ENDED)) return
-        pauseReleaseMonitor?.close()
         if (interrupted) cancelInterruptedPlayback()
         if (directOutputOpened) {
             directRoute?.invalidateOutput()

@@ -1747,6 +1747,18 @@ class UsbOutputCoordinatorTest {
     }
 
     @Test
+    fun `reselecting strict mode during a user pause still returns the DAC at the deadline`() {
+        reachDirectActive()
+        player.pause()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(20))
+        requestStrict()
+        direct.calls.clear()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(10))
+        assertTrue("release" in direct.calls)
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
     fun `resuming before the pause deadline keeps the current session`() {
         reachDirectActive()
         player.pause()
