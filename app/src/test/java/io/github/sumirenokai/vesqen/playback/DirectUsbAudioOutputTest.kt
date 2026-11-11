@@ -125,12 +125,15 @@ class DirectUsbAudioOutputTest {
         val handle = FakeHandle()
         val events = mutableListOf<Pair<Int, Boolean>>()
         var source = 1
-        val output = DirectUsbAudioOutput(plan, UsbPcmEncoding.INT16, 16, handle, listenerFactory = {
+        val identities = mutableMapOf<DirectUsbAudioOutput.PlaybackListener, Int>()
+        val continued = mutableListOf<Int?>()
+        val output = DirectUsbAudioOutput(plan, UsbPcmEncoding.INT16, 16, handle, listenerFactory = { previous ->
             val identity = source
+            continued += previous?.let(identities::get)
             object : DirectUsbAudioOutput.PlaybackListener {
                 override fun onActiveChanged(active: Boolean) { events += identity to active }
                 override fun onFailed(failure: DirectUsbFailure) = Unit
-            }
+            }.also { identities[it] = identity }
         })
         output.play()
         output.write(pcm(prefillFrames), 1, 0)
@@ -146,15 +149,57 @@ class DirectUsbAudioOutputTest {
         val format = Format.Builder().setSampleMimeType(MimeTypes.AUDIO_RAW)
             .setSampleRate(48000).setChannelCount(2).setPcmEncoding(C.ENCODING_PCM_16BIT).build()
         assertTrue(output.canReuseAudioOutput(config, AudioOutputProvider.FormatConfig.Builder(format).build(), config))
+        assertEquals("The reused output names the source it continues", listOf(null, 1), continued)
+        // The first source's tail is still going out (A1, #314): it stays active until the second one's
+        // first frame arrives, and the second is reported before the first retires.
         handle.delivered = prefillFrames.toLong() - handle.lost
         output.positionUs
-        assertEquals(listOf(1 to true, 1 to false), events)
+        assertEquals(listOf(1 to true), events)
         output.write(pcm(1), 1, 0)
         handle.delivered++
         output.positionUs
+        assertEquals(listOf(1 to true, 2 to true, 1 to false), events)
         output.pause()
         output.release()
-        assertEquals(listOf(1 to true, 1 to false, 2 to true, 2 to false), events)
+        assertEquals(listOf(1 to true, 2 to true, 1 to false, 2 to false), events)
+    }
+
+    @Test
+    fun `a next track whose first frames are lost does not borrow the previous track's delivery`() {
+        val handle = FakeHandle()
+        val events = mutableListOf<Pair<Int, Boolean>>()
+        var source = 1
+        val output = DirectUsbAudioOutput(plan, UsbPcmEncoding.INT16, 16, handle, listenerFactory = {
+            val identity = source
+            object : DirectUsbAudioOutput.PlaybackListener {
+                override fun onActiveChanged(active: Boolean) { events += identity to active }
+                override fun onFailed(failure: DirectUsbFailure) = Unit
+            }
+        })
+        output.play()
+        output.write(pcm(prefillFrames), 1, 0)
+        handle.delivered = 1
+        output.positionUs
+        source = 2
+        val config = AudioOutputProvider.OutputConfig.Builder()
+            .setSampleRate(48000).setEncoding(C.ENCODING_PCM_16BIT).setChannelMask(12).setBufferSize(96000).build()
+        val format = Format.Builder().setSampleMimeType(MimeTypes.AUDIO_RAW)
+            .setSampleRate(48000).setChannelCount(2).setPcmEncoding(C.ENCODING_PCM_16BIT).build()
+        assertTrue(output.canReuseAudioOutput(config, AudioOutputProvider.FormatConfig.Builder(format).build(), config))
+        output.write(pcm(96), 1, 0)
+        // The first track's last frame is out, exactly at the boundary: still its tail.
+        handle.delivered = prefillFrames.toLong()
+        handle.processed = prefillFrames.toLong()
+        output.positionUs
+        assertEquals(listOf(1 to true), events)
+        // The second track's first packet is lost, so nothing of it has reached the DAC.
+        handle.lost = 48
+        handle.processed = prefillFrames + 48L
+        output.positionUs
+        assertEquals(listOf(1 to true, 1 to false), events)
+        handle.delivered++
+        output.positionUs
+        assertEquals(listOf(1 to true, 1 to false, 2 to true), events)
     }
 
     private fun pcm(frames: Int) = ByteBuffer.wrap(ByteArray(frames * 4) { it.toByte() })
