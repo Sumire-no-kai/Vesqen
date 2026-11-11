@@ -40,7 +40,7 @@ internal class UsbPauseReleaseMonitor(context: Context, private val handler: Han
         audio.registerAudioPlaybackCallback(callback, handler)
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                if (!power.isInteractive) release()
+                if (intent.action == Intent.ACTION_SCREEN_OFF) release()
             }
         }
         screen = receiver

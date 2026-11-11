@@ -129,7 +129,7 @@ internal class UsbOutputCoordinator(
     private val pauseReleaseMonitor = directRoute?.let {
         UsbPauseReleaseMonitor(appContext, mainHandler) {
             if (!closed && directPath && !interrupted && returnTarget == null && player?.playWhenReady == false) {
-                returnDirect(it, UsbOutputMode.STRICT_BIT_PERFECT, resume = false, UsbOutputFailureOrigin.USER_PLAYBACK)
+                returnDirect(it, UsbOutputMode.STRICT_BIT_PERFECT, resume = false, UsbOutputFailureOrigin.USER_PLAYBACK, pausedReturn = true)
             }
         }
     }
@@ -327,7 +327,6 @@ internal class UsbOutputCoordinator(
         directSources.removeAll { it.period != currentPeriod && (!natural || it.delivered && !it.delivering) }
         updateSource(mediaItem)
         if (mediaItem == null) {
-            pauseReleaseMonitor?.close()
             if (interrupted) cancelInterruptedPlayback()
             resumeAfterInterruption = false
             resumeAfterConfiguration = false
@@ -1494,6 +1493,7 @@ internal class UsbOutputCoordinator(
         resume: Boolean,
         origin: UsbOutputFailureOrigin,
         stopPlayer: Boolean = true,
+        pausedReturn: Boolean = false,
     ) {
         if (returnTarget != null) return
         pauseReleaseMonitor?.close()
@@ -1530,6 +1530,8 @@ internal class UsbOutputCoordinator(
                 completeSystemOutput(rebuild = true, resume = resumeAfterConfiguration)
             } else if (interrupted) {
                 reconcileInterruption()
+            } else if (pausedReturn && !resumeAfterConfiguration && configurationOrigin == UsbOutputFailureOrigin.USER_PLAYBACK) {
+                publishDirect(UsbOutputPhase.AVAILABLE, "direct_usb.available")
             } else {
                 scheduleReconfigure(resume = resumeAfterConfiguration, origin = configurationOrigin)
             }
