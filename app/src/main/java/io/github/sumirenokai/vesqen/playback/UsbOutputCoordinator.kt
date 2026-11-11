@@ -126,6 +126,7 @@ internal class UsbOutputCoordinator(
         UsbCommunicationMonitor(audioManager, mainHandler, ::onCommunicationChanged)
     }
     private var resumeAfterRecovery = false
+    private var returnedAfterPause = false
     private val pauseReleaseMonitor = directRoute?.let {
         UsbPauseReleaseMonitor(appContext, mainHandler) {
             if (!closed && directPath && !interrupted && returnTarget == null && player?.playWhenReady == false) {
@@ -160,16 +161,18 @@ internal class UsbOutputCoordinator(
 
     private val deviceCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
-            if (currentMode() != UsbOutputMode.STRICT_BIT_PERFECT || addedDevices.none(AudioDeviceInfo::isUsbAudioOutput)) return
-            if (synchronized(lock) { awaitingReattach } || returnTarget != null) return
+            if (currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
+            val usbDevices = addedDevices.filter(AudioDeviceInfo::isUsbAudioOutput)
+            if (usbDevices.isEmpty() || synchronized(lock) { awaitingReattach } || returnTarget != null || returnedAfterPause) return
             if (synchronized(lock) { directPath }) {
                 // Once playback owns the DAC, later route events do not interrupt it. Before
                 // that point a newly visible official mixer still has priority (#298).
                 val route = directRoute ?: return
-                if (!route.streaming && officialMixerOffered(addedDevices.filter(AudioDeviceInfo::isUsbAudioOutput))) {
+                if (!route.streaming && officialMixerOffered(usbDevices)) {
                     returnDirectForOfficial(route)
                 }
             } else {
+                if (reconfigurePosted || (isGenerationCurrent(directAttemptGeneration) && !officialMixerOffered(usbDevices))) return
                 scheduleReconfigure(resume = player?.playWhenReady == true, origin = UsbOutputFailureOrigin.ROUTE_CHANGE)
             }
         }
@@ -339,6 +342,10 @@ internal class UsbOutputCoordinator(
             resumeAfterRecovery = false
         }
         if (recoveryInProgress || returnTarget != null) return
+        if (returnedAfterPause && player?.playWhenReady != true) {
+            publishDirect(UsbOutputPhase.AVAILABLE, "direct_usb.available")
+            return
+        }
         // The own output checks every item where its PCM begins (#282) and keeps the DAC between
         // items, so a transition rebuilds nothing; the status only takes the new item's source.
         if (synchronized(lock) { directPath } && directRoute?.streaming == true) {
@@ -577,6 +584,7 @@ internal class UsbOutputCoordinator(
         val wasPlaying = activePlayer?.playWhenReady == true
         val scheduled = synchronized(lock) {
             if (closed || mode != UsbOutputMode.STRICT_BIT_PERFECT) return@synchronized null
+            returnedAfterPause = false
             configurationGeneration += 1
             // Coalesced queue callbacks must not erase a Play command already received in this attempt.
             if (!(reconfigurePosted && configurationOrigin == UsbOutputFailureOrigin.USER_PLAYBACK &&
@@ -1394,6 +1402,7 @@ internal class UsbOutputCoordinator(
     }
 
     private fun restoreSystemOutput(rebuild: Boolean) {
+        returnedAfterPause = false
         val activePlayer = player
         val resume = activePlayer?.playWhenReady == true || synchronized(lock) { resumeAfterConfiguration }
         val wasDirect = synchronized(lock) { directPath }
@@ -1537,6 +1546,8 @@ internal class UsbOutputCoordinator(
             } else if (interrupted) {
                 reconcileInterruption()
             } else if (pausedReturn && !resumeAfterConfiguration && configurationOrigin == UsbOutputFailureOrigin.USER_PLAYBACK) {
+                // Android announces the returned sound card asynchronously, even after cleanup has completed.
+                returnedAfterPause = true
                 publishDirect(UsbOutputPhase.AVAILABLE, "direct_usb.available")
             } else {
                 scheduleReconfigure(resume = resumeAfterConfiguration, origin = configurationOrigin)
