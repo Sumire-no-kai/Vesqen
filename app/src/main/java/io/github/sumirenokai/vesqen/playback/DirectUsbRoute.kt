@@ -527,7 +527,11 @@ internal class AndroidDirectUsbRoute(
         lateinit var next: DirectUsbSession
         next = DirectUsbSession(
             device = identity,
-            link = AndroidUsbLink(target.device, target.connection) { usbManager.hasPermission(target.device) },
+            link = AndroidUsbLink(
+                target.device, target.connection,
+                permission = { usbManager.hasPermission(target.device) },
+                connectionPresent = { usbManager.deviceList.values.any { it.deviceId == target.device.deviceId } },
+            ),
             function = target.function,
             markers = markers,
             control = control,
