@@ -119,7 +119,7 @@ class UsbOutputCoordinatorTest {
         if (::coordinator.isInitialized) coordinator.close()
         realPlayer.release()
         RoutableAudioTrackShadow.accepted = true
-        RoutableAudioTrackShadow.routingListenersAccepted = Int.MAX_VALUE
+        RoutableAudioTrackShadow.rejectCoordinatorListener = false
     }
 
     @Test
@@ -174,7 +174,36 @@ class UsbOutputCoordinatorTest {
         start(direct = direct)
         idle()
         assertStatus(UsbOutputPhase.FAILED, "direct_usb.permission_required")
-        assertFalse("permission" in direct.calls)
+        assertFalse("requestPermission" in direct.calls)
+    }
+
+    @Test
+    fun `unplug during the recovery dialog completes the requested system handoff`() {
+        direct.recoveryPending = true
+        direct.recoveryResult = DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_required")
+        start(direct = direct)
+        direct.beforePermissionResult = {
+            direct.recoveryPending = false
+            direct.recoveryResult = DirectUsbRecoveryResult()
+        }
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        idle()
+        assertStatus(UsbOutputPhase.SYSTEM, "system_audio_route")
+        assertEquals(1, direct.calls.count { it == "requestPermission" })
+    }
+
+    @Test
+    fun `a grant followed by another permission failure cannot ask twice`() {
+        direct.recoveryPending = true
+        direct.recoveryResult = DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_required")
+        start(direct = direct)
+        direct.beforePermissionResult = {
+            if (direct.calls.count { it == "requestPermission" } > 1) direct.permissionGranted = false
+        }
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        idle()
+        assertStatus(UsbOutputPhase.FAILED, "direct_usb.permission_required")
+        assertEquals(1, direct.calls.count { it == "requestPermission" })
     }
 
     @Test
@@ -502,8 +531,7 @@ class UsbOutputCoordinatorTest {
     @Test
     fun `a routing listener that cannot be registered fails closed`() {
         prepareStrictPlan()
-        // Media3 registers its own listener on the new track before the coordinator does.
-        RoutableAudioTrackShadow.routingListenersAccepted = 1
+        RoutableAudioTrackShadow.rejectCoordinatorListener = true
 
         val output = strictOutput()
 
@@ -1947,6 +1975,7 @@ class UsbOutputCoordinatorTest {
         val calls = mutableListOf<String>()
         var inspection: DirectUsbInspection = DirectUsbInspection.Ready("JBL Flip 7", PLAN_48K_24)
         var permissionGranted = true
+        var beforePermissionResult: (() -> Unit)? = null
         var takeoverFailure: DirectUsbFailure? = null
         override fun readings() = DirectUsbReadings(48000, 24, 3, 2, "uac1", "adaptive", -30.0, 0, 0, 0, 0)
         var deferTakeover = false
@@ -1989,6 +2018,7 @@ class UsbOutputCoordinatorTest {
         override fun requestPermission(onResult: (granted: Boolean) -> Unit) {
             calls += "requestPermission"
             if (permissionGranted) inspection = DirectUsbInspection.Ready("JBL Flip 7", PLAN_48K_24)
+            beforePermissionResult?.invoke()
             onResult(permissionGranted)
         }
 
@@ -2250,7 +2280,8 @@ class RoutableAudioTrackShadow : ShadowAudioTrack() {
 
     @Implementation
     override fun addOnRoutingChangedListener(listener: AudioRouting.OnRoutingChangedListener, handler: Handler?) {
-        check(routingListenersAccepted-- > 0)
+        // Media3 also registers listeners, sometimes on another track while this test is running.
+        check(!rejectCoordinatorListener || !listener.javaClass.name.startsWith(UsbOutputCoordinator::class.java.name))
         super.addOnRoutingChangedListener(listener, handler)
     }
 
@@ -2259,6 +2290,6 @@ class RoutableAudioTrackShadow : ShadowAudioTrack() {
         var accepted = true
 
         @JvmStatic
-        var routingListenersAccepted = Int.MAX_VALUE
+        var rejectCoordinatorListener = false
     }
 }

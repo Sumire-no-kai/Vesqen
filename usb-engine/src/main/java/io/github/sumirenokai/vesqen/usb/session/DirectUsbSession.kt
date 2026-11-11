@@ -198,7 +198,7 @@ class DirectUsbSession(
     fun onDeviceDetached() = control.execute { fail(DirectUsbFailure(Reason.DEVICE_DISCONNECTED, "the device was detached")) }
 
     private fun claimAndStart(plan: StreamingPlan, startVolume: Int): Takeover {
-        val taken = markers.acquire(device)
+        val taken = markers.acquire(device, function.controlInterface)
             ?: return failed(Reason.USB_TRANSFER_FAILED, "the takeover marker is unavailable or awaiting recovery")
         markerWritten = true
         restorePending = taken.volumeBefore != null
@@ -213,6 +213,9 @@ class DirectUsbSession(
         val unit = terminalLink?.let { terminal -> function.featureUnitsAfter(terminal).firstOrNull { it.masterVolume != UacControlAccess.ABSENT } }
             ?: return failed(Reason.VOLUME_CONTROL_FAILED, "no master volume on the path")
         val controlInterface = function.controlInterface
+        if (taken.volumeUnitId != null && taken.volumeUnitId != unit.id) {
+            return failed(Reason.VOLUME_CONTROL_FAILED, "another volume control has pending recovery")
+        }
         val range = client.volumeRange(unit.id, controlInterface)
         val volumeNow = client.volume(unit.id, controlInterface)
         if (range == null || volumeNow == null) return failed(Reason.VOLUME_CONTROL_FAILED, "the volume could not be read")
@@ -225,8 +228,7 @@ class DirectUsbSession(
         }
         restorePending = true
         restoreVolume = {
-            val mutedAgain = mutedBefore != true || client.setMute(unit.id, controlInterface, true)
-            client.setVolume(unit.id, controlInterface, volumeBefore) && mutedAgain
+            client.restoreSettings(unit.id, controlInterface, volumeBefore, mutedBefore)
         }
         val target = range.settingAtOrBelow(startVolume)
         val set = client.setVolume(unit.id, controlInterface, target)

@@ -88,11 +88,12 @@ abstract class TakeoverMarkerStore {
      * kept after an incomplete interface release, or one for another connected device, keeps blocking.
      */
     @Synchronized
-    fun acquire(device: UsbDeviceIdentity): TakeoverMarker? {
+    fun acquire(device: UsbDeviceIdentity, controlInterface: Int? = null): TakeoverMarker? {
         if (held) return null
         val left = if (hasPendingRecovery()) read() else null
         if (left != null && (wroteHere || left.device != device)) return null
-        val marker = left ?: TakeoverMarker(device, null, null)
+        if (left?.controlInterface != null && controlInterface != null && left.controlInterface != controlInterface) return null
+        val marker = left ?: TakeoverMarker(device, null, null, controlInterface)
         if (!write(marker)) return null
         held = true
         wroteHere = true

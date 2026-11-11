@@ -115,7 +115,7 @@ internal class UsbOutputCoordinator(
     private var directOutputPeriod: Any? = null
     private var directOutputActive = false
     private var returnTarget: UsbOutputMode? = null
-    private var recoveryInProgress = false
+    @Volatile private var recoveryInProgress = false
     private var recoveryTarget: UsbOutputMode? = null
     private var resumeAfterRecovery = false
 
@@ -1203,17 +1203,23 @@ internal class UsbOutputCoordinator(
         configurationOrigin = origin
         player?.stop()
         publish(phase = UsbOutputPhase.APPLYING, decisionCode = "direct_usb.recovering")
+        attemptRecovery(route, mayRequestPermission = true)
+        return true
+    }
+
+    private fun attemptRecovery(route: DirectUsbRoute, mayRequestPermission: Boolean) {
         route.recover { result ->
             if (closed) return@recover
-            if (result.code == "direct_usb.permission_required" &&
+            if (mayRequestPermission && result.code == "direct_usb.permission_required" &&
                 (configurationOrigin == UsbOutputFailureOrigin.USER_PLAYBACK ||
                     configurationOrigin == UsbOutputFailureOrigin.USER_MODE_CHANGE)) {
                 route.requestPermission { granted ->
                     if (closed) return@requestPermission
-                    recoveryInProgress = false
                     if (granted) {
-                        recoverBeforePlayback(configurationOrigin)
+                        attemptRecovery(route, mayRequestPermission = false)
                     } else {
+                        recoveryInProgress = false
+                        resumeAfterRecovery = false
                         player?.pause()
                         publish(phase = UsbOutputPhase.FAILED, failure = UsbOutputFailure.PLATFORM_ERROR,
                             decisionCode = "direct_usb.permission_denied", failureOrigin = configurationOrigin)
@@ -1236,7 +1242,6 @@ internal class UsbOutputCoordinator(
                 }
             }
         }
-        return true
     }
 
     private fun restoreSystemOutput(rebuild: Boolean) {
