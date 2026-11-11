@@ -226,7 +226,7 @@ internal interface DirectUsbRoute {
     fun readings(): DirectUsbReadings? = null
 
     /** Shows the system's permission dialog for the device; only for a user's own action. */
-    fun requestPermission(onResult: (granted: Boolean) -> Unit)
+    fun requestPermission(forRecovery: Boolean = false, onResult: (granted: Boolean) -> Unit)
 
     /** Takes over the device [inspect] planned for. [onDone] runs on the main thread, with null on success. */
     fun takeOver(onDone: (DirectUsbFailure?) -> Unit)
@@ -500,13 +500,26 @@ internal class AndroidDirectUsbRoute(
         return directRefusal(parsed.topology, refusals, source).copy(deviceName = name)
     }
 
-    override fun requestPermission(onResult: (granted: Boolean) -> Unit) {
+    override fun requestPermission(forRecovery: Boolean, onResult: (granted: Boolean) -> Unit) {
+        val requested = try {
+            requestDevicePermission(forRecovery)
+        } catch (_: SecurityException) {
+            false
+        } catch (_: IllegalStateException) {
+            false
+        }
+        // The permission broadcast is delivered on this same main looper.
+        if (requested) permissionCallback = onResult else onResult(false)
+    }
+
+    private fun requestDevicePermission(forRecovery: Boolean): Boolean {
         val candidates = usbManager.deviceList.values.filter(UsbDevice::isUsbAudioDevice)
-        val pending = markers.recoveryRecord()?.device
-        val device = candidates.firstOrNull { pending != null && it.deviceId == pending.deviceId &&
-            it.vendorId == pending.vendorId && it.productId == pending.productId }
-            ?: candidates.singleOrNull() ?: return onResult(false)
-        permissionCallback = onResult
+        val device = if (forRecovery) {
+            val saved = markers.recoveryRecord()?.device ?: return false
+            candidates.firstOrNull { it.deviceId == saved.deviceId && it.vendorId == saved.vendorId && it.productId == saved.productId }
+        } else {
+            candidates.singleOrNull()
+        } ?: return false
         usbManager.requestPermission(
             device,
             // Mutable: the system adds the device and the answer to this intent.
@@ -517,6 +530,7 @@ internal class AndroidDirectUsbRoute(
                 PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             ),
         )
+        return true
     }
 
     override fun takeOver(onDone: (DirectUsbFailure?) -> Unit) {
@@ -673,8 +687,15 @@ internal class PreferencesTakeoverMarkerStore(context: Context) : TakeoverMarker
         if (!preferences.contains(DEVICE_ID)) return false
         // A physically removed connection cannot be restored. A still-live owner is protected by acquire().
         val id = preferences.getInt(DEVICE_ID, -1)
-        return usbManager.deviceList.values.any { it.deviceId == id &&
-            it.vendorId == preferences.getInt(VENDOR_ID, -1) && it.productId == preferences.getInt(PRODUCT_ID, -1) }
+        // A failed enumeration cannot establish a detach. Keep the record for a recovery attempt.
+        return try {
+            usbManager.deviceList.values.any { it.deviceId == id &&
+                it.vendorId == preferences.getInt(VENDOR_ID, -1) && it.productId == preferences.getInt(PRODUCT_ID, -1) }
+        } catch (_: SecurityException) {
+            true
+        } catch (_: IllegalStateException) {
+            true
+        }
     }
 
     override fun read(): TakeoverMarker? {
