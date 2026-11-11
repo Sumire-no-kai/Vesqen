@@ -193,6 +193,39 @@ class UsbOutputCoordinatorTest {
     }
 
     @Test
+    fun `an unplugged DAC can dismiss its permission dialog without stranding system mode`() {
+        direct.recoveryPending = true
+        direct.recoveryResult = DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_required")
+        start(direct = direct)
+        direct.beforePermissionResult = {
+            direct.permissionGranted = false
+            direct.recoveryPending = false
+            direct.recoveryResult = DirectUsbRecoveryResult()
+        }
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        idle()
+        assertStatus(UsbOutputPhase.SYSTEM, "system_audio_route")
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `denying recovery cancels a Play even when a later mode selection can recover`() {
+        direct.recoveryPending = true
+        direct.recoveryResult = DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_required")
+        start(direct = direct)
+        loadTrack()
+        direct.permissionGranted = false
+        player.play()
+        idle()
+        assertStatus(UsbOutputPhase.FAILED, "direct_usb.permission_denied")
+        direct.recoveryResult = DirectUsbRecoveryResult()
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        idle()
+        assertStatus(UsbOutputPhase.SYSTEM, "system_audio_route")
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
     fun `a grant followed by another permission failure cannot ask twice`() {
         direct.recoveryPending = true
         direct.recoveryResult = DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_required")
@@ -2034,7 +2067,7 @@ class UsbOutputCoordinatorTest {
 
         override fun hasUsbAudioDevice() = usbAudioDevicePresent
 
-        override fun requestPermission(onResult: (granted: Boolean) -> Unit) {
+        override fun requestPermission(forRecovery: Boolean, onResult: (granted: Boolean) -> Unit) {
             calls += "requestPermission"
             if (permissionGranted) inspection = DirectUsbInspection.Ready("JBL Flip 7", PLAN_48K_24)
             beforePermissionResult?.invoke()
