@@ -124,6 +124,7 @@ class DirectUsbSession(
     /** Only the session that wrote the marker clears it; one refused before claiming leaves another's alone. */
     private var markerWritten = false
     @Volatile private var detached = false
+    @Volatile private var releaseRequested = false
 
     private val epochLock = Any()
     private var newestEpoch = UsbStreamEngine.FIRST_EPOCH
@@ -133,8 +134,9 @@ class DirectUsbSession(
     private data class StreamProgress(val completed: UsbStreamTotals, val active: UsbStream?)
     // Publish both parts together so a reader counts each native stream exactly once.
     @Volatile private var progress = StreamProgress(UsbStreamTotals.NONE, null)
-    @Volatile private var finalStats: UsbStreamStats? = null
-    @Volatile private var finishedStream: UsbStream? = null
+    // Read and published together under epochLock so a retired output sees only its own counters.
+    private var finalStats: UsbStreamStats? = null
+    private var finishedStream: UsbStream? = null
     private var pendingOutput: RequestedOutput? = null
     private val releaseCallbacks = mutableListOf<(CleanupRecord) -> Unit>()
 
@@ -179,7 +181,7 @@ class DirectUsbSession(
      */
     fun openOutput(): UsbOutputHandle? = synchronized(epochLock) {
         val current = stream ?: return@synchronized null
-        if (state !is State.Streaming) return@synchronized null
+        if (releaseRequested || state !is State.Streaming) return@synchronized null
         if (newestEpochTaken) retireNewest(current)
         newestEpochTaken = true
         Output(newestEpoch, current)
@@ -189,7 +191,7 @@ class DirectUsbSession(
     fun openOutput(plan: StreamingPlan): UsbOutputHandle {
         val request = RequestedOutput(plan)
         control.execute {
-            if (request.released) return@execute
+            if (releaseRequested || request.released) return@execute
             when (val current = state) {
                 is State.Streaming -> {
                     if (current.plan == plan) {
@@ -197,8 +199,6 @@ class DirectUsbSession(
                     } else {
                         pendingOutput = request
                         synchronized(epochLock) { state = State.Reconfiguring }
-                        monitor?.cancel(false)
-                        monitor = null
                         reconfigure()
                     }
                 }
@@ -213,19 +213,17 @@ class DirectUsbSession(
     }
 
     private fun reconfigure() {
-        if (state != State.Reconfiguring) return
+        if (state != State.Reconfiguring || releaseRequested) return
         val current = stream
         if (current != null) {
             if (!current.destroy(timing.destroyTimeoutMs)) {
                 control.schedule(::reconfigure, timing.destroyRetryMs, TimeUnit.MILLISECONDS)
                 return
             }
-            finalStats = current.readStats()
-            finishedStream = current
-            finalTotals += finalStats?.sessionTotals ?: UsbStreamTotals.NONE
-            stream = null
-            progress = StreamProgress(finalTotals, null)
+            recordReclaimed(current)?.asFailure()?.let { return fail(it) }
         }
+        if (releaseRequested) return
+        connectionFailure()?.let { return fail(it) }
         val request = checkNotNull(pendingOutput)
         if (request.released) {
             pendingOutput = null
@@ -247,6 +245,7 @@ class DirectUsbSession(
             fail(failure)
             return
         }
+        if (releaseRequested) return
         synchronized(epochLock) {
             newestEpoch = UsbStreamEngine.FIRST_EPOCH
             newestEpochTaken = false
@@ -256,7 +255,6 @@ class DirectUsbSession(
         pendingOutput = null
         listener.onReconfigured(request.plan)
         request.install(openOutput())
-        monitor = control.scheduleWithFixedDelay(::check, timing.monitorPeriodMs, timing.monitorPeriodMs, TimeUnit.MILLISECONDS)
     }
 
     private inner class RequestedOutput(val plan: StreamingPlan) : UsbOutputHandle {
@@ -269,9 +267,9 @@ class DirectUsbSession(
             if (released) {
                 ready?.release()
             } else {
-                output = ready
                 if (ended) ready?.markEndOfStream()
                 ready?.setRunning(running)
+                output = ready
             }
         }
         override val epoch: Long get() = output?.epoch ?: 0
@@ -317,16 +315,19 @@ class DirectUsbSession(
     }
 
     /** Gives the device back. The callback comes once every interface is released, which can wait for the kernel. */
-    fun release(onReleased: ((CleanupRecord) -> Unit)? = null) = control.execute {
-        val done = state as? State.Released
-        if (done != null) {
-            onReleased?.invoke(done.cleanup)
-            return@execute
-        }
-        if (onReleased != null) releaseCallbacks.add(onReleased)
-        if (state is State.Streaming || state == State.Reconfiguring || state == State.Idle) {
-            synchronized(epochLock) { state = State.Releasing(null) }
-            cleanUp()
+    fun release(onReleased: ((CleanupRecord) -> Unit)? = null) {
+        releaseRequested = true
+        control.execute {
+            val done = state as? State.Released
+            if (done != null) {
+                onReleased?.invoke(done.cleanup)
+                return@execute
+            }
+            if (onReleased != null) releaseCallbacks.add(onReleased)
+            if (state is State.Streaming || state == State.Reconfiguring || state == State.Idle) {
+                synchronized(epochLock) { state = State.Releasing(null) }
+                cleanUp()
+            }
         }
     }
 
@@ -420,21 +421,23 @@ class DirectUsbSession(
 
     private fun failed(reason: Reason, detail: String) = Takeover.Failed(DirectUsbFailure(reason, detail))
 
+    private fun connectionFailure(): DirectUsbFailure? = try {
+        when {
+            detached || !link.connected -> DirectUsbFailure(Reason.DEVICE_DISCONNECTED, "the device was detached")
+            !link.permissionGranted -> DirectUsbFailure(Reason.USB_PERMISSION_REVOKED, "USB access was revoked")
+            else -> null
+        }
+    } catch (_: SecurityException) {
+        DirectUsbFailure(Reason.USB_PERMISSION_REVOKED, "USB access was revoked")
+    } catch (_: IllegalStateException) {
+        DirectUsbFailure(Reason.USB_TRANSFER_FAILED, "USB connection unavailable")
+    }
+
     /** On [control]: errors the stream reported, and retirements that never finish. */
     private fun check() {
-        if (state !is State.Streaming) return
-        val connectionFailure = try {
-            when {
-                !link.connected -> DirectUsbFailure(Reason.DEVICE_DISCONNECTED, "the device was detached")
-                !link.permissionGranted -> DirectUsbFailure(Reason.USB_PERMISSION_REVOKED, "USB access was revoked")
-                else -> null
-            }
-        } catch (_: SecurityException) {
-            DirectUsbFailure(Reason.USB_PERMISSION_REVOKED, "USB access was revoked")
-        } catch (_: IllegalStateException) {
-            DirectUsbFailure(Reason.USB_TRANSFER_FAILED, "USB connection unavailable")
-        }
-        if (connectionFailure != null) return fail(connectionFailure)
+        if (releaseRequested || (state !is State.Streaming && state != State.Reconfiguring)) return
+        connectionFailure()?.let { return fail(it) }
+        if (state == State.Reconfiguring) return
         val stats = stream?.readStats() ?: return
         stats.asFailure()?.let { return fail(it) }
         val waitingSince = synchronized(epochLock) { retiredAtNanos } ?: return
@@ -471,11 +474,7 @@ class DirectUsbSession(
                 }
                 return
             }
-            finalStats = current.readStats()
-            finishedStream = current
-            finalTotals += finalStats?.sessionTotals ?: UsbStreamTotals.NONE
-            stream = null
-            progress = StreamProgress(finalTotals, null)
+            recordReclaimed(current)
             cleanupSteps += CleanupStep("stream reclaimed", true)
         }
         var allReleased = true
@@ -504,6 +503,18 @@ class DirectUsbSession(
         listener.onReleased(record, failure)
         releaseCallbacks.forEach { it(record) }
         releaseCallbacks.clear()
+    }
+
+    private fun recordReclaimed(current: UsbStream): UsbStreamStats? {
+        val stats = current.readStats()
+        synchronized(epochLock) {
+            finalStats = stats
+            finishedStream = current
+        }
+        finalTotals += stats?.sessionTotals ?: UsbStreamTotals.NONE
+        stream = null
+        progress = StreamProgress(finalTotals, null)
+        return stats
     }
 
     private fun cleanupStep(name: String, action: () -> Boolean): Boolean {

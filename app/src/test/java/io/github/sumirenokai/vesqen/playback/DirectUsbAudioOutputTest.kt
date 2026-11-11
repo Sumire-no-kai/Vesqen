@@ -4,6 +4,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.audio.AudioOutput
+import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.AudioOutputProvider
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceFacts
 import io.github.sumirenokai.vesqen.usb.engine.UsbStreamStats
@@ -505,6 +506,39 @@ class DirectUsbAudioOutputTest {
     private fun formatConfig(encoding: Int = C.ENCODING_PCM_16BIT, sampleRate: Int = 48_000) = AudioOutputProvider.FormatConfig.Builder(
         Format.Builder().setSampleMimeType(MimeTypes.AUDIO_RAW).setPcmEncoding(encoding).setSampleRate(sampleRate).setChannelCount(2).build(),
     ).build()
+
+    @Test
+    fun `a rate switch waits for confirmed completions even when the media clock reaches the tail`() {
+        val old = FakeHandle()
+        var now = 0L
+        var facts = flac16
+        val provider = DirectUsbAudioOutputProvider(
+            plan, openOutput = { FakeHandle() }, source = { facts },
+            planForSource = { source -> plan.copy(sampleRateHz = source.sampleRateHz) },
+        )
+        val sink = StrictPcmAudioSink(object : AudioOutputProvider by provider {
+            override fun getAudioOutput(config: AudioOutputProvider.OutputConfig): AudioOutput =
+                if (config.sampleRate == 48_000) output(old, nanoTime = { now }) else provider.getAudioOutput(config)
+        })
+        sink.configure(AudioSink.AudioSinkConfig.Builder(formatConfig().format).build())
+        sink.play()
+        assertTrue(sink.handleBuffer(pcm(prefillFrames), 0, 1))
+        old.submitted = prefillFrames.toLong()
+        old.processed = old.submitted - 48
+        sink.getCurrentPositionUs(false)
+        now += 2_000_000
+        assertEquals(100_000L, sink.getCurrentPositionUs(false))
+        facts = flac16.copy(sampleRateHz = 44_100)
+        sink.configure(AudioSink.AudioSinkConfig.Builder(formatConfig(sampleRate = 44_100).format).build())
+        val next = pcm(1)
+        assertFalse(sink.handleBuffer(next, 100_000, 1))
+        assertEquals(0, next.position())
+        assertEquals(0, old.releases)
+        old.processed = old.submitted
+        assertTrue(sink.handleBuffer(next, 100_000, 1))
+        assertEquals(1, old.releases)
+        sink.reset()
+    }
 
     @Test
     fun `the provider plans a new rate before requesting its new stream`() {

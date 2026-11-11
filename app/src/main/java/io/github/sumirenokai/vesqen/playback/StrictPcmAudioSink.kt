@@ -171,6 +171,7 @@ internal class StrictPcmAudioSink(
 
     override fun hasPendingData(): Boolean {
         val current = output ?: return false
+        if (current is DirectUsbAudioOutput) return current.hasPendingMedia()
         val active = checkNotNull(configuration)
         return writtenBytes / active.frameSize > Util.durationUsToSampleCount(current.positionUs, active.sampleRate)
     }

@@ -9,6 +9,7 @@ import androidx.media3.exoplayer.audio.AudioOutput
 import androidx.media3.exoplayer.audio.AudioOutputProvider
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceFacts
 import io.github.sumirenokai.vesqen.usb.engine.UsbMediaClock
+import io.github.sumirenokai.vesqen.usb.engine.UsbStreamStats
 import io.github.sumirenokai.vesqen.usb.pcm.ExactPcmConverter
 import io.github.sumirenokai.vesqen.usb.pcm.UsbPcmEncoding
 import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
@@ -145,15 +146,26 @@ class DirectUsbAudioOutput(
     }
 
     override fun getPositionUs(): Long {
-        val target = handle ?: return 0
+        val stats = playbackStats() ?: return 0
+        val frames = clock.positionFrames(stats.mediaFramesProcessed, stats.mediaFramesSubmitted, running, nanoTime())
+        return Util.sampleCountToDurationUs(frames, plan.sampleRateHz)
+    }
+
+    /** Submitted URBs may still be in flight after the interpolated playback clock reaches the tail. */
+    internal fun hasPendingMedia(): Boolean {
+        val processed = playbackStats()?.mediaFramesProcessed ?: 0L
+        return !released && !failureReported && (scratch.hasRemaining() || acceptedFrames > processed)
+    }
+
+    private fun playbackStats(): UsbStreamStats? {
+        val target = handle ?: return null
         settle(target)
         target.failure?.let(::report)
         // Null until the stream reached this output's epoch: none of its audio has gone out yet.
-        val stats = target.readStats() ?: return 0
+        val stats = target.readStats() ?: return null
         stats.asFailure()?.let(::report)
         reportDelivery(stats.lastDeliveredMediaFrame.takeIf { !released && running && !failureReported }, stats.mediaFramesProcessed)
-        val frames = clock.positionFrames(stats.mediaFramesProcessed, stats.mediaFramesSubmitted, running, nanoTime())
-        return Util.sampleCountToDurationUs(frames, plan.sampleRateHz)
+        return stats
     }
 
     /**

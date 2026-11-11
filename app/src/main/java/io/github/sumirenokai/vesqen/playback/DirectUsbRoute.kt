@@ -319,8 +319,7 @@ internal class AndroidDirectUsbRoute(
         val session: DirectUsbSession,
         val device: UsbDeviceIdentity,
         @Volatile var plan: StreamingPlan,
-        val protocol: String,
-        @Volatile var syncType: String,
+        val function: UacFunction,
         @Volatile var volume: Int,
     )
 
@@ -586,10 +585,7 @@ internal class AndroidDirectUsbRoute(
                     target.plan = plan
                     main.post {
                         if (session !== next) return@post
-                        streamingFacts?.let {
-                            it.plan = plan
-                            it.syncType = target.function.syncToken(plan)
-                        }
+                        streamingFacts?.plan = plan
                         listener?.onReconfigured(plan)
                     }
                 }
@@ -602,7 +598,7 @@ internal class AndroidDirectUsbRoute(
                 when (result) {
                     is DirectUsbSession.Takeover.Ready -> {
                         streamingFacts = StreamingFacts(
-                            next, identity, target.plan, target.function.protocolToken(), target.function.syncToken(target.plan), result.volumeNow,
+                            next, identity, target.plan, target.function, result.volumeNow,
                         )
                         next.volumeRange?.let { volumes.publish(DirectUsbVolume(result.volumeNow, it.minimum, it.maximum, it.resolution)) }
                         sessionProvider = DirectUsbAudioOutputProvider(
@@ -610,7 +606,8 @@ internal class AndroidDirectUsbRoute(
                             openOutput = next::openOutput,
                             openPlannedOutput = next::openOutput,
                             planForSource = { source ->
-                                if (target.plan.carries(source)) target.plan else {
+                                val activePlan = target.plan
+                                if (activePlan.carries(source)) activePlan else {
                                     WIRE_DEPTHS.asSequence().filter { it >= source.bitDepth }.mapNotNull { bits ->
                                         (StreamingPlanner.plan(
                                             target.function, target.speed, source.sampleRateHz, bits,
@@ -666,8 +663,8 @@ internal class AndroidDirectUsbRoute(
             bitDepth = plan.bitResolution,
             subslotBytes = plan.subslotBytes,
             channelCount = plan.channels,
-            protocol = facts.protocol,
-            syncType = facts.syncType,
+            protocol = facts.function.protocolToken(),
+            syncType = facts.function.syncToken(plan),
             // UAC volume is in 1/256 dB.
             hardwareVolumeDb = facts.volume / 256.0,
             deliveredFrames = totals.deliveredFrames,

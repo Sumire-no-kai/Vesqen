@@ -415,6 +415,68 @@ class DirectUsbSessionTest {
     }
 
     @Test
+    fun `a hardware return requested inside blocking destruction cancels the next rate`() {
+        takeOver()
+        val entered = CountDownLatch(1)
+        val finish = CountDownLatch(1)
+        stream.onDestroy = { entered.countDown(); finish.await(5, TimeUnit.SECONDS) }
+        events.clear()
+        val next = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        try {
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            session.release()
+        } finally {
+            finish.countDown()
+        }
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertFalse(events.contains("set rate 44100"))
+        assertEquals(0, next.write(ByteBuffer.allocateDirect(4), 0, 4))
+        assertNull(markers.persisted)
+    }
+
+    @Test
+    fun `a permission revoked at the rate switch barrier releases instead of restarting`() {
+        takeOver()
+        stream.onDestroy = { link.permissionGranted = false }
+        events.clear()
+        val next = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertEquals(Reason.USB_PERMISSION_REVOKED, next.failure?.reason)
+        assertFalse(events.contains("set rate 44100"))
+    }
+
+    @Test
+    fun `an abandoned rate change keeps monitoring the claimed device`() {
+        takeOver()
+        val entered = CountDownLatch(1)
+        val finish = CountDownLatch(1)
+        stream.onDestroy = { entered.countDown(); finish.await(5, TimeUnit.SECONDS) }
+        val abandoned = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        try {
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            abandoned.release()
+        } finally {
+            finish.countDown()
+        }
+        control.submit {}.get(2, TimeUnit.SECONDS)
+        link.permissionGranted = false
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertEquals(Reason.USB_PERMISSION_REVOKED, failures.single().reason)
+        assertNull(markers.persisted)
+    }
+
+    @Test
+    fun `a transfer failure reported at final reap is preserved across a rate switch`() {
+        takeOver()
+        stream.onDestroy = { stream.failure = UsbStreamStats.Failure.DEVICE_GONE }
+        events.clear()
+        val next = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertEquals(Reason.DEVICE_DISCONNECTED, next.failure?.reason)
+        assertFalse(events.contains("set rate 44100"))
+    }
+
+    @Test
     fun `release while reconfiguration waits cannot restart the stream later`() {
         takeOver()
         stream.destroyAnswers.addAll(listOf(false, false, true))
