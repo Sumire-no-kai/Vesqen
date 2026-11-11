@@ -1750,6 +1750,7 @@ class UsbOutputCoordinatorTest {
     @Test
     fun `clearing a paused queue still returns the DAC without inspecting an empty source`() {
         reachDirectActive()
+        shadowOf(audioManager).removeOutputDevice(dac, false)
         player.pause()
         idle()
         player.clearMediaItems()
@@ -1758,6 +1759,8 @@ class UsbOutputCoordinatorTest {
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(30))
         assertTrue("release" in direct.calls)
         assertFalse(direct.streaming)
+        shadowOf(audioManager).addOutputDevice(dac, true)
+        idle()
         assertFalse(player.playWhenReady)
         assertStatus(UsbOutputPhase.AVAILABLE, "direct_usb.available")
     }
