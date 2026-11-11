@@ -249,13 +249,17 @@ internal class UsbOutputCoordinator(
         }
     }
 
+    private fun saveMode(selected: UsbOutputMode) {
+        preferences.edit { putString(MODE_KEY, selected.name) }
+        UsbAttachActivity.syncEnabled(appContext)
+    }
+
     fun requestMode(requestedMode: UsbOutputMode) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             mainHandler.post { requestMode(requestedMode) }
             return
         }
         if (closed) return
-        UsbAttachActivity.syncEnabled(appContext, requestedMode)
         if (requestedMode == UsbOutputMode.SYSTEM) {
             if (interrupted) cancelInterruptedPlayback()
             interrupted = false
@@ -267,7 +271,7 @@ internal class UsbOutputCoordinator(
                 recoveryTarget = requestedMode
                 configurationOrigin = UsbOutputFailureOrigin.USER_MODE_CHANGE
             }
-            preferences.edit { putString(MODE_KEY, requestedMode.name) }
+            saveMode(requestedMode)
             return
         }
         if (returnTarget == null && directRoute?.recoveryPending == true && !directPath && directRoute.streaming == false &&
@@ -276,7 +280,7 @@ internal class UsbOutputCoordinator(
                 mode = requestedMode
                 recoveryTarget = requestedMode
             }
-            preferences.edit { putString(MODE_KEY, requestedMode.name) }
+            saveMode(requestedMode)
             if (recoverBeforePlayback(UsbOutputFailureOrigin.USER_MODE_CHANGE)) return
         }
         if (returnTarget != null) {
@@ -284,7 +288,7 @@ internal class UsbOutputCoordinator(
             if (returnTarget != requestedMode) {
                 returnTarget = requestedMode
                 if (requestedMode == UsbOutputMode.STRICT_BIT_PERFECT) {
-                    preferences.edit { putString(MODE_KEY, requestedMode.name) }
+                    saveMode(requestedMode)
                 }
                 publishReturning(requestedMode)
             }
@@ -303,7 +307,7 @@ internal class UsbOutputCoordinator(
                 configurationGeneration += 1
                 mode = requestedMode
             }
-            preferences.edit { putString(MODE_KEY, requestedMode.name) }
+            saveMode(requestedMode)
             scheduleReconfigure(resume = player?.playWhenReady == true, origin = UsbOutputFailureOrigin.USER_MODE_CHANGE)
         }
     }
@@ -1432,7 +1436,7 @@ internal class UsbOutputCoordinator(
             mode = UsbOutputMode.SYSTEM
             resumeAfterConfiguration = false
         }
-        preferences.edit { putString(MODE_KEY, UsbOutputMode.SYSTEM.name) }
+        saveMode(UsbOutputMode.SYSTEM)
         val activePlayer = player
         activePlayer?.setPreferredAudioDevice(null)
         activePlayer?.setHandleAudioBecomingNoisy(true)
