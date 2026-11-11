@@ -19,6 +19,7 @@ import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionCommands
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import io.github.sumirenokai.vesqen.library.folderCollectionKey
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMediaItemExtras
 import io.github.sumirenokai.vesqen.verification.OutputVerificationMatch
@@ -407,6 +408,23 @@ class PlaybackController(
         }
     }
 
+    fun skipToPreviousFolder() = skipFolder(forward = false)
+
+    fun skipToNextFolder() = skipFolder(forward = true)
+
+    private fun skipFolder(forward: Boolean) {
+        val player = controller ?: return
+        if (!player.isCommandAvailable(Player.COMMAND_SEEK_TO_MEDIA_ITEM)) return
+        // Resolve against the live timeline: the menu may have been opened before a queue edit.
+        val queue = buildQueueCache(player).projection
+        val targets = folderNavigation(queue, player.repeatMode.toPlaybackRepeatMode())
+        val index = (if (forward) targets.next else targets.previous) ?: return
+        player.seekToDefaultPosition(index)
+        if (player.playbackState == Player.STATE_IDLE) player.prepare()
+        player.play()
+        publish(player, rebuildQueue = true)
+    }
+
     fun skipToPrevious() {
         controller?.let { activeController ->
             activeController.seekToNeighbor(
@@ -531,6 +549,8 @@ class PlaybackController(
         val item = player.currentMediaItem
         val track = item?.mediaId?.let(::trackOf)
         val metadata = item?.mediaMetadata
+        val folders = if (player.repeatMode == Player.REPEAT_MODE_ALL) queueCache.loopedFolders else queueCache.folders
+        val canJumpFolder = player.isCommandAvailable(Player.COMMAND_SEEK_TO_MEDIA_ITEM)
         updateSnapshot(
             PlaybackSnapshot(
                 isControllerReady = true,
@@ -561,6 +581,8 @@ class PlaybackController(
                     neighborIndex = player.nextMediaItemIndex,
                     dedicatedCommand = Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
                 ),
+                canSkipPreviousFolder = canJumpFolder && folders.previous != null,
+                canSkipNextFolder = canJumpFolder && folders.next != null,
                 shuffleEnabled = player.shuffleModeEnabled,
                 repeatMode = player.repeatMode.toPlaybackRepeatMode(),
                 queueIndex = queueCache.projection.indexOfFirst(PlaybackQueueItem::isCurrent).coerceAtLeast(0),
@@ -601,6 +623,7 @@ class PlaybackController(
                 isCurrent = index == currentIndex,
                 listIndex = index,
                 entryId = queueItem.queueEntryId(),
+                folderKey = queueTrack?.takeIf { it.folderName.isNotBlank() }?.folderCollectionKey(),
             )
         }
         return PlaybackQueueCache(
@@ -608,6 +631,8 @@ class PlaybackController(
             currentIndex = currentIndex,
             shuffleEnabled = player.shuffleModeEnabled,
             projection = projection,
+            folders = folderNavigation(projection, PlaybackRepeatMode.OFF),
+            loopedFolders = folderNavigation(projection, PlaybackRepeatMode.ALL),
         )
     }
 
@@ -902,6 +927,8 @@ internal fun PlaybackRepeatMode.toMedia3RepeatMode(): Int = when (this) {
 }
 
 private data class PlaybackQueueCache(
+    val folders: FolderNavigation = FolderNavigation(),
+    val loopedFolders: FolderNavigation = FolderNavigation(),
     val mediaIds: List<String> = emptyList(),
     val currentIndex: Int = C.INDEX_UNSET,
     val shuffleEnabled: Boolean = false,
@@ -1051,6 +1078,8 @@ internal fun PlaybackSnapshot.withDisconnectedController(
     return copy(
         isControllerReady = false,
         canSetUsbOutputMode = false,
+        canSkipPreviousFolder = false,
+        canSkipNextFolder = false,
         isPlaying = false,
         showsPauseAction = false,
         usbOutputStatus = disconnectedOutputStatus,

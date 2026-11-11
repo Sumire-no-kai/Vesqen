@@ -310,6 +310,8 @@ fun NowScreen(
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
+    onPreviousFolder: () -> Unit = {},
+    onNextFolder: () -> Unit = {},
     /** Seeks the given queue entry; the seek is dropped if another entry plays by then (#216). */
     onSeek: (positionMs: Long, queueEntryId: String?) -> Unit,
     onPlayQueueIndex: (Int) -> Unit,
@@ -411,6 +413,10 @@ fun NowScreen(
         onPrevious = onPrevious,
         onPlayPause = onPlayPause,
         onNext = onNext,
+        canSkipPreviousFolder = snapshot.canSkipPreviousFolder,
+        canSkipNextFolder = snapshot.canSkipNextFolder,
+        onPreviousFolder = onPreviousFolder,
+        onNextFolder = onNextFolder,
         onSeek = onSeek,
         onToggleFavorite = onToggleFavorite,
         lyricsShown = lyrics.shown,
@@ -546,6 +552,10 @@ private class NowActions(
     val onPrevious: () -> Unit,
     val onPlayPause: () -> Unit,
     val onNext: () -> Unit,
+    val canSkipPreviousFolder: Boolean,
+    val canSkipNextFolder: Boolean,
+    val onPreviousFolder: () -> Unit,
+    val onNextFolder: () -> Unit,
     val onSeek: (positionMs: Long, queueEntryId: String?) -> Unit,
     val onToggleFavorite: (Long, Boolean) -> Unit,
     val lyricsShown: Boolean,
@@ -844,6 +854,21 @@ private fun NowMoreMenu(actions: NowActions, isLandscape: Boolean) {
             Icon(Icons.Filled.MoreVert, stringResource(R.string.now_more_options))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            if (actions.canSkipPreviousFolder || actions.canSkipNextFolder) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.folder_previous)) },
+                    enabled = actions.canSkipPreviousFolder,
+                    onClick = { expanded = false; actions.onPreviousFolder() },
+                    modifier = Modifier.testTag("vesqen.now.previous-folder"),
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.folder_next)) },
+                    enabled = actions.canSkipNextFolder,
+                    onClick = { expanded = false; actions.onNextFolder() },
+                    modifier = Modifier.testTag("vesqen.now.next-folder"),
+                )
+            }
+
             // #209: the switch for accessibility services and keyboards, which cannot use the tap.
             DropdownMenuItem(
                 text = { Text(stringResource(if (actions.lyricsShown) R.string.lyrics_show_cover else R.string.lyrics_show)) },

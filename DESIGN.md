@@ -176,6 +176,7 @@ Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hai
 - Settings rows: 56 dp, or 64 dp with a description. A value (version, On/Off) sits left of the chevron; above 130 % text it moves under the title so the title never squeezes into single letters.
 - Album detail rows: track number, title, duration and a 48 dp overflow button in a 48 dp row. The number column is at least 20 dp and widens with large text; "01" never wraps.
 - Folder rows: the folder's own name is the title; the second line is the track count, then the path above the folder ("3 tracks · Music/Demo"), so a narrow row never cuts off the part that tells folders apart.
+- Folder details (#330): a text menu below the heading chooses "This folder only" (default) or "Continue through folders" for the next queue started here. Changing the choice does not start playback. Now's More menu offers Previous/Next folder when the current queue has a reachable different folder; unavailable directions are disabled. Use the existing text-button/menu treatment and accessibility semantics.
 
 ### Library
 
