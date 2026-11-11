@@ -125,6 +125,13 @@ internal class UsbOutputCoordinator(
         UsbCommunicationMonitor(audioManager, mainHandler, ::onCommunicationChanged)
     }
     private var resumeAfterRecovery = false
+    private val pauseReleaseMonitor = directRoute?.let {
+        UsbPauseReleaseMonitor(appContext, mainHandler) {
+            if (!closed && directPath && !interrupted && returnTarget == null && player?.playWhenReady == false) {
+                returnDirect(it, UsbOutputMode.STRICT_BIT_PERFECT, resume = false, UsbOutputFailureOrigin.USER_PLAYBACK)
+            }
+        }
+    }
 
     /**
      * Set when the own path gave the device back after a failure. Android then shows the USB route
@@ -313,6 +320,7 @@ internal class UsbOutputCoordinator(
         directSources.removeAll { it.period != currentPeriod && (!natural || it.delivered && !it.delivering) }
         updateSource(mediaItem)
         if (mediaItem == null) {
+            pauseReleaseMonitor?.close()
             if (interrupted) cancelInterruptedPlayback()
             resumeAfterInterruption = false
             resumeAfterConfiguration = false
@@ -354,6 +362,12 @@ internal class UsbOutputCoordinator(
     }
 
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+        if (playWhenReady) {
+            pauseReleaseMonitor?.setPaused(false)
+        } else if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST && !internalPauseInProgress &&
+            !interrupted && directPath && directRoute?.streaming == true) {
+            pauseReleaseMonitor?.setPaused(true)
+        }
         if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS &&
             currentMode() == UsbOutputMode.STRICT_BIT_PERFECT && (directPath || interrupted)) {
             resumeAfterConfiguration = false
@@ -507,6 +521,7 @@ internal class UsbOutputCoordinator(
 
     override fun onPlaybackStateChanged(playbackState: Int) {
         if (playbackState != player?.playbackState || (playbackState != Player.STATE_IDLE && playbackState != Player.STATE_ENDED)) return
+        pauseReleaseMonitor?.close()
         if (interrupted) cancelInterruptedPlayback()
         if (directOutputOpened) {
             directRoute?.invalidateOutput()
@@ -1280,6 +1295,7 @@ internal class UsbOutputCoordinator(
             state
         } ?: return
         returnTarget = null
+        pauseReleaseMonitor?.close()
         interrupted = false
         resumeAfterInterruption = false
         communicationMonitor?.setEnabled(false)
@@ -1472,6 +1488,7 @@ internal class UsbOutputCoordinator(
         stopPlayer: Boolean = true,
     ) {
         if (returnTarget != null) return
+        pauseReleaseMonitor?.close()
         returnTarget = target
         val generation = synchronized(lock) {
             mode = UsbOutputMode.STRICT_BIT_PERFECT
@@ -1801,6 +1818,7 @@ internal class UsbOutputCoordinator(
             state
         }
         communicationMonitor?.close()
+        pauseReleaseMonitor?.close()
         runCatching { audioManager.unregisterAudioDeviceCallback(deviceCallback) }
         if (directRoute != null) runCatching { appContext.unregisterReceiver(usbAttachReceiver) }
         directRoute?.release()
