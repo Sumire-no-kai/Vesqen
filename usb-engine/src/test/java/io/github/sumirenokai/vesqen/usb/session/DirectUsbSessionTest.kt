@@ -314,6 +314,31 @@ class DirectUsbSessionTest {
     }
 
     @Test
+    fun `a request abandoned during blocking destruction is not configured after the barrier`() {
+        val entered = CountDownLatch(1)
+        val finish = CountDownLatch(1)
+        val next = FakeStream(events)
+        var creations = 0
+        streams = UsbStreamFactory { _, _ -> UsbStreamFactory.Creation.Created(if (creations++ == 0) stream else next) }
+        takeOver()
+        stream.onDestroy = { entered.countDown(); finish.await(5, TimeUnit.SECONDS) }
+        events.clear()
+        val obsolete = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        try {
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            obsolete.release()
+        } finally {
+            finish.countDown()
+        }
+        control.submit {}.get(2, TimeUnit.SECONDS)
+        assertEquals(1, creations)
+        assertFalse(events.contains("set rate 44100"))
+        val latest = session.openOutput(PLAN)
+        assertTrue(waitUntil { latest.readStats() != null })
+        assertEquals(2, creations)
+    }
+
+    @Test
     fun `the same wire plan opens another epoch without recreating the stream`() {
         var creations = 0
         streams = UsbStreamFactory { _, _ -> creations++; UsbStreamFactory.Creation.Created(stream) }

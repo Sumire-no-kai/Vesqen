@@ -196,7 +196,10 @@ class DirectUsbSession(
                         reconfigure()
                     }
                 }
-                State.Reconfiguring -> pendingOutput = request
+                State.Reconfiguring -> {
+                    pendingOutput = request
+                    if (stream == null) reconfigure()
+                }
                 else -> request.refusal = DirectUsbFailure(Reason.USB_ENGINE_UNAVAILABLE, "the session is no longer streaming")
             }
         }
@@ -217,6 +220,10 @@ class DirectUsbSession(
             stream = null
         }
         val request = checkNotNull(pendingOutput)
+        if (request.released) {
+            pendingOutput = null
+            return
+        }
         val failure = try {
             when {
                 detached -> DirectUsbFailure(Reason.DEVICE_DISCONNECTED, "the device was detached")
