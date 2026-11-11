@@ -1780,6 +1780,32 @@ class UsbOutputCoordinatorTest {
     }
 
     @Test
+    fun `the playback thread's seek adjustment keeps the output opened after the seek`() {
+        reachDirectActive(listOf(mediaItem(mediaId = "first"), mediaItem(mediaId = "second")))
+        val reasons = java.util.Collections.synchronizedList(mutableListOf<Int>())
+        realPlayer.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onPositionDiscontinuity(
+                oldPosition: androidx.media3.common.Player.PositionInfo,
+                newPosition: androidx.media3.common.Player.PositionInfo,
+                reason: Int,
+            ) { reasons += reason }
+        })
+        player.seekToNextMediaItem()
+        idle()
+        // The output Media3 opens after the seek can report before the playback thread's own
+        // report of that seek, a seek adjustment, reaches the main thread.
+        notifyDeliveredOutput()
+        idle()
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (androidx.media3.common.Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT !in reasons && System.nanoTime() < deadline) {
+            Thread.sleep(10)
+            idle()
+        }
+        assertTrue("No seek adjustment arrived: $reasons", androidx.media3.common.Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT in reasons)
+        assertStatus(UsbOutputPhase.ACTIVE, "direct_usb.active")
+    }
+
+    @Test
     fun `a track transition keeps the own output`() {
         reachDirectActive(listOf(mediaItem(mediaId = "first"), mediaItem(mediaId = "second")))
 
