@@ -153,16 +153,18 @@ internal class UsbOutputCoordinator(
 
     private val deviceCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
-            if (currentMode() != UsbOutputMode.STRICT_BIT_PERFECT || addedDevices.none(AudioDeviceInfo::isUsbAudioOutput)) return
-            if (synchronized(lock) { awaitingReattach } || returnTarget != null) return
+            if (currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
+            val usbDevices = addedDevices.filter(AudioDeviceInfo::isUsbAudioOutput)
+            if (usbDevices.isEmpty() || synchronized(lock) { awaitingReattach } || returnTarget != null) return
             if (synchronized(lock) { directPath }) {
                 // Once playback owns the DAC, later route events do not interrupt it. Before
                 // that point a newly visible official mixer still has priority (#298).
                 val route = directRoute ?: return
-                if (!route.streaming && officialMixerOffered(addedDevices.filter(AudioDeviceInfo::isUsbAudioOutput))) {
+                if (!route.streaming && officialMixerOffered(usbDevices)) {
                     returnDirectForOfficial(route)
                 }
             } else {
+                if (reconfigurePosted || (isGenerationCurrent(directAttemptGeneration) && !officialMixerOffered(usbDevices))) return
                 scheduleReconfigure(resume = player?.playWhenReady == true, origin = UsbOutputFailureOrigin.ROUTE_CHANGE)
             }
         }

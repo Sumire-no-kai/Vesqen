@@ -1771,6 +1771,7 @@ class UsbOutputCoordinatorTest {
         direct.deferPermission = true
         requestStrict()
         val result = checkNotNull(direct.pendingPermission)
+        shadowOf(audioManager).addOutputDevice(dac, true)
         context.sendBroadcast(Intent(UsbAttachActivity.ACTION_RECHECK).setPackage(context.packageName))
         idle()
         assertStatus(UsbOutputPhase.APPLYING, "direct_usb.permission_requested")
