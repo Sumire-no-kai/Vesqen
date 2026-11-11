@@ -59,6 +59,14 @@ class UsbPauseReleaseMonitorTest {
         assertEquals(1, releases)
     }
 
+    @Test fun screenOffStillReleasesWhenTheScreenWakesBeforeDelivery() {
+        power.setIsInteractive(true)
+        monitor.setPaused(true)
+        context.sendBroadcast(Intent(Intent.ACTION_SCREEN_OFF))
+        shadowOf(main).idle()
+        assertEquals(1, releases)
+    }
+
     @Test fun otherPlaybackReleasesOnlyWhileTheMonitorIsArmed() {
         power.setIsInteractive(true)
         val audio = shadowOf(context.getSystemService(AudioManager::class.java))

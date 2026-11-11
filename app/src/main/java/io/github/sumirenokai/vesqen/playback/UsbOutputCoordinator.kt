@@ -114,6 +114,7 @@ internal class UsbOutputCoordinator(
 
     /** Main thread: the sources the route reported since the current output instance opened. */
     private val directSources = mutableListOf<DirectSource>()
+    private var directAttemptGeneration = NO_GENERATION
     private var returnTarget: UsbOutputMode? = null
     @Volatile private var recoveryInProgress = false
     private var recoveryTarget: UsbOutputMode? = null
@@ -128,7 +129,7 @@ internal class UsbOutputCoordinator(
     private val pauseReleaseMonitor = directRoute?.let {
         UsbPauseReleaseMonitor(appContext, mainHandler) {
             if (!closed && directPath && !interrupted && returnTarget == null && player?.playWhenReady == false) {
-                returnDirect(it, UsbOutputMode.STRICT_BIT_PERFECT, resume = false, UsbOutputFailureOrigin.USER_PLAYBACK)
+                returnDirect(it, UsbOutputMode.STRICT_BIT_PERFECT, resume = false, UsbOutputFailureOrigin.USER_PLAYBACK, pausedReturn = true)
             }
         }
     }
@@ -141,7 +142,9 @@ internal class UsbOutputCoordinator(
 
     private val usbAttachReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (directRoute?.streaming == true) return
+            if (currentMode() != UsbOutputMode.STRICT_BIT_PERFECT || closed || recoveryInProgress ||
+                returnTarget != null || directRoute?.streaming == true || isGenerationCurrent(directAttemptGeneration)
+            ) return
             if (intent.action == UsbAttachActivity.ACTION_RECHECK) {
                 if (probeUsb(synchronized(lock) { configurationGeneration }) { directRoute?.hasUsbAudioDevice() == true } != true) return
             } else {
@@ -149,7 +152,7 @@ internal class UsbOutputCoordinator(
                 if (attached == null || !attached.isUsbAudioDevice()) return
             }
             synchronized(lock) { awaitingReattach = false }
-            if (currentMode() == UsbOutputMode.STRICT_BIT_PERFECT) {
+            if (!reconfigurePosted) {
                 scheduleReconfigure(resume = player?.playWhenReady == true, origin = UsbOutputFailureOrigin.ROUTE_CHANGE)
             }
         }
@@ -330,7 +333,6 @@ internal class UsbOutputCoordinator(
         directSources.removeAll { it.period != currentPeriod && (!natural || it.delivered && !it.delivering) }
         updateSource(mediaItem)
         if (mediaItem == null) {
-            pauseReleaseMonitor?.close()
             if (interrupted) cancelInterruptedPlayback()
             resumeAfterInterruption = false
             resumeAfterConfiguration = false
@@ -1497,6 +1499,7 @@ internal class UsbOutputCoordinator(
         resume: Boolean,
         origin: UsbOutputFailureOrigin,
         stopPlayer: Boolean = true,
+        pausedReturn: Boolean = false,
     ) {
         if (returnTarget != null) return
         pauseReleaseMonitor?.close()
@@ -1533,6 +1536,8 @@ internal class UsbOutputCoordinator(
                 completeSystemOutput(rebuild = true, resume = resumeAfterConfiguration)
             } else if (interrupted) {
                 reconcileInterruption()
+            } else if (pausedReturn && !resumeAfterConfiguration && configurationOrigin == UsbOutputFailureOrigin.USER_PLAYBACK) {
+                publishDirect(UsbOutputPhase.AVAILABLE, "direct_usb.available")
             } else {
                 scheduleReconfigure(resume = resumeAfterConfiguration, origin = configurationOrigin)
             }
@@ -1602,9 +1607,11 @@ internal class UsbOutputCoordinator(
             decisionCode = "direct_usb.permission_requested",
             deviceName = deviceName,
         )
+        directAttemptGeneration = generation
         route.requestPermission { granted ->
             mainHandler.post {
                 if (!isGenerationCurrent(generation)) return@post
+                directAttemptGeneration = NO_GENERATION
                 if (granted) {
                     scheduleReconfigure(resume = false, origin = origin)
                 } else {
@@ -1654,8 +1661,10 @@ internal class UsbOutputCoordinator(
         }
         activePlayer.pause()
         activePlayer.setHandleAudioBecomingNoisy(false)
+        directAttemptGeneration = generation
         route.takeOver { failure ->
             if (!isGenerationCurrent(generation)) return@takeOver
+            directAttemptGeneration = NO_GENERATION
             if (failure != null) {
                 val (reason, code) = failure.toStrictFailure()
                 failClosed(reason, code, expectedGeneration = generation)
