@@ -236,6 +236,7 @@ internal class UsbOutputCoordinator(
         }
         if (closed) return
         if (requestedMode == UsbOutputMode.SYSTEM) {
+            if (interrupted) cancelInterruptedPlayback()
             interrupted = false
             resumeAfterInterruption = false
             communicationMonitor?.setEnabled(false)
@@ -298,6 +299,7 @@ internal class UsbOutputCoordinator(
         }
         updateSource(mediaItem)
         if (mediaItem == null) {
+            if (interrupted) cancelInterruptedPlayback()
             resumeAfterInterruption = false
             resumeAfterConfiguration = false
             resumeAfterRecovery = false
@@ -338,10 +340,11 @@ internal class UsbOutputCoordinator(
     }
 
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-        if (directRoute != null && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS &&
-            currentMode() == UsbOutputMode.STRICT_BIT_PERFECT && directPath) {
+        if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS &&
+            currentMode() == UsbOutputMode.STRICT_BIT_PERFECT && (directPath || interrupted)) {
+            resumeAfterConfiguration = false
             resumeAfterInterruption = false
-            interruptDirectOutput()
+            interruptDirectOutput(resume = false)
             return
         }
         if (interrupted) {
@@ -458,17 +461,25 @@ internal class UsbOutputCoordinator(
         }
     }
 
-    private fun interruptDirectOutput() {
+    private fun cancelInterruptedPlayback() {
+        resumeAfterInterruption = false
+        resumeAfterConfiguration = false
+        // stop() and an empty timeline can leave Media3's playWhenReady set.
+        if (player?.playWhenReady == true) player?.pause()
+    }
+
+    private fun interruptDirectOutput(resume: Boolean = player?.playWhenReady == true || resumeAfterConfiguration) {
         val route = directRoute ?: return
         if (!interrupted) {
             interrupted = true
-            resumeAfterInterruption = player?.playWhenReady == true || resumeAfterConfiguration
+            resumeAfterInterruption = resume
         }
         if (returnTarget != null || recoveryInProgress) return
         if (directPath || route.streaming) {
             returnDirect(route, UsbOutputMode.STRICT_BIT_PERFECT, resumeAfterInterruption, UsbOutputFailureOrigin.ROUTE_CHANGE, stopPlayer = false)
+        } else {
+            publishDirect(UsbOutputPhase.APPLYING, "direct_usb.interrupted")
         }
-        publishDirect(UsbOutputPhase.APPLYING, "direct_usb.interrupted")
     }
 
     override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
@@ -482,8 +493,9 @@ internal class UsbOutputCoordinator(
     }
 
     override fun onPlaybackStateChanged(playbackState: Int) {
-        if (directOutputOpened && playbackState == player?.playbackState &&
-            (playbackState == Player.STATE_IDLE || playbackState == Player.STATE_ENDED)) {
+        if (playbackState != player?.playbackState || (playbackState != Player.STATE_IDLE && playbackState != Player.STATE_ENDED)) return
+        if (interrupted) cancelInterruptedPlayback()
+        if (directOutputOpened) {
             directRoute?.invalidateOutput()
             directOutputActive = false
             publishDirectActiveIfPlaying()
@@ -517,10 +529,8 @@ internal class UsbOutputCoordinator(
             resumeAfterRecovery = resumeAfterRecovery || resume
             return
         }
-        if (interrupted && (focusSuppressed || communicationActive)) {
-            resumeAfterInterruption = resumeAfterInterruption || resume
-            return
-        }
+        // Only an explicit player command changes the saved intent during an interruption.
+        if (interrupted && (focusSuppressed || communicationActive)) return
         if (returnTarget != null) return
         val activePlayer = player
         val wasPlaying = activePlayer?.playWhenReady == true
@@ -582,7 +592,7 @@ internal class UsbOutputCoordinator(
     }
 
     private fun reconfigureStrictOutput() {
-        if (closed || recoveryInProgress || returnTarget != null || currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
+        if (closed || recoveryInProgress || interrupted || returnTarget != null || currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
         val generation = synchronized(lock) { configurationGeneration }
         val activePlayer = player ?: return
         updateSource(activePlayer.currentMediaItem)
@@ -1443,8 +1453,12 @@ internal class UsbOutputCoordinator(
         }
         // stop() abandons Media3's focus request, so an interruption keeps the renderer
         // suppressed or backpressured until the existing focus owner can report a gain.
-        if (stopPlayer) player?.stop()
-        publishReturning(target)
+        if (stopPlayer) {
+            player?.stop()
+            publishReturning(target)
+        } else {
+            publishDirect(UsbOutputPhase.APPLYING, "direct_usb.interrupted")
+        }
         route.release { released ->
             if (!isGenerationCurrent(generation)) return@release
             val selected = returnTarget ?: return@release
@@ -1459,15 +1473,10 @@ internal class UsbOutputCoordinator(
                 failClosed(UsbOutputFailure.PLATFORM_ERROR, code, origin = configurationOrigin)
             } else if (selected == UsbOutputMode.SYSTEM) {
                 completeSystemOutput(rebuild = true, resume = resumeAfterConfiguration)
+            } else if (interrupted) {
+                reconcileInterruption()
             } else {
-                if (interrupted && (focusSuppressed || communicationActive)) {
-                    publishDirect(UsbOutputPhase.APPLYING, "direct_usb.interrupted")
-                } else {
-                    resumeAfterConfiguration = resumeAfterConfiguration || resumeAfterInterruption
-                    interrupted = false
-                    resumeAfterInterruption = false
-                    scheduleReconfigure(resume = resumeAfterConfiguration, origin = configurationOrigin)
-                }
+                scheduleReconfigure(resume = resumeAfterConfiguration, origin = configurationOrigin)
             }
         }
     }

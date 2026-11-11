@@ -312,7 +312,56 @@ class UsbOutputCoordinatorTest {
         coordinator.onCommunicationChanged(false)
         idle()
         assertStatus(UsbOutputPhase.SYSTEM, "system_audio_route")
+        assertFalse(player.playWhenReady)
         assertEquals(0, direct.calls.count { it == "takeOver" })
+    }
+
+    @Test
+    fun `a mode change while the DAC is returning cannot play through the speaker during a call`() {
+        reachDirectActive()
+        direct.deferTakeover = true
+        coordinator.onCommunicationChanged(true)
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        checkNotNull(direct.pendingRelease)(true)
+        idle()
+        assertStatus(UsbOutputPhase.SYSTEM, "system_audio_route")
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `stopping during a call cancels resume even if a route comes back`() {
+        reachDirectActive()
+        coordinator.onCommunicationChanged(true)
+        player.stop()
+        shadowOf(audioManager).addOutputDevice(audioDevice(id = 12), true)
+        idle()
+        coordinator.onCommunicationChanged(false)
+        idle()
+        assertFalse("takeOver" in direct.calls)
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `a synchronous release failure during a call remains visible`() {
+        reachDirectActive()
+        direct.recoveryPending = true
+        coordinator.onCommunicationChanged(true)
+        idle()
+        assertStatus(UsbOutputPhase.FAILED, "direct_usb.usb_transfer_failed")
+    }
+
+    @Test
+    fun `permanent focus loss cancels the outstanding Play in a delayed takeover`() {
+        beginHostOnlyTakeover()
+        val stale = checkNotNull(direct.pendingTakeover)
+        direct.calls.clear()
+        coordinator.onPlayWhenReadyChanged(false, Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS)
+        direct.deferTakeover = false
+        checkNotNull(direct.pendingRelease)(true)
+        stale(null)
+        idle()
+        assertFalse("takeOver" in direct.calls)
+        assertFalse(player.playWhenReady)
     }
 
     @Test
@@ -354,6 +403,38 @@ class UsbOutputCoordinatorTest {
         assertTrue("release" in direct.calls)
         assertFalse(player.playWhenReady)
         assertFalse("takeOver" in direct.calls)
+    }
+
+    @Test
+    fun `a real Media3 permanent loss returns the device and a route notification cannot resume it`() {
+        player.setAudioAttributes(
+            androidx.media3.common.AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(),
+            true,
+        )
+        reachDirectActive()
+        drainPlaybackCommands()
+        val focus = checkNotNull(shadowOf(audioManager).lastAudioFocusRequest)
+        focus.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS)
+        drainPlaybackCommands()
+        shadowOf(audioManager).addOutputDevice(audioDevice(id = 12), true)
+        drainPlaybackCommands()
+        assertTrue("release" in direct.calls)
+        assertFalse("takeOver" in direct.calls)
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `clearing the queue during an interruption cancels resume for the next queue`() {
+        reachDirectActive()
+        coordinator.onCommunicationChanged(true)
+        player.clearMediaItems()
+        player.setMediaItem(mediaItem(mediaId = "replacement"))
+        idle()
+        coordinator.onCommunicationChanged(false)
+        idle()
+        assertFalse("takeOver" in direct.calls)
+        assertFalse(player.playWhenReady)
     }
 
     @Test
