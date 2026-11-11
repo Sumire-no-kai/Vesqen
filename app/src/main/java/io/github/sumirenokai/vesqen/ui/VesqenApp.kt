@@ -109,6 +109,7 @@ import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.library.LibraryRebuildNotice
 import io.github.sumirenokai.vesqen.library.musicLibraryPermission
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
 import io.github.sumirenokai.vesqen.premium.ActivationCodes
 import io.github.sumirenokai.vesqen.premium.PremiumAccess
@@ -401,6 +402,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
         onRefreshPlaybackPosition = viewModel::refreshPlaybackPosition,
         onCyclePlaybackOrder = viewModel::cyclePlaybackOrderMode,
         onSetUsbOutputMode = viewModel::setUsbOutputMode,
+        onAnswerFixedVolume = viewModel::answerFixedVolume,
         verificationRegistryState = verificationRegistryState,
         verificationImportResult = verificationImportResult,
         onImportVerificationRegistry = {
@@ -484,6 +486,7 @@ fun VesqenAppContent(
     onRefreshPlaybackPosition: () -> Unit = {},
     onCyclePlaybackOrder: () -> Unit,
     onSetUsbOutputMode: (UsbOutputMode) -> Unit = {},
+    onAnswerFixedVolume: (UsbOutputStatus, Boolean) -> Unit = { _, _ -> },
     onAddLibraryFolder: () -> Unit = {},
     onRemoveLibraryFolder: (String) -> Unit = {},
     onPauseLibraryScan: () -> Unit = {},
@@ -821,6 +824,7 @@ fun VesqenAppContent(
             canChangeOutputMode = state.playback.canSetUsbOutputMode,
             onSetUsbOutputMode = setUsbOutputMode,
             onOpenPremium = if (premiumAccess != null) ::openPremium else null,
+            onAnswerFixedVolume = onAnswerFixedVolume,
         )
     }
 

@@ -62,6 +62,7 @@ class PlaybackService : MediaSessionService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mediaButtonStart = MediaButtonStartObligation()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val fixedVolumeCommand = SessionCommand(UsbOutputSessionContract.FIXED_VOLUME_ACTION, android.os.Bundle.EMPTY)
     private val usbOutputCommand = SessionCommand(UsbOutputSessionContract.SET_MODE_ACTION, android.os.Bundle.EMPTY)
     private val moveCommand = SessionCommand(PlayOrderSessionContract.MOVE_ACTION, android.os.Bundle.EMPTY)
     private val outputStateListener: (UsbOutputStatus) -> Unit = { status ->
@@ -115,7 +116,7 @@ class PlaybackService : MediaSessionService() {
             val base = MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller).build()
             if (controller.packageName != packageName) return Futures.immediateFuture(base)
             return Futures.immediateFuture(MediaSession.ConnectionResult.accept(
-                base.availableSessionCommands.buildUpon().add(usbOutputCommand).add(moveCommand).build(),
+                base.availableSessionCommands.buildUpon().add(usbOutputCommand).add(fixedVolumeCommand).add(moveCommand).build(),
                 base.availablePlayerCommands,
             ))
         }
@@ -134,6 +135,14 @@ class PlaybackService : MediaSessionService() {
                 UsbOutputSessionContract.SET_MODE_ACTION -> UsbOutputSessionContract.readMode(args)
                     ?.let(::applyUsbOutputMode)
                     ?: Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
+                UsbOutputSessionContract.FIXED_VOLUME_ACTION -> onMainThread {
+                    val answered = usbOutputCoordinator?.answerFixedVolume(
+                        args.getLong(UsbOutputSessionContract.GENERATION, -1L),
+                        args.getLong(UsbOutputSessionContract.OBSERVED_AT_ELAPSED, -1L),
+                        args.getBoolean(UsbOutputSessionContract.ACCEPT_FIXED_VOLUME),
+                    ) == true
+                    SessionResult(if (answered) SessionResult.RESULT_SUCCESS else SessionError.ERROR_BAD_VALUE)
+                }
                 PlayOrderSessionContract.MOVE_ACTION -> {
                     val move = PlayOrderSessionContract.readMove(args)
                         ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))

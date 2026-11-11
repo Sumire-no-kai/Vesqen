@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.playback.FIXED_VOLUME_CONFIRMATION
 import io.github.sumirenokai.vesqen.playback.OfficialMixerApiSupport
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailureOrigin
@@ -58,7 +59,9 @@ internal fun StrictUsbUnavailableDialog(
  * from startup, queue restore, route or processing changes and service stop stay non-modal;
  * the Now status chip and output dialog, Chain and Settings show the reason.
  */
-internal fun UsbOutputStatus.failureInterruptsUser(): Boolean = failure != null && when (failureOrigin) {
+internal fun UsbOutputStatus.failureInterruptsUser(): Boolean = failure != null && userInitiatedAttempt()
+
+private fun UsbOutputStatus.userInitiatedAttempt(): Boolean = when (failureOrigin) {
     UsbOutputFailureOrigin.USER_PLAYBACK,
     UsbOutputFailureOrigin.TRACK_TRANSITION,
     UsbOutputFailureOrigin.USER_MODE_CHANGE,
@@ -82,12 +85,36 @@ internal fun StrictUsbFailureDialog(
     canChangeOutputMode: Boolean,
     onSetUsbOutputMode: (UsbOutputMode) -> Unit,
     onOpenPremium: (() -> Unit)? = null,
+    onAnswerFixedVolume: (UsbOutputStatus, Boolean) -> Unit = { _, _ -> },
 ) {
     var dismissedFailure by rememberSaveable { mutableStateOf<String?>(null) }
-    val failure = status.failure?.takeIf { status.failureInterruptsUser() } ?: return
     // A fresh failed attempt has a new coordinator generation. Telemetry refreshes do not.
-    val failureKey = "${status.generation}:${status.observedAtEpochMs}:${failure.name}"
+    val failureKey = "${status.generation}:${status.observedAtEpochMs}:${status.decisionCode}"
     if (dismissedFailure == failureKey) return
+    if (status.decisionCode == FIXED_VOLUME_CONFIRMATION) {
+        if (!status.userInitiatedAttempt()) return
+        fun answer(accept: Boolean) {
+            dismissedFailure = failureKey
+            onAnswerFixedVolume(status, accept)
+        }
+        AlertDialog(
+            modifier = Modifier.testTag("vesqen.output.fixed-volume-dialog"),
+            onDismissRequest = { answer(false) },
+            title = { Text(stringResource(R.string.usb_fixed_volume_title)) },
+            text = { Text(stringResource(R.string.usb_fixed_volume_body,
+                status.deviceName ?: stringResource(R.string.settings_usb_device_unknown)),
+                modifier = Modifier.verticalScroll(rememberScrollState())) },
+            confirmButton = {
+                TextButton(onClick = { answer(true) }, enabled = canChangeOutputMode,
+                    modifier = Modifier.testTag("vesqen.output.fixed-volume-confirm")) {
+                    Text(stringResource(R.string.usb_fixed_volume_accept))
+                }
+            },
+            dismissButton = { TextButton(onClick = { answer(false) }) { Text(stringResource(R.string.cancel)) } },
+        )
+        return
+    }
+    val failure = status.failure?.takeIf { status.failureInterruptsUser() } ?: return
     // #119: an ended trial is not fixed by another DAC; offer Pro features instead of keeping strict.
     val openPremium = onOpenPremium?.takeIf { failure == UsbOutputFailure.TRIAL_ENDED }
 

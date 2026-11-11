@@ -2,6 +2,7 @@ package io.github.sumirenokai.vesqen.usb.session
 
 import io.github.sumirenokai.vesqen.usb.control.UacVolumeRange
 import io.github.sumirenokai.vesqen.usb.control.UsbControlTransfer
+import io.github.sumirenokai.vesqen.usb.descriptor.UacControlAccess
 import io.github.sumirenokai.vesqen.usb.descriptor.UacDescriptorParser
 import io.github.sumirenokai.vesqen.usb.descriptor.UacFunction
 import io.github.sumirenokai.vesqen.usb.descriptor.UacParseResult
@@ -37,11 +38,12 @@ class DirectUsbSessionTest {
     private val released = CountDownLatch(1)
     private val releasedWith = AtomicReference<Pair<CleanupRecord, DirectUsbFailure?>>()
     private var streams = UsbStreamFactory { _, _ -> UsbStreamFactory.Creation.Created(stream.also { events += "stream created" }) }
+    private var topology = JBL
     private val session by lazy {
         DirectUsbSession(
             device = UsbDeviceIdentity(deviceId = 1003, vendorId = 0x0ecb, productId = 0x2107),
             link = link,
-            function = JBL,
+            function = topology,
             markers = markers,
             control = control,
             streams = streams,
@@ -496,6 +498,75 @@ class DirectUsbSessionTest {
         control.shutdownNow()
     }
 
+    private fun fixedTopology(access: UacControlAccess) = JBL.copy(featureUnits = JBL.featureUnits.map {
+        it.copy(masterVolume = access, channelVolumes = emptyList())
+    })
+
+    @Test
+    fun `only a resolved physical path can be fixed and a writable channel is never fixed`() {
+        val unit = JBL.featureUnits.single()
+        val noUnit = JBL.copy(featureUnits = emptyList(), outputTerminals = JBL.outputTerminals.map {
+            if (it.sourceId == unit.id) it.copy(sourceId = unit.sourceId) else it
+        })
+        assertEquals(UsbPlaybackVolume.Fixed, noUnit.playbackVolume(PLAN))
+        assertEquals(UsbPlaybackVolume.Unsupported, JBL.copy(featureUnits = emptyList()).playbackVolume(PLAN))
+        assertEquals(UsbPlaybackVolume.Unsupported, JBL.copy(inputTerminals = emptyList()).playbackVolume(PLAN))
+        val readOnly = fixedTopology(UacControlAccess.READ_ONLY)
+        assertEquals(UsbPlaybackVolume.Fixed, readOnly.playbackVolume(PLAN))
+        assertEquals(UsbPlaybackVolume.Unsupported, JBL.copy(featureUnits = listOf(unit.copy(
+            masterVolume = UacControlAccess.ABSENT, channelVolumes = listOf(UacControlAccess.WRITABLE),
+        ))).playbackVolume(PLAN))
+    }
+
+    @Test
+    fun `without fixed consent no interface is claimed and no stream is started`() {
+        topology = fixedTopology(UacControlAccess.ABSENT)
+        assertEquals(Reason.VOLUME_CONTROL_FAILED, (takeOver() as DirectUsbSession.Takeover.Failed).failure.reason)
+        assertTrue(events.none { it.startsWith("claim") || it.startsWith("marker volume") || it.startsWith("stream") })
+    }
+
+    @Test
+    fun `confirmed mute-only hardware plays and releases without volume or mute transfers`() {
+        topology = fixedTopology(UacControlAccess.ABSENT)
+        device.muted = true
+        assertEquals(DirectUsbSession.Takeover.Ready(null, null), takeOver(confirmed = true))
+        assertNull(session.volumeRange)
+        assertNull(setVolume(-1000))
+        val (cleanup, failure) = release()
+        assertNull(failure)
+        assertNull(cleanup.firstFailure)
+        assertTrue(events.containsAll(listOf("stream started", "stream destroyed", "release 2", "marker cleared")))
+        assertFalse(events.any { it.startsWith("set volume") || it.startsWith("set mute") || it.startsWith("read ") })
+        assertTrue(device.muted)
+    }
+
+    @Test
+    fun `changing a fixed stream to an alternate with writable volume requires a fresh takeover`() {
+        val input = JBL.inputTerminals.single { it.isUsbStreaming }
+        val output = JBL.outputTerminals.single { !it.isUsbStreaming }
+        val streaming = JBL.streamingInterfaces.single { it.interfaceNumber == PLAN.interfaceNumber }
+        val alternate = streaming.alternateSettings.single { it.alternateSetting == PLAN.alternateSetting }
+        // The original alternate now goes directly to its physical terminal. Alternate 2 retains the master.
+        topology = JBL.copy(
+            inputTerminals = JBL.inputTerminals + input.copy(id = 11),
+            outputTerminals = JBL.outputTerminals + output.copy(id = 12, sourceId = 11),
+            streamingInterfaces = listOf(streaming.copy(alternateSettings = streaming.alternateSettings - alternate +
+                alternate.copy(terminalLink = 11) + alternate.copy(alternateSetting = 2))),
+        )
+        assertEquals(DirectUsbSession.Takeover.Ready(null, null), takeOver(confirmed = true))
+        session.openOutput(PLAN.copy(alternateSetting = 2))
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertEquals(Reason.VOLUME_CONTROL_FAILED, failures.single().reason)
+        assertFalse("alternate 2/2" in events)
+    }
+
+    @Test
+    fun `prior fixed consent cannot bypass a failing advertised master control`() {
+        device.failVolumeReads = true
+        assertEquals(Reason.VOLUME_CONTROL_FAILED, (takeOver(confirmed = true) as DirectUsbSession.Takeover.Failed).failure.reason)
+        assertFalse(events.contains("stream started"))
+    }
+
     @Test
     fun `the takeover writes the marker before claiming and starts the stream last`() {
         assertEquals(DirectUsbSession.Takeover.Ready(volumeBefore = -2560, volumeNow = -15400), takeOver())
@@ -588,7 +659,7 @@ class DirectUsbSessionTest {
     fun `a volume that does not read back fails the takeover and restores the volume`() {
         device.volumeReadBackOffset = 2 * 154
 
-        val result = takeOver() as DirectUsbSession.Takeover.Failed
+        val result = takeOver(confirmed = true) as DirectUsbSession.Takeover.Failed
 
         assertEquals(Reason.VOLUME_CONTROL_FAILED, result.failure.reason)
         assertTrue(released.await(2, TimeUnit.SECONDS))
@@ -1024,10 +1095,10 @@ class DirectUsbSessionTest {
         session.takeOver(PLAN, START_VOLUME) {}
     }
 
-    private fun takeOver(target: DirectUsbSession = session): DirectUsbSession.Takeover {
+    private fun takeOver(target: DirectUsbSession = session, confirmed: Boolean = false): DirectUsbSession.Takeover {
         val result = AtomicReference<DirectUsbSession.Takeover>()
         val done = CountDownLatch(1)
-        target.takeOver(PLAN, START_VOLUME) {
+        target.takeOver(PLAN, START_VOLUME, fixedVolumeConfirmed = confirmed) {
             result.set(it)
             done.countDown()
         }

@@ -3,6 +3,7 @@ package io.github.sumirenokai.vesqen.usb.session
 import io.github.sumirenokai.vesqen.usb.control.Uac1ControlClient
 import io.github.sumirenokai.vesqen.usb.control.UacVolumeRange
 import io.github.sumirenokai.vesqen.usb.descriptor.UacControlAccess
+import io.github.sumirenokai.vesqen.usb.descriptor.UacFeatureUnit
 import io.github.sumirenokai.vesqen.usb.descriptor.UacFunction
 import io.github.sumirenokai.vesqen.usb.engine.UsbStream
 import io.github.sumirenokai.vesqen.usb.engine.UsbStreamEngine
@@ -15,6 +16,30 @@ import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+
+/** A missing or unknown stream topology cannot establish that the DAC has fixed output. */
+sealed interface UsbPlaybackVolume {
+    data class Master(val unit: UacFeatureUnit) : UsbPlaybackVolume
+    data object Fixed : UsbPlaybackVolume
+    data object Unsupported : UsbPlaybackVolume
+}
+
+fun UacFunction.playbackVolume(plan: StreamingPlan): UsbPlaybackVolume {
+    val terminal = streamingInterfaces.firstOrNull { it.interfaceNumber == plan.interfaceNumber }
+        ?.alternateSettings?.firstOrNull { it.alternateSetting == plan.alternateSetting && it.isPlayback }?.terminalLink
+        ?: return UsbPlaybackVolume.Unsupported
+    if (inputTerminals.none { it.id == terminal && it.isUsbStreaming }) return UsbPlaybackVolume.Unsupported
+    val path = playbackEntitiesAfter(terminal)
+    if (path.isEmpty()) return UsbPlaybackVolume.Unsupported
+    val units = featureUnits.filter { it.id in path }
+    // UAC1 advertises presence only. It must pass the normal read/write/read-back checks.
+    fun controllable(access: UacControlAccess) =
+        access == UacControlAccess.WRITABLE || access == UacControlAccess.PRESENT_ACCESS_UNKNOWN
+    units.firstOrNull { controllable(it.masterVolume) }?.let { return UsbPlaybackVolume.Master(it) }
+    // Per-channel controls are not implemented; never call such an output fixed.
+    if (units.any { it.channelVolumes.any(::controllable) }) return UsbPlaybackVolume.Unsupported
+    return UsbPlaybackVolume.Fixed
+}
 
 /** The native stream behind a session; the app uses [UsbStreamEngine], tests a fake. */
 fun interface UsbStreamFactory {
@@ -90,7 +115,7 @@ class DirectUsbSession(
     }
 
     sealed interface Takeover {
-        data class Ready(val volumeBefore: Int, val volumeNow: Int) : Takeover
+        data class Ready(val volumeBefore: Int?, val volumeNow: Int?) : Takeover
 
         data class Failed(val failure: DirectUsbFailure) : Takeover
     }
@@ -113,6 +138,7 @@ class DirectUsbSession(
     private class VolumeControl(val unitId: Int, val controlInterface: Int, val range: UacVolumeRange)
 
     private var volumeControl: VolumeControl? = null
+    private var fixedVolume = false
 
     /** The settings the device's hardware volume accepts, or null before the takeover is ready. */
     @Volatile
@@ -145,16 +171,16 @@ class DirectUsbSession(
         return snapshot.completed + (snapshot.active?.readStats()?.sessionTotals ?: UsbStreamTotals.NONE)
     }
 
-    fun takeOver(plan: StreamingPlan, startVolume: Int, onDone: (Takeover) -> Unit) {
+    fun takeOver(plan: StreamingPlan, startVolume: Int, fixedVolumeConfirmed: Boolean = false, onDone: (Takeover) -> Unit) {
         check(takeOverAsked.compareAndSet(false, true)) { "A session takes over once" }
-        control.execute { takeOverNow(plan, startVolume, onDone) }
+        control.execute { takeOverNow(plan, startVolume, fixedVolumeConfirmed, onDone) }
     }
 
-    private fun takeOverNow(plan: StreamingPlan, startVolume: Int, onDone: (Takeover) -> Unit) {
+    private fun takeOverNow(plan: StreamingPlan, startVolume: Int, fixedVolumeConfirmed: Boolean, onDone: (Takeover) -> Unit) {
         if (state != State.Idle) return onDone(failed(Reason.USB_ENGINE_UNAVAILABLE, "the session was released before its takeover"))
         state = State.TakingOver
         val attempt = try {
-            claimAndStart(plan, startVolume)
+            claimAndStart(plan, startVolume, fixedVolumeConfirmed)
         } catch (_: SecurityException) {
             failed(Reason.USB_PERMISSION_REVOKED, "USB access was revoked")
         } catch (error: IllegalStateException) {
@@ -337,8 +363,12 @@ class DirectUsbSession(
         control.execute { fail(DirectUsbFailure(Reason.DEVICE_DISCONNECTED, "the device was detached")) }
     }
 
-    private fun claimAndStart(plan: StreamingPlan, startVolume: Int): Takeover {
+    private fun claimAndStart(plan: StreamingPlan, startVolume: Int, fixedVolumeConfirmed: Boolean): Takeover {
         if (detached) return failed(Reason.DEVICE_DISCONNECTED, "the device was detached")
+        val volume = function.playbackVolume(plan)
+        if (volume == UsbPlaybackVolume.Unsupported || (volume == UsbPlaybackVolume.Fixed && !fixedVolumeConfirmed)) {
+            return failed(Reason.VOLUME_CONTROL_FAILED, "no supported or confirmed volume path")
+        }
         val taken = markers.acquire(device, function.controlInterface)
             ?: return failed(Reason.USB_TRANSFER_FAILED, "the takeover marker is unavailable or awaiting recovery")
         markerWritten = true
@@ -349,10 +379,15 @@ class DirectUsbSession(
             claimed += number
         }
 
-        val terminalLink = function.streamingInterfaces.firstOrNull { it.interfaceNumber == plan.interfaceNumber }
-            ?.alternateSettings?.firstOrNull { it.alternateSetting == plan.alternateSetting }?.terminalLink
-        val unit = terminalLink?.let { terminal -> function.featureUnitsAfter(terminal).firstOrNull { it.masterVolume != UacControlAccess.ABSENT } }
-            ?: return failed(Reason.VOLUME_CONTROL_FAILED, "no master volume on the path")
+        if (volume == UsbPlaybackVolume.Fixed) {
+            if (taken.volumeBefore != null || taken.volumeUnitId != null) {
+                return failed(Reason.VOLUME_CONTROL_FAILED, "a previous hardware volume still needs restoration")
+            }
+            fixedVolume = true
+            val failure = startStream(plan)
+            return if (failure == null) Takeover.Ready(null, null) else Takeover.Failed(failure)
+        }
+        val unit = (volume as UsbPlaybackVolume.Master).unit
         val controlInterface = function.controlInterface
         if (taken.volumeUnitId != null && taken.volumeUnitId != unit.id) {
             return failed(Reason.VOLUME_CONTROL_FAILED, "another volume control has pending recovery")
@@ -389,10 +424,12 @@ class DirectUsbSession(
     }
 
     private fun startStream(plan: StreamingPlan): DirectUsbFailure? {
-        val terminal = function.streamingInterfaces.firstOrNull { it.interfaceNumber == plan.interfaceNumber }
-            ?.alternateSettings?.firstOrNull { it.alternateSetting == plan.alternateSetting }?.terminalLink
-        val unit = terminal?.let { function.featureUnitsAfter(it).firstOrNull { unit -> unit.masterVolume != UacControlAccess.ABSENT } }
-        if (unit?.id != volumeControl?.unitId) {
+        val sameControl = when (val volume = function.playbackVolume(plan)) {
+            is UsbPlaybackVolume.Master -> volume.unit.id == volumeControl?.unitId
+            UsbPlaybackVolume.Fixed -> fixedVolume
+            UsbPlaybackVolume.Unsupported -> false
+        }
+        if (!sameControl) {
             return DirectUsbFailure(Reason.VOLUME_CONTROL_FAILED, "the new stream uses another volume control")
         }
         if (!link.selectAlternate(plan.interfaceNumber, plan.alternateSetting)) {
