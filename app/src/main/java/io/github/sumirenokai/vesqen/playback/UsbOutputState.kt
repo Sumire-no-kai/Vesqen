@@ -317,6 +317,12 @@ internal object UsbOutputSessionContract {
     fun readMode(arguments: Bundle): UsbOutputMode? = arguments.getString(MODE_ARGUMENT)
         ?.let { stored -> UsbOutputMode.entries.firstOrNull { it.name == stored } }
 
+    /** Replaces optional USB fields too, while preserving other session contracts' namespaces. */
+    fun withStatus(extras: Bundle, status: UsbOutputStatus): Bundle = Bundle(extras).apply {
+        keySet().filter { it.startsWith("usb_output_") }.forEach(::remove)
+        putAll(toBundle(status))
+    }
+
     fun toBundle(status: UsbOutputStatus): Bundle = Bundle().apply {
         putString(MODE_ARGUMENT, status.mode.name)
         putString(PHASE, status.phase.name)

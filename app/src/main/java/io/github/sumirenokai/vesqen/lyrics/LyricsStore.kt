@@ -47,15 +47,24 @@ internal class LyricsStore(
 ) : TrackMergeFollower {
     private val lock = Any()
     private var generation = 0L
+    private val contentRevisions = HashMap<Long, Long>()
     private var loadedTrackIds: MutableSet<Long>? = null
     private val duplicate: (File, File) -> Unit = duplicate ?: ::linkOrCopy
 
     /** What [prepareMerge] did for each `(from, into)` of the open merging transaction. */
     private val preparedMerges = HashMap<Pair<Long, Long>, MergePreparation>()
+    private val adjustmentMerges = LyricsAdjustmentMerges(
+        directory,
+        write = { target, bytes -> writeAtomically(target) { it.write(bytes) } },
+        duplicate = this.duplicate,
+    )
     private val state = MutableStateFlow(ImportedLyrics())
     val importedLyrics: StateFlow<ImportedLyrics> = state.asStateFlow()
 
     fun generation(): Long = synchronized(lock) { generation }
+
+    /** Import changes invalidate a prepared save; another time adjustment does not. */
+    fun contentEpoch(trackId: Long): Long = synchronized(lock) { contentRevisions[trackId] ?: 0L }
 
     /** Lists the directory once, off the main thread, so [importedLyrics] holds what is stored. */
     fun load() {
@@ -71,6 +80,52 @@ internal class LyricsStore(
         } catch (_: FileNotFoundException) {
             null
         }
+    }
+
+    /** Only the current source/content key is read; replaced lyrics never borrow an old offset. */
+    @Throws(IOException::class)
+    fun userAdvance(trackId: Long, contentRevision: String): Long = synchronized(lock) {
+        readAdvance(adjustmentFile(trackId, contentRevision))
+    }
+
+    /** Commits under the same lock/generation as imports, merges and catalog rebuilds. */
+    fun adjust(
+        trackId: Long,
+        contentRevision: String,
+        action: LyricsAdjustmentAction,
+        expectedGeneration: Long,
+        expectedContentEpoch: Long,
+    ): LyricsAdjustmentResult = synchronized(lock) {
+        if (generation != expectedGeneration) return LyricsAdjustmentResult.TRACK_CHANGED
+        if (contentEpoch(trackId) != expectedContentEpoch) return LyricsAdjustmentResult.LYRICS_CHANGED
+        val target = adjustmentFile(trackId, contentRevision)
+        val current = try {
+            readAdvance(target)
+        } catch (_: IOException) {
+            return LyricsAdjustmentResult.FAILED
+        }
+        val next = try {
+            when (action) {
+                LyricsAdjustmentAction.ADVANCE -> Math.addExact(current, 500L)
+                LyricsAdjustmentAction.DELAY -> Math.addExact(current, -500L)
+                LyricsAdjustmentAction.RESET -> 0L
+            }
+        } catch (_: ArithmeticException) {
+            return LyricsAdjustmentResult.LIMIT_REACHED
+        }
+        if (next == current) return LyricsAdjustmentResult.APPLIED
+        try {
+            if (next == 0L) {
+                if (target.exists() && !target.delete()) return LyricsAdjustmentResult.FAILED
+            } else {
+                writeAtomically(target) { it.write(next.toString().toByteArray(Charsets.US_ASCII)) }
+            }
+        } catch (_: IOException) {
+            return LyricsAdjustmentResult.FAILED
+        }
+        trackIds()
+        publish()
+        LyricsAdjustmentResult.APPLIED
     }
 
     /**
@@ -92,6 +147,7 @@ internal class LyricsStore(
             } catch (_: IOException) {
                 return LyricsImportResult.FAILED
             }
+            contentChanged(trackId)
             trackIds().add(trackId)
             publish()
             LyricsImportResult.IMPORTED
@@ -100,8 +156,9 @@ internal class LyricsStore(
 
     fun remove(trackId: Long) {
         synchronized(lock) {
-            val removed = fileFor(trackId).delete()
-            if (trackIds().remove(trackId) || removed) publish()
+            val removed = removeImport(trackId)
+            val adjustmentsRemoved = adjustmentFiles(trackId).map(File::delete).any { it }
+            if (removed || adjustmentsRemoved) publish()
         }
     }
 
@@ -109,8 +166,10 @@ internal class LyricsStore(
     fun clearAll() {
         synchronized(lock) {
             generation++
+            contentRevisions.clear()
             directory.listFiles()?.forEach(File::delete)
             loadedTrackIds = HashSet()
+            adjustmentMerges.clear()
             publish()
         }
     }
@@ -124,19 +183,28 @@ internal class LyricsStore(
         synchronized(lock) {
             if (generation != expectedGeneration) return
             val gone = trackIds().filter { it !in catalog.trackIds && it <= catalog.largestAssignedId }
-            if (gone.isEmpty()) return
             gone.forEach { trackId -> fileFor(trackId).delete() }
+            gone.forEach { contentChanged(it) }
             trackIds().removeAll(gone.toSet())
-            publish()
+            val mergeProtected = adjustmentMerges.protectedTrackIds()
+            val staleAdjustments = adjustmentFiles().filter { file ->
+                val id = adjustmentTrackId(file)
+                id !in mergeProtected && id !in catalog.trackIds && id <= catalog.largestAssignedId
+            }
+            staleAdjustments.forEach(File::delete)
+            if (gone.isNotEmpty() || staleAdjustments.isNotEmpty()) publish()
         }
     }
 
     override fun prepareMerge(from: Long, into: Long) {
         synchronized(lock) {
+            // The journal must be durable before either sidecar or imported-file preparation.
+            val transfersAdjustments = adjustmentMerges.prepare(from, into)
             preparedMerges[from to into] = when {
                 from == into || into in trackIds() || from !in trackIds() -> MergePreparation.NOTHING
                 else -> try {
                     duplicate(fileFor(from), fileFor(into))
+                    contentChanged(into)
                     trackIds().add(into)
                     publish()
                     MergePreparation.DUPLICATED
@@ -144,6 +212,7 @@ internal class LyricsStore(
                     moveForMerge(from, into)
                 }
             }
+            if (transfersAdjustments) publish()
         }
     }
 
@@ -155,6 +224,7 @@ internal class LyricsStore(
      */
     private fun moveForMerge(from: Long, into: Long): MergePreparation = try {
         Files.move(fileFor(from).toPath(), fileFor(into).toPath(), StandardCopyOption.ATOMIC_MOVE)
+        contentChanged(from, into)
         trackIds().remove(from)
         trackIds().add(into)
         publish()
@@ -164,21 +234,29 @@ internal class LyricsStore(
         MergePreparation.KEPT
     }
 
+    override fun recoverMerges(trackExists: (Long) -> Boolean) {
+        synchronized(lock) {
+            adjustmentMerges.recover(trackExists)
+        }
+    }
+
     override fun mergeCommitted(from: Long, into: Long) {
         synchronized(lock) {
             when (preparedMerges.remove(from to into)) {
                 MergePreparation.MOVED, MergePreparation.KEPT -> Unit
-                MergePreparation.NOTHING, MergePreparation.DUPLICATED, null -> remove(from)
+                MergePreparation.NOTHING, MergePreparation.DUPLICATED, null -> if (removeImport(from)) publish()
             }
+            adjustmentMerges.committed()
         }
     }
 
     override fun mergeRolledBack(from: Long, into: Long) {
         synchronized(lock) {
             when (preparedMerges.remove(from to into)) {
-                MergePreparation.DUPLICATED -> remove(into)
+                MergePreparation.DUPLICATED -> if (removeImport(into)) publish()
                 MergePreparation.MOVED -> try {
                     Files.move(fileFor(into).toPath(), fileFor(from).toPath(), StandardCopyOption.ATOMIC_MOVE)
+                    contentChanged(from, into)
                     trackIds().remove(into)
                     trackIds().add(from)
                     publish()
@@ -187,6 +265,8 @@ internal class LyricsStore(
                 }
                 MergePreparation.NOTHING, MergePreparation.KEPT, null -> Unit
             }
+            adjustmentMerges.rolledBack()
+            publish()
         }
     }
 
@@ -219,6 +299,39 @@ internal class LyricsStore(
 
     private fun fileFor(trackId: Long) = File(directory, "$trackId$LYRICS_SUFFIX")
 
+    private fun removeImport(trackId: Long): Boolean {
+        val removed = fileFor(trackId).delete()
+        return (trackIds().remove(trackId) || removed).also { if (it) contentChanged(trackId) }
+    }
+
+    private fun contentChanged(vararg trackIds: Long) {
+        trackIds.forEach { id -> contentRevisions[id] = (contentRevisions[id] ?: 0L) + 1 }
+    }
+
+    private fun adjustmentFile(trackId: Long, contentRevision: String): File {
+        require(trackId > 0 && CONTENT_REVISION.matches(contentRevision))
+        return File(directory, "$trackId.$contentRevision$ADJUSTMENT_SUFFIX")
+    }
+
+    private fun adjustmentFiles(trackId: Long? = null): List<File> = directory.listFiles().orEmpty().filter { file ->
+        ADJUSTMENT_FILE.matches(file.name) && file.name.substringBefore('.').toLongOrNull()?.let { id ->
+            trackId == null || id == trackId
+        } == true
+    }
+
+    private fun adjustmentTrackId(file: File): Long = file.name.substringBefore('.').toLong()
+
+    private fun readAdvance(file: File): Long {
+        val bytes = try {
+            FileInputStream(file).use { it.readAtMost(MAX_ADJUSTMENT_BYTES + 1) }
+        } catch (failure: FileNotFoundException) {
+            if (file.exists()) throw failure
+            return 0L
+        }
+        if (bytes.size > MAX_ADJUSTMENT_BYTES) throw IOException("Invalid lyrics adjustment")
+        return bytes.toString(Charsets.US_ASCII).toLongOrNull() ?: throw IOException("Invalid lyrics adjustment")
+    }
+
     private inline fun writeAtomically(target: File, write: (FileOutputStream) -> Unit) {
         if (!directory.isDirectory && !directory.mkdirs()) throw IOException("Cannot create $directory")
         val temporary = File(directory, target.name + TEMPORARY_SUFFIX)
@@ -239,3 +352,7 @@ internal class LyricsStore(
 
 private const val LYRICS_SUFFIX = ".lrc"
 private const val TEMPORARY_SUFFIX = ".tmp"
+private const val ADJUSTMENT_SUFFIX = ".adjustment"
+private const val MAX_ADJUSTMENT_BYTES = 20
+private val CONTENT_REVISION = Regex("[0-9a-f]{64}")
+private val ADJUSTMENT_FILE = Regex("[1-9][0-9]*\\.[0-9a-f]{64}\\.adjustment")

@@ -26,6 +26,10 @@ interface LibraryCatalog : Closeable {
 
     suspend fun addFolder(treeUri: Uri)
 
+    /** Restores only the selected existing source; a different folder is never a replacement. */
+    suspend fun renewFolder(sourceId: String, selectedTreeUri: Uri): FolderGrantRenewalResult =
+        FolderGrantRenewalResult.UNSUPPORTED
+
     suspend fun removeFolder(sourceId: String)
 
     fun pause()
@@ -134,6 +138,30 @@ internal class AndroidLibraryCatalog(
                 }
             }
             throw failure
+        }
+    }
+
+    override suspend fun renewFolder(sourceId: String, selectedTreeUri: Uri): FolderGrantRenewalResult {
+        if (LibrarySourceId.forTree(selectedTreeUri.toString()) != sourceId) return FolderGrantRenewalResult.WRONG_FOLDER
+        // Removal takes the same process-wide gate. Check the source and take its grant together.
+        return betweenScans {
+            serialized {
+                val source = store.readSources().firstOrNull { it.id == sourceId }
+                    ?: return@serialized FolderGrantRenewalResult.SOURCE_NOT_FOUND
+                if (source.kind != LibrarySourceKind.FOLDER || source.treeUri != selectedTreeUri.toString()) {
+                    return@serialized FolderGrantRenewalResult.WRONG_FOLDER
+                }
+                if (selectedTreeUri !in folderGrants()) {
+                    try {
+                        contentResolver.takePersistableUriPermission(selectedTreeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    } catch (_: SecurityException) {
+                        return@serialized FolderGrantRenewalResult.PERMISSION_DENIED
+                    }
+                }
+                // The existing source owns this grant even if a later catalog write fails.
+                store.upsertFolderSource(source.treeUri, source.displayName)
+                FolderGrantRenewalResult.RENEWED
+            }
         }
     }
 
@@ -256,16 +284,20 @@ internal class AndroidLibraryCatalog(
         var hadFailure = false
         var scanPaused = false
         var yielded = false
+        val sourceResults = mutableListOf<LibrarySourceScanResult>()
         if (includeDeviceLibrary) {
-            when (scanDeviceLibrary(onProgress)) {
-                SourceScanOutcome.FAILED,
-                SourceScanOutcome.INTERRUPTED,
+            val source = store.ensureDeviceSource()
+            val report = SourceScanReport(source)
+            val outcome = scanDeviceLibrary(source, report, onProgress)
+            sourceResults += report.result(outcome)
+            when (outcome) {
+                LibrarySourceScanStatus.FAILED,
+                LibrarySourceScanStatus.INTERRUPTED,
                 -> hadFailure = true
+                LibrarySourceScanStatus.PAUSED -> scanPaused = source.scanState != LibraryScanState.PAUSED
                 // A rebuilt catalog has no sources left to scan; the Library starts a full scan of it.
-                SourceScanOutcome.PAUSED,
-                SourceScanOutcome.REBUILT,
-                -> scanPaused = true
-                SourceScanOutcome.YIELDED -> {
+                LibrarySourceScanStatus.REBUILT -> scanPaused = true
+                LibrarySourceScanStatus.YIELDED -> {
                     scanPaused = true
                     yielded = true
                 }
@@ -277,17 +309,28 @@ internal class AndroidLibraryCatalog(
             val availableTreeUris = readableTreeUris()
             store.readSources()
                 .asSequence()
-                .filter { it.kind == LibrarySourceKind.FOLDER && it.treeUri in availableTreeUris }
+                .filter { it.kind == LibrarySourceKind.FOLDER }
                 .forEach { source ->
-                    if (scanPaused || source.scanState == LibraryScanState.PAUSED) return@forEach
-                    when (scanTreeSource(source, onProgress)) {
-                        SourceScanOutcome.FAILED,
-                        SourceScanOutcome.INTERRUPTED,
+                    if (scanPaused) return@forEach
+                    val report = SourceScanReport(source)
+                    if (source.treeUri !in availableTreeUris) {
+                        sourceResults += report.result(LibrarySourceScanStatus.UNAVAILABLE, LibraryScanFailureReason.PERMISSION_REQUIRED)
+                        return@forEach
+                    }
+                    if (source.scanState == LibraryScanState.PAUSED) {
+                        sourceResults += report.result(LibrarySourceScanStatus.PAUSED)
+                        return@forEach
+                    }
+                    val outcome = scanTreeSource(source, report, onProgress)
+                    sourceResults += report.result(outcome)
+                    when (outcome) {
+                        LibrarySourceScanStatus.FAILED,
+                        LibrarySourceScanStatus.INTERRUPTED,
                         -> hadFailure = true
-                        SourceScanOutcome.PAUSED,
-                        SourceScanOutcome.REBUILT,
+                        LibrarySourceScanStatus.PAUSED,
+                        LibrarySourceScanStatus.REBUILT,
                         -> scanPaused = true
-                        SourceScanOutcome.YIELDED -> {
+                        LibrarySourceScanStatus.YIELDED -> {
                             scanPaused = true
                             yielded = true
                         }
@@ -300,6 +343,7 @@ internal class AndroidLibraryCatalog(
             snapshot = serialized { snapshotInternal(includeDeviceLibrary) },
             hadFailure = hadFailure,
             yieldedToEdit = yielded,
+            sourceResults = sourceResults,
         )
     }
 
@@ -322,14 +366,21 @@ internal class AndroidLibraryCatalog(
     }
 
     private suspend fun scanDeviceLibrary(
+        source: StoredLibrarySource,
+        report: SourceScanReport,
         onProgress: suspend (LibraryScanProgress) -> Unit,
-    ): SourceScanOutcome = try {
-        val source = store.ensureDeviceSource()
-        if (source.scanState == LibraryScanState.PAUSED) return SourceScanOutcome.SKIPPED
+    ): LibrarySourceScanStatus = try {
+        if (source.scanState == LibraryScanState.PAUSED) return LibrarySourceScanStatus.PAUSED
         val scanScope = mediaStore.currentScanScope()
+        // A stale refresh request can outlive the runtime grant. Android 10+ would otherwise
+        // report only this app's files and make the missing shared-library rows look deleted.
+        if (!scanScope.hasMusicLibraryPermission) {
+            report.failureReason = LibraryScanFailureReason.PERMISSION_REQUIRED
+            return LibrarySourceScanStatus.UNAVAILABLE
+        }
         if (scanScope.generation != null && source.generation == scanScope.generation) {
             store.finishSourceScan(source.id, generation = scanScope.generation)
-            return SourceScanOutcome.COMPLETED
+            return LibrarySourceScanStatus.UNCHANGED
         }
         if (
             mediaStoreScanUsesConcreteVolumes(scanScope) &&
@@ -342,13 +393,7 @@ internal class AndroidLibraryCatalog(
             pathIdentifiesFile = mediaStore.pathIdentifiesFile,
             volumesWithStableIds = mediaStoreVolumesWithStableIds(source.generation, scanScope),
         )
-        onProgress(
-            LibraryScanProgress(
-                sourceId = source.id,
-                sourceName = source.displayName,
-                scannedTrackCount = 0,
-            ),
-        )
+        onProgress(report.progress())
         val iteration = mediaStore.scanTracks(
             scope = scanScope,
             shouldPause = scanGate::isPaused,
@@ -356,73 +401,70 @@ internal class AndroidLibraryCatalog(
             if (scan.firstOffer(candidate) && !store.markSeenIfUnchanged(scan, candidate)) {
                 store.upsertMediaStoreTrack(scan, metadataReader.enrich(candidate))
             }
-        }
-        // After a rebuild the scan's rows belong to the old catalog; finishIteration ends it (#165 U5).
-        if (iteration.completed && !scanGate.catalogRebuilt()) {
-            val finalScope = mediaStore.currentScanScope()
-            if (!mediaStoreScanCanCommit(iteration, scanScope, finalScope)) {
-                store.markSourceInterrupted(source.id)
-                return SourceScanOutcome.INTERRUPTED
-            }
-            // Before Android 11 there is no generation to show that nothing changed.
-            if (finalScope.generation == null || finalScope.generation != scanScope.generation) {
-                store.keepTracksStillListed(scan, mediaStore.listFiles(scanScope))
-            }
+            report.checkedTrack()
+            if (report.shouldPublish()) onProgress(report.progress())
         }
         finishIteration(
             source = source,
             session = scan.session,
             iteration = iteration,
             generation = scanScope.generation,
-            scannedMediaStoreVolumes = scanScope.volumeNames,
+            mediaStoreScan = scan,
+            mediaStoreScope = scanScope,
+            report = report,
             onProgress = onProgress,
         )
     } catch (cancelled: CancellationException) {
         store.markSourceInterrupted(LibrarySourceId.DEVICE)
         throw cancelled
-    } catch (_: Exception) {
+    } catch (failure: Exception) {
+        report.failureReason = scanFailureReason(failure)
         store.markSourceFailed(LibrarySourceId.DEVICE)
-        SourceScanOutcome.FAILED
+        LibrarySourceScanStatus.FAILED
     }
 
     private suspend fun scanTreeSource(
         source: StoredLibrarySource,
+        report: SourceScanReport,
         onProgress: suspend (LibraryScanProgress) -> Unit,
-    ): SourceScanOutcome = try {
-        val treeUri = source.treeUri?.let(Uri::parse) ?: return SourceScanOutcome.FAILED
+    ): LibrarySourceScanStatus = try {
+        val treeUri = source.treeUri?.let(Uri::parse) ?: return LibrarySourceScanStatus.FAILED
         // A folder added back while its provider could not be read has a stand-in name (#191 D20).
         val displayName = treeScanner.readDisplayName(treeUri)
             ?.also { name -> if (name != source.displayName) store.renameFolderSource(source.id, name) }
             ?: source.displayName
         val session = store.beginSourceScan(source.id)
-        onProgress(
-            LibraryScanProgress(
-                sourceId = source.id,
-                sourceName = displayName,
-                scannedTrackCount = 0,
-            ),
-        )
+        report.sourceName = displayName
+        onProgress(report.progress())
         val iteration = treeScanner.scan(
             treeUri = treeUri,
             shouldPause = scanGate::isPaused,
+            onSkippedAudio = { format ->
+                report.skippedAudio(format)
+                if (report.shouldPublish()) onProgress(report.progress())
+            },
         ) { document ->
             if (!store.markSeenIfFingerprintMatches(session, document.documentId, document.fingerprint)) {
                 store.upsertTrack(session, metadataReader.enrich(document.toTrackCandidate()))
             }
+            report.checkedTrack()
+            if (report.shouldPublish()) onProgress(report.progress())
         }
         finishIteration(
             source = source.copy(displayName = displayName),
             session = session,
             iteration = iteration,
             generation = null,
+            report = report,
             onProgress = onProgress,
         )
     } catch (cancelled: CancellationException) {
         store.markSourceInterrupted(source.id)
         throw cancelled
-    } catch (_: Exception) {
+    } catch (failure: Exception) {
+        report.failureReason = scanFailureReason(failure)
         store.markSourceFailed(source.id)
-        SourceScanOutcome.FAILED
+        LibrarySourceScanStatus.FAILED
     }
 
     private suspend fun finishIteration(
@@ -430,46 +472,89 @@ internal class AndroidLibraryCatalog(
         session: SourceScanSession,
         iteration: ScanIterationResult,
         generation: String?,
-        scannedMediaStoreVolumes: Collection<String>? = null,
+        mediaStoreScan: MediaStoreScanSession? = null,
+        mediaStoreScope: MediaStoreScanScope? = null,
+        report: SourceScanReport,
         onProgress: suspend (LibraryScanProgress) -> Unit,
-    ): SourceScanOutcome {
+    ): LibrarySourceScanStatus {
         // The session and the rows it saw belong to the catalog that was set aside (#165 U5).
-        if (scanGate.catalogRebuilt()) return SourceScanOutcome.REBUILT
-        if (!iteration.completed && !scanGate.pausedByUser()) {
-            // Stopped for an edit that waits for the catalog: not the user's pause, and not a failure.
-            store.markSourceYieldedToEdit(source.id)
-            return SourceScanOutcome.YIELDED
+        if (scanGate.catalogRebuilt()) return LibrarySourceScanStatus.REBUILT
+        if (!iteration.completed || scanGate.isPaused()) {
+            return stopBeforeCommit(source, report, LibraryScanStage.READING, onProgress)
         }
-        if (!iteration.completed) {
-            store.markSourcePaused(source.id)
-            onProgress(
-                LibraryScanProgress(
-                    sourceId = source.id,
-                    sourceName = source.displayName,
-                    scannedTrackCount = iteration.processedTrackCount,
-                    isPaused = true,
-                ),
-            )
-            return SourceScanOutcome.PAUSED
+        onProgress(report.progress(stage = LibraryScanStage.RECONCILING))
+        // Reporting can suspend while permissions, pause requests or the catalog itself change.
+        if (scanGate.catalogRebuilt()) return LibrarySourceScanStatus.REBUILT
+        if (source.kind == LibrarySourceKind.FOLDER && source.treeUri !in readableTreeUris()) {
+            store.markSourceInterrupted(source.id)
+            report.failureReason = LibraryScanFailureReason.PERMISSION_REQUIRED
+            return LibrarySourceScanStatus.UNAVAILABLE
         }
-        if (scannedMediaStoreVolumes == null) {
+        if (scanGate.isPaused()) {
+            return stopBeforeCommit(source, report, LibraryScanStage.RECONCILING, onProgress)
+        }
+        if (mediaStoreScope != null) {
+            var finalScope = mediaStore.currentScanScope()
+            if (mediaStoreScanCanCommit(iteration, mediaStoreScope, finalScope) &&
+                (finalScope.generation == null || finalScope.generation != mediaStoreScope.generation)
+            ) {
+                // A changing cursor may have skipped rows. Re-list after the observer, while the
+                // scan still owns this catalog, and keep those rows only within the same scope.
+                val listedFiles = mediaStore.listFiles(mediaStoreScope)
+                if (scanGate.catalogRebuilt()) return LibrarySourceScanStatus.REBUILT
+                finalScope = mediaStore.currentScanScope()
+                if (mediaStoreScanCanCommit(iteration, mediaStoreScope, finalScope)) {
+                    store.keepTracksStillListed(checkNotNull(mediaStoreScan), listedFiles)
+                }
+            }
+            if (!mediaStoreScanCanCommit(iteration, mediaStoreScope, finalScope)) {
+                store.markSourceInterrupted(source.id)
+                val permissionRevoked = mediaStoreScope.hasMusicLibraryPermission && !finalScope.hasMusicLibraryPermission
+                report.failureReason = if (permissionRevoked) LibraryScanFailureReason.PERMISSION_REQUIRED else LibraryScanFailureReason.SOURCE_CHANGED
+                return if (permissionRevoked) LibrarySourceScanStatus.UNAVAILABLE else LibrarySourceScanStatus.INTERRUPTED
+            }
+        }
+        // The re-list can suspend too; a pause, edit or catalog rebuild must still prevent pruning.
+        if (scanGate.catalogRebuilt()) return LibrarySourceScanStatus.REBUILT
+        if (scanGate.isPaused()) {
+            return stopBeforeCommit(source, report, LibraryScanStage.RECONCILING, onProgress)
+        }
+        if (mediaStoreScope == null) {
             store.completeSourceScan(session, generation)
         } else {
-            store.completeMediaStoreScan(session, generation, scannedMediaStoreVolumes)
+            store.completeMediaStoreScan(session, generation, mediaStoreScope.volumeNames)
         }
-        return SourceScanOutcome.COMPLETED
+        // The terminal result is returned by refresh. No observer runs after this commit: its
+        // failure/cancellation must not relabel a committed scan as failed or interrupted.
+        return LibrarySourceScanStatus.COMPLETED
+    }
+
+    private suspend fun stopBeforeCommit(
+        source: StoredLibrarySource,
+        report: SourceScanReport,
+        stage: LibraryScanStage,
+        onProgress: suspend (LibraryScanProgress) -> Unit,
+    ): LibrarySourceScanStatus {
+        if (!scanGate.pausedByUser()) {
+            store.markSourceYieldedToEdit(source.id)
+            return LibrarySourceScanStatus.YIELDED
+        }
+        store.markSourcePaused(source.id)
+        onProgress(report.progress(stage = stage, isPaused = true))
+        return LibrarySourceScanStatus.PAUSED
     }
 
     private fun snapshotInternal(includeDeviceLibrary: Boolean, readUnmatchedRecords: Boolean = true): LibraryCatalogSnapshot {
+        val deviceAvailable = includeDeviceLibrary && mediaStore.hasMusicLibraryPermission()
         val readableTreeUris = readableTreeUris()
-        val mountedMediaStoreVolumes = if (includeDeviceLibrary) {
+        val mountedMediaStoreVolumes = if (deviceAvailable) {
             mediaStore.currentVolumeNames()
         } else {
             emptyList()
         }
         val sources = store.readSources().map { source ->
             val available = when (source.kind) {
-                LibrarySourceKind.DEVICE -> includeDeviceLibrary
+                LibrarySourceKind.DEVICE -> deviceAvailable
                 LibrarySourceKind.FOLDER -> source.treeUri in readableTreeUris
             }
             LibrarySource(
@@ -486,12 +571,12 @@ internal class AndroidLibraryCatalog(
             .filter(LibrarySource::isAvailable)
             .map(LibrarySource::id)
             .toList()
-        val deviceTrackLocations = if (includeDeviceLibrary) {
+        val deviceTrackLocations = if (deviceAvailable) {
             store.readTrackContentUris(LibrarySourceId.DEVICE)
         } else {
             emptyMap()
         }
-        val displacedDeviceTrackIds = if (includeDeviceLibrary) {
+        val displacedDeviceTrackIds = if (deviceAvailable) {
             store.readDisplacedTrackIds()
         } else {
             emptySet()
@@ -612,18 +697,43 @@ internal class LibraryCatalogOperationGate {
     }
 }
 
-private enum class SourceScanOutcome {
-    COMPLETED,
-    PAUSED,
-    INTERRUPTED,
-    SKIPPED,
-    FAILED,
+internal fun scanFailureReason(failure: Exception): LibraryScanFailureReason = when (failure) {
+    is SecurityException -> LibraryScanFailureReason.PERMISSION_REQUIRED
+    is IncompleteLibraryProviderException -> LibraryScanFailureReason.PROVIDER_NOT_READY
+    else -> LibraryScanFailureReason.READ_FAILED
+}
 
-    /** The catalog was rebuilt after corruption during the scan, which stopped without writing more. */
-    REBUILT,
+internal class SourceScanReport(source: StoredLibrarySource) {
+    private val sourceId = source.id
+    var sourceName = source.displayName
+    private var checked = 0
+    private val skipped = linkedMapOf<UnsupportedAudioFormat, Int>()
+    var failureReason: LibraryScanFailureReason? = null
 
-    /** Stopped at its next row for an edit that waits for [AndroidLibraryCatalog]'s scan lock (#191 D17). */
-    YIELDED,
+    fun checkedTrack() { checked++ }
+
+    fun skippedAudio(format: UnsupportedAudioFormat) { skipped[format] = (skipped[format] ?: 0) + 1 }
+
+    // Publish a bounded batch, then the exact final count at the phase/terminal boundary.
+    fun shouldPublish(): Boolean {
+        val observed = checked + skipped.values.sum()
+        return observed > 0 && observed % PROGRESS_BATCH_SIZE == 0
+    }
+
+    fun progress(stage: LibraryScanStage = LibraryScanStage.READING, isPaused: Boolean = false) = LibraryScanProgress(
+        sourceId, sourceName, checked, isPaused, stage, skipped.toMap(),
+    )
+
+    fun result(outcome: LibrarySourceScanStatus, reason: LibraryScanFailureReason? = failureReason) = LibrarySourceScanResult(
+        sourceId = sourceId,
+        sourceName = sourceName,
+        status = outcome,
+        scannedTrackCount = checked,
+        skippedUnsupportedAudio = skipped.toMap(),
+        failureReason = reason ?: LibraryScanFailureReason.READ_FAILED.takeIf { outcome == LibrarySourceScanStatus.FAILED },
+    )
+
+    private companion object { const val PROGRESS_BATCH_SIZE = 32 }
 }
 
 /**

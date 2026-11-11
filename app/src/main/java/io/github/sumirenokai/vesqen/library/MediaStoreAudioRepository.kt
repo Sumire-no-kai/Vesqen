@@ -4,8 +4,10 @@ import android.Manifest
 import android.content.ContentUris
 import android.content.ContentResolver
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.MediaStore
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
@@ -25,6 +27,9 @@ internal class MediaStoreAudioRepository(
     private val context: Context,
     private val contentResolver: ContentResolver,
 ) {
+    fun hasMusicLibraryPermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, musicLibraryPermission) == PackageManager.PERMISSION_GRANTED
+
     /** Mounted volumes are also used to hide retained rows whose removable media is offline. */
     fun currentVolumeNames(): List<String> = mediaStoreScanVolumeNames(
         sdkInt = Build.VERSION.SDK_INT,
@@ -59,6 +64,7 @@ internal class MediaStoreAudioRepository(
             volumeNames = volumeNames,
             generation = versions?.let(::libraryScanGeneration),
             databaseVersions = versions?.associate { it.volumeName to it.databaseVersion },
+            hasMusicLibraryPermission = hasMusicLibraryPermission(),
         )
     }
 
@@ -153,7 +159,7 @@ internal class MediaStoreAudioRepository(
     suspend fun scanTracks(
         scope: MediaStoreScanScope,
         shouldPause: () -> Boolean,
-        onTrack: (LibraryTrackCandidate) -> Unit,
+        onTrack: suspend (LibraryTrackCandidate) -> Unit,
     ): ScanIterationResult {
         val scanContext = currentCoroutineContext()
         scanContext.ensureActive()
@@ -307,6 +313,8 @@ internal data class MediaStoreScanScope(
     val generation: String?,
     /** Each volume's MediaStore database version, which changes when MediaStore is rebuilt; null before Android 11. */
     val databaseVersions: Map<String, String>? = null,
+    /** Without this grant Android 10+ lists only app-owned audio, a different query scope. */
+    val hasMusicLibraryPermission: Boolean = true,
 )
 
 internal data class MediaStoreLegacyIdentity(
@@ -370,7 +378,8 @@ internal fun mediaStoreScanCanCommit(
     finalScope: MediaStoreScanScope,
 ): Boolean = iteration.completed &&
     initialScope.volumeNames == finalScope.volumeNames &&
-    initialScope.databaseVersions == finalScope.databaseVersions
+    initialScope.databaseVersions == finalScope.databaseVersions &&
+    initialScope.hasMusicLibraryPermission && finalScope.hasMusicLibraryPermission
 
 /**
  * The volumes whose MediaStore database is the one the last completed scan read, recorded in its

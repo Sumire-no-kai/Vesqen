@@ -137,10 +137,16 @@ data class PlaybackSnapshot(
     val outputVerification: OutputVerificationMatch? = null,
     /** Pause remains available during buffering or transient suppression of requested playback. */
     val showsPauseAction: Boolean = isPlaying,
+    /** Available only through the running service's private timer command. */
+    val canSetSleepTimer: Boolean = false,
+    val sleepTimer: SleepTimerState = SleepTimerState(),
 ) {
     init {
         require(isControllerReady || !canSetUsbOutputMode) {
             "A disconnected controller cannot expose the strict-output command"
+        }
+        require(isControllerReady || !canSetSleepTimer) {
+            "A disconnected controller cannot expose the sleep timer command"
         }
     }
 
