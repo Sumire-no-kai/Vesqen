@@ -22,12 +22,18 @@ import org.robolectric.annotation.Config
 class UsbAttachActivityTest {
     private val context = RuntimeEnvironment.getApplication()
 
+    private fun select(mode: UsbOutputMode) {
+        context.getSharedPreferences(UsbOutputCoordinator.PREFERENCES_NAME, Context.MODE_PRIVATE)
+            .edit().putString(UsbOutputCoordinator.MODE_KEY, mode.name).commit()
+        UsbAttachActivity.syncEnabled(context)
+    }
+
     @Test fun strictSelectionEnablesTheEntryAndSystemSelectionDisablesIt() {
         val component = ComponentName(context, UsbAttachActivity::class.java)
-        UsbAttachActivity.syncEnabled(context, UsbOutputMode.STRICT_BIT_PERFECT)
+        select(UsbOutputMode.STRICT_BIT_PERFECT)
         assertEquals(if (BuildConfig.DIRECT_USB_ENABLED) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
             else PackageManager.COMPONENT_ENABLED_STATE_DISABLED, context.packageManager.getComponentEnabledSetting(component))
-        UsbAttachActivity.syncEnabled(context, UsbOutputMode.SYSTEM)
+        select(UsbOutputMode.SYSTEM)
         assertEquals(PackageManager.COMPONENT_ENABLED_STATE_DISABLED, context.packageManager.getComponentEnabledSetting(component))
     }
 

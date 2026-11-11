@@ -1788,6 +1788,23 @@ class UsbOutputCoordinatorTest {
     }
 
     @Test
+    fun `a failed return keeps the USB entry aligned with the saved strict mode`() {
+        reachDirectActive()
+        direct.recoveryPending = true
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        idle()
+        assertStatus(UsbOutputPhase.FAILED, "direct_usb.usb_transfer_failed")
+        val preferences = context.getSharedPreferences(UsbOutputCoordinator.PREFERENCES_NAME, Context.MODE_PRIVATE)
+        assertEquals(UsbOutputMode.STRICT_BIT_PERFECT.name, preferences.getString(UsbOutputCoordinator.MODE_KEY, null))
+        val component = android.content.ComponentName(context, UsbAttachActivity::class.java)
+        assertEquals(
+            if (io.github.sumirenokai.vesqen.BuildConfig.DIRECT_USB_ENABLED) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            context.packageManager.getComponentEnabledSetting(component),
+        )
+    }
+
+    @Test
     fun `the attachment activity signal rechecks permission without reviving a paused queue`() {
         start(direct = direct)
         loadTrack()
