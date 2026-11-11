@@ -498,6 +498,7 @@ private fun ChainEmptyScreen(
 internal fun outputClaimTitle(playback: PlaybackSnapshot): String {
     val status = playback.usbOutputStatus
     val verification = playback.outputVerification
+    if (status.decisionCode == "direct_usb.interrupted") return stringResource(R.string.usb_output_interrupted)
     if (status.decisionCode == "direct_usb.recovering") return stringResource(R.string.usb_recovery_in_progress)
     return if (verification != null) {
         stringResource(R.string.chain_verified_title)

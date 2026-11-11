@@ -227,6 +227,27 @@ class DirectUsbSessionTest {
         assertTrue(markers.isOccupied())
     }
 
+    @Test
+    fun `a removed device is identified as detached even when permission has disappeared`() {
+        takeOver()
+        link.permissionGranted = false
+        link.connected = false
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertEquals(Reason.DEVICE_DISCONNECTED, failures.single().reason)
+    }
+
+    @Test
+    fun `an intentional release keeps the last media position while focus is held elsewhere`() {
+        takeOver()
+        val output = checkNotNull(session.openOutput())
+        val before = checkNotNull(output.readStats())
+        release()
+        assertEquals(before.epoch, output.readStats()?.epoch)
+        assertEquals(before.mediaFramesProcessed, output.readStats()?.mediaFramesProcessed)
+        assertEquals(0, output.write(ByteBuffer.allocateDirect(4), 0, 4))
+        assertNull(output.failure)
+    }
+
     @After
     fun stopControl() {
         control.shutdownNow()
@@ -808,6 +829,7 @@ class DirectUsbSessionTest {
                 check(!probeUnavailable) { "USB manager unavailable" }
                 return field
             }
+        @Volatile override var connected = true
         override val fileDescriptor = 42
 
         override fun claim(interfaceNumber: Int): Boolean {

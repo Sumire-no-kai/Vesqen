@@ -126,6 +126,7 @@ class DirectUsbSession(
     private var newestEpochTaken = false
     private var retiredAtNanos: Long? = null
     @Volatile private var finalTotals = UsbStreamTotals.NONE
+    @Volatile private var finalStats: UsbStreamStats? = null
     private val releaseCallbacks = mutableListOf<(CleanupRecord) -> Unit>()
 
     fun totals(): UsbStreamTotals = stream?.readStats()?.sessionTotals ?: finalTotals
@@ -339,7 +340,8 @@ class DirectUsbSession(
                 }
                 return
             }
-            finalTotals = current.readStats()?.sessionTotals ?: UsbStreamTotals.NONE
+            finalStats = current.readStats()
+            finalTotals = finalStats?.sessionTotals ?: UsbStreamTotals.NONE
             stream = null
             cleanupSteps += CleanupStep("stream reclaimed", true)
         }
@@ -416,7 +418,7 @@ class DirectUsbSession(
             if (!released) stream?.markEndOfStream(epoch)
         }
 
-        override fun readStats(): UsbStreamStats? = stream?.readStats()?.takeIf { it.epoch == epoch }
+        override fun readStats(): UsbStreamStats? = (stream?.readStats() ?: finalStats)?.takeIf { it.epoch == epoch }
 
         override val failure: DirectUsbFailure?
             get() = when (val current = state) {

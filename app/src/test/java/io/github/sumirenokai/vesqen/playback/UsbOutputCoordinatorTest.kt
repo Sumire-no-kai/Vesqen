@@ -18,6 +18,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import androidx.core.content.edit
+import androidx.media3.common.Player
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -277,6 +278,229 @@ class UsbOutputCoordinatorTest {
         assertStatus(UsbOutputPhase.FAILED, "direct_usb.usb_permission_revoked")
         assertFalse(player.playWhenReady)
         assertTrue("release" in direct.calls)
+    }
+
+    @Test
+    fun `temporary focus loss gives back the DAC and waits through returning Android routes`() {
+        reachDirectActive()
+        direct.deferTakeover = true
+        coordinator.onPlaybackSuppressionReasonChanged(Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS)
+        assertEquals(1, direct.calls.count { it == "release" })
+        val done = checkNotNull(direct.pendingRelease)
+        shadowOf(audioManager).addOutputDevice(audioDevice(id = 12), true)
+        idle()
+        done(true)
+        idle()
+        assertStatus(UsbOutputPhase.APPLYING, "direct_usb.interrupted")
+        assertEquals(0, direct.calls.count { it == "takeOver" })
+
+        direct.deferTakeover = false
+        coordinator.onPlaybackSuppressionReasonChanged(Player.PLAYBACK_SUPPRESSION_REASON_NONE)
+        idle()
+        assertEquals(1, direct.calls.count { it == "takeOver" })
+        assertTrue(player.playWhenReady)
+    }
+
+    @Test
+    fun `focus returning before release cannot start another takeover early`() {
+        reachDirectActive()
+        direct.deferTakeover = true
+        coordinator.onPlaybackSuppressionReasonChanged(Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS)
+        coordinator.onPlaybackSuppressionReasonChanged(Player.PLAYBACK_SUPPRESSION_REASON_NONE)
+        idle()
+        assertEquals(0, direct.calls.count { it == "takeOver" })
+        direct.deferTakeover = false
+        checkNotNull(direct.pendingRelease)(true)
+        idle()
+        assertEquals(1, direct.calls.count { it == "takeOver" })
+    }
+
+    @Test
+    fun `a call and focus loss must both finish before the DAC is reclaimed`() {
+        reachDirectActive()
+        coordinator.onCommunicationChanged(true)
+        coordinator.onPlaybackSuppressionReasonChanged(Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS)
+        coordinator.onCommunicationChanged(false)
+        idle()
+        assertEquals(0, direct.calls.count { it == "takeOver" })
+        coordinator.onPlaybackSuppressionReasonChanged(Player.PLAYBACK_SUPPRESSION_REASON_NONE)
+        idle()
+        assertEquals(1, direct.calls.count { it == "takeOver" })
+    }
+
+    @Test
+    fun `pausing during a call cancels the automatic return and late routes cannot revive it`() {
+        reachDirectActive()
+        coordinator.onCommunicationChanged(true)
+        player.pause()
+        coordinator.onCommunicationChanged(false)
+        shadowOf(audioManager).addOutputDevice(audioDevice(id = 12), true)
+        idle()
+        assertFalse(player.playWhenReady)
+        assertEquals(0, direct.calls.count { it == "takeOver" })
+    }
+
+    @Test
+    fun `switching to system during a call cancels the pending strict resume`() {
+        reachDirectActive()
+        coordinator.onCommunicationChanged(true)
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        coordinator.onCommunicationChanged(false)
+        idle()
+        assertStatus(UsbOutputPhase.SYSTEM, "system_audio_route")
+        assertFalse(player.playWhenReady)
+        assertEquals(0, direct.calls.count { it == "takeOver" })
+    }
+
+    @Test
+    fun `a mode change while the DAC is returning cannot play through the speaker during a call`() {
+        reachDirectActive()
+        direct.deferTakeover = true
+        coordinator.onCommunicationChanged(true)
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        checkNotNull(direct.pendingRelease)(true)
+        idle()
+        assertStatus(UsbOutputPhase.SYSTEM, "system_audio_route")
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `stopping during a call cancels resume even if a route comes back`() {
+        reachDirectActive()
+        coordinator.onCommunicationChanged(true)
+        player.stop()
+        shadowOf(audioManager).addOutputDevice(audioDevice(id = 12), true)
+        idle()
+        coordinator.onCommunicationChanged(false)
+        idle()
+        assertFalse("takeOver" in direct.calls)
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `a synchronous release failure during a call remains visible`() {
+        reachDirectActive()
+        direct.recoveryPending = true
+        coordinator.onCommunicationChanged(true)
+        idle()
+        assertStatus(UsbOutputPhase.FAILED, "direct_usb.usb_transfer_failed")
+    }
+
+    @Test
+    fun `permanent focus loss cancels the outstanding Play in a delayed takeover`() {
+        beginHostOnlyTakeover()
+        val stale = checkNotNull(direct.pendingTakeover)
+        direct.calls.clear()
+        coordinator.onPlayWhenReadyChanged(false, Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS)
+        direct.deferTakeover = false
+        checkNotNull(direct.pendingRelease)(true)
+        stale(null)
+        idle()
+        assertFalse("takeOver" in direct.calls)
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `closing the service during a call cancels callbacks that would resume playback`() {
+        reachDirectActive()
+        coordinator.onCommunicationChanged(true)
+        coordinator.close()
+        playerCalls.clear()
+        coordinator.onCommunicationChanged(false)
+        coordinator.onPlaybackSuppressionReasonChanged(Player.PLAYBACK_SUPPRESSION_REASON_NONE)
+        idle()
+        assertFalse("prepare" in playerCalls || "play" in playerCalls)
+    }
+
+    @Test
+    fun `an existing communication mode blocks takeover until it returns to normal`() {
+        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        connect(dac)
+        start(direct = direct)
+        loadTrack()
+        requestStrict()
+        player.play()
+        idle()
+        assertFalse("takeOver" in direct.calls)
+        assertStatus(UsbOutputPhase.APPLYING, "direct_usb.interrupted")
+        audioManager.mode = AudioManager.MODE_NORMAL
+        idle()
+        assertTrue("takeOver" in direct.calls)
+        assertTrue(player.playWhenReady)
+    }
+
+    @Test
+    fun `permanent focus loss releases the DAC without automatic playback`() {
+        reachDirectActive()
+        player.pause()
+        idle()
+        coordinator.onPlayWhenReadyChanged(false, Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS)
+        idle()
+        assertTrue("release" in direct.calls)
+        assertFalse(player.playWhenReady)
+        assertFalse("takeOver" in direct.calls)
+    }
+
+    @Test
+    fun `a real Media3 permanent loss returns the device and a route notification cannot resume it`() {
+        player.setAudioAttributes(
+            androidx.media3.common.AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(),
+            true,
+        )
+        reachDirectActive()
+        drainPlaybackCommands()
+        val focus = checkNotNull(shadowOf(audioManager).lastAudioFocusRequest)
+        focus.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS)
+        drainPlaybackCommands()
+        shadowOf(audioManager).addOutputDevice(audioDevice(id = 12), true)
+        drainPlaybackCommands()
+        assertTrue("release" in direct.calls)
+        assertFalse("takeOver" in direct.calls)
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `clearing the queue during an interruption cancels resume for the next queue`() {
+        reachDirectActive()
+        coordinator.onCommunicationChanged(true)
+        player.clearMediaItems()
+        player.setMediaItem(mediaItem(mediaId = "replacement"))
+        idle()
+        coordinator.onCommunicationChanged(false)
+        idle()
+        assertFalse("takeOver" in direct.calls)
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `a real Media3 transient focus callback keeps its focus request until gain`() {
+        realPlayer.setAudioAttributes(
+            androidx.media3.common.AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(),
+            true,
+        )
+        reachDirectActive()
+        drainPlaybackCommands()
+        val focus = checkNotNull(shadowOf(audioManager).lastAudioFocusRequest)
+        // Media3 reuses the platform request after the initial stop/prepare handoff. Reset only
+        // the shadow's observation so an abandonment during this interruption can be detected.
+        ReflectionHelpers.setField(shadowOf(audioManager), "lastAbandonedAudioFocusRequest", null)
+        focus.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)
+        drainPlaybackCommands()
+        assertTrue("release" in direct.calls)
+        assertFalse("stop" in playerCalls)
+        assertNull(shadowOf(audioManager).lastAbandonedAudioFocusRequest)
+        focus.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_GAIN)
+        drainPlaybackCommands()
+        assertTrue("takeOver" in direct.calls)
+    }
+
+    private fun drainPlaybackCommands() {
+        val done = java.util.concurrent.CountDownLatch(1)
+        Handler(realPlayer.playbackLooper).post { done.countDown() }
+        assertTrue(done.await(2, TimeUnit.SECONDS))
+        idle()
     }
 
     // System output

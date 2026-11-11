@@ -117,6 +117,13 @@ internal class UsbOutputCoordinator(
     private var returnTarget: UsbOutputMode? = null
     @Volatile private var recoveryInProgress = false
     private var recoveryTarget: UsbOutputMode? = null
+    private var focusSuppressed = false
+    private var communicationActive = false
+    private var interrupted = false
+    private var resumeAfterInterruption = false
+    private val communicationMonitor = directRoute?.let {
+        UsbCommunicationMonitor(audioManager, mainHandler, ::onCommunicationChanged)
+    }
     private var resumeAfterRecovery = false
 
     /**
@@ -228,14 +235,26 @@ internal class UsbOutputCoordinator(
             return
         }
         if (closed) return
+        if (requestedMode == UsbOutputMode.SYSTEM) {
+            if (interrupted) cancelInterruptedPlayback()
+            interrupted = false
+            resumeAfterInterruption = false
+            communicationMonitor?.setEnabled(false)
+        }
         if (recoveryInProgress) {
-            synchronized(lock) { recoveryTarget = requestedMode; configurationOrigin = UsbOutputFailureOrigin.USER_MODE_CHANGE }
+            synchronized(lock) {
+                recoveryTarget = requestedMode
+                configurationOrigin = UsbOutputFailureOrigin.USER_MODE_CHANGE
+            }
             preferences.edit { putString(MODE_KEY, requestedMode.name) }
             return
         }
         if (returnTarget == null && directRoute?.recoveryPending == true && !directPath && directRoute.streaming == false &&
             (requestedMode != UsbOutputMode.SYSTEM || currentMode() != UsbOutputMode.SYSTEM)) {
-            synchronized(lock) { mode = requestedMode; recoveryTarget = requestedMode }
+            synchronized(lock) {
+                mode = requestedMode
+                recoveryTarget = requestedMode
+            }
             preferences.edit { putString(MODE_KEY, requestedMode.name) }
             if (recoverBeforePlayback(UsbOutputFailureOrigin.USER_MODE_CHANGE)) return
         }
@@ -279,6 +298,12 @@ internal class UsbOutputCoordinator(
             directOutputActive = false
         }
         updateSource(mediaItem)
+        if (mediaItem == null) {
+            if (interrupted) cancelInterruptedPlayback()
+            resumeAfterInterruption = false
+            resumeAfterConfiguration = false
+            resumeAfterRecovery = false
+        }
         if (recoveryInProgress || returnTarget != null) return
         // The own output checks every item where its PCM begins (#282) and keeps the DAC between
         // items, so a transition rebuilds nothing; the status only takes the new item's source.
@@ -315,6 +340,18 @@ internal class UsbOutputCoordinator(
     }
 
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+        if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS &&
+            currentMode() == UsbOutputMode.STRICT_BIT_PERFECT && (directPath || interrupted)) {
+            resumeAfterConfiguration = false
+            resumeAfterInterruption = false
+            interruptDirectOutput(resume = false)
+            return
+        }
+        if (interrupted) {
+            resumeAfterInterruption = playWhenReady
+            resumeAfterConfiguration = playWhenReady
+            return
+        }
         if (recoveryInProgress) {
             resumeAfterRecovery = playWhenReady
             if (playWhenReady) player?.stop()
@@ -392,6 +429,59 @@ internal class UsbOutputCoordinator(
         }
     }
 
+    override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) {
+        focusSuppressed = playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS
+        reconcileInterruption()
+    }
+
+    /** Main-thread audio-mode adapter seam, also used to exercise overlapping call/focus events. */
+    internal fun onCommunicationChanged(active: Boolean) {
+        if (closed) return
+        communicationActive = active
+        reconcileInterruption()
+    }
+
+    private fun reconcileInterruption() {
+        if (closed || currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
+        if (focusSuppressed || communicationActive) {
+            if (directPath || interrupted) interruptDirectOutput()
+        } else if (interrupted) {
+            val resume = resumeAfterInterruption
+            if (returnTarget != null) {
+                resumeAfterConfiguration = resume
+                return
+            }
+            interrupted = false
+            resumeAfterInterruption = false
+            if (resume) {
+                scheduleReconfigure(resume = true, origin = UsbOutputFailureOrigin.ROUTE_CHANGE)
+            } else {
+                publishDirect(UsbOutputPhase.AVAILABLE, "direct_usb.available")
+            }
+        }
+    }
+
+    private fun cancelInterruptedPlayback() {
+        resumeAfterInterruption = false
+        resumeAfterConfiguration = false
+        // stop() and an empty timeline can leave Media3's playWhenReady set.
+        if (player?.playWhenReady == true) player?.pause()
+    }
+
+    private fun interruptDirectOutput(resume: Boolean = player?.playWhenReady == true || resumeAfterConfiguration) {
+        val route = directRoute ?: return
+        if (!interrupted) {
+            interrupted = true
+            resumeAfterInterruption = resume
+        }
+        if (returnTarget != null || recoveryInProgress) return
+        if (directPath || route.streaming) {
+            returnDirect(route, UsbOutputMode.STRICT_BIT_PERFECT, resumeAfterInterruption, UsbOutputFailureOrigin.ROUTE_CHANGE, stopPlayer = false)
+        } else {
+            publishDirect(UsbOutputPhase.APPLYING, "direct_usb.interrupted")
+        }
+    }
+
     override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
         if (reason == Player.DISCONTINUITY_REASON_SEEK || reason == Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT ||
             reason == Player.DISCONTINUITY_REASON_REMOVE) {
@@ -403,8 +493,9 @@ internal class UsbOutputCoordinator(
     }
 
     override fun onPlaybackStateChanged(playbackState: Int) {
-        if (directOutputOpened && playbackState == player?.playbackState &&
-            (playbackState == Player.STATE_IDLE || playbackState == Player.STATE_ENDED)) {
+        if (playbackState != player?.playbackState || (playbackState != Player.STATE_IDLE && playbackState != Player.STATE_ENDED)) return
+        if (interrupted) cancelInterruptedPlayback()
+        if (directOutputOpened) {
             directRoute?.invalidateOutput()
             directOutputActive = false
             publishDirectActiveIfPlaying()
@@ -438,6 +529,8 @@ internal class UsbOutputCoordinator(
             resumeAfterRecovery = resumeAfterRecovery || resume
             return
         }
+        // Only an explicit player command changes the saved intent during an interruption.
+        if (interrupted && (focusSuppressed || communicationActive)) return
         if (returnTarget != null) return
         val activePlayer = player
         val wasPlaying = activePlayer?.playWhenReady == true
@@ -499,7 +592,7 @@ internal class UsbOutputCoordinator(
     }
 
     private fun reconfigureStrictOutput() {
-        if (closed || recoveryInProgress || returnTarget != null || currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
+        if (closed || recoveryInProgress || interrupted || returnTarget != null || currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
         val generation = synchronized(lock) { configurationGeneration }
         val activePlayer = player ?: return
         updateSource(activePlayer.currentMediaItem)
@@ -1174,6 +1267,9 @@ internal class UsbOutputCoordinator(
             state
         } ?: return
         returnTarget = null
+        interrupted = false
+        resumeAfterInterruption = false
+        communicationMonitor?.setEnabled(false)
         directRoute?.release()
         detachRoutingListener()
         if (attemptMixerCleanup) synchronized(mixerMutationLock) {
@@ -1355,7 +1451,13 @@ internal class UsbOutputCoordinator(
         returnDirect(route, UsbOutputMode.STRICT_BIT_PERFECT, resume, UsbOutputFailureOrigin.ROUTE_CHANGE)
     }
 
-    private fun returnDirect(route: DirectUsbRoute, target: UsbOutputMode, resume: Boolean, origin: UsbOutputFailureOrigin) {
+    private fun returnDirect(
+        route: DirectUsbRoute,
+        target: UsbOutputMode,
+        resume: Boolean,
+        origin: UsbOutputFailureOrigin,
+        stopPlayer: Boolean = true,
+    ) {
         if (returnTarget != null) return
         returnTarget = target
         val generation = synchronized(lock) {
@@ -1367,17 +1469,30 @@ internal class UsbOutputCoordinator(
             configurationOrigin = origin
             ++configurationGeneration
         }
-        player?.stop()
-        publishReturning(target)
+        // stop() abandons Media3's focus request, so an interruption keeps the renderer
+        // suppressed or backpressured until the existing focus owner can report a gain.
+        if (stopPlayer) {
+            player?.stop()
+            publishReturning(target)
+        } else {
+            publishDirect(UsbOutputPhase.APPLYING, "direct_usb.interrupted")
+        }
         route.release { released ->
             if (!isGenerationCurrent(generation)) return@release
             val selected = returnTarget ?: return@release
             returnTarget = null
             if (!released || route.recoveryPending) {
                 synchronized(lock) { awaitingReattach = true }
-                failClosed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed", origin = configurationOrigin)
+                val code = if (route.lastCleanup?.firstFailure?.name == "volume restored") {
+                    "direct_usb.volume_control_failed"
+                } else {
+                    "direct_usb.usb_transfer_failed"
+                }
+                failClosed(UsbOutputFailure.PLATFORM_ERROR, code, origin = configurationOrigin)
             } else if (selected == UsbOutputMode.SYSTEM) {
                 completeSystemOutput(rebuild = true, resume = resumeAfterConfiguration)
+            } else if (interrupted) {
+                reconcileInterruption()
             } else {
                 scheduleReconfigure(resume = resumeAfterConfiguration, origin = configurationOrigin)
             }
@@ -1390,6 +1505,11 @@ internal class UsbOutputCoordinator(
     }
 
     private fun reconfigureDirectOutput(route: DirectUsbRoute, generation: Long, activePlayer: ExoPlayer) {
+        communicationMonitor?.setEnabled(true)
+        if (focusSuppressed || communicationActive) {
+            interruptDirectOutput()
+            return
+        }
         if (!appContext.packageManager.hasSystemFeature(PackageManager.FEATURE_USB_HOST)) {
             failClosed(UsbOutputFailure.USB_HOST_UNAVAILABLE, "direct_usb.usb_host_unavailable", expectedGeneration = generation)
             return
@@ -1536,7 +1656,7 @@ internal class UsbOutputCoordinator(
         val activePlayer = player ?: return
         val timeline = activePlayer.currentTimeline
         val period = if (timeline.isEmpty) null else timeline.getUidOfPeriod(activePlayer.currentPeriodIndex)
-        val active = directOutputOpened && directOutputActive && directOutputPeriod == period &&
+        val active = !interrupted && directOutputOpened && directOutputActive && directOutputPeriod == period &&
             activePlayer.playWhenReady && activePlayer.playbackState != Player.STATE_IDLE && activePlayer.playbackState != Player.STATE_ENDED
         publishDirect(
             if (active) UsbOutputPhase.ACTIVE else UsbOutputPhase.APPLYING,
@@ -1663,6 +1783,7 @@ internal class UsbOutputCoordinator(
             resumeAfterConfiguration = false
             state
         }
+        communicationMonitor?.close()
         runCatching { audioManager.unregisterAudioDeviceCallback(deviceCallback) }
         if (directRoute != null) runCatching { appContext.unregisterReceiver(usbAttachReceiver) }
         directRoute?.release()
