@@ -126,6 +126,14 @@ internal class UsbOutputCoordinator(
         UsbCommunicationMonitor(audioManager, mainHandler, ::onCommunicationChanged)
     }
     private var resumeAfterRecovery = false
+    private var returnedAfterPause = false
+    private val pauseReleaseMonitor = directRoute?.let {
+        UsbPauseReleaseMonitor(appContext, mainHandler) {
+            if (!closed && directPath && !interrupted && returnTarget == null && player?.playWhenReady == false) {
+                returnDirect(it, UsbOutputMode.STRICT_BIT_PERFECT, resume = false, UsbOutputFailureOrigin.USER_PLAYBACK, pausedReturn = true)
+            }
+        }
+    }
 
     /**
      * Set when the own path gave the device back after a failure. Android then shows the USB route
@@ -155,7 +163,7 @@ internal class UsbOutputCoordinator(
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
             if (currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
             val usbDevices = addedDevices.filter(AudioDeviceInfo::isUsbAudioOutput)
-            if (usbDevices.isEmpty() || synchronized(lock) { awaitingReattach } || returnTarget != null) return
+            if (usbDevices.isEmpty() || synchronized(lock) { awaitingReattach } || returnTarget != null || returnedAfterPause) return
             if (synchronized(lock) { directPath }) {
                 // Once playback owns the DAC, later route events do not interrupt it. Before
                 // that point a newly visible official mixer still has priority (#298).
@@ -328,6 +336,10 @@ internal class UsbOutputCoordinator(
             resumeAfterRecovery = false
         }
         if (recoveryInProgress || returnTarget != null) return
+        if (returnedAfterPause && player?.playWhenReady != true) {
+            publishDirect(UsbOutputPhase.AVAILABLE, "direct_usb.available")
+            return
+        }
         // The own output checks every item where its PCM begins (#282) and keeps the DAC between
         // items, so a transition rebuilds nothing; the status only takes the new item's source.
         if (synchronized(lock) { directPath } && directRoute?.streaming == true) {
@@ -363,6 +375,12 @@ internal class UsbOutputCoordinator(
     }
 
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+        if (playWhenReady) {
+            pauseReleaseMonitor?.setPaused(false)
+        } else if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST && !internalPauseInProgress &&
+            !interrupted && directPath && directRoute?.streaming == true) {
+            pauseReleaseMonitor?.setPaused(true)
+        }
         if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS &&
             currentMode() == UsbOutputMode.STRICT_BIT_PERFECT && (directPath || interrupted)) {
             resumeAfterConfiguration = false
@@ -560,6 +578,7 @@ internal class UsbOutputCoordinator(
         val wasPlaying = activePlayer?.playWhenReady == true
         val scheduled = synchronized(lock) {
             if (closed || mode != UsbOutputMode.STRICT_BIT_PERFECT) return@synchronized null
+            returnedAfterPause = false
             configurationGeneration += 1
             // Coalesced queue callbacks must not erase a Play command already received in this attempt.
             if (!(reconfigurePosted && configurationOrigin == UsbOutputFailureOrigin.USER_PLAYBACK &&
@@ -1291,6 +1310,7 @@ internal class UsbOutputCoordinator(
             state
         } ?: return
         returnTarget = null
+        pauseReleaseMonitor?.close()
         interrupted = false
         resumeAfterInterruption = false
         communicationMonitor?.setEnabled(false)
@@ -1376,6 +1396,7 @@ internal class UsbOutputCoordinator(
     }
 
     private fun restoreSystemOutput(rebuild: Boolean) {
+        returnedAfterPause = false
         val activePlayer = player
         val resume = activePlayer?.playWhenReady == true || synchronized(lock) { resumeAfterConfiguration }
         val wasDirect = synchronized(lock) { directPath }
@@ -1481,8 +1502,10 @@ internal class UsbOutputCoordinator(
         resume: Boolean,
         origin: UsbOutputFailureOrigin,
         stopPlayer: Boolean = true,
+        pausedReturn: Boolean = false,
     ) {
         if (returnTarget != null) return
+        pauseReleaseMonitor?.close()
         returnTarget = target
         val generation = synchronized(lock) {
             mode = UsbOutputMode.STRICT_BIT_PERFECT
@@ -1516,6 +1539,10 @@ internal class UsbOutputCoordinator(
                 completeSystemOutput(rebuild = true, resume = resumeAfterConfiguration)
             } else if (interrupted) {
                 reconcileInterruption()
+            } else if (pausedReturn && !resumeAfterConfiguration && configurationOrigin == UsbOutputFailureOrigin.USER_PLAYBACK) {
+                // Android announces the returned sound card asynchronously, even after cleanup has completed.
+                returnedAfterPause = true
+                publishDirect(UsbOutputPhase.AVAILABLE, "direct_usb.available")
             } else {
                 scheduleReconfigure(resume = resumeAfterConfiguration, origin = configurationOrigin)
             }
@@ -1816,6 +1843,7 @@ internal class UsbOutputCoordinator(
             state
         }
         communicationMonitor?.close()
+        pauseReleaseMonitor?.close()
         runCatching { audioManager.unregisterAudioDeviceCallback(deviceCallback) }
         if (directRoute != null) runCatching { appContext.unregisterReceiver(usbAttachReceiver) }
         directRoute?.release()

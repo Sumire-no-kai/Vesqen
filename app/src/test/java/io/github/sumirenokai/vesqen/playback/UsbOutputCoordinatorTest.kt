@@ -1730,6 +1730,83 @@ class UsbOutputCoordinatorTest {
     }
 
     @Test
+    fun `a user pause returns the DAC after thirty seconds and waits for a new Play`() {
+        reachDirectActive()
+        player.pause()
+        idle()
+        direct.calls.clear()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(29))
+        assertFalse("release" in direct.calls)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(1))
+        assertTrue("release" in direct.calls)
+        assertFalse("takeOver" in direct.calls)
+        assertFalse("inspect" in direct.calls)
+        assertFalse(player.playWhenReady)
+        player.play()
+        idle()
+        assertTrue("takeOver" in direct.calls)
+    }
+
+    @Test
+    fun `clearing a paused queue still returns the DAC without inspecting an empty source`() {
+        reachDirectActive()
+        shadowOf(audioManager).removeOutputDevice(dac, false)
+        player.pause()
+        idle()
+        player.clearMediaItems()
+        idle()
+        direct.calls.clear()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(30))
+        assertTrue("release" in direct.calls)
+        assertFalse(direct.streaming)
+        shadowOf(audioManager).addOutputDevice(dac, true)
+        idle()
+        assertFalse(player.playWhenReady)
+        assertStatus(UsbOutputPhase.AVAILABLE, "direct_usb.available")
+    }
+
+    @Test
+    fun `reselecting strict mode during a user pause still returns the DAC at the deadline`() {
+        reachDirectActive()
+        player.pause()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(20))
+        requestStrict()
+        direct.calls.clear()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(10))
+        assertTrue("release" in direct.calls)
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `resuming before the pause deadline keeps the current session`() {
+        reachDirectActive()
+        player.pause()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(29))
+        player.play()
+        idle()
+        direct.calls.clear()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
+        assertFalse("release" in direct.calls)
+    }
+
+    @Test
+    fun `a Play arriving while pause cleanup waits resumes only after the DAC is back`() {
+        reachDirectActive()
+        direct.deferTakeover = true
+        player.pause()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(30))
+        val done = checkNotNull(direct.pendingRelease)
+        direct.calls.clear()
+        player.play()
+        idle()
+        assertFalse("takeOver" in direct.calls)
+        direct.deferTakeover = false
+        done(true)
+        idle()
+        assertEquals(1, direct.calls.count { it == "takeOver" })
+    }
+
+    @Test
     fun `a failed return keeps the USB entry aligned with the saved strict mode`() {
         reachDirectActive()
         direct.recoveryPending = true
