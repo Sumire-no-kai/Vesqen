@@ -68,6 +68,8 @@ class DirectUsbSession(
     interface Listener {
         fun onFailed(failure: DirectUsbFailure) = Unit
 
+        fun onReconfigured(plan: StreamingPlan) = Unit
+
         /** Every interface is back, or the record says which step failed. [failure] is null after a plain release. */
         fun onReleased(cleanup: CleanupRecord, failure: DirectUsbFailure?) = Unit
     }
@@ -78,6 +80,8 @@ class DirectUsbSession(
         data object TakingOver : State
 
         data class Streaming(val plan: StreamingPlan) : State
+
+        data object Reconfiguring : State
 
         /** Giving the device back. While URBs are still the kernel's this lasts, and nothing else may take over. */
         data class Releasing(val failure: DirectUsbFailure?) : State
@@ -120,16 +124,26 @@ class DirectUsbSession(
     /** Only the session that wrote the marker clears it; one refused before claiming leaves another's alone. */
     private var markerWritten = false
     @Volatile private var detached = false
+    @Volatile private var releaseRequested = false
 
     private val epochLock = Any()
     private var newestEpoch = UsbStreamEngine.FIRST_EPOCH
     private var newestEpochTaken = false
     private var retiredAtNanos: Long? = null
     @Volatile private var finalTotals = UsbStreamTotals.NONE
-    @Volatile private var finalStats: UsbStreamStats? = null
+    private data class StreamProgress(val completed: UsbStreamTotals, val active: UsbStream?)
+    // Publish both parts together so a reader counts each native stream exactly once.
+    @Volatile private var progress = StreamProgress(UsbStreamTotals.NONE, null)
+    // Read and published together under epochLock so a retired output sees only its own counters.
+    private var finalStats: UsbStreamStats? = null
+    private var finishedStream: UsbStream? = null
+    private var pendingOutput: RequestedOutput? = null
     private val releaseCallbacks = mutableListOf<(CleanupRecord) -> Unit>()
 
-    fun totals(): UsbStreamTotals = stream?.readStats()?.sessionTotals ?: finalTotals
+    fun totals(): UsbStreamTotals {
+        val snapshot = progress
+        return snapshot.completed + (snapshot.active?.readStats()?.sessionTotals ?: UsbStreamTotals.NONE)
+    }
 
     fun takeOver(plan: StreamingPlan, startVolume: Int, onDone: (Takeover) -> Unit) {
         check(takeOverAsked.compareAndSet(false, true)) { "A session takes over once" }
@@ -165,14 +179,117 @@ class DirectUsbSession(
      * A new output for Media3. The first takes the stream's first epoch; any later one first ends the
      * output before it. Null unless the session is streaming. Never waits.
      */
-    fun openOutput(): UsbOutputHandle? {
-        val current = stream ?: return null
-        if (state !is State.Streaming) return null
-        return synchronized(epochLock) {
-            if (newestEpochTaken) retireNewest(current)
-            newestEpochTaken = true
-            Output(newestEpoch)
+    fun openOutput(): UsbOutputHandle? = synchronized(epochLock) {
+        val current = stream ?: return@synchronized null
+        if (releaseRequested || state !is State.Streaming) return@synchronized null
+        if (newestEpochTaken) retireNewest(current)
+        newestEpochTaken = true
+        Output(newestEpoch, current)
+    }
+
+    /** A new wire configuration starts only after the sink drained and released the previous output. */
+    fun openOutput(plan: StreamingPlan): UsbOutputHandle {
+        val request = RequestedOutput(plan)
+        control.execute {
+            if (releaseRequested || request.released) return@execute
+            when (val current = state) {
+                is State.Streaming -> {
+                    if (current.plan == plan) {
+                        request.install(openOutput())
+                    } else {
+                        pendingOutput = request
+                        synchronized(epochLock) { state = State.Reconfiguring }
+                        reconfigure()
+                    }
+                }
+                State.Reconfiguring -> {
+                    pendingOutput = request
+                    if (stream == null) reconfigure()
+                }
+                else -> request.refusal = DirectUsbFailure(Reason.USB_ENGINE_UNAVAILABLE, "the session is no longer streaming")
+            }
         }
+        return request
+    }
+
+    private fun reconfigure() {
+        if (state != State.Reconfiguring || releaseRequested) return
+        val current = stream
+        if (current != null) {
+            if (!current.destroy(timing.destroyTimeoutMs)) {
+                control.schedule(::reconfigure, timing.destroyRetryMs, TimeUnit.MILLISECONDS)
+                return
+            }
+            recordReclaimed(current)?.asFailure()?.let { return fail(it) }
+        }
+        if (releaseRequested) return
+        connectionFailure()?.let { return fail(it) }
+        val request = checkNotNull(pendingOutput)
+        if (request.released) {
+            pendingOutput = null
+            return
+        }
+        val failure = try {
+            when {
+                detached -> DirectUsbFailure(Reason.DEVICE_DISCONNECTED, "the device was detached")
+                streamingInterface?.let { !link.selectAlternate(it, 0) } == true ->
+                    DirectUsbFailure(Reason.INTERFACE_CLAIM_FAILED, "the old alternate setting could not be reset")
+                else -> startStream(request.plan)
+            }
+        } catch (_: SecurityException) {
+            DirectUsbFailure(Reason.USB_PERMISSION_REVOKED, "USB access was revoked")
+        } catch (_: IllegalStateException) {
+            DirectUsbFailure(Reason.USB_TRANSFER_FAILED, "USB connection unavailable during reconfiguration")
+        }
+        if (failure != null) {
+            fail(failure)
+            return
+        }
+        if (releaseRequested) return
+        synchronized(epochLock) {
+            newestEpoch = UsbStreamEngine.FIRST_EPOCH
+            newestEpochTaken = false
+            retiredAtNanos = null
+        }
+        state = State.Streaming(request.plan)
+        pendingOutput = null
+        listener.onReconfigured(request.plan)
+        request.install(openOutput())
+    }
+
+    private inner class RequestedOutput(val plan: StreamingPlan) : UsbOutputHandle {
+        @Volatile var released = false
+        @Volatile var refusal: DirectUsbFailure? = null
+        @Volatile private var output: UsbOutputHandle? = null
+        private var running = false
+        private var ended = false
+        @Synchronized fun install(ready: UsbOutputHandle?) {
+            if (released) {
+                ready?.release()
+            } else {
+                if (ended) ready?.markEndOfStream()
+                ready?.setRunning(running)
+                output = ready
+            }
+        }
+        override val epoch: Long get() = output?.epoch ?: 0
+        override val failure: DirectUsbFailure? get() = refusal ?: output?.failure ?: when (val current = state) {
+            is State.Releasing -> current.failure
+            is State.Released -> current.failure
+            else -> null
+        }
+        override fun write(buffer: ByteBuffer, offset: Int, size: Int): Int =
+            if (released || failure != null) -1 else output?.write(buffer, offset, size) ?: 0
+        override fun readStats(): UsbStreamStats? = output?.readStats()
+        @Synchronized override fun setRunning(running: Boolean) {
+            this.running = running
+            output?.setRunning(running)
+        }
+        @Synchronized override fun markEndOfStream() {
+            ended = true
+            output?.markEndOfStream()
+        }
+        @Synchronized override fun release() { released = true; output?.release() }
     }
 
     /**
@@ -182,7 +299,7 @@ class DirectUsbSession(
      */
     fun setVolume(target: Int, onDone: (Int?) -> Unit) = control.execute {
         val volume = volumeControl
-        if (state !is State.Streaming || volume == null) return@execute onDone(null)
+        if ((state !is State.Streaming && state != State.Reconfiguring) || volume == null) return@execute onDone(null)
         val readBack = try {
             client.setVolume(volume.unitId, volume.controlInterface, volume.range.settingAtOrBelow(target))
             client.volume(volume.unitId, volume.controlInterface)
@@ -198,16 +315,19 @@ class DirectUsbSession(
     }
 
     /** Gives the device back. The callback comes once every interface is released, which can wait for the kernel. */
-    fun release(onReleased: ((CleanupRecord) -> Unit)? = null) = control.execute {
-        val done = state as? State.Released
-        if (done != null) {
-            onReleased?.invoke(done.cleanup)
-            return@execute
-        }
-        if (onReleased != null) releaseCallbacks.add(onReleased)
-        if (state is State.Streaming || state == State.Idle) {
-            state = State.Releasing(null)
-            cleanUp()
+    fun release(onReleased: ((CleanupRecord) -> Unit)? = null) {
+        releaseRequested = true
+        control.execute {
+            val done = state as? State.Released
+            if (done != null) {
+                onReleased?.invoke(done.cleanup)
+                return@execute
+            }
+            if (onReleased != null) releaseCallbacks.add(onReleased)
+            if (state is State.Streaming || state == State.Reconfiguring || state == State.Idle) {
+                synchronized(epochLock) { state = State.Releasing(null) }
+                cleanUp()
+            }
         }
     }
 
@@ -264,46 +384,60 @@ class DirectUsbSession(
         volumeControl = VolumeControl(unit.id, controlInterface, range)
         volumeRange = range
 
+        val startFailure = startStream(plan)
+        return if (startFailure == null) Takeover.Ready(volumeBefore, readBack) else Takeover.Failed(startFailure)
+    }
+
+    private fun startStream(plan: StreamingPlan): DirectUsbFailure? {
+        val terminal = function.streamingInterfaces.firstOrNull { it.interfaceNumber == plan.interfaceNumber }
+            ?.alternateSettings?.firstOrNull { it.alternateSetting == plan.alternateSetting }?.terminalLink
+        val unit = terminal?.let { function.featureUnitsAfter(it).firstOrNull { unit -> unit.masterVolume != UacControlAccess.ABSENT } }
+        if (unit?.id != volumeControl?.unitId) {
+            return DirectUsbFailure(Reason.VOLUME_CONTROL_FAILED, "the new stream uses another volume control")
+        }
         if (!link.selectAlternate(plan.interfaceNumber, plan.alternateSetting)) {
-            return failed(Reason.INTERFACE_CLAIM_FAILED, "alternate setting ${plan.alternateSetting} of interface ${plan.interfaceNumber}")
+            return DirectUsbFailure(Reason.INTERFACE_CLAIM_FAILED, "alternate setting ${plan.alternateSetting} of interface ${plan.interfaceNumber}")
         }
         streamingInterface = plan.interfaceNumber
         // UAC1 addresses the rate to the endpoint, which only exists once its setting is active.
         if (plan.endpointSetsSampleRate) {
             if (!client.setSampleRate(plan.endpointAddress, plan.sampleRateHz)) {
-                return failed(Reason.SAMPLE_RATE_SET_FAILED, "${plan.sampleRateHz} Hz")
+                return DirectUsbFailure(Reason.SAMPLE_RATE_SET_FAILED, "${plan.sampleRateHz} Hz")
             }
             val rate = client.sampleRate(plan.endpointAddress)
-            if (rate != plan.sampleRateHz) return failed(Reason.SAMPLE_RATE_READBACK_MISMATCH, "set ${plan.sampleRateHz}, reads back $rate")
+            if (rate != plan.sampleRateHz) return DirectUsbFailure(Reason.SAMPLE_RATE_READBACK_MISMATCH, "set ${plan.sampleRateHz}, reads back $rate")
         }
 
         val created = when (val creation = streams.create(link.fileDescriptor, plan)) {
             is UsbStreamFactory.Creation.Created -> creation.stream
-            is UsbStreamFactory.Creation.Unavailable -> return failed(Reason.USB_ENGINE_UNAVAILABLE, creation.reason)
+            is UsbStreamFactory.Creation.Unavailable -> return DirectUsbFailure(Reason.USB_ENGINE_UNAVAILABLE, creation.reason)
         }
         stream = created
-        if (detached) return failed(Reason.DEVICE_DISCONNECTED, "the device was detached")
-        if (!created.start()) return failed(Reason.USB_ENGINE_UNAVAILABLE, "the stream thread did not start")
-        return Takeover.Ready(volumeBefore, readBack)
+        progress = StreamProgress(finalTotals, created)
+        if (detached) return DirectUsbFailure(Reason.DEVICE_DISCONNECTED, "the device was detached")
+        if (!created.start()) return DirectUsbFailure(Reason.USB_ENGINE_UNAVAILABLE, "the stream thread did not start")
+        return null
     }
 
     private fun failed(reason: Reason, detail: String) = Takeover.Failed(DirectUsbFailure(reason, detail))
 
+    private fun connectionFailure(): DirectUsbFailure? = try {
+        when {
+            detached || !link.connected -> DirectUsbFailure(Reason.DEVICE_DISCONNECTED, "the device was detached")
+            !link.permissionGranted -> DirectUsbFailure(Reason.USB_PERMISSION_REVOKED, "USB access was revoked")
+            else -> null
+        }
+    } catch (_: SecurityException) {
+        DirectUsbFailure(Reason.USB_PERMISSION_REVOKED, "USB access was revoked")
+    } catch (_: IllegalStateException) {
+        DirectUsbFailure(Reason.USB_TRANSFER_FAILED, "USB connection unavailable")
+    }
+
     /** On [control]: errors the stream reported, and retirements that never finish. */
     private fun check() {
-        if (state !is State.Streaming) return
-        val connectionFailure = try {
-            when {
-                !link.connected -> DirectUsbFailure(Reason.DEVICE_DISCONNECTED, "the device was detached")
-                !link.permissionGranted -> DirectUsbFailure(Reason.USB_PERMISSION_REVOKED, "USB access was revoked")
-                else -> null
-            }
-        } catch (_: SecurityException) {
-            DirectUsbFailure(Reason.USB_PERMISSION_REVOKED, "USB access was revoked")
-        } catch (_: IllegalStateException) {
-            DirectUsbFailure(Reason.USB_TRANSFER_FAILED, "USB connection unavailable")
-        }
-        if (connectionFailure != null) return fail(connectionFailure)
+        if (releaseRequested || (state !is State.Streaming && state != State.Reconfiguring)) return
+        connectionFailure()?.let { return fail(it) }
+        if (state == State.Reconfiguring) return
         val stats = stream?.readStats() ?: return
         stats.asFailure()?.let { return fail(it) }
         val waitingSince = synchronized(epochLock) { retiredAtNanos } ?: return
@@ -315,8 +449,8 @@ class DirectUsbSession(
     }
 
     private fun fail(failure: DirectUsbFailure) {
-        if (state !is State.Streaming) return
-        state = State.Releasing(failure)
+        if (state !is State.Streaming && state != State.Reconfiguring) return
+        synchronized(epochLock) { state = State.Releasing(failure) }
         listener.onFailed(failure)
         cleanUp()
     }
@@ -340,9 +474,7 @@ class DirectUsbSession(
                 }
                 return
             }
-            finalStats = current.readStats()
-            finalTotals = finalStats?.sessionTotals ?: UsbStreamTotals.NONE
-            stream = null
+            recordReclaimed(current)
             cleanupSteps += CleanupStep("stream reclaimed", true)
         }
         var allReleased = true
@@ -373,6 +505,18 @@ class DirectUsbSession(
         releaseCallbacks.clear()
     }
 
+    private fun recordReclaimed(current: UsbStream): UsbStreamStats? {
+        val stats = current.readStats()
+        synchronized(epochLock) {
+            finalStats = stats
+            finishedStream = current
+        }
+        finalTotals += stats?.sessionTotals ?: UsbStreamTotals.NONE
+        stream = null
+        progress = StreamProgress(finalTotals, null)
+        return stats
+    }
+
     private fun cleanupStep(name: String, action: () -> Boolean): Boolean {
         val succeeded = try {
             action()
@@ -393,32 +537,37 @@ class DirectUsbSession(
 
     private fun retire(output: Output) {
         val current = stream ?: return
+        if (current !== output.owner) return
         synchronized(epochLock) {
-            if (output.epoch == newestEpoch && newestEpochTaken) retireNewest(current)
+            if (stream === output.owner && state is State.Streaming && output.epoch == newestEpoch && newestEpochTaken) retireNewest(current)
         }
     }
 
-    private inner class Output(override val epoch: Long) : UsbOutputHandle {
+    private inner class Output(override val epoch: Long, val owner: UsbStream) : UsbOutputHandle {
         @Volatile
         private var released = false
 
-        override fun write(buffer: ByteBuffer, offset: Int, size: Int): Int {
-            if (released) return -1
-            // A device given back on purpose (focus, a long pause) is no error: the output takes nothing
-            // until its owner rebuilds the player. A failure ends it, and [failure] says why.
-            if (state !is State.Streaming) return if (failure == null) 0 else -1
-            return stream?.write(epoch, buffer, offset, size) ?: -1
+        // State changes acquire this lock before destruction. A playback call can only use a live stream.
+        override fun write(buffer: ByteBuffer, offset: Int, size: Int): Int = synchronized(epochLock) {
+            if (released) return@synchronized -1
+            if (state !is State.Streaming || stream !== owner) return@synchronized if (failure == null) 0 else -1
+            owner.write(epoch, buffer, offset, size)
         }
 
-        override fun setRunning(running: Boolean) {
-            if (!released) stream?.setRunning(epoch, running)
+        override fun setRunning(running: Boolean) = synchronized(epochLock) {
+            if (!released && stream === owner && state is State.Streaming) owner.setRunning(epoch, running)
         }
 
-        override fun markEndOfStream() {
-            if (!released) stream?.markEndOfStream(epoch)
+        override fun markEndOfStream() = synchronized(epochLock) {
+            if (!released && stream === owner && state is State.Streaming) owner.markEndOfStream(epoch)
         }
 
-        override fun readStats(): UsbStreamStats? = (stream?.readStats() ?: finalStats)?.takeIf { it.epoch == epoch }
+        private var lastStats: UsbStreamStats? = null
+        override fun readStats(): UsbStreamStats? = synchronized(epochLock) {
+            val stats = if (stream === owner && state is State.Streaming) owner.readStats()
+                else finalStats.takeIf { finishedStream === owner } ?: lastStats
+            stats?.takeIf { it.epoch == epoch }?.also { lastStats = it }
+        }
 
         override val failure: DirectUsbFailure?
             get() = when (val current = state) {

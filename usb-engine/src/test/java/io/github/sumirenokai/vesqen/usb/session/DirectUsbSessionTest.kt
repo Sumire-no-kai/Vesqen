@@ -248,6 +248,249 @@ class DirectUsbSessionTest {
         assertNull(output.failure)
     }
 
+    @Test
+    fun `reconfiguration keeps the original marker and hardware level until final release`() {
+        val next = FakeStream(events)
+        var creations = 0
+        streams = UsbStreamFactory { _, _ -> UsbStreamFactory.Creation.Created(if (creations++ == 0) stream else next) }
+        takeOver()
+        val original = markers.persisted
+        setVolume(-5000)
+        events.clear()
+        val output = session.openOutput(PLAN.copy(sampleRateHz = 44_100, ringFrames = 22_050))
+        assertTrue(waitUntil { output.readStats() != null })
+        assertTrue(events.indexOf("stream destroyed") < events.indexOf("set rate 44100"))
+        assertEquals(2, creations)
+        assertEquals(original, markers.persisted)
+        assertFalse(events.any { it.startsWith("claim ") || it.startsWith("release ") || it.startsWith("set volume ") })
+        release()
+        assertTrue(events.contains("set volume -2560"))
+        assertNull(markers.persisted)
+    }
+
+    @Test
+    fun `a newer requested format replaces a released request while URBs are outstanding`() {
+        val next = FakeStream(events)
+        var creations = 0
+        streams = UsbStreamFactory { _, _ -> UsbStreamFactory.Creation.Created(if (creations++ == 0) stream else next) }
+        takeOver()
+        stream.destroyAnswers.addAll(listOf(false, false, false, true))
+        events.clear()
+        val obsolete = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        assertTrue(waitUntil { "stream not destroyed" in events })
+        obsolete.release()
+        val latest = session.openOutput(PLAN)
+        assertTrue(waitUntil { latest.readStats() != null })
+        assertFalse(events.contains("set rate 44100"))
+        assertEquals(2, creations)
+        assertEquals(-1, obsolete.write(ByteBuffer.allocateDirect(4), 0, 4))
+        assertEquals(4, latest.write(ByteBuffer.allocateDirect(4), 0, 4))
+    }
+
+    @Test
+    fun `playback operations do not enter a stream while its destruction waits`() {
+        val entered = CountDownLatch(1)
+        val finish = CountDownLatch(1)
+        val playback = Executors.newSingleThreadExecutor()
+        takeOver()
+        val old = checkNotNull(session.openOutput())
+        stream.onDestroy = { entered.countDown(); finish.await(5, TimeUnit.SECONDS) }
+        stream.onRunning = { finish.await(5, TimeUnit.SECONDS) }
+        session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        try {
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            playback.submit {
+                old.setRunning(false)
+                old.markEndOfStream()
+                assertEquals(0, old.write(ByteBuffer.allocateDirect(4), 0, 4))
+                old.readStats()
+                old.release()
+            }.get(2, TimeUnit.SECONDS)
+        } finally {
+            finish.countDown()
+            playback.shutdownNow()
+            control.submit {}.get(2, TimeUnit.SECONDS)
+        }
+    }
+
+    @Test
+    fun `a request abandoned during blocking destruction is not configured after the barrier`() {
+        val entered = CountDownLatch(1)
+        val finish = CountDownLatch(1)
+        val next = FakeStream(events)
+        var creations = 0
+        streams = UsbStreamFactory { _, _ -> UsbStreamFactory.Creation.Created(if (creations++ == 0) stream else next) }
+        takeOver()
+        stream.onDestroy = { entered.countDown(); finish.await(5, TimeUnit.SECONDS) }
+        events.clear()
+        val obsolete = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        try {
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            obsolete.release()
+        } finally {
+            finish.countDown()
+        }
+        control.submit {}.get(2, TimeUnit.SECONDS)
+        assertEquals(1, creations)
+        assertFalse(events.contains("set rate 44100"))
+        val latest = session.openOutput(PLAN)
+        assertTrue(waitUntil { latest.readStats() != null })
+        assertEquals(2, creations)
+    }
+
+    @Test
+    fun `session totals include each native stream once across a rate change and release`() {
+        val next = FakeStream(events)
+        var creations = 0
+        streams = UsbStreamFactory { _, _ -> UsbStreamFactory.Creation.Created(if (creations++ == 0) stream else next) }
+        takeOver()
+        stream.delivered[0] = 100
+        stream.lost[0] = 2
+        assertEquals(UsbStreamTotals(2, 0, 0, 100), session.totals())
+        val output = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        assertTrue(waitUntil { output.readStats() != null })
+        assertEquals(UsbStreamTotals(2, 0, 0, 100), session.totals())
+        next.delivered[0] = 25
+        next.lost[0] = 3
+        assertEquals(UsbStreamTotals(5, 0, 0, 125), session.totals())
+        release()
+        assertEquals(UsbStreamTotals(5, 0, 0, 125), session.totals())
+    }
+
+    @Test
+    fun `the same wire plan opens another epoch without recreating the stream`() {
+        var creations = 0
+        streams = UsbStreamFactory { _, _ -> creations++; UsbStreamFactory.Creation.Created(stream) }
+        takeOver()
+        events.clear()
+        val output = session.openOutput(PLAN)
+        assertTrue(waitUntil { output.readStats() != null })
+        assertEquals(1, creations)
+        assertFalse(events.any { it.startsWith("alternate ") || it.startsWith("set rate ") || it == "stream destroyed" })
+    }
+
+    @Test
+    fun `a rate change cannot cross the old native safety barrier`() {
+        val next = FakeStream(events)
+        var creations = 0
+        streams = UsbStreamFactory { _, _ -> UsbStreamFactory.Creation.Created(if (creations++ == 0) stream else next) }
+        takeOver()
+        stream.destroyAnswers.addAll(listOf(false, false, true))
+        events.clear()
+        val output = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        assertTrue(waitUntil { "stream not destroyed" in events })
+        assertEquals(1, creations)
+        assertFalse(events.any { it.startsWith("set rate ") || it.startsWith("alternate ") })
+        assertEquals(0, output.write(ByteBuffer.allocateDirect(4), 0, 4))
+        assertTrue(waitUntil { output.readStats() != null })
+        assertEquals(2, creations)
+    }
+
+    @Test
+    fun `an old output cannot stop or retire a new stream with the same epoch number`() {
+        val next = FakeStream(events)
+        var creations = 0
+        streams = UsbStreamFactory { _, _ -> UsbStreamFactory.Creation.Created(if (creations++ == 0) stream else next) }
+        takeOver()
+        val old = checkNotNull(session.openOutput())
+        val output = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        assertTrue(waitUntil { output.readStats() != null })
+        val retirements = next.retirements
+        assertEquals(0, old.write(ByteBuffer.allocateDirect(4), 0, 4))
+        assertTrue(next.writes.isEmpty())
+        old.release()
+        old.setRunning(false)
+        assertEquals(retirements, next.retirements)
+        assertEquals(4, output.write(ByteBuffer.allocateDirect(4), 0, 4))
+    }
+
+    @Test
+    fun `a failed sampling rate readback during a switch releases all interfaces`() {
+        takeOver()
+        device.rateReadBack = 48_000
+        val output = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertEquals(Reason.SAMPLE_RATE_READBACK_MISMATCH, output.failure?.reason)
+        assertTrue(events.containsAll(listOf("release 1", "release 2", "close")))
+    }
+
+    @Test
+    fun `a hardware return requested inside blocking destruction cancels the next rate`() {
+        takeOver()
+        val entered = CountDownLatch(1)
+        val finish = CountDownLatch(1)
+        stream.onDestroy = { entered.countDown(); finish.await(5, TimeUnit.SECONDS) }
+        events.clear()
+        val next = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        try {
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            session.release()
+        } finally {
+            finish.countDown()
+        }
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertFalse(events.contains("set rate 44100"))
+        assertEquals(0, next.write(ByteBuffer.allocateDirect(4), 0, 4))
+        assertNull(markers.persisted)
+    }
+
+    @Test
+    fun `a permission revoked at the rate switch barrier releases instead of restarting`() {
+        takeOver()
+        stream.onDestroy = { link.permissionGranted = false }
+        events.clear()
+        val next = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertEquals(Reason.USB_PERMISSION_REVOKED, next.failure?.reason)
+        assertFalse(events.contains("set rate 44100"))
+    }
+
+    @Test
+    fun `an abandoned rate change keeps monitoring the claimed device`() {
+        takeOver()
+        val entered = CountDownLatch(1)
+        val finish = CountDownLatch(1)
+        stream.onDestroy = { entered.countDown(); finish.await(5, TimeUnit.SECONDS) }
+        val abandoned = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        try {
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            abandoned.release()
+        } finally {
+            finish.countDown()
+        }
+        control.submit {}.get(2, TimeUnit.SECONDS)
+        link.permissionGranted = false
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertEquals(Reason.USB_PERMISSION_REVOKED, failures.single().reason)
+        assertNull(markers.persisted)
+    }
+
+    @Test
+    fun `a transfer failure reported at final reap is preserved across a rate switch`() {
+        takeOver()
+        stream.onDestroy = { stream.failure = UsbStreamStats.Failure.DEVICE_GONE }
+        events.clear()
+        val next = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertEquals(Reason.DEVICE_DISCONNECTED, next.failure?.reason)
+        assertFalse(events.contains("set rate 44100"))
+    }
+
+    @Test
+    fun `release while reconfiguration waits cannot restart the stream later`() {
+        takeOver()
+        stream.destroyAnswers.addAll(listOf(false, false, true))
+        events.clear()
+        val output = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        assertTrue(waitUntil { "stream not destroyed" in events })
+        session.release()
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        control.submit {}.get(2, TimeUnit.SECONDS)
+        assertTrue(session.state is DirectUsbSession.State.Released)
+        assertFalse(events.contains("set rate 44100"))
+        assertEquals(0, output.write(ByteBuffer.allocateDirect(4), 0, 4))
+    }
+
     @After
     fun stopControl() {
         control.shutdownNow()
@@ -944,6 +1187,7 @@ class DirectUsbSessionTest {
         /** Runs inside destroy, before it answers. */
         @Volatile
         var onDestroy: () -> Unit = {}
+        var onRunning: () -> Unit = {}
         val writes = CopyOnWriteArrayList<Pair<Long, Int>>()
         val lost = java.util.concurrent.ConcurrentHashMap<Long, Long>()
         val delivered = java.util.concurrent.ConcurrentHashMap<Long, Long>()
@@ -966,7 +1210,7 @@ class DirectUsbSessionTest {
             return size
         }
 
-        override fun setRunning(epoch: Long, running: Boolean) = Unit
+        override fun setRunning(epoch: Long, running: Boolean) = onRunning()
 
         override fun markEndOfStream(epoch: Long) = Unit
 

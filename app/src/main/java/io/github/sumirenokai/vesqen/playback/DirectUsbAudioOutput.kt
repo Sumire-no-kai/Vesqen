@@ -9,6 +9,7 @@ import androidx.media3.exoplayer.audio.AudioOutput
 import androidx.media3.exoplayer.audio.AudioOutputProvider
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceFacts
 import io.github.sumirenokai.vesqen.usb.engine.UsbMediaClock
+import io.github.sumirenokai.vesqen.usb.engine.UsbStreamStats
 import io.github.sumirenokai.vesqen.usb.pcm.ExactPcmConverter
 import io.github.sumirenokai.vesqen.usb.pcm.UsbPcmEncoding
 import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
@@ -44,6 +45,7 @@ class DirectUsbAudioOutput(
     private val configuredSourceBits: () -> Int = { sourceBits },
     /** Called for each source this output plays, with the source a reused output continues from. */
     private val listenerFactory: ((continuing: PlaybackListener?) -> PlaybackListener)? = null,
+    private val configuredWirePlan: () -> StreamingPlan = { plan },
 ) : AudioOutput {
     interface PlaybackListener {
         fun onActiveChanged(active: Boolean)
@@ -144,15 +146,26 @@ class DirectUsbAudioOutput(
     }
 
     override fun getPositionUs(): Long {
-        val target = handle ?: return 0
+        val stats = playbackStats() ?: return 0
+        val frames = clock.positionFrames(stats.mediaFramesProcessed, stats.mediaFramesSubmitted, running, nanoTime())
+        return Util.sampleCountToDurationUs(frames, plan.sampleRateHz)
+    }
+
+    /** Submitted URBs may still be in flight after the interpolated playback clock reaches the tail. */
+    internal fun hasPendingMedia(): Boolean {
+        val processed = playbackStats()?.mediaFramesProcessed ?: 0L
+        return !released && !failureReported && (scratch.hasRemaining() || acceptedFrames > processed)
+    }
+
+    private fun playbackStats(): UsbStreamStats? {
+        val target = handle ?: return null
         settle(target)
         target.failure?.let(::report)
         // Null until the stream reached this output's epoch: none of its audio has gone out yet.
-        val stats = target.readStats() ?: return 0
+        val stats = target.readStats() ?: return null
         stats.asFailure()?.let(::report)
         reportDelivery(stats.lastDeliveredMediaFrame.takeIf { !released && running && !failureReported }, stats.mediaFramesProcessed)
-        val frames = clock.positionFrames(stats.mediaFramesProcessed, stats.mediaFramesSubmitted, running, nanoTime())
-        return Util.sampleCountToDurationUs(frames, plan.sampleRateHz)
+        return stats
     }
 
     /**
@@ -166,7 +179,7 @@ class DirectUsbAudioOutput(
         newFormat: AudioOutputProvider.FormatConfig,
         newConfig: AudioOutputProvider.OutputConfig,
     ): Boolean {
-        if (newConfig != currentConfig) return false
+        if (newConfig != currentConfig || configuredWirePlan() != plan) return false
         val bits = configuredSourceBits()
         if (bits <= 0) return false
         sources.addLast(Source(listenerFactory?.invoke(sources.last().listener), acceptedFrames))
@@ -282,12 +295,20 @@ internal class DirectUsbAudioOutputProvider(
     private val onFailure: (DirectUsbFailure) -> Unit = {},
     private val onVolumeIgnored: (Float) -> Unit = {},
     private val listenerFactory: ((DirectUsbAudioOutput.PlaybackListener?) -> DirectUsbAudioOutput.PlaybackListener)? = null,
+    private val planForSource: ((SourcePcmFormat) -> StreamingPlan?)? = null,
+    private val openPlannedOutput: ((StreamingPlan) -> UsbOutputHandle?)? = null,
 ) : AudioOutputProvider {
     /**
      * Set by [getOutputConfig] for the format being configured, and 0 while that format is refused.
      * A new output starts with it, and an output the sink keeps for that format switches to it.
      */
     private var acceptedSourceBits = 0
+    private var configuredPlan = plan
+
+    private fun selectPlan(format: androidx.media3.common.Format): StreamingPlan {
+        val bits = source()?.bitDepth ?: return plan
+        return planForSource?.invoke(SourcePcmFormat(format.sampleRate, bits, format.channelCount)) ?: plan
+    }
 
     private fun encodingOf(pcmEncoding: Int): UsbPcmEncoding? = when (pcmEncoding) {
         C.ENCODING_PCM_16BIT -> UsbPcmEncoding.INT16
@@ -297,20 +318,20 @@ internal class DirectUsbAudioOutputProvider(
         else -> null
     }
 
-    private fun decide(formatConfig: AudioOutputProvider.FormatConfig): DirectUsbFormatGate.Decision {
+    private fun decide(formatConfig: AudioOutputProvider.FormatConfig, wire: StreamingPlan): DirectUsbFormatGate.Decision {
         val format = formatConfig.format
         if (encodingOf(format.pcmEncoding) == null) {
             return DirectUsbFormatGate.Decision.Rejected(
                 DirectUsbFailure(DirectUsbFailure.Reason.DECODER_PRECISION_LOST, "decoded to PCM encoding ${format.pcmEncoding}"),
             )
         }
-        return DirectUsbFormatGate.check(source(), format, plan)
+        return DirectUsbFormatGate.check(source(), format, wire)
     }
 
     override fun getFormatSupport(formatConfig: AudioOutputProvider.FormatConfig): AudioOutputProvider.FormatSupport =
         AudioOutputProvider.FormatSupport.Builder()
             .setFormatSupportLevel(
-                if (decide(formatConfig) is DirectUsbFormatGate.Decision.Accepted) {
+                if (decide(formatConfig, selectPlan(formatConfig.format)) is DirectUsbFormatGate.Decision.Accepted) {
                     AudioOutputProvider.FORMAT_SUPPORTED_DIRECTLY
                 } else {
                     AudioOutputProvider.FORMAT_UNSUPPORTED
@@ -321,33 +342,37 @@ internal class DirectUsbAudioOutputProvider(
     override fun getOutputConfig(formatConfig: AudioOutputProvider.FormatConfig): AudioOutputProvider.OutputConfig {
         val format = formatConfig.format
         acceptedSourceBits = 0
-        when (val decision = decide(formatConfig)) {
+        val wire = selectPlan(format)
+        when (val decision = decide(formatConfig, wire)) {
             is DirectUsbFormatGate.Decision.Rejected -> {
                 onFailure(decision.failure)
                 throw AudioOutputProvider.ConfigurationException("${decision.failure.reason}: ${decision.failure.detail}")
             }
             is DirectUsbFormatGate.Decision.Accepted -> acceptedSourceBits = decision.sourceBits
         }
+        configuredPlan = wire
         return AudioOutputProvider.OutputConfig.Builder()
             .setEncoding(format.pcmEncoding)
             .setSampleRate(format.sampleRate)
             .setChannelMask(Util.getAudioTrackChannelConfig(format.channelCount))
-            .setBufferSize(plan.ringFrames * Util.getPcmFrameSize(format.pcmEncoding, format.channelCount))
+            .setBufferSize(wire.ringFrames * Util.getPcmFrameSize(format.pcmEncoding, format.channelCount))
             .setAudioAttributes(formatConfig.audioAttributes)
             .build()
     }
 
     override fun getAudioOutput(config: AudioOutputProvider.OutputConfig): AudioOutput {
         check(acceptedSourceBits > 0) { "No format was accepted before the output" }
+        val wire = configuredPlan
         return DirectUsbAudioOutput(
-            plan,
+            wire,
             checkNotNull(encodingOf(config.encoding)),
             acceptedSourceBits,
-            openOutput(),
+            if (openPlannedOutput == null) openOutput() else openPlannedOutput.invoke(wire),
             onFailure,
             onVolumeIgnored,
             configuredSourceBits = { acceptedSourceBits },
             listenerFactory = listenerFactory,
+            configuredWirePlan = { configuredPlan },
         )
     }
 

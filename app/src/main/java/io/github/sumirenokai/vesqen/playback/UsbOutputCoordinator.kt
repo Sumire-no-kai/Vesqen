@@ -197,6 +197,12 @@ internal class UsbOutputCoordinator(
         audioManager.registerAudioDeviceCallback(deviceCallback, mainHandler)
         directRoute?.let { route ->
             route.listener = object : DirectUsbRoute.Listener {
+                override fun onReconfigured(plan: StreamingPlan) {
+                    if (closed || !directPath) return
+                    synchronized(lock) { directPlan = plan }
+                    publishDirectActiveIfPlaying()
+                }
+
                 override fun onReleased(cleanup: io.github.sumirenokai.vesqen.usb.session.CleanupRecord) {
                     if (!closed && !directPath && !route.streaming) player.setHandleAudioBecomingNoisy(true)
                 }

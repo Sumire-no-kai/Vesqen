@@ -30,6 +30,9 @@ import io.github.sumirenokai.vesqen.usb.descriptor.UsbAudioTopology
 import io.github.sumirenokai.vesqen.usb.engine.StreamPreflight
 import io.github.sumirenokai.vesqen.usb.engine.UsbStreamEngine
 import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
+import io.github.sumirenokai.vesqen.usb.plan.StreamingPlanner
+import io.github.sumirenokai.vesqen.usb.plan.StreamingPlanResult
+import io.github.sumirenokai.vesqen.usb.plan.UsbBusSpeed
 import io.github.sumirenokai.vesqen.usb.plan.StreamingRefusal
 import io.github.sumirenokai.vesqen.usb.session.AndroidUsbLink
 import io.github.sumirenokai.vesqen.usb.session.DirectUsbFailure
@@ -183,6 +186,7 @@ internal data class DirectUsbRecoveryResult(
 internal interface DirectUsbRoute {
     interface Listener {
         fun onReleased(cleanup: CleanupRecord) = Unit
+        fun onReconfigured(plan: StreamingPlan) = Unit
 
         /**
          * The route has posted a new output to the main thread. Register it before the next failure
@@ -296,7 +300,10 @@ internal class AndroidDirectUsbRoute(
     private val usbManager = appContext.getSystemService(UsbManager::class.java)
     private val main = Handler(Looper.getMainLooper())
 
-    private class Prepared(val device: UsbDevice, val connection: UsbDeviceConnection, val function: UacFunction, val plan: StreamingPlan)
+    private class Prepared(
+        val device: UsbDevice, val connection: UsbDeviceConnection, val function: UacFunction,
+        @Volatile var plan: StreamingPlan, val speed: UsbBusSpeed,
+    )
 
     private val releases = PendingUsbReleases()
     private var recovering = false
@@ -311,9 +318,8 @@ internal class AndroidDirectUsbRoute(
     private class StreamingFacts(
         val session: DirectUsbSession,
         val device: UsbDeviceIdentity,
-        val plan: StreamingPlan,
-        val protocol: String,
-        val syncType: String,
+        @Volatile var plan: StreamingPlan,
+        val function: UacFunction,
         @Volatile var volume: Int,
     )
 
@@ -510,7 +516,7 @@ internal class AndroidDirectUsbRoute(
                             details = source.toDirectDetails().withOffer(preflight.function),
                         )
                     }
-                    prepared = Prepared(device, connection, preflight.function, preflight.plan)
+                    prepared = Prepared(device, connection, preflight.function, preflight.plan, preflight.speed)
                     return DirectUsbInspection.Ready(name, preflight.plan)
                 }
                 StreamPreflight.NoPlaybackFunction ->
@@ -575,6 +581,14 @@ internal class AndroidDirectUsbRoute(
                 override fun onFailed(failure: DirectUsbFailure) {
                     main.post { if (session === next) listener?.onFailed(failure) }
                 }
+                override fun onReconfigured(plan: StreamingPlan) {
+                    target.plan = plan
+                    main.post {
+                        if (session !== next) return@post
+                        streamingFacts?.plan = plan
+                        listener?.onReconfigured(plan)
+                    }
+                }
             },
         )
         session = next
@@ -584,12 +598,23 @@ internal class AndroidDirectUsbRoute(
                 when (result) {
                     is DirectUsbSession.Takeover.Ready -> {
                         streamingFacts = StreamingFacts(
-                            next, identity, target.plan, target.function.protocolToken(), target.function.syncToken(target.plan), result.volumeNow,
+                            next, identity, target.plan, target.function, result.volumeNow,
                         )
                         next.volumeRange?.let { volumes.publish(DirectUsbVolume(result.volumeNow, it.minimum, it.maximum, it.resolution)) }
                         sessionProvider = DirectUsbAudioOutputProvider(
                             target.plan,
                             openOutput = next::openOutput,
+                            openPlannedOutput = next::openOutput,
+                            planForSource = { source ->
+                                val activePlan = target.plan
+                                if (activePlan.carries(source)) activePlan else {
+                                    WIRE_DEPTHS.asSequence().filter { it >= source.bitDepth }.mapNotNull { bits ->
+                                        (StreamingPlanner.plan(
+                                            target.function, target.speed, source.sampleRateHz, bits,
+                                        ) as? StreamingPlanResult.Planned)?.plan
+                                    }.firstOrNull { it.carries(source) }
+                                }
+                            },
                             source = { configuringSource },
                             onFailure = { failure ->
                                 val details = configuringSource?.toDirectDetails()?.withOffer(target.function)
@@ -632,13 +657,14 @@ internal class AndroidDirectUsbRoute(
     override fun readings(): DirectUsbReadings? {
         val facts = streamingFacts ?: return null
         val totals = facts.session.totals()
+        val plan = facts.plan
         return DirectUsbReadings(
-            sampleRateHz = facts.plan.sampleRateHz,
-            bitDepth = facts.plan.bitResolution,
-            subslotBytes = facts.plan.subslotBytes,
-            channelCount = facts.plan.channels,
-            protocol = facts.protocol,
-            syncType = facts.syncType,
+            sampleRateHz = plan.sampleRateHz,
+            bitDepth = plan.bitResolution,
+            subslotBytes = plan.subslotBytes,
+            channelCount = plan.channels,
+            protocol = facts.function.protocolToken(),
+            syncType = facts.function.syncToken(plan),
             // UAC volume is in 1/256 dB.
             hardwareVolumeDb = facts.volume / 256.0,
             deliveredFrames = totals.deliveredFrames,
