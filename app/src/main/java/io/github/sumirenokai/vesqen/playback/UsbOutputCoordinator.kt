@@ -517,8 +517,10 @@ internal class UsbOutputCoordinator(
     }
 
     override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
-        if (reason == Player.DISCONTINUITY_REASON_SEEK || reason == Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT ||
-            reason == Player.DISCONTINUITY_REASON_REMOVE) {
+        // Both arrive on this thread before the playback thread acts on them. A seek adjustment is the
+        // playback thread's own later report of a seek already handled here, and the output Media3
+        // opened after that seek may have registered first (#314).
+        if (reason == Player.DISCONTINUITY_REASON_SEEK || reason == Player.DISCONTINUITY_REASON_REMOVE) {
             directRoute?.invalidateOutput()
             directSources.clear()
             publishDirectActiveIfPlaying()
