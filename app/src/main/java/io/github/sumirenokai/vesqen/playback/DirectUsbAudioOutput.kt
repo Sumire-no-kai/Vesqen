@@ -150,7 +150,7 @@ class DirectUsbAudioOutput(
         // Null until the stream reached this output's epoch: none of its audio has gone out yet.
         val stats = target.readStats() ?: return 0
         stats.asFailure()?.let(::report)
-        reportDelivery(stats.lastDeliveredMediaFrame.takeIf { !released && running && !failureReported })
+        reportDelivery(stats.lastDeliveredMediaFrame.takeIf { !released && running && !failureReported }, stats.mediaFramesProcessed)
         val frames = clock.positionFrames(stats.mediaFramesProcessed, stats.mediaFramesSubmitted, running, nanoTime())
         return Util.sampleCountToDurationUs(frames, plan.sampleRateHz)
     }
@@ -232,11 +232,14 @@ class DirectUsbAudioOutput(
     /**
      * [lastDelivered] is null while nothing goes out. The newest source with a delivered frame is the
      * one playing and the sources before it have finished. The successor is reported first, so a
-     * listener never sees a gap between two items (A1, #314).
+     * listener never sees a gap between two items (A1, #314). A source also finishes once [processed]
+     * passes into the next one while none of the next one's frames arrived: they were lost, and the
+     * next item must not borrow its predecessor's delivery.
      */
-    private fun reportDelivery(lastDelivered: Long?) {
+    private fun reportDelivery(lastDelivered: Long?, processed: Long = 0) {
         val playing = if (lastDelivered == null) -1 else sources.indexOfLast { lastDelivered > it.startFrames }
-        if (playing < 0) {
+        val finished = playing >= 0 && playing + 1 < sources.size && processed > sources[playing + 1].startFrames
+        if (playing < 0 || finished) {
             sources.forEach { it.report(false) }
             return
         }
