@@ -42,6 +42,15 @@ class Uac1ControlClient(private val usb: UsbControlTransfer, private val timeout
     fun setMute(unitId: Int, interfaceNumber: Int, muted: Boolean): Boolean =
         writeFeature(MUTE_CONTROL, unitId, interfaceNumber, byteArrayOf(if (muted) 1 else 0))
 
+    /** Restore the saved level before unmuting, and verify writes before the recovery record is cleared. */
+    fun restoreSettings(unit: Int, number: Int, level: Int, muted: Boolean?): Boolean {
+        fun restoreMute(value: Boolean) = mute(unit, number) == value ||
+            (setMute(unit, number, value) && mute(unit, number) == value)
+        if (muted == true && !restoreMute(true)) return false
+        if (!setVolume(unit, number, level) || volume(unit, number) != level) return false
+        return muted != false || restoreMute(false)
+    }
+
     fun sampleRate(endpointAddress: Int): Int? {
         val answer = ByteArray(3)
         val length = usb.transfer(TO_HOST_ENDPOINT, GET_CUR, SAMPLING_FREQ_VALUE, endpointAddress, answer, 3, timeoutMs)

@@ -404,6 +404,8 @@ internal class AndroidDirectUsbRoute(
                     recoverSavedDevice()
                 } catch (_: SecurityException) {
                     DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_required")
+                } catch (_: IllegalStateException) {
+                    DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed")
                 }
                 main.post {
                     lastCleanup = result.cleanup
@@ -426,7 +428,15 @@ internal class AndroidDirectUsbRoute(
         }
         val connection = usbManager.openDevice(device)
             ?: return DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.open_failed")
-        val parsed = connection.rawDescriptors?.let(UacDescriptorParser::parse)
+        val parsed = try {
+            connection.rawDescriptors?.let(UacDescriptorParser::parse)
+        } catch (_: SecurityException) {
+            connection.close()
+            return DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_required")
+        } catch (_: IllegalStateException) {
+            connection.close()
+            return DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed")
+        }
         if (parsed !is UacParseResult.Parsed) {
             connection.close()
             return DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.descriptors_refused")

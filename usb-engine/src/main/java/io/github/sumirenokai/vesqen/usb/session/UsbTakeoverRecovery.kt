@@ -3,6 +3,7 @@ package io.github.sumirenokai.vesqen.usb.session
 import io.github.sumirenokai.vesqen.usb.control.Uac1ControlClient
 import io.github.sumirenokai.vesqen.usb.descriptor.UacControlAccess
 import io.github.sumirenokai.vesqen.usb.descriptor.UacFunction
+import io.github.sumirenokai.vesqen.usb.descriptor.UacVersion
 
 /** Runs on the USB control executor, after the old owner has returned every native buffer. */
 class UsbTakeoverRecovery(
@@ -19,42 +20,40 @@ class UsbTakeoverRecovery(
             return CleanupRecord(listOf(CleanupStep("recovery ownership", false)))
         }
         val claimed = mutableListOf<Int>()
-        val interfaces = functions.flatMap { function ->
-            listOf(function.controlInterface) + function.streamingInterfaces.map { it.interfaceNumber }
-        }.distinct()
-        var complete = interfaces.isNotEmpty()
+        val function = functions.singleOrNull {
+            it.version == UacVersion.UAC1 && it.streamingInterfaces.isNotEmpty() &&
+                (marker.controlInterface == null || it.controlInterface == marker.controlInterface)
+        }
+        // Older records did not name the function. Never force-claim an unrelated audio function.
+        var complete = function != null
         var settingsRestored = marker.volumeBefore == null
         try {
-            for (number in interfaces) {
-                val succeeded = attempt { link.claim(number) }
-                steps += CleanupStep("interface $number reclaimed", succeeded)
-                if (succeeded) claimed += number else complete = false
-            }
-            functions.flatMap { it.streamingInterfaces }.distinctBy { it.interfaceNumber }.forEach { stream ->
-                if (stream.interfaceNumber in claimed) {
-                    val succeeded = attempt { link.selectAlternate(stream.interfaceNumber, 0) }
-                    steps += CleanupStep("alternate setting 0 on interface ${stream.interfaceNumber}", succeeded)
+            if (function == null) {
+                steps += CleanupStep("saved audio function identified", false)
+            } else {
+                val interfaces = (listOf(function.controlInterface) + function.streamingInterfaces.map { it.interfaceNumber }).distinct()
+                for (number in interfaces) {
+                    val succeeded = attempt { link.claim(number) }
+                    steps += CleanupStep("interface $number reclaimed", succeeded)
+                    if (succeeded) claimed += number else complete = false
                 }
-            }
-            if (marker.volumeBefore != null) {
-                val candidates = functions.flatMap { function ->
-                    function.featureUnits.filter { it.masterVolume != UacControlAccess.ABSENT && it.masterVolume != UacControlAccess.READ_ONLY }
-                        .map { function.controlInterface to it.id }
-                }.filter { (number, unit) ->
-                    (marker.controlInterface == null || marker.controlInterface == number) &&
-                        (marker.volumeUnitId == null || marker.volumeUnitId == unit)
+                function.streamingInterfaces.distinctBy { it.interfaceNumber }.forEach { stream ->
+                    if (stream.interfaceNumber in claimed) {
+                        val succeeded = attempt { link.selectAlternate(stream.interfaceNumber, 0) }
+                        steps += CleanupStep("alternate setting 0 on interface ${stream.interfaceNumber}", succeeded)
+                        complete = complete && succeeded
+                    }
                 }
-                val target = candidates.singleOrNull()
-                settingsRestored = target != null && target.first in claimed && attempt {
-                    val client = Uac1ControlClient(link.control)
-                    val (number, unit) = checkNotNull(target)
-                    val muted = marker.mutedBefore == null ||
-                        (client.setMute(unit, number, marker.mutedBefore) && client.mute(unit, number) == marker.mutedBefore)
-                    val volume = client.setVolume(unit, number, marker.volumeBefore) &&
-                        client.volume(unit, number) == marker.volumeBefore
-                    muted && volume
+                if (marker.volumeBefore != null) {
+                    val target = function.featureUnits.singleOrNull {
+                        it.masterVolume != UacControlAccess.ABSENT && it.masterVolume != UacControlAccess.READ_ONLY &&
+                            (marker.volumeUnitId == null || marker.volumeUnitId == it.id)
+                    }
+                    settingsRestored = target != null && function.controlInterface in claimed && attempt {
+                        Uac1ControlClient(link.control).restoreSettings(target.id, function.controlInterface, marker.volumeBefore, marker.mutedBefore)
+                    }
+                    steps += CleanupStep("volume restored", settingsRestored)
                 }
-                steps += CleanupStep("volume restored", settingsRestored)
             }
         } finally {
             claimed.asReversed().forEach { number ->
