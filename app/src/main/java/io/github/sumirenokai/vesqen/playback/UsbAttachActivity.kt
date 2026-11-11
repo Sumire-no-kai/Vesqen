@@ -22,6 +22,7 @@ class UsbAttachActivity : Activity() {
     internal companion object {
         const val ACTION_RECHECK = "io.github.sumirenokai.vesqen.playback.RECHECK_USB_ATTACHMENT"
 
+        @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
         fun syncEnabled(context: Context, selected: UsbOutputMode? = null) {
             val preferences = context.getSharedPreferences(UsbOutputCoordinator.PREFERENCES_NAME, Context.MODE_PRIVATE)
             val mode = selected?.name ?: preferences.getString(UsbOutputCoordinator.MODE_KEY, null)
