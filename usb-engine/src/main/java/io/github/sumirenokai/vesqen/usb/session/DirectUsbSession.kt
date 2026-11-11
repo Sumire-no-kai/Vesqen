@@ -171,14 +171,12 @@ class DirectUsbSession(
      * A new output for Media3. The first takes the stream's first epoch; any later one first ends the
      * output before it. Null unless the session is streaming. Never waits.
      */
-    fun openOutput(): UsbOutputHandle? {
-        val current = stream ?: return null
-        if (state !is State.Streaming) return null
-        return synchronized(epochLock) {
-            if (newestEpochTaken) retireNewest(current)
-            newestEpochTaken = true
-            Output(newestEpoch, current)
-        }
+    fun openOutput(): UsbOutputHandle? = synchronized(epochLock) {
+        val current = stream ?: return@synchronized null
+        if (state !is State.Streaming) return@synchronized null
+        if (newestEpochTaken) retireNewest(current)
+        newestEpochTaken = true
+        Output(newestEpoch, current)
     }
 
     /** A new wire configuration starts only after the sink drained and released the previous output. */
@@ -192,7 +190,7 @@ class DirectUsbSession(
                         request.install(openOutput())
                     } else {
                         pendingOutput = request
-                        state = State.Reconfiguring
+                        synchronized(epochLock) { state = State.Reconfiguring }
                         monitor?.cancel(false)
                         monitor = null
                         reconfigure()
@@ -313,7 +311,7 @@ class DirectUsbSession(
         }
         if (onReleased != null) releaseCallbacks.add(onReleased)
         if (state is State.Streaming || state == State.Reconfiguring || state == State.Idle) {
-            state = State.Releasing(null)
+            synchronized(epochLock) { state = State.Releasing(null) }
             cleanUp()
         }
     }
@@ -434,7 +432,7 @@ class DirectUsbSession(
 
     private fun fail(failure: DirectUsbFailure) {
         if (state !is State.Streaming && state != State.Reconfiguring) return
-        state = State.Releasing(failure)
+        synchronized(epochLock) { state = State.Releasing(failure) }
         listener.onFailed(failure)
         cleanUp()
     }
@@ -514,7 +512,7 @@ class DirectUsbSession(
         val current = stream ?: return
         if (current !== output.owner) return
         synchronized(epochLock) {
-            if (output.epoch == newestEpoch && newestEpochTaken) retireNewest(current)
+            if (stream === output.owner && state is State.Streaming && output.epoch == newestEpoch && newestEpochTaken) retireNewest(current)
         }
     }
 
@@ -522,24 +520,27 @@ class DirectUsbSession(
         @Volatile
         private var released = false
 
-        override fun write(buffer: ByteBuffer, offset: Int, size: Int): Int {
-            if (released) return -1
-            // A device given back on purpose (focus, a long pause) is no error: the output takes nothing
-            // until its owner rebuilds the player. A failure ends it, and [failure] says why.
-            if (state !is State.Streaming || stream !== owner) return if (failure == null) 0 else -1
-            return stream?.write(epoch, buffer, offset, size) ?: -1
+        // State changes acquire this lock before destruction. A playback call can only use a live stream.
+        override fun write(buffer: ByteBuffer, offset: Int, size: Int): Int = synchronized(epochLock) {
+            if (released) return@synchronized -1
+            if (state !is State.Streaming || stream !== owner) return@synchronized if (failure == null) 0 else -1
+            owner.write(epoch, buffer, offset, size)
         }
 
-        override fun setRunning(running: Boolean) {
-            if (!released && stream === owner) owner.setRunning(epoch, running)
+        override fun setRunning(running: Boolean) = synchronized(epochLock) {
+            if (!released && stream === owner && state is State.Streaming) owner.setRunning(epoch, running)
         }
 
-        override fun markEndOfStream() {
-            if (!released && stream === owner) owner.markEndOfStream(epoch)
+        override fun markEndOfStream() = synchronized(epochLock) {
+            if (!released && stream === owner && state is State.Streaming) owner.markEndOfStream(epoch)
         }
 
-        override fun readStats(): UsbStreamStats? =
-            (if (stream === owner) owner.readStats() else finalStats.takeIf { finishedStream === owner })?.takeIf { it.epoch == epoch }
+        private var lastStats: UsbStreamStats? = null
+        override fun readStats(): UsbStreamStats? = synchronized(epochLock) {
+            val stats = if (stream === owner && state is State.Streaming) owner.readStats()
+                else finalStats.takeIf { finishedStream === owner } ?: lastStats
+            stats?.takeIf { it.epoch == epoch }?.also { lastStats = it }
+        }
 
         override val failure: DirectUsbFailure?
             get() = when (val current = state) {

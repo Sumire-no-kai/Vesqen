@@ -288,6 +288,32 @@ class DirectUsbSessionTest {
     }
 
     @Test
+    fun `playback operations do not enter a stream while its destruction waits`() {
+        val entered = CountDownLatch(1)
+        val finish = CountDownLatch(1)
+        val playback = Executors.newSingleThreadExecutor()
+        takeOver()
+        val old = checkNotNull(session.openOutput())
+        stream.onDestroy = { entered.countDown(); finish.await(5, TimeUnit.SECONDS) }
+        stream.onRunning = { finish.await(5, TimeUnit.SECONDS) }
+        session.openOutput(PLAN.copy(sampleRateHz = 44_100))
+        try {
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            playback.submit {
+                old.setRunning(false)
+                old.markEndOfStream()
+                assertEquals(0, old.write(ByteBuffer.allocateDirect(4), 0, 4))
+                old.readStats()
+                old.release()
+            }.get(2, TimeUnit.SECONDS)
+        } finally {
+            finish.countDown()
+            playback.shutdownNow()
+            control.submit {}.get(2, TimeUnit.SECONDS)
+        }
+    }
+
+    @Test
     fun `the same wire plan opens another epoch without recreating the stream`() {
         var creations = 0
         streams = UsbStreamFactory { _, _ -> creations++; UsbStreamFactory.Creation.Created(stream) }
@@ -326,6 +352,8 @@ class DirectUsbSessionTest {
         val output = session.openOutput(PLAN.copy(sampleRateHz = 44_100))
         assertTrue(waitUntil { output.readStats() != null })
         val retirements = next.retirements
+        assertEquals(0, old.write(ByteBuffer.allocateDirect(4), 0, 4))
+        assertTrue(next.writes.isEmpty())
         old.release()
         old.setRunning(false)
         assertEquals(retirements, next.retirements)
@@ -1053,6 +1081,7 @@ class DirectUsbSessionTest {
         /** Runs inside destroy, before it answers. */
         @Volatile
         var onDestroy: () -> Unit = {}
+        var onRunning: () -> Unit = {}
         val writes = CopyOnWriteArrayList<Pair<Long, Int>>()
         val lost = java.util.concurrent.ConcurrentHashMap<Long, Long>()
         val delivered = java.util.concurrent.ConcurrentHashMap<Long, Long>()
@@ -1075,7 +1104,7 @@ class DirectUsbSessionTest {
             return size
         }
 
-        override fun setRunning(epoch: Long, running: Boolean) = Unit
+        override fun setRunning(epoch: Long, running: Boolean) = onRunning()
 
         override fun markEndOfStream(epoch: Long) = Unit
 
