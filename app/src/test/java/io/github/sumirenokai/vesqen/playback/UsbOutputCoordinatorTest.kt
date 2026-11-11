@@ -38,8 +38,8 @@ import io.github.sumirenokai.vesqen.library.AudioTrack as LibraryTrack
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMediaItemExtras
 import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
 import io.github.sumirenokai.vesqen.usb.session.TakeoverMarker
-import io.github.sumirenokai.vesqen.usb.session.UsbDeviceIdentity
 import io.github.sumirenokai.vesqen.usb.session.DirectUsbFailure
+import io.github.sumirenokai.vesqen.usb.session.UsbDeviceIdentity
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 import java.nio.ByteBuffer
@@ -2052,6 +2052,64 @@ class UsbOutputCoordinatorTest {
         direct.calls.clear()
     }
 
+    private fun requestFixedVolume(): UsbOutputStatus {
+        direct.inspection = DirectUsbInspection.Ready("Fixed DAC", PLAN_48K_24, UsbDeviceIdentity(1, 2, 3))
+        connect(dac)
+        start(direct = direct)
+        loadTrack()
+        requestStrict()
+        assertStatus(UsbOutputPhase.AVAILABLE, "direct_usb.available")
+        player.play()
+        idle()
+        assertStatus(UsbOutputPhase.AVAILABLE, FIXED_VOLUME_CONFIRMATION)
+        assertNull(status().failure)
+        assertFalse(player.playWhenReady)
+        assertFalse("takeOver" in direct.calls)
+        return status()
+    }
+
+    private fun answer(prompt: UsbOutputStatus, accept: Boolean) =
+        coordinator.answerFixedVolume(prompt.generation, prompt.observedAtElapsedRealtimeMs, accept)
+
+    @Test
+    fun `cancelling consumes only that prompt and retry requires a fresh confirmation`() {
+        val first = requestFixedVolume()
+        assertTrue(answer(first, false))
+        assertStatus(UsbOutputPhase.AVAILABLE, "direct_usb.available")
+        assertFalse(answer(first, true))
+        assertFalse("confirmed" in direct.calls)
+        player.play()
+        idle()
+        val second = status()
+        assertEquals(FIXED_VOLUME_CONFIRMATION, second.decisionCode)
+        assertFalse(answer(first, true))
+        assertTrue(answer(second, true))
+        idle()
+        assertEquals(1, direct.calls.count { it == "confirmed" })
+        assertEquals(1, direct.calls.count { it == "takeOver" })
+        assertTrue(player.playWhenReady)
+        assertFalse(answer(second, true))
+    }
+
+    @Test
+    fun `change of attached device invalidates a visible confirmation even for the same model`() {
+        val first = requestFixedVolume()
+        direct.inspection = DirectUsbInspection.Ready("Fixed DAC", PLAN_48K_24, UsbDeviceIdentity(9, 2, 3))
+        assertFalse(answer(first, true))
+        idle()
+        assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.fixed_volume_confirmation_failed")
+        assertFalse("takeOver" in direct.calls || "confirmed" in direct.calls)
+    }
+
+    @Test
+    fun `clearing the queue with a confirmation open cannot authorize full-scale playback`() {
+        val first = requestFixedVolume()
+        player.clearMediaItems()
+        idle()
+        assertFalse(answer(first, true))
+        assertFalse("takeOver" in direct.calls || "confirmed" in direct.calls)
+    }
+
     @Test
     fun `without a bit-perfect mixer strict mode inspects the own path and takes over only to play`() {
         connect(dac)
@@ -2605,6 +2663,13 @@ class UsbOutputCoordinatorTest {
     private class FakeDirectRoute : DirectUsbRoute {
         val calls = mutableListOf<String>()
         var inspection: DirectUsbInspection = DirectUsbInspection.Ready("JBL Flip 7", PLAN_48K_24)
+        override fun confirmFixedVolume(expected: UsbDeviceIdentity): Boolean {
+            val current = inspection as? DirectUsbInspection.Ready ?: return false
+            if (current.needsFixedVolumeConsent != expected) return false
+            calls += "confirmed"
+            inspection = current.copy(needsFixedVolumeConsent = null)
+            return true
+        }
         var permissionGranted = true
         var beforePermissionResult: (() -> Unit)? = null
         var takeoverFailure: DirectUsbFailure? = null

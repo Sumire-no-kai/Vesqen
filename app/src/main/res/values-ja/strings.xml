@@ -1064,4 +1064,9 @@
     <string name="usb_recovery_in_progress">USB デバイスと接続前の音量を復元しています。完了するまで再生を待機します。</string>
     <string name="usb_failure_permission_revoked">USB へのアクセス権限が取り消されました。再生を停止し、デバイスを解放しています。</string>
     <string name="usb_output_interrupted">通話の終了またはオーディオフォーカスの復帰を待つ間、厳密な USB 出力を一時停止しています。</string>
+    <string name="usb_fixed_volume_title">固定音量で再生しますか？</string>
+    <string name="usb_fixed_volume_body">%1$s にフルスケールのデジタル音声を出力します。スマートフォンの音量ボタンでは音量を下げられません。再生する前に DAC またはアンプの音量を下げてください。この DAC と同じモデルを使うときは、この端末では次回から確認を省略します。</string>
+    <string name="usb_fixed_volume_accept">確認して再生</string>
+    <string name="usb_fixed_volume_failed">DAC を確認できませんでした。USB 接続を確認して、もう一度再生してください。</string>
+    <string name="usb_fixed_volume_label">音量は DAC またはアンプで調節してください</string>
 </resources>

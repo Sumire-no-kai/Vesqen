@@ -55,7 +55,7 @@ class MainActivity : ComponentActivity() {
 
     /** The key-up belongs to the press taken in [onKeyDown], so the system gets neither. */
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-        val taken = volumeKeyPresses(keyCode) != null && (application as VesqenApplication).directUsbVolume.state.value != null
+        val taken = volumeKeyPresses(keyCode) != null && (application as VesqenApplication).directUsbVolume.ownsVolume
         return taken || super.onKeyUp(keyCode, event)
     }
 

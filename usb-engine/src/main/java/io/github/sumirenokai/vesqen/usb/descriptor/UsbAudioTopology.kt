@@ -34,7 +34,11 @@ data class UacFunction(
     val streamingInterfaces: List<UacStreamingInterface>,
 ) {
     /** The feature units audio passes between this USB stream and any output terminal. */
-    fun featureUnitsAfter(terminalLink: Int): List<UacFeatureUnit> {
+    fun featureUnitsAfter(terminalLink: Int): List<UacFeatureUnit> =
+        playbackEntitiesAfter(terminalLink).let { path -> featureUnits.filter { it.id in path } }
+
+    /** Entities on a route from this USB input to a physical output; empty for an unresolved path. */
+    internal fun playbackEntitiesAfter(terminalLink: Int): Set<Int> {
         val sources = buildMap<Int, List<Int>> {
             outputTerminals.forEach { put(it.id, listOf(it.sourceId)) }
             featureUnits.forEach { put(it.id, listOf(it.sourceId)) }
@@ -49,7 +53,7 @@ data class UacFunction(
             return sources[id].orEmpty().map(::reachesLink).any { it }.also { reaches[id] = it }
         }
         outputTerminals.filterNot(UacOutputTerminal::isUsbStreaming).forEach { reachesLink(it.id) }
-        return featureUnits.filter { reaches[it.id] == true }
+        return reaches.filterValues { it }.keys
     }
 
     /** UAC2: the clock sources this USB stream can run from. */

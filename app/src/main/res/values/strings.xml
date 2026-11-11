@@ -1095,4 +1095,9 @@
     <string name="usb_recovery_in_progress">Restoring the USB device and its original volume. Playback will wait until recovery finishes.</string>
     <string name="usb_failure_permission_revoked">USB access was revoked. Playback stopped and the device is being released.</string>
     <string name="usb_output_interrupted">Strict USB output is temporarily stopped while a call is active or audio focus is held elsewhere.</string>
+    <string name="usb_fixed_volume_title">Play at fixed volume?</string>
+    <string name="usb_fixed_volume_body">%1$s will receive full-scale digital audio. Lower the volume on the DAC or amplifier before playing. The phone volume controls cannot lower this output. Vesqen will remember your confirmation on this phone for this DAC model.</string>
+    <string name="usb_fixed_volume_accept">Confirm and play</string>
+    <string name="usb_fixed_volume_failed">Could not confirm this DAC. Check the USB connection and try playing again.</string>
+    <string name="usb_fixed_volume_label">Adjust volume on the DAC or amplifier</string>
 </resources>
