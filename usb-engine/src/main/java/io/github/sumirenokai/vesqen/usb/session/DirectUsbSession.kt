@@ -119,6 +119,7 @@ class DirectUsbSession(
 
     /** Only the session that wrote the marker clears it; one refused before claiming leaves another's alone. */
     private var markerWritten = false
+    @Volatile private var detached = false
 
     private val epochLock = Any()
     private var newestEpoch = UsbStreamEngine.FIRST_EPOCH
@@ -137,7 +138,14 @@ class DirectUsbSession(
     private fun takeOverNow(plan: StreamingPlan, startVolume: Int, onDone: (Takeover) -> Unit) {
         if (state != State.Idle) return onDone(failed(Reason.USB_ENGINE_UNAVAILABLE, "the session was released before its takeover"))
         state = State.TakingOver
-        val result = claimAndStart(plan, startVolume)
+        val attempt = try {
+            claimAndStart(plan, startVolume)
+        } catch (_: SecurityException) {
+            failed(Reason.USB_PERMISSION_REVOKED, "USB access was revoked")
+        } catch (error: IllegalStateException) {
+            failed(Reason.USB_TRANSFER_FAILED, "USB connection unavailable: ${error.javaClass.simpleName}")
+        }
+        val result = if (detached) failed(Reason.DEVICE_DISCONNECTED, "the device was detached") else attempt
         when (result) {
             is Takeover.Ready -> {
                 state = State.Streaming(plan)
@@ -174,8 +182,16 @@ class DirectUsbSession(
     fun setVolume(target: Int, onDone: (Int?) -> Unit) = control.execute {
         val volume = volumeControl
         if (state !is State.Streaming || volume == null) return@execute onDone(null)
-        client.setVolume(volume.unitId, volume.controlInterface, volume.range.settingAtOrBelow(target))
-        val readBack = client.volume(volume.unitId, volume.controlInterface)
+        val readBack = try {
+            client.setVolume(volume.unitId, volume.controlInterface, volume.range.settingAtOrBelow(target))
+            client.volume(volume.unitId, volume.controlInterface)
+        } catch (_: SecurityException) {
+            onDone(null)
+            fail(DirectUsbFailure(Reason.USB_PERMISSION_REVOKED, "USB access was revoked"))
+            return@execute
+        } catch (_: IllegalStateException) {
+            null
+        }
         onDone(readBack)
         if (readBack == null) fail(DirectUsbFailure(Reason.VOLUME_CONTROL_FAILED, "the volume could not be read after a change"))
     }
@@ -195,9 +211,13 @@ class DirectUsbSession(
     }
 
     /** The system said the device is gone. */
-    fun onDeviceDetached() = control.execute { fail(DirectUsbFailure(Reason.DEVICE_DISCONNECTED, "the device was detached")) }
+    fun onDeviceDetached() {
+        detached = true
+        control.execute { fail(DirectUsbFailure(Reason.DEVICE_DISCONNECTED, "the device was detached")) }
+    }
 
     private fun claimAndStart(plan: StreamingPlan, startVolume: Int): Takeover {
+        if (detached) return failed(Reason.DEVICE_DISCONNECTED, "the device was detached")
         val taken = markers.acquire(device, function.controlInterface)
             ?: return failed(Reason.USB_TRANSFER_FAILED, "the takeover marker is unavailable or awaiting recovery")
         markerWritten = true
@@ -261,6 +281,7 @@ class DirectUsbSession(
             is UsbStreamFactory.Creation.Unavailable -> return failed(Reason.USB_ENGINE_UNAVAILABLE, creation.reason)
         }
         stream = created
+        if (detached) return failed(Reason.DEVICE_DISCONNECTED, "the device was detached")
         if (!created.start()) return failed(Reason.USB_ENGINE_UNAVAILABLE, "the stream thread did not start")
         return Takeover.Ready(volumeBefore, readBack)
     }
@@ -270,6 +291,18 @@ class DirectUsbSession(
     /** On [control]: errors the stream reported, and retirements that never finish. */
     private fun check() {
         if (state !is State.Streaming) return
+        val connectionFailure = try {
+            when {
+                !link.connected -> DirectUsbFailure(Reason.DEVICE_DISCONNECTED, "the device was detached")
+                !link.permissionGranted -> DirectUsbFailure(Reason.USB_PERMISSION_REVOKED, "USB access was revoked")
+                else -> null
+            }
+        } catch (_: SecurityException) {
+            DirectUsbFailure(Reason.USB_PERMISSION_REVOKED, "USB access was revoked")
+        } catch (_: IllegalStateException) {
+            DirectUsbFailure(Reason.USB_TRANSFER_FAILED, "USB connection unavailable")
+        }
+        if (connectionFailure != null) return fail(connectionFailure)
         val stats = stream?.readStats() ?: return
         stats.asFailure()?.let { return fail(it) }
         val waitingSince = synchronized(epochLock) { retiredAtNanos } ?: return
@@ -310,24 +343,22 @@ class DirectUsbSession(
             stream = null
             cleanupSteps += CleanupStep("stream reclaimed", true)
         }
+        var allReleased = true
         streamingInterface?.let { number ->
-            cleanupSteps += CleanupStep("alternate setting 0 on interface $number", link.selectAlternate(number, 0))
+            allReleased = cleanupStep("alternate setting 0 on interface $number") { link.selectAlternate(number, 0) }
             streamingInterface = null
         }
         restoreVolume?.let { restore ->
-            val restored = runCatching(restore).getOrDefault(false)
-            restorePending = !restored
-            cleanupSteps += CleanupStep("volume restored", restored)
+            restorePending = !cleanupStep("volume restored", restore)
             restoreVolume = null
         }
-        var allReleased = true
         claimed.asReversed().forEach { number ->
-            val released = link.release(number)
+            val released = cleanupStep("interface $number released") { link.release(number) }
             allReleased = allReleased && released
-            cleanupSteps += CleanupStep("interface $number released", released)
         }
         claimed.clear()
-        link.close()
+        val closed = cleanupStep("connection closed") { link.close(); true }
+        allReleased = allReleased && closed
         // Only a device with every interface back may lose its marker; otherwise the next start recovers it.
         if (markerWritten) {
             cleanupSteps += CleanupStep("takeover marker cleared", markers.finish(allReleased, settingsRestored = !restorePending))
@@ -338,6 +369,18 @@ class DirectUsbSession(
         listener.onReleased(record, failure)
         releaseCallbacks.forEach { it(record) }
         releaseCallbacks.clear()
+    }
+
+    private fun cleanupStep(name: String, action: () -> Boolean): Boolean {
+        val succeeded = try {
+            action()
+        } catch (_: SecurityException) {
+            false
+        } catch (_: IllegalStateException) {
+            false
+        }
+        cleanupSteps += CleanupStep(name, succeeded)
+        return succeeded
     }
 
     private fun retireNewest(current: UsbStream) {

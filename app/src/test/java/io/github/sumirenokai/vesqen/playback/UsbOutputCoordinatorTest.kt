@@ -6,8 +6,10 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
 import android.media.AudioAttributes
+import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
@@ -61,6 +63,7 @@ import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
 import org.robolectric.shadow.api.Shadow
 import org.robolectric.shadows.AudioDeviceInfoBuilder
+import org.robolectric.shadows.ShadowAudioManager
 import org.robolectric.shadows.ShadowAudioTrack
 import org.robolectric.util.ReflectionHelpers
 
@@ -70,7 +73,7 @@ import org.robolectric.util.ReflectionHelpers
  * audio sink would.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [35], shadows = [RoutableAudioTrackShadow::class])
+@Config(sdk = [35], shadows = [RoutableAudioTrackShadow::class, RoutingAudioManagerShadow::class])
 @androidx.annotation.OptIn(UnstableApi::class)
 class UsbOutputCoordinatorTest {
     private val context = RuntimeEnvironment.getApplication()
@@ -255,6 +258,25 @@ class UsbOutputCoordinatorTest {
         idle()
         assertEquals(UsbOutputMode.STRICT_BIT_PERFECT, status().mode)
         assertTrue(status().phase != UsbOutputPhase.FAILED)
+    }
+
+    @Test
+    fun `the noisy broadcast caused by claiming the DAC does not pause direct playback`() {
+        reachDirectActive()
+        context.sendBroadcast(Intent(android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY))
+        idle()
+        assertTrue(player.playWhenReady)
+        assertStatus(UsbOutputPhase.ACTIVE, "direct_usb.active")
+    }
+
+    @Test
+    fun `a current session permission failure stops playback and revokes ACTIVE`() {
+        reachDirectActive()
+        checkNotNull(direct.listener).onFailed(DirectUsbFailure(DirectUsbFailure.Reason.USB_PERMISSION_REVOKED, "revoked"))
+        idle()
+        assertStatus(UsbOutputPhase.FAILED, "direct_usb.usb_permission_revoked")
+        assertFalse(player.playWhenReady)
+        assertTrue("release" in direct.calls)
     }
 
     // System output
@@ -1964,6 +1986,31 @@ class UsbOutputCoordinatorTest {
     }
 
     @Test
+    @Config(shadows = [RevokedDescriptorConnection::class])
+    fun `revocation during descriptor inspection closes the connection and fails before takeover`() {
+        attachUsbHardware("/dev/bus/usb/001/002", vendorId = 0x1234, productId = 0x5678)
+        val route = AndroidDirectUsbRoute(context, PreferencesTakeoverMarkerStore(context),
+            DirectUsbVolumeControl(), PreferencesDirectUsbVolumeMemory(context))
+        RevokedDescriptorConnection.closes = 0
+        start(direct = route)
+        loadTrack()
+        requestStrict()
+        assertStatus(UsbOutputPhase.FAILED, "direct_usb.usb_permission_revoked")
+        assertEquals(1, RevokedDescriptorConnection.closes)
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `an unavailable host list cannot crash a strict playback request`() {
+        start(direct = direct)
+        loadTrack()
+        direct.deviceListError = IllegalStateException("USB service unavailable")
+        requestStrict()
+        assertStatus(UsbOutputPhase.FAILED, "direct_usb.usb_transfer_failed")
+        assertFalse("takeOver" in direct.calls)
+    }
+
+    @Test
     fun `a persisted recovery marker blocks another device until its own device is unplugged`() {
         attachUsbHardware("/dev/bus/usb/001/002", vendorId = 0x1234, productId = 0x5678)
         val manager = context.getSystemService(UsbManager::class.java)
@@ -2044,9 +2091,14 @@ class UsbOutputCoordinatorTest {
 
         override fun onSinkConfigured(config: AudioSink.AudioSinkConfig) = Unit
 
+        var deviceListError: IllegalStateException? = null
+
         override fun inspect(source: SourcePcmFormat): DirectUsbInspection = inspection.also { calls += "inspect" }
 
-        override fun hasUsbAudioDevice() = usbAudioDevicePresent
+        override fun hasUsbAudioDevice(): Boolean {
+            deviceListError?.let { throw it }
+            return usbAudioDevicePresent
+        }
 
         override fun requestPermission(forRecovery: Boolean, onResult: (granted: Boolean) -> Unit) {
             calls += "requestPermission"
@@ -2302,6 +2354,45 @@ class UsbOutputCoordinatorTest {
                     throw failure.targetException
                 }
             } as ExoPlayer
+    }
+}
+
+@Implements(UsbDeviceConnection::class)
+class RevokedDescriptorConnection {
+    @Implementation fun getRawDescriptors(): ByteArray = throw SecurityException("USB permission revoked after open")
+    @Implementation fun close() { closes++ }
+
+    companion object {
+        var closes = 0
+    }
+}
+
+/** Robolectric 4.17 invokes device callbacks on the test thread even when Media3 supplied its playback handler. */
+@Implements(AudioManager::class)
+class RoutingAudioManagerShadow : ShadowAudioManager() {
+    private val registrations = mutableMapOf<AudioDeviceCallback, AudioDeviceCallback>()
+
+    @Implementation
+    @Synchronized
+    override fun registerAudioDeviceCallback(callback: AudioDeviceCallback, handler: Handler?) {
+        if (callback in registrations) return
+        val target = handler ?: Handler(Looper.getMainLooper())
+        val delivery = object : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(devices: Array<out AudioDeviceInfo>) {
+                target.post { callback.onAudioDevicesAdded(devices) }
+            }
+            override fun onAudioDevicesRemoved(devices: Array<out AudioDeviceInfo>) {
+                target.post { callback.onAudioDevicesRemoved(devices) }
+            }
+        }
+        registrations[callback] = delivery
+        super.registerAudioDeviceCallback(delivery, target)
+    }
+
+    @Implementation
+    @Synchronized
+    override fun unregisterAudioDeviceCallback(callback: AudioDeviceCallback) {
+        registrations.remove(callback)?.let { super.unregisterAudioDeviceCallback(it) }
     }
 }
 

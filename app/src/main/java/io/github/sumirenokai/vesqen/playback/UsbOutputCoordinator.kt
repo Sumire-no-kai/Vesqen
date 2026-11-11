@@ -173,6 +173,10 @@ internal class UsbOutputCoordinator(
         audioManager.registerAudioDeviceCallback(deviceCallback, mainHandler)
         directRoute?.let { route ->
             route.listener = object : DirectUsbRoute.Listener {
+                override fun onReleased(cleanup: io.github.sumirenokai.vesqen.usb.session.CleanupRecord) {
+                    if (!closed && !directPath && !route.streaming) player.setHandleAudioBecomingNoisy(true)
+                }
+
                 override fun onOutputOpened(periodUid: Any, output: Any) {
                     if (closed || !directPath || player.currentTimeline.getIndexOfPeriod(periodUid) == C.INDEX_UNSET) return
                     directOutputToken = output
@@ -507,13 +511,16 @@ internal class UsbOutputCoordinator(
         }
         enforceNeutralProcessing(activePlayer)
         val route = directRoute
-        if (route != null && usesDirectPath(route)) {
-            reconfigureDirectOutput(route, generation, activePlayer)
-            return
-        }
-        if (route != null && synchronized(lock) { directPath }) {
-            returnDirectForOfficial(route)
-            return
+        if (route != null) {
+            val useDirect = probeUsb(generation) { usesDirectPath(route) } ?: return
+            if (useDirect) {
+                reconfigureDirectOutput(route, generation, activePlayer)
+                return
+            }
+            if (synchronized(lock) { directPath }) {
+                returnDirectForOfficial(route)
+                return
+            }
         }
         // Also applies after a retry or service recreation: Android may list a mixer while an
         // earlier session still owns the interfaces or has an unresolved recovery record.
@@ -1302,6 +1309,7 @@ internal class UsbOutputCoordinator(
         preferences.edit { putString(MODE_KEY, UsbOutputMode.SYSTEM.name) }
         val activePlayer = player
         activePlayer?.setPreferredAudioDevice(null)
+        activePlayer?.setHandleAudioBecomingNoisy(true)
         publishSystem()
         if (rebuild && activePlayer != null && activePlayer.mediaItemCount > 0) {
             activePlayer.pause()
@@ -1325,6 +1333,17 @@ internal class UsbOutputCoordinator(
         // preflight reports the missing device, and an arriving route starts the next attempt.
         if (routes.isEmpty()) return route.hasUsbAudioDevice()
         return !officialMixerOffered(routes)
+    }
+
+    /** Permission or the connection can disappear between enumeration and opening the descriptor. */
+    private inline fun <T : Any> probeUsb(generation: Long, probe: () -> T): T? = try {
+        probe()
+    } catch (_: SecurityException) {
+        failClosed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_permission_revoked", expectedGeneration = generation)
+        null
+    } catch (_: IllegalStateException) {
+        failClosed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed", expectedGeneration = generation)
+        null
     }
 
     private fun officialMixerOffered(devices: List<AudioDeviceInfo>): Boolean =
@@ -1388,7 +1407,7 @@ internal class UsbOutputCoordinator(
             failClosed(UsbOutputFailure.SOURCE_FORMAT_UNKNOWN, "direct_usb.source_format_unknown", expectedGeneration = generation)
             return
         }
-        when (val inspection = route.inspect(source)) {
+        when (val inspection = probeUsb(generation) { route.inspect(source) } ?: return) {
             DirectUsbInspection.NoDevice ->
                 failClosed(UsbOutputFailure.NO_USB_AUDIO_DEVICE, "direct_usb.no_usb_audio_device", expectedGeneration = generation)
             DirectUsbInspection.SeveralDevices ->
@@ -1474,6 +1493,7 @@ internal class UsbOutputCoordinator(
             }
         }
         activePlayer.pause()
+        activePlayer.setHandleAudioBecomingNoisy(false)
         route.takeOver { failure ->
             if (!isGenerationCurrent(generation)) return@takeOver
             if (failure != null) {

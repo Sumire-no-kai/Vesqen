@@ -167,6 +167,66 @@ class DirectUsbSessionTest {
     private fun recover(functions: List<UacFunction> = listOf(JBL)) =
         UsbTakeoverRecovery(UsbDeviceIdentity(1003, 0x0ecb, 0x2107), link, functions, markers).recover()
 
+    @Test
+    fun `an unavailable USB manager cannot silently stop monitoring an active stream`() {
+        takeOver()
+        link.probeUnavailable = true
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertEquals(Reason.USB_TRANSFER_FAILED, failures.single().reason)
+        assertTrue(events.containsAll(listOf("release 2", "release 1", "close")))
+    }
+
+    @Test
+    fun `a detach delivered during stream creation cannot publish a successful takeover`() {
+        streams = UsbStreamFactory { _, _ ->
+            session.onDeviceDetached()
+            UsbStreamFactory.Creation.Created(stream)
+        }
+        val result = takeOver()
+        assertTrue(result is DirectUsbSession.Takeover.Failed)
+        assertEquals(Reason.DEVICE_DISCONNECTED, (result as DirectUsbSession.Takeover.Failed).failure.reason)
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertFalse(events.contains("stream started"))
+    }
+
+    @Test
+    fun `an unsuccessful alternate reset on live release preserves the marker for startup`() {
+        takeOver()
+        link.refuseAlternateZero = true
+        val (record, _) = release()
+        assertEquals("alternate setting 0 on interface 2", record.firstFailure?.name)
+        assertTrue(markers.isOccupied())
+    }
+
+    @Test
+    fun `permission removal fails closed and releases every claimed interface`() {
+        takeOver()
+        link.permissionGranted = false
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        assertEquals(Reason.USB_PERMISSION_REVOKED, failures.single().reason)
+        assertTrue(events.containsAll(listOf("stream destroyed", "release 2", "release 1", "close")))
+        assertTrue(session.openOutput() == null)
+    }
+
+    @Test
+    fun `permission removal during a claim still releases earlier interfaces`() {
+        link.throwingClaims += 2
+        val result = takeOver() as DirectUsbSession.Takeover.Failed
+        assertEquals(Reason.USB_PERMISSION_REVOKED, result.failure.reason)
+        assertTrue(events.containsAll(listOf("claim 1", "claim 2", "release 1", "close")))
+    }
+
+    @Test
+    fun `an exception releasing one interface does not skip the rest or erase recovery`() {
+        takeOver()
+        link.throwingReleases += 2
+        val (record, _) = release()
+        assertEquals("interface 2 released", record.firstFailure?.name)
+        assertTrue(events.containsAll(listOf("release 2", "release 1", "close")))
+        assertEquals(-2560, markers.persisted?.volumeBefore)
+        assertTrue(markers.isOccupied())
+    }
+
     @After
     fun stopControl() {
         control.shutdownNow()
@@ -740,15 +800,25 @@ class DirectUsbSessionTest {
         var refuseAlternateZero = false
         val failingClaims = mutableSetOf<Int>()
         val failingReleases = mutableSetOf<Int>()
+        val throwingClaims = mutableSetOf<Int>()
+        val throwingReleases = mutableSetOf<Int>()
+        @Volatile var probeUnavailable = false
+        @Volatile override var permissionGranted = true
+            get() {
+                check(!probeUnavailable) { "USB manager unavailable" }
+                return field
+            }
         override val fileDescriptor = 42
 
         override fun claim(interfaceNumber: Int): Boolean {
             events += "claim $interfaceNumber"
+            if (interfaceNumber in throwingClaims) throw SecurityException("revoked")
             return interfaceNumber !in failingClaims
         }
 
         override fun release(interfaceNumber: Int): Boolean {
             events += "release $interfaceNumber"
+            if (interfaceNumber in throwingReleases) throw SecurityException("revoked")
             return interfaceNumber !in failingReleases
         }
 

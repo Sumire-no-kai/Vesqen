@@ -182,6 +182,8 @@ internal data class DirectUsbRecoveryResult(
 @UnstableApi
 internal interface DirectUsbRoute {
     interface Listener {
+        fun onReleased(cleanup: CleanupRecord) = Unit
+
         /** The route has posted a new output to the main thread. Register it before the next failure callback. */
         fun onOutputOpened(periodUid: Any, output: Any = periodUid) = Unit
 
@@ -462,10 +464,16 @@ internal class AndroidDirectUsbRoute(
         release()
         val name = device.displayName()
         val connection = usbManager.openDevice(device) ?: return DirectUsbInspection.Refused("open_failed", deviceName = name)
-        val raw = connection.rawDescriptors
-        val parsed = raw?.let(UacDescriptorParser::parse)
+        try {
+            return inspectConnection(source, device, name, connection)
+        } finally {
+            if (prepared?.connection !== connection) connection.close()
+        }
+    }
+
+    private fun inspectConnection(source: SourcePcmFormat, device: UsbDevice, name: String, connection: UsbDeviceConnection): DirectUsbInspection {
+        val parsed = connection.rawDescriptors?.let(UacDescriptorParser::parse)
         if (parsed !is UacParseResult.Parsed) {
-            connection.close()
             return DirectUsbInspection.Refused("descriptors_refused", deviceName = name)
         }
         val speed = UsbStreamEngine.busSpeed(connection.fileDescriptor)
@@ -478,7 +486,6 @@ internal class AndroidDirectUsbRoute(
                     // The settings the own output streams through are stereo, so a known mono or
                     // multichannel source is refused here, before anything is claimed (#295).
                     if (!preflight.plan.carries(source)) {
-                        connection.close()
                         return DirectUsbInspection.Refused(
                             "channels_unsupported",
                             formatRefused = true,
@@ -490,13 +497,12 @@ internal class AndroidDirectUsbRoute(
                     return DirectUsbInspection.Ready(name, preflight.plan)
                 }
                 StreamPreflight.NoPlaybackFunction ->
-                    return DirectUsbInspection.Refused("no_playback_function", deviceName = name).also { connection.close() }
+                    return DirectUsbInspection.Refused("no_playback_function", deviceName = name)
                 is StreamPreflight.LibraryUnavailable ->
-                    return DirectUsbInspection.Refused("engine_unavailable", deviceName = name).also { connection.close() }
+                    return DirectUsbInspection.Refused("engine_unavailable", deviceName = name)
                 is StreamPreflight.Refused -> refusals += preflight.reason
             }
         }
-        connection.close()
         return directRefusal(parsed.topology, refusals, source).copy(deviceName = name)
     }
 
@@ -539,7 +545,11 @@ internal class AndroidDirectUsbRoute(
         lateinit var next: DirectUsbSession
         next = DirectUsbSession(
             device = identity,
-            link = AndroidUsbLink(target.device, target.connection),
+            link = AndroidUsbLink(
+                target.device, target.connection,
+                permission = { usbManager.hasPermission(target.device) },
+                connectionPresent = { usbManager.deviceList.values.any { it.deviceId == target.device.deviceId } },
+            ),
             function = target.function,
             markers = markers,
             control = control,
@@ -653,7 +663,13 @@ internal class AndroidDirectUsbRoute(
         prepared = null
         if (current != null) {
             releases.begin()
-            current.release { cleanup -> main.post { lastCleanup = cleanup; releases.complete(cleanup.firstFailure == null) } }
+            current.release { cleanup ->
+                main.post {
+                    lastCleanup = cleanup
+                    releases.complete(cleanup.firstFailure == null)
+                    listener?.onReleased(cleanup)
+                }
+            }
         } else {
             held?.connection?.close()
         }
@@ -751,5 +767,6 @@ internal fun DirectUsbFailure.toStrictFailure(): Pair<UsbOutputFailure, String> 
     DirectUsbFailure.Reason.SAMPLE_RATE_READBACK_MISMATCH,
     DirectUsbFailure.Reason.USB_ENGINE_UNAVAILABLE,
     DirectUsbFailure.Reason.USB_TRANSFER_FAILED,
+    DirectUsbFailure.Reason.USB_PERMISSION_REVOKED,
     DirectUsbFailure.Reason.PCM_NOT_EXACT -> UsbOutputFailure.PLATFORM_ERROR
 } to "direct_usb.${reason.name.lowercase()}"
