@@ -115,6 +115,9 @@ internal class UsbOutputCoordinator(
     private var directOutputPeriod: Any? = null
     private var directOutputActive = false
     private var returnTarget: UsbOutputMode? = null
+    @Volatile private var recoveryInProgress = false
+    private var recoveryTarget: UsbOutputMode? = null
+    private var resumeAfterRecovery = false
 
     /**
      * Set when the own path gave the device back after a failure. Android then shows the USB route
@@ -207,6 +210,7 @@ internal class UsbOutputCoordinator(
             )
         }
         updateSource(player.currentMediaItem)
+        if (recoverBeforePlayback(UsbOutputFailureOrigin.SERVICE_START)) return
         if (mode == UsbOutputMode.SYSTEM) {
             publishSystem()
         } else {
@@ -220,6 +224,17 @@ internal class UsbOutputCoordinator(
             return
         }
         if (closed) return
+        if (recoveryInProgress) {
+            synchronized(lock) { recoveryTarget = requestedMode; configurationOrigin = UsbOutputFailureOrigin.USER_MODE_CHANGE }
+            preferences.edit { putString(MODE_KEY, requestedMode.name) }
+            return
+        }
+        if (returnTarget == null && directRoute?.recoveryPending == true && !directPath && directRoute.streaming == false &&
+            (requestedMode != UsbOutputMode.SYSTEM || currentMode() != UsbOutputMode.SYSTEM)) {
+            synchronized(lock) { mode = requestedMode; recoveryTarget = requestedMode }
+            preferences.edit { putString(MODE_KEY, requestedMode.name) }
+            if (recoverBeforePlayback(UsbOutputFailureOrigin.USER_MODE_CHANGE)) return
+        }
         if (returnTarget != null) {
             // The connection is already being returned. Use the latest selection when it is back.
             if (returnTarget != requestedMode) {
@@ -260,7 +275,7 @@ internal class UsbOutputCoordinator(
             directOutputActive = false
         }
         updateSource(mediaItem)
-        if (returnTarget != null) return
+        if (recoveryInProgress || returnTarget != null) return
         // The own output checks every item where its PCM begins (#282) and keeps the DAC between
         // items, so a transition rebuilds nothing; the status only takes the new item's source.
         if (synchronized(lock) { directPath } && directRoute?.streaming == true) {
@@ -296,6 +311,13 @@ internal class UsbOutputCoordinator(
     }
 
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+        if (recoveryInProgress) {
+            resumeAfterRecovery = playWhenReady
+            if (playWhenReady) player?.stop()
+            return
+        }
+        if (playWhenReady && returnTarget == null && (currentMode() == UsbOutputMode.STRICT_BIT_PERFECT || currentStatus().phase == UsbOutputPhase.FAILED) &&
+            recoverBeforePlayback(UsbOutputFailureOrigin.USER_PLAYBACK)) return
         if (returnTarget != null) {
             resumeAfterConfiguration = playWhenReady
             return
@@ -408,6 +430,10 @@ internal class UsbOutputCoordinator(
             mainHandler.post { scheduleReconfigure(resume, origin) }
             return
         }
+        if (recoveryInProgress) {
+            resumeAfterRecovery = resumeAfterRecovery || resume
+            return
+        }
         if (returnTarget != null) return
         val activePlayer = player
         val wasPlaying = activePlayer?.playWhenReady == true
@@ -469,7 +495,7 @@ internal class UsbOutputCoordinator(
     }
 
     private fun reconfigureStrictOutput() {
-        if (closed || returnTarget != null || currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
+        if (closed || recoveryInProgress || returnTarget != null || currentMode() != UsbOutputMode.STRICT_BIT_PERFECT) return
         val generation = synchronized(lock) { configurationGeneration }
         val activePlayer = player ?: return
         updateSource(activePlayer.currentMediaItem)
@@ -605,6 +631,7 @@ internal class UsbOutputCoordinator(
         val request = outputConfig.toPlatformFormat()
         val audioAttributes = outputConfig.audioAttributes.getPlatformAudioAttributes()
         val outputMode = currentMode()
+        if (recoveryInProgress) return pendingStrictOutput(outputConfig)
         if (outputMode == UsbOutputMode.SYSTEM) {
             return super.getAudioOutput(outputConfig)
         }
@@ -1161,6 +1188,62 @@ internal class UsbOutputCoordinator(
                 pause()
                 stop()
                 setPreferredAudioDevice(null)
+            }
+        }
+    }
+
+    private fun recoverBeforePlayback(origin: UsbOutputFailureOrigin): Boolean {
+        val route = directRoute ?: return false
+        if (recoveryInProgress) return true
+        if (route.streaming || directPath || !route.recoveryPending) return false
+        recoveryInProgress = true
+        recoveryTarget = recoveryTarget ?: currentMode()
+        synchronized(lock) { mode = UsbOutputMode.STRICT_BIT_PERFECT }
+        resumeAfterRecovery = resumeAfterRecovery || player?.playWhenReady == true || resumeAfterConfiguration
+        configurationOrigin = origin
+        player?.stop()
+        publish(phase = UsbOutputPhase.APPLYING, decisionCode = "direct_usb.recovering")
+        attemptRecovery(route, mayRequestPermission = true)
+        return true
+    }
+
+    private fun attemptRecovery(route: DirectUsbRoute, mayRequestPermission: Boolean) {
+        route.recover { result ->
+            if (closed) return@recover
+            if (mayRequestPermission && result.code == "direct_usb.permission_required" &&
+                (configurationOrigin == UsbOutputFailureOrigin.USER_PLAYBACK ||
+                    configurationOrigin == UsbOutputFailureOrigin.USER_MODE_CHANGE)) {
+                route.requestPermission(forRecovery = true) { granted ->
+                    if (closed) return@requestPermission
+                    val stillPending = route.recoveryPending
+                    if (!granted || !stillPending) {
+                        resumeAfterRecovery = false
+                        resumeAfterConfiguration = false
+                        player?.pause()
+                    }
+                    if (granted || !stillPending) {
+                        attemptRecovery(route, mayRequestPermission = false)
+                    } else {
+                        recoveryInProgress = false
+                        publish(phase = UsbOutputPhase.FAILED, failure = UsbOutputFailure.PLATFORM_ERROR,
+                            decisionCode = "direct_usb.permission_denied", failureOrigin = configurationOrigin)
+                    }
+                }
+                return@recover
+            }
+            recoveryInProgress = false
+            val resume = resumeAfterRecovery
+            resumeAfterRecovery = false
+            if (result.failure != null) {
+                failClosed(result.failure, result.code, origin = configurationOrigin)
+            } else {
+                val target = recoveryTarget
+                recoveryTarget = null
+                if (target == UsbOutputMode.SYSTEM) {
+                    completeSystemOutput(rebuild = true, resume = resume)
+                } else {
+                    scheduleReconfigure(resume = resume, origin = configurationOrigin)
+                }
             }
         }
     }

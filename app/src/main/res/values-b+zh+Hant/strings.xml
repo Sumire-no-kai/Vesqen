@@ -1061,4 +1061,5 @@
     <string name="lyrics_source_embedded">內嵌於音樂檔案</string>
     <string name="lyrics_source_none">無</string>
     <string name="lyrics_source_unreadable">無法讀取</string>
+    <string name="usb_recovery_in_progress">正在恢復 USB 裝置及接管前的音量。恢復完成後才能開始播放。</string>
 </resources>

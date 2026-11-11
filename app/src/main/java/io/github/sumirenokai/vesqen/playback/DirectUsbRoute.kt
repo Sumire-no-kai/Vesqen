@@ -36,6 +36,8 @@ import io.github.sumirenokai.vesqen.usb.session.DirectUsbFailure
 import io.github.sumirenokai.vesqen.usb.session.DirectUsbSession
 import io.github.sumirenokai.vesqen.usb.session.TakeoverMarker
 import io.github.sumirenokai.vesqen.usb.session.TakeoverMarkerStore
+import io.github.sumirenokai.vesqen.usb.session.CleanupRecord
+import io.github.sumirenokai.vesqen.usb.session.UsbTakeoverRecovery
 import io.github.sumirenokai.vesqen.usb.session.UsbDeviceIdentity
 import java.util.concurrent.Executors
 
@@ -171,6 +173,12 @@ private fun SampleRates.ranges(): List<IntRange> = when (this) {
  * Vesqen's own USB output as the coordinator drives it: one device, its permission, its plan and the
  * [DirectUsbSession] between takeover and release. Calls come on the main thread unless noted.
  */
+internal data class DirectUsbRecoveryResult(
+    val failure: UsbOutputFailure? = null,
+    val code: String = "direct_usb.recovered",
+    val cleanup: CleanupRecord? = null,
+)
+
 @UnstableApi
 internal interface DirectUsbRoute {
     interface Listener {
@@ -196,6 +204,11 @@ internal interface DirectUsbRoute {
     /** A current or unresolved takeover must give the device back before Android can play. */
     val recoveryPending: Boolean
 
+    /** Completes on main after the previous service's cleanup and persisted recovery. No permission dialog. */
+    fun recover(onDone: (DirectUsbRecoveryResult) -> Unit) = onDone(DirectUsbRecoveryResult())
+
+    val lastCleanup: CleanupRecord? get() = null
+
     var listener: Listener?
 
     /** Playback thread: Media3 is configuring the sink for the item that [config] names (#282). */
@@ -213,7 +226,7 @@ internal interface DirectUsbRoute {
     fun readings(): DirectUsbReadings? = null
 
     /** Shows the system's permission dialog for the device; only for a user's own action. */
-    fun requestPermission(onResult: (granted: Boolean) -> Unit)
+    fun requestPermission(forRecovery: Boolean = false, onResult: (granted: Boolean) -> Unit)
 
     /** Takes over the device [inspect] planned for. [onDone] runs on the main thread, with null on success. */
     fun takeOver(onDone: (DirectUsbFailure?) -> Unit)
@@ -267,6 +280,10 @@ internal class AndroidDirectUsbRoute(
     private class Prepared(val device: UsbDevice, val connection: UsbDeviceConnection, val function: UacFunction, val plan: StreamingPlan)
 
     private val releases = PendingUsbReleases()
+    private var recovering = false
+    private val recoveryCallbacks = mutableListOf<(DirectUsbRecoveryResult) -> Unit>()
+    @Volatile override var lastCleanup: CleanupRecord? = null
+        private set
     private var prepared: Prepared? = null
     @Volatile
     private var session: DirectUsbSession? = null
@@ -373,7 +390,60 @@ internal class AndroidDirectUsbRoute(
         }
     }
 
-    override val recoveryPending: Boolean get() = releases.pending || markers.isOccupied()
+    override val recoveryPending: Boolean get() = recovering || releases.pending || markers.isOccupied()
+
+    override fun recover(onDone: (DirectUsbRecoveryResult) -> Unit) {
+        recoveryCallbacks += onDone
+        if (recovering) return
+        recovering = true
+        markers.whenIdle {
+            control.execute {
+                val result = try {
+                    recoverSavedDevice()
+                } catch (_: SecurityException) {
+                    DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_required")
+                } catch (_: IllegalStateException) {
+                    DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed")
+                }
+                main.post {
+                    lastCleanup = result.cleanup
+                    recovering = false
+                    val callbacks = recoveryCallbacks.toList()
+                    recoveryCallbacks.clear()
+                    callbacks.forEach { it(result) }
+                }
+            }
+        }
+    }
+
+    private fun recoverSavedDevice(): DirectUsbRecoveryResult {
+        val marker = markers.recoveryRecord() ?: return DirectUsbRecoveryResult()
+        val device = usbManager.deviceList.values.firstOrNull {
+            it.deviceId == marker.device.deviceId && it.vendorId == marker.device.vendorId && it.productId == marker.device.productId
+        } ?: return DirectUsbRecoveryResult()
+        if (!usbManager.hasPermission(device)) {
+            return DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_required")
+        }
+        val connection = usbManager.openDevice(device)
+            ?: return DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.open_failed")
+        val parsed = try {
+            connection.rawDescriptors?.let(UacDescriptorParser::parse)
+        } catch (_: SecurityException) {
+            connection.close()
+            return DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_required")
+        } catch (_: IllegalStateException) {
+            connection.close()
+            return DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed")
+        }
+        if (parsed !is UacParseResult.Parsed) {
+            connection.close()
+            return DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.descriptors_refused")
+        }
+        val record = UsbTakeoverRecovery(marker.device, AndroidUsbLink(device, connection), parsed.topology.functions, markers).recover()
+        val failure = record.firstFailure ?: return DirectUsbRecoveryResult(cleanup = record)
+        val code = if (failure.name == "volume restored") "direct_usb.volume_control_failed" else "direct_usb.usb_transfer_failed"
+        return DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, code, record)
+    }
 
     override fun hasUsbAudioDevice(): Boolean = usbManager.deviceList.values.any(UsbDevice::isUsbAudioDevice)
 
@@ -430,9 +500,26 @@ internal class AndroidDirectUsbRoute(
         return directRefusal(parsed.topology, refusals, source).copy(deviceName = name)
     }
 
-    override fun requestPermission(onResult: (granted: Boolean) -> Unit) {
-        val device = usbManager.deviceList.values.filter(UsbDevice::isUsbAudioDevice).singleOrNull() ?: return onResult(false)
-        permissionCallback = onResult
+    override fun requestPermission(forRecovery: Boolean, onResult: (granted: Boolean) -> Unit) {
+        val requested = try {
+            requestDevicePermission(forRecovery)
+        } catch (_: SecurityException) {
+            false
+        } catch (_: IllegalStateException) {
+            false
+        }
+        // The permission broadcast is delivered on this same main looper.
+        if (requested) permissionCallback = onResult else onResult(false)
+    }
+
+    private fun requestDevicePermission(forRecovery: Boolean): Boolean {
+        val candidates = usbManager.deviceList.values.filter(UsbDevice::isUsbAudioDevice)
+        val device = if (forRecovery) {
+            val saved = markers.recoveryRecord()?.device ?: return false
+            candidates.firstOrNull { it.deviceId == saved.deviceId && it.vendorId == saved.vendorId && it.productId == saved.productId }
+        } else {
+            candidates.singleOrNull()
+        } ?: return false
         usbManager.requestPermission(
             device,
             // Mutable: the system adds the device and the answer to this intent.
@@ -443,6 +530,7 @@ internal class AndroidDirectUsbRoute(
                 PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             ),
         )
+        return true
     }
 
     override fun takeOver(onDone: (DirectUsbFailure?) -> Unit) {
@@ -565,7 +653,7 @@ internal class AndroidDirectUsbRoute(
         prepared = null
         if (current != null) {
             releases.begin()
-            current.release { cleanup -> main.post { releases.complete(cleanup.firstFailure == null) } }
+            current.release { cleanup -> main.post { lastCleanup = cleanup; releases.complete(cleanup.firstFailure == null) } }
         } else {
             held?.connection?.close()
         }
@@ -599,7 +687,15 @@ internal class PreferencesTakeoverMarkerStore(context: Context) : TakeoverMarker
         if (!preferences.contains(DEVICE_ID)) return false
         // A physically removed connection cannot be restored. A still-live owner is protected by acquire().
         val id = preferences.getInt(DEVICE_ID, -1)
-        return usbManager.deviceList.values.any { it.deviceId == id }
+        // A failed enumeration cannot establish a detach. Keep the record for a recovery attempt.
+        return try {
+            usbManager.deviceList.values.any { it.deviceId == id &&
+                it.vendorId == preferences.getInt(VENDOR_ID, -1) && it.productId == preferences.getInt(PRODUCT_ID, -1) }
+        } catch (_: SecurityException) {
+            true
+        } catch (_: IllegalStateException) {
+            true
+        }
     }
 
     override fun read(): TakeoverMarker? {
@@ -608,6 +704,8 @@ internal class PreferencesTakeoverMarkerStore(context: Context) : TakeoverMarker
             UsbDeviceIdentity(preferences.getInt(DEVICE_ID, -1), preferences.getInt(VENDOR_ID, -1), preferences.getInt(PRODUCT_ID, -1)),
             volumeBefore = if (preferences.contains(VOLUME_BEFORE)) preferences.getInt(VOLUME_BEFORE, 0) else null,
             mutedBefore = if (preferences.contains(MUTED_BEFORE)) preferences.getBoolean(MUTED_BEFORE, false) else null,
+            controlInterface = if (preferences.contains(CONTROL_INTERFACE)) preferences.getInt(CONTROL_INTERFACE, -1) else null,
+            volumeUnitId = if (preferences.contains(VOLUME_UNIT_ID)) preferences.getInt(VOLUME_UNIT_ID, -1) else null,
         )
     }
 
@@ -617,6 +715,8 @@ internal class PreferencesTakeoverMarkerStore(context: Context) : TakeoverMarker
         putInt(PRODUCT_ID, marker.device.productId)
         marker.volumeBefore?.let { putInt(VOLUME_BEFORE, it) } ?: remove(VOLUME_BEFORE)
         marker.mutedBefore?.let { putBoolean(MUTED_BEFORE, it) } ?: remove(MUTED_BEFORE)
+        marker.controlInterface?.let { putInt(CONTROL_INTERFACE, it) } ?: remove(CONTROL_INTERFACE)
+        marker.volumeUnitId?.let { putInt(VOLUME_UNIT_ID, it) } ?: remove(VOLUME_UNIT_ID)
     }.commit()
 
     override fun clear() = preferences.edit().clear().commit()
@@ -627,6 +727,8 @@ internal class PreferencesTakeoverMarkerStore(context: Context) : TakeoverMarker
         const val PRODUCT_ID = "product_id"
         const val VOLUME_BEFORE = "volume_before"
         const val MUTED_BEFORE = "muted_before"
+        const val CONTROL_INTERFACE = "control_interface"
+        const val VOLUME_UNIT_ID = "volume_unit_id"
     }
 }
 

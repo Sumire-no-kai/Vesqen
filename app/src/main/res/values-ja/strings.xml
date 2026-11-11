@@ -1061,4 +1061,5 @@
     <string name="lyrics_source_embedded">音楽ファイルに埋め込み</string>
     <string name="lyrics_source_none">なし</string>
     <string name="lyrics_source_unreadable">読み込めません</string>
+    <string name="usb_recovery_in_progress">USB デバイスと接続前の音量を復元しています。完了するまで再生を待機します。</string>
 </resources>

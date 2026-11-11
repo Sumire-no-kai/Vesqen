@@ -80,6 +80,93 @@ class DirectUsbSessionTest {
         assertTrue(events.contains("set volume -2560"))
     }
 
+    @Test
+    fun `startup recovery restores the saved settings and rebinds without creating a stream`() {
+        markers.persisted = TakeoverMarker(UsbDeviceIdentity(1003, 0x0ecb, 0x2107), -1280, true)
+        val record = recover()
+        assertNull(record.firstFailure)
+        assertTrue(events.containsAll(listOf("claim 1", "claim 2", "alternate 2/0", "set volume -1280", "release 2", "release 1", "close")))
+        assertFalse(events.any { it.startsWith("stream ") || it.startsWith("set rate ") })
+        assertNull(markers.persisted)
+    }
+
+    @Test
+    fun `startup recovery keeps the saved volume after a failed write and can retry`() {
+        val marker = TakeoverMarker(UsbDeviceIdentity(1003, 0x0ecb, 0x2107), -1280, false)
+        markers.persisted = marker
+        device.muted = true
+        device.failVolumeWrites = true
+        assertEquals("volume restored", recover().firstFailure?.name)
+        assertTrue(events.containsAll(listOf("release 2", "release 1", "close")))
+        assertEquals(marker, markers.persisted)
+        assertTrue("a failed level write must leave the DAC muted", device.muted)
+        device.failVolumeWrites = false
+        assertNull(recover().firstFailure)
+        assertNull(markers.persisted)
+    }
+
+    @Test
+    fun `recovery releases successful claims when a later interface refuses`() {
+        markers.persisted = TakeoverMarker(UsbDeviceIdentity(1003, 0x0ecb, 0x2107), -1280, false)
+        link.failingClaims += 2
+        assertEquals("interface 2 reclaimed", recover().firstFailure?.name)
+        assertTrue(events.containsAll(listOf("release 1", "close")))
+        assertFalse(events.contains("release 2"))
+        assertTrue(markers.isOccupied())
+    }
+
+    @Test
+    fun `a different connection cannot receive the old saved settings`() {
+        val marker = TakeoverMarker(UsbDeviceIdentity(999, 0x0ecb, 0x2107), -1280, false)
+        markers.persisted = marker
+        assertEquals("recovery ownership", recover().firstFailure?.name)
+        assertEquals(listOf("close"), events.toList())
+        assertEquals(marker, markers.persisted)
+    }
+
+    @Test
+    fun `a rebuilt service waits until the previous session finishes cleanup`() {
+        takeOver()
+        var idle = false
+        markers.whenIdle { idle = true }
+        assertFalse(idle)
+        session.release()
+        assertTrue(released.await(2, TimeUnit.SECONDS))
+        control.submit {}.get(2, TimeUnit.SECONDS)
+        assertTrue(idle)
+        assertNull(markers.persisted)
+    }
+
+    @Test
+    fun `startup recovery touches only the saved audio function of a composite device`() {
+        val other = JBL.copy(controlInterface = 5, streamingInterfaces = JBL.streamingInterfaces.map { it.copy(interfaceNumber = 6) })
+        markers.persisted = TakeoverMarker(UsbDeviceIdentity(1003, 0x0ecb, 0x2107), null, null, JBL.controlInterface)
+        assertNull(recover(listOf(other, JBL)).firstFailure)
+        assertEquals(listOf("claim 1", "claim 2"), events.filter { it.startsWith("claim ") })
+    }
+
+    @Test
+    fun `a legacy marker cannot force claim one of several possible functions`() {
+        val marker = TakeoverMarker(UsbDeviceIdentity(1003, 0x0ecb, 0x2107), null, null)
+        markers.persisted = marker
+        assertTrue(recover(listOf(JBL, JBL.copy(controlInterface = 5))).firstFailure != null)
+        assertFalse(events.any { it.startsWith("claim ") })
+        assertEquals(marker, markers.persisted)
+    }
+
+    @Test
+    fun `an unsuccessful alternate reset preserves the recovery record`() {
+        val marker = TakeoverMarker(UsbDeviceIdentity(1003, 0x0ecb, 0x2107), null, null)
+        markers.persisted = marker
+        link.refuseAlternateZero = true
+        assertEquals("alternate setting 0 on interface 2", recover().firstFailure?.name)
+        assertEquals(marker, markers.persisted)
+        assertTrue(events.containsAll(listOf("release 1", "release 2", "close")))
+    }
+
+    private fun recover(functions: List<UacFunction> = listOf(JBL)) =
+        UsbTakeoverRecovery(UsbDeviceIdentity(1003, 0x0ecb, 0x2107), link, functions, markers).recover()
+
     @After
     fun stopControl() {
         control.shutdownNow()
@@ -114,7 +201,7 @@ class DirectUsbSessionTest {
         val (record, failure) = release()
 
         assertEquals(
-            listOf("stream destroyed", "alternate 2/0", "set volume -2560", "release 2", "release 1", "close", "marker cleared"),
+            listOf("stream destroyed", "alternate 2/0", "set volume -2560", "read 2/129", "read 1/129", "release 2", "release 1", "close", "marker cleared"),
             events,
         )
         assertNull(failure)
@@ -650,6 +737,7 @@ class DirectUsbSessionTest {
     }
 
     private class FakeLink(private val events: MutableList<String>, override val control: UsbControlTransfer) : UsbLink {
+        var refuseAlternateZero = false
         val failingClaims = mutableSetOf<Int>()
         val failingReleases = mutableSetOf<Int>()
         override val fileDescriptor = 42
@@ -666,7 +754,7 @@ class DirectUsbSessionTest {
 
         override fun selectAlternate(interfaceNumber: Int, alternateSetting: Int): Boolean {
             events += "alternate $interfaceNumber/$alternateSetting"
-            return true
+            return alternateSetting != 0 || !refuseAlternateZero
         }
 
         override fun close() {

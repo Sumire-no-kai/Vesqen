@@ -1092,4 +1092,5 @@
     <string name="lyrics_source_embedded">Embedded in the music file</string>
     <string name="lyrics_source_none">None</string>
     <string name="lyrics_source_unreadable">Cannot be read</string>
+    <string name="usb_recovery_in_progress">Restoring the USB device and its original volume. Playback will wait until recovery finishes.</string>
 </resources>
