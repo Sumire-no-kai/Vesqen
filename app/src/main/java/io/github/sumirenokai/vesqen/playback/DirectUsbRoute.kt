@@ -404,6 +404,8 @@ internal class AndroidDirectUsbRoute(
                     recoverSavedDevice()
                 } catch (_: SecurityException) {
                     DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.permission_required")
+                } catch (_: IllegalStateException) {
+                    DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed")
                 }
                 main.post {
                     lastCleanup = result.cleanup

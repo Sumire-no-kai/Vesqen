@@ -8,9 +8,9 @@ import io.github.sumirenokai.vesqen.usb.control.UsbControlTransfer
 /** The opened device as a session uses it: [AndroidUsbLink] on a phone, a fake in tests. */
 interface UsbLink {
     /** Lent to the native stream, so [close] must wait until the stream is destroyed. */
+    val fileDescriptor: Int
     val permissionGranted: Boolean get() = true
     val connected: Boolean get() = true
-    val fileDescriptor: Int
     val control: UsbControlTransfer
 
     /** Claims the interface's alternate setting 0, taking it from the kernel driver. */
