@@ -56,6 +56,7 @@ class PlaybackService : MediaSessionService() {
     private var sessionArtworkLoader: SessionArtworkLoader? = null
     private var usbOutputCoordinator: UsbOutputCoordinator? = null
     private var directUsbRoute: DirectUsbRoute? = null
+    private var screenOffKeepAlive: ScreenOffKeepAliveController? = null
     private var notificationProvider: DefaultMediaNotificationProvider? = null
     /** Opened on the first playback resumption; the UI keeps its own catalog. */
     private var resumptionCatalog: AndroidLibraryCatalog? = null
@@ -331,6 +332,14 @@ class PlaybackService : MediaSessionService() {
             .setSessionExtras(UsbOutputSessionContract.toBundle(outputStateRepository.snapshot()))
             .build()
         outputStateRepository.addListener(outputStateListener)
+        if (directRoute != null) {
+            // D13: only Vesqen's own output needs it; the system path keeps the app alive by itself.
+            val settings = (application as VesqenApplication).screenOffKeepAlive
+            val keepAlive = ScreenOffKeepAliveController(this, mainHandler, ScreenOffKeepAlive { SpeakerKeepAliveTrack.start(this) })
+            screenOffKeepAlive = keepAlive
+            outputStateRepository.addListener(keepAlive.statusListener)
+            serviceScope.launch { settings.enabled.collect(keepAlive::setEnabled) }
+        }
     }
 
     @UnstableApi
@@ -430,6 +439,11 @@ class PlaybackService : MediaSessionService() {
         (application as VesqenApplication).playbackTrackMerges.detach()
         serviceScope.cancel()
         (application as VesqenApplication).usbOutputStateRepository.removeListener(outputStateListener)
+        screenOffKeepAlive?.let { keepAlive ->
+            (application as VesqenApplication).usbOutputStateRepository.removeListener(keepAlive.statusListener)
+            keepAlive.close()
+        }
+        screenOffKeepAlive = null
         usbOutputCoordinator?.close()
         usbOutputCoordinator = null
         (application as VesqenApplication).directUsbReadings.detach()

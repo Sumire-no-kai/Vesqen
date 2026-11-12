@@ -77,6 +77,15 @@
     <string name="settings_strict_usb_active_direct">Active on %1$s, %2$s. Based on Vesqen’s own configuration and readback of the device, not externally verified. The volume bar and the volume keys change the hardware volume of %1$s. The phone’s media volume has no effect on this output.</string>
     <string name="usb_volume_label">DAC volume</string>
     <string name="usb_volume_state">%1$s decibels</string>
+    <string name="screen_off_keep_alive_title">Keep playing with the screen off</string>
+    <string name="screen_off_keep_alive_body">Some phones, including certain vivo and iQOO models, freeze background apps after the screen turns off. When that happens, playback that Vesqen sends directly to a DAC stops. With this on, Vesqen sends a very low-level signal to the phone speaker while it plays with the screen off, so the system keeps Vesqen running. You may hear faint noise close to the phone speaker, and battery use rises slightly. The audio sent to the DAC is not affected.</string>
+    <string name="background_power_title">Allow high background power consumption</string>
+    <string name="background_power_body">Turn this on for Vesqen in the system settings. It only needs to be set once and adds no noise.</string>
+    <string name="screen_off_guidance_title">Playing with the screen off</string>
+    <string name="screen_off_guidance_body">Some phones, including certain vivo and iQOO models, freeze background apps after the screen turns off. When that happens, playback that Vesqen sends directly to a DAC stops. Either of these prevents it:\n\n• Turn on “Allow high background power consumption” for Vesqen in the system settings. It only needs to be set once and adds no noise.\n• Turn on Vesqen\'s “Keep playing with the screen off”. No system setting changes, but you may hear faint noise close to the phone speaker.</string>
+    <string name="screen_off_guidance_open_settings">Open system settings</string>
+    <string name="screen_off_guidance_keep_alive">Keep playing with the screen off</string>
+    <string name="screen_off_guidance_not_now">Not now</string>
     <string name="settings_strict_usb_failed">Playback stopped: %1$s For normal playback, choose System output.</string>
     <string name="settings_usb_device_unknown">USB audio device</string>
     <string name="settings_format_unknown">format pending</string>
