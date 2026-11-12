@@ -76,11 +76,11 @@
     <string name="usb_volume_label">DAC 音量</string>
     <string name="usb_volume_state">%1$s 分貝</string>
     <string name="screen_off_keep_alive_title">螢幕關閉時保持播放</string>
-    <string name="screen_off_keep_alive_body">部分手機（例如 vivo、iQOO）會在螢幕關閉後凍結背景應用程式，Vesqen 直接輸出到 DAC 時，播放會因此中斷。開啟後，螢幕關閉期間播放時，Vesqen 會向手機喇叭送出一路極低電平的訊號，使系統保持 Vesqen 執行。貼近手機喇叭時可能聽到輕微底噪，耗電也會略為增加。送往 DAC 的音訊不受影響。</string>
+    <string name="screen_off_keep_alive_body">部分手機（包括一些 vivo 和 iQOO 機型）會在螢幕關閉後凍結背景應用程式。發生這種情況時，Vesqen 直接輸出到 DAC 的播放會中斷。開啟後，螢幕關閉期間播放時，Vesqen 會向手機喇叭送出一路極低電平的訊號，使系統保持 Vesqen 執行。貼近手機喇叭時可能聽到輕微底噪，耗電也會略為增加。送往 DAC 的音訊不受影響。</string>
     <string name="background_power_title">允許背景高耗電</string>
     <string name="background_power_body">在系統設定中為 Vesqen 開啟。只需設定一次，不會產生底噪。</string>
     <string name="screen_off_guidance_title">螢幕關閉時的播放</string>
-    <string name="screen_off_guidance_body">這支手機會在螢幕關閉後凍結背景應用程式。Vesqen 直接輸出到 DAC 時，播放會因此中斷。可以選擇以下任一方法：\n\n• 在系統設定中為 Vesqen 開啟「允許背景高耗電」。只需設定一次，不會產生底噪。\n• 開啟 Vesqen 的「螢幕關閉時保持播放」。不需要修改系統設定，但貼近手機喇叭時可能聽到輕微底噪。</string>
+    <string name="screen_off_guidance_body">部分手機（包括一些 vivo 和 iQOO 機型）會在螢幕關閉後凍結背景應用程式。發生這種情況時，Vesqen 直接輸出到 DAC 的播放會中斷。可以選擇以下任一方法：\n\n• 在系統設定中為 Vesqen 開啟「允許背景高耗電」。只需設定一次，不會產生底噪。\n• 開啟 Vesqen 的「螢幕關閉時保持播放」。不需要修改系統設定，但貼近手機喇叭時可能聽到輕微底噪。</string>
     <string name="screen_off_guidance_open_settings">開啟系統設定</string>
     <string name="screen_off_guidance_keep_alive">開啟螢幕關閉時保持播放</string>
     <string name="screen_off_guidance_not_now">暫不設定</string>

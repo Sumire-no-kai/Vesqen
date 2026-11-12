@@ -76,11 +76,11 @@
     <string name="usb_volume_label">DAC 音量</string>
     <string name="usb_volume_state">%1$s 分贝</string>
     <string name="screen_off_keep_alive_title">息屏时保持播放</string>
-    <string name="screen_off_keep_alive_body">部分手机（例如 vivo、iQOO）会在息屏后冻结后台应用，Vesqen 直接输出到 DAC 时，播放会因此中断。开启后，息屏播放期间 Vesqen 会向手机扬声器送出一路极低电平的信号，使系统保持 Vesqen 运行。贴近手机扬声器时可能听到轻微底噪，耗电也会略有增加。送往 DAC 的音频不受影响。</string>
+    <string name="screen_off_keep_alive_body">部分手机（包括一些 vivo 和 iQOO 机型）会在息屏后冻结后台应用。出现这种情况时，Vesqen 直接输出到 DAC 的播放会中断。开启后，息屏播放期间 Vesqen 会向手机扬声器送出一路极低电平的信号，使系统保持 Vesqen 运行。贴近手机扬声器时可能听到轻微底噪，耗电也会略有增加。送往 DAC 的音频不受影响。</string>
     <string name="background_power_title">允许后台高耗电</string>
     <string name="background_power_body">在系统设置中为 Vesqen 打开。只需设置一次，不会产生底噪。</string>
     <string name="screen_off_guidance_title">息屏播放</string>
-    <string name="screen_off_guidance_body">这台手机会在息屏后冻结后台应用。Vesqen 直接输出到 DAC 时，播放会因此中断。可以选择以下任一办法：\n\n• 在系统设置中为 Vesqen 打开“允许后台高耗电”。只需设置一次，不会产生底噪。\n• 开启 Vesqen 的“息屏时保持播放”。不需要修改系统设置，但贴近手机扬声器时可能听到轻微底噪。</string>
+    <string name="screen_off_guidance_body">部分手机（包括一些 vivo 和 iQOO 机型）会在息屏后冻结后台应用。出现这种情况时，Vesqen 直接输出到 DAC 的播放会中断。可以选择以下任一办法：\n\n• 在系统设置中为 Vesqen 打开“允许后台高耗电”。只需设置一次，不会产生底噪。\n• 开启 Vesqen 的“息屏时保持播放”。不需要修改系统设置，但贴近手机扬声器时可能听到轻微底噪。</string>
     <string name="screen_off_guidance_open_settings">打开系统设置</string>
     <string name="screen_off_guidance_keep_alive">开启息屏时保持播放</string>
     <string name="screen_off_guidance_not_now">暂不设置</string>
