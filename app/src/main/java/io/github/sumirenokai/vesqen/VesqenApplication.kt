@@ -16,6 +16,7 @@ import io.github.sumirenokai.vesqen.lyrics.LyricsStore
 import io.github.sumirenokai.vesqen.playback.DirectUsbReadingsSource
 import io.github.sumirenokai.vesqen.playback.DirectUsbVolumeControl
 import io.github.sumirenokai.vesqen.playback.PreferencesDirectUsbVolumeMemory
+import io.github.sumirenokai.vesqen.playback.ScreenOffKeepAliveSettings
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryRecorder
 import io.github.sumirenokai.vesqen.playback.PlaybackStateStore
 import io.github.sumirenokai.vesqen.playback.PlaybackTrackMerges
@@ -81,6 +82,7 @@ class VesqenApplication : Application() {
     /** The DAC's hardware volume while the own USB output holds it, for the volume bar and the volume keys. */
     val directUsbVolume = DirectUsbVolumeControl()
     internal val directUsbVolumeMemory by lazy { PreferencesDirectUsbVolumeMemory(this) }
+    internal val screenOffKeepAlive by lazy { ScreenOffKeepAliveSettings(this) }
 
     /** #119: the trial and paid-feature state; the betas build it with enforcement off. */
     val premiumAccess: PremiumAccess by lazy {

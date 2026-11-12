@@ -75,6 +75,15 @@
     <string name="settings_strict_usb_active_direct">%1$s で有効：%2$s。Vesqen によるデバイスの設定と読み戻しに基づく状態で、外部検証は行っていません。音量バーと音量ボタンは %1$s のハードウェア音量を調整します。スマートフォンのメディア音量はこの出力には反映されません。</string>
     <string name="usb_volume_label">DAC の音量</string>
     <string name="usb_volume_state">%1$s デシベル</string>
+    <string name="screen_off_keep_alive_title">画面オフ中も再生を続ける</string>
+    <string name="screen_off_keep_alive_body">一部のスマートフォン（vivo、iQOO など）は画面がオフになるとバックグラウンドのアプリを凍結するため、Vesqen が DAC に直接出力している間は再生が止まります。オンにすると、画面オフで再生している間、Vesqen はスマートフォンのスピーカーにごく低いレベルの信号を送り、システムが Vesqen を動作させ続けるようにします。スピーカーに近づくとかすかなノイズが聞こえることがあり、電池の消費もわずかに増えます。DAC に送る音声は変わりません。</string>
+    <string name="background_power_title">バックグラウンドでの高い電力消費を許可</string>
+    <string name="background_power_body">システム設定で Vesqen に対してオンにします。設定は一度だけで、ノイズは生じません。</string>
+    <string name="screen_off_guidance_title">画面オフ中の再生</string>
+    <string name="screen_off_guidance_body">このスマートフォンは画面がオフになるとバックグラウンドのアプリを凍結するため、Vesqen が DAC に直接出力している間は再生が止まります。次のどちらかで防げます。\n\n• システム設定で Vesqen の「バックグラウンドでの高い電力消費を許可」をオンにする。設定は一度だけで、ノイズは生じません。\n• Vesqen の「画面オフ中も再生を続ける」をオンにする。システム設定を変える必要はありませんが、スピーカーに近づくとかすかなノイズが聞こえることがあります。</string>
+    <string name="screen_off_guidance_open_settings">システム設定を開く</string>
+    <string name="screen_off_guidance_keep_alive">画面オフ中も再生を続ける</string>
+    <string name="screen_off_guidance_not_now">今は設定しない</string>
     <string name="settings_strict_usb_failed">再生を停止しました。%1$s通常の再生に戻すには「システム出力」を選んでください。</string>
     <string name="settings_usb_device_unknown">USB オーディオデバイス</string>
     <string name="settings_format_unknown">形式は未確認</string>

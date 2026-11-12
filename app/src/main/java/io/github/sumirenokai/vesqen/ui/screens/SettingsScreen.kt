@@ -47,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -57,6 +58,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.ui.LocalScreenOffKeepAlive
+import io.github.sumirenokai.vesqen.ui.openBackgroundPowerSettings
 import io.github.sumirenokai.vesqen.library.ArtistSplitSettings
 import io.github.sumirenokai.vesqen.playback.NO_BIT_PERFECT_MIXER_CODE
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
@@ -168,6 +171,7 @@ fun SettingsScreen(
                             modifier = Modifier.testTag("vesqen.settings.output.strict-usb"),
                         )
                     }
+                    if (strictSelected && outputStatus.directUsbAvailable) SettingsScreenOffRows()
                     if (premiumAccess != null) {
                         PaperDivider()
                         SettingsPremiumRow(premiumAccess, onOpenPremium)
@@ -620,6 +624,31 @@ private fun SettingsRadioRow(
         )
         Spacer(Modifier.width(VesqenSpacing.sm))
         SettingsRowText(title, description, Modifier.weight(1f))
+    }
+}
+
+/** D13 (#333): the keep-alive switch and, on vivo-family phones, the system setting that avoids it. */
+@Composable
+private fun SettingsScreenOffRows() {
+    val keepAlive = LocalScreenOffKeepAlive.current ?: return
+    val enabled by keepAlive.enabled.collectAsStateWithLifecycle()
+    PaperDivider()
+    SettingsSwitchRow(
+        title = stringResource(R.string.screen_off_keep_alive_title),
+        description = stringResource(R.string.screen_off_keep_alive_body),
+        checked = enabled,
+        onCheckedChange = keepAlive::setEnabled,
+        modifier = Modifier.testTag("vesqen.settings.screen-off-keep-alive"),
+    )
+    if (keepAlive.vivoFamily) {
+        val context = LocalContext.current
+        PaperDivider()
+        SettingsRow(
+            title = stringResource(R.string.background_power_title),
+            description = stringResource(R.string.background_power_body),
+            onClick = { openBackgroundPowerSettings(context) },
+            modifier = Modifier.testTag("vesqen.settings.background-power"),
+        )
     }
 }
 

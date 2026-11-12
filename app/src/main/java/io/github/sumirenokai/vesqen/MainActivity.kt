@@ -21,6 +21,7 @@ import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
 import io.github.sumirenokai.vesqen.ui.VesqenApp
 import io.github.sumirenokai.vesqen.ui.screens.DirectUsbVolumeKeyOverlay
 import io.github.sumirenokai.vesqen.ui.screens.LocalDirectUsbVolume
+import io.github.sumirenokai.vesqen.ui.LocalScreenOffKeepAlive
 
 class MainActivity : ComponentActivity() {
     /** Counts requests to show the Pro features page, such as after an activation link (#120). */
@@ -34,7 +35,8 @@ class MainActivity : ComponentActivity() {
             VesqenTheme {
                 // UiAutomator sees test tags as resource IDs; the Baseline Profile generator finds screens by them (#50).
                 val usbVolume = (application as VesqenApplication).directUsbVolume
-                CompositionLocalProvider(LocalDirectUsbVolume provides usbVolume) {
+                val keepAlive = (application as VesqenApplication).screenOffKeepAlive.takeIf { BuildConfig.DIRECT_USB_ENABLED }
+                CompositionLocalProvider(LocalDirectUsbVolume provides usbVolume, LocalScreenOffKeepAlive provides keepAlive) {
                     Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
                         VesqenApp(openPremiumRequest = premiumRequests.intValue)
                         DirectUsbVolumeKeyOverlay(usbVolume, Modifier.align(Alignment.TopCenter))
