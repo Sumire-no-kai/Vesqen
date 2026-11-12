@@ -8,6 +8,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.session.SessionResult
+import com.google.common.util.concurrent.ListenableFuture
 import io.github.sumirenokai.vesqen.VesqenApplication
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.library.AlbumArtworkLoader
@@ -16,12 +18,17 @@ import io.github.sumirenokai.vesqen.library.LibraryCatalog
 import io.github.sumirenokai.vesqen.library.LibraryCatalogSnapshot
 import io.github.sumirenokai.vesqen.library.LibraryScanProgress
 import io.github.sumirenokai.vesqen.library.LibraryScanState
+import io.github.sumirenokai.vesqen.library.LibrarySourceScanResult
+import io.github.sumirenokai.vesqen.library.FolderGrantRenewalResult
 import io.github.sumirenokai.vesqen.library.UnmatchedLibraryRecord
 import io.github.sumirenokai.vesqen.library.LibrarySource
 import io.github.sumirenokai.vesqen.library.LibrarySourceKind
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
 import io.github.sumirenokai.vesqen.lyrics.LyricsImportResult
+import io.github.sumirenokai.vesqen.lyrics.LyricsAdjustmentAction
+import io.github.sumirenokai.vesqen.lyrics.LyricsAdjustmentResult
 import io.github.sumirenokai.vesqen.lyrics.LyricsStore
+import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.lyrics.readProviderLyrics
 import io.github.sumirenokai.vesqen.playback.PlaybackController
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryUpdate
@@ -54,9 +61,11 @@ data class LibraryUiState(
     val unmatchedRecords: List<UnmatchedLibraryRecord> = emptyList(),
     /** Records the user put off with "Later"; see [UnmatchedRecordPrompt]. */
     val dismissedUnmatchedRecordIds: Set<Long> = emptySet(),
+    /** Observations of the last refresh, scoped to its actual sources rather than the whole device. */
+    val lastScanResults: List<LibrarySourceScanResult> = emptyList(),
 ) {
     val isScanPaused: Boolean
-        get() = scanProgress?.isPaused == true || sources.any { it.scanState == LibraryScanState.PAUSED }
+        get() = scanProgress?.isPaused ?: sources.any { it.scanState == LibraryScanState.PAUSED }
 
     /** The Library mentions unmatched records while one waits that "Later" was not pressed for. */
     val promptsUnmatchedRecords: Boolean
@@ -161,9 +170,11 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                 tracks = emptyList(),
                 playlists = emptyList(),
                 sources = emptyList(),
+                scanProgress = null,
                 unmatchedRecords = emptyList(),
                 // The new catalog gives these record IDs out again (#191 D9).
                 dismissedUnmatchedRecordIds = emptySet(),
+                lastScanResults = emptyList(),
                 isLoading = true,
             )
         }
@@ -212,7 +223,8 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         // IO started under an earlier permission snapshot must not restore its rows afterward.
         cachedLibraryReader.invalidate()
-        if (!musicGranted && uiState.library.musicAccess == MusicAccess.GRANTED) {
+        val scopeChanged = musicGranted != (uiState.library.musicAccess == MusicAccess.GRANTED)
+        if (scopeChanged) {
             libraryRefreshEpoch++
             AlbumArtworkLoader.clearMemoryCache()
         }
@@ -231,6 +243,8 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                 // catalog snapshot replaces device rows on the following IO turn.
                 isLoading = if (updatedMusicAccess == MusicAccess.GRANTED) it.isLoading else false,
                 loadingFailed = if (updatedMusicAccess == MusicAccess.GRANTED) it.loadingFailed else false,
+                lastScanResults = if (updatedMusicAccess == it.musicAccess) it.lastScanResults else emptyList(),
+                scanProgress = if (scopeChanged) null else it.scanProgress,
             )
         }
     }
@@ -242,7 +256,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
             libraryRefreshQueued = true
             catalog.resume()
             updateLibrary {
-                it.copy(scanProgress = it.scanProgress?.copy(isPaused = false))
+                it.copy(scanProgress = it.scanProgress?.copy(isPaused = false, pauseRequested = false))
             }
             return
         }
@@ -256,6 +270,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                 loadingFailed = false,
                 catalogMutationFailed = false,
                 scanProgress = null,
+                lastScanResults = emptyList(),
             )
         }
         activeLibraryScan = viewModelScope.launch {
@@ -266,7 +281,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                         catalog.refresh(includeDeviceLibrary) { progress ->
                             withContext(Dispatchers.Main.immediate) {
                                 if (libraryRefreshEpoch == requestEpoch) {
-                                    updateLibrary { it.copy(scanProgress = progress) }
+                                    updateLibrary { it.copy(scanProgress = scanProgressAfterReport(it.scanProgress, progress)) }
                                 }
                             }
                         }
@@ -305,6 +320,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                     scanProgress = it.scanProgress?.takeIf(LibraryScanProgress::isPaused)
                         ?: snapshot?.pausedProgress(),
                     loadingFailed = result.getOrNull()?.hadFailure ?: result.isFailure,
+                    lastScanResults = result.getOrNull()?.sourceResults.orEmpty(),
                 )
             }
             // Connect to playback even when the library could not be read: music that is already
@@ -387,6 +403,27 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch(Dispatchers.IO) { lyricsStore.remove(trackId) }
     }
 
+    /** Provider reads precede the catalog gate; only the guarded local write holds track identity. */
+    internal suspend fun adjustLyricsTime(
+        track: AudioTrack,
+        expected: TrackLyrics.Found,
+        action: LyricsAdjustmentAction,
+    ): LyricsAdjustmentResult {
+        val rebuildsBefore = catalogRebuilds.value
+        return try {
+            lyricsResolver.adjust(track, expected, action) { save ->
+                catalog.withTrackContentUri(track.id) { contentUri ->
+                    if (contentUri != track.contentUri) LyricsAdjustmentResult.TRACK_CHANGED else save()
+                }
+            }
+        } catch (_: SQLiteException) {
+            if (catalogRebuiltSince(rebuildsBefore)) LyricsAdjustmentResult.TRACK_CHANGED else LyricsAdjustmentResult.FAILED
+        } catch (failure: IllegalStateException) {
+            failure.rethrowUnlessCatalogRebuiltSince(rebuildsBefore)
+            LyricsAdjustmentResult.TRACK_CHANGED
+        }
+    }
+
     fun addLibraryFolder(treeUri: Uri) {
         viewModelScope.launch {
             val result = try {
@@ -408,19 +445,29 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
         mutateCatalog { catalog.removeFolder(sourceId) }
     }
 
+    /** Renews the selected source in place; successful authorization starts an ordinary refresh. */
+    suspend fun renewLibraryFolder(sourceId: String, selectedTreeUri: Uri): FolderGrantRenewalResult {
+        val result = withContext(Dispatchers.IO) { catalog.renewFolder(sourceId, selectedTreeUri) }
+        if (result == FolderGrantRenewalResult.RENEWED) refreshLibrary()
+        return result
+    }
+
     fun pauseLibraryScan() {
         catalog.pause()
         updateLibrary {
             it.copy(
-                scanProgress = it.scanProgress?.copy(isPaused = true) ?: pausedProgressFrom(it.sources),
+                scanProgress = (it.scanProgress ?: pausedProgressFrom(it.sources))?.copy(pauseRequested = true),
             )
         }
     }
 
     fun resumeLibraryScan() {
+        val pauseWasRequested = uiState.library.isScanPaused || uiState.library.scanProgress?.pauseRequested == true
         catalog.resume()
         if (activeLibraryScan?.isActive == true) {
-            updateLibrary { it.copy(scanProgress = it.scanProgress?.copy(isPaused = false)) }
+            // The cursor may already have stopped while its confirmation still waits for Main.
+            if (pauseWasRequested) libraryRefreshQueued = true
+            updateLibrary { it.copy(scanProgress = it.scanProgress?.copy(isPaused = false, pauseRequested = false)) }
         } else {
             refreshLibrary()
         }
@@ -540,6 +587,14 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setUsbOutputMode(mode: UsbOutputMode) = playbackController().setUsbOutputMode(mode)
 
+    fun setSleepTimer(durationMs: Long, finishCurrentTrack: Boolean = false): ListenableFuture<SessionResult> =
+        playbackController().setSleepTimer(durationMs, finishCurrentTrack)
+
+    fun pauseAfterCurrentTrack(queueEntryId: String? = uiState.playback.queueEntryId): ListenableFuture<SessionResult> =
+        playbackController().pauseAfterCurrentTrack(queueEntryId)
+
+    fun cancelSleepTimer(): ListenableFuture<SessionResult> = playbackController().cancelSleepTimer()
+
     fun refreshPlaybackPosition() = playbackController?.refreshPosition()
 
     override fun onCleared() {
@@ -620,6 +675,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                         tracks = refreshedTracks,
                         playlists = snapshot.playlists,
                         sources = snapshot.sources,
+                        lastScanResults = scanResultsAfterSourcesRead(current.lastScanResults, current.sources, snapshot.sources),
                         unmatchedRecords = snapshot.unmatchedRecords,
                         scanProgress = scanProgressAfterRead(
                             current = current.scanProgress,
@@ -690,9 +746,9 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 }
 
 /**
- * The scan progress a catalog read publishes. A scan reports progress only as each source starts and
- * ends, so a read while it runs keeps the last report: the scanning row and its Pause button stay
- * until the scan reports again (#136 U1). Otherwise only a paused scan keeps its row.
+ * Cached catalog reads do not supply live scan progress. While a scan runs they retain its last
+ * report, including its count and stage, until the scan publishes a newer one (#136 U1).
+ * Otherwise only a paused scan keeps its row.
  */
 internal fun scanProgressAfterRead(
     current: LibraryScanProgress?,
@@ -702,6 +758,31 @@ internal fun scanProgressAfterRead(
     current
 } else {
     snapshot.pausedProgress() ?: current?.takeIf(LibraryScanProgress::isPaused)
+}
+
+/** A row reported before the cursor observes Pause cannot withdraw the user's pending request. */
+internal fun scanProgressAfterReport(
+    current: LibraryScanProgress?,
+    reported: LibraryScanProgress,
+): LibraryScanProgress = reported.copy(
+    pauseRequested = !reported.isPaused && current?.pauseRequested == true,
+)
+
+/** A cached read can discover a removed/replaced source or a revoked grant without doing a scan. */
+internal fun scanResultsAfterSourcesRead(
+    results: List<LibrarySourceScanResult>,
+    previousSources: List<LibrarySource>,
+    sources: List<LibrarySource>,
+): List<LibrarySourceScanResult> {
+    if (results.isEmpty()) return results
+    val previous = previousSources.associateBy(LibrarySource::id)
+    val current = sources.associateBy(LibrarySource::id)
+    return results.filter { result ->
+        val before = previous[result.sourceId]
+        val after = current[result.sourceId]
+        before != null && after != null && before.kind == after.kind && before.treeUri == after.treeUri &&
+            before.isAvailable == after.isAvailable
+    }
 }
 
 private fun LibraryCatalogSnapshot.pausedProgress(): LibraryScanProgress? = sources.firstOrNull {
@@ -758,6 +839,6 @@ private fun pausedProgressFrom(sources: List<LibrarySource>): LibraryScanProgres
         sourceId = source.id,
         sourceName = source.displayName,
         scannedTrackCount = 0,
-        isPaused = true,
+        isPaused = source.scanState == LibraryScanState.PAUSED,
     )
 }

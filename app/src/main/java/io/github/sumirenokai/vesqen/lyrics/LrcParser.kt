@@ -5,7 +5,15 @@ package io.github.sumirenokai.vesqen.lyrics
  * neither highlighted nor followed.
  */
 sealed interface Lyrics {
-    data class Synced(val lines: List<LyricLine>) : Lyrics
+    data class Synced(
+        val lines: List<LyricLine>,
+        /** File-adjusted times before clamping, retained so a user delay can bring them past zero. */
+        internal val unadjustedTimesMs: List<Long> = lines.map(LyricLine::timeMs),
+    ) : Lyrics {
+        init {
+            require(lines.size == unadjustedTimesMs.size)
+        }
+    }
 
     data class Plain(val lines: List<String>) : Lyrics
 }
@@ -129,6 +137,7 @@ private fun syncedLyrics(timed: List<TimedText>, offsetMs: Long): Lyrics? {
     // A stable sort keeps file order within one time: that order decides original and translations.
     val sorted = timed.sortedBy(TimedText::timeMs)
     val lines = ArrayList<LyricLine>()
+    val unadjustedTimes = ArrayList<Long>()
     var start = 0
     while (start < sorted.size) {
         val time = sorted[start].timeMs
@@ -144,8 +153,9 @@ private fun syncedLyrics(timed: List<TimedText>, offsetMs: Long): Lyrics? {
         // A pause before the first line or right after another pause adds only an empty row.
         if (line.text.isEmpty() && lines.lastOrNull()?.text?.isNotEmpty() != true) continue
         lines += line
+        unadjustedTimes += time - offsetMs
     }
-    return lines.takeIf { it.isNotEmpty() }?.let(Lyrics::Synced)
+    return lines.takeIf { it.isNotEmpty() }?.let { Lyrics.Synced(it, unadjustedTimes) }
 }
 
 private fun plainLyrics(untimed: List<String>): Lyrics? {

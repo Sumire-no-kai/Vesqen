@@ -56,6 +56,7 @@ class PlaybackService : MediaSessionService() {
     private var sessionArtworkLoader: SessionArtworkLoader? = null
     private var usbOutputCoordinator: UsbOutputCoordinator? = null
     private var directUsbRoute: DirectUsbRoute? = null
+    private var sleepTimer: PlaybackSleepTimer? = null
     private var notificationProvider: DefaultMediaNotificationProvider? = null
     /** Opened on the first playback resumption; the UI keeps its own catalog. */
     private var resumptionCatalog: AndroidLibraryCatalog? = null
@@ -64,12 +65,19 @@ class PlaybackService : MediaSessionService() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val usbOutputCommand = SessionCommand(UsbOutputSessionContract.SET_MODE_ACTION, android.os.Bundle.EMPTY)
     private val moveCommand = SessionCommand(PlayOrderSessionContract.MOVE_ACTION, android.os.Bundle.EMPTY)
+    private val sleepTimerCommand = SessionCommand(SleepTimerSessionContract.SET_ACTION, android.os.Bundle.EMPTY)
     private val outputStateListener: (UsbOutputStatus) -> Unit = { status ->
         mainHandler.post {
-            mediaSession?.setSessionExtras(UsbOutputSessionContract.toBundle(status))
+            publishSessionExtras(status)
             // A strict failure stops the requested Play without sound (PRD 9.2), which also ends a
             // media button start.
-            if (status.stopsRequestedPlayback()) endMediaButtonStartWithoutPlayback()
+            if (status.stopsRequestedPlayback()) {
+                // An output refusal can pause without raising PlayerError. Do not retain its gate.
+                if (status == (application as VesqenApplication).usbOutputStateRepository.snapshot()) {
+                    sleepTimer?.apply(SleepTimerRequest.Cancel)
+                }
+                endMediaButtonStartWithoutPlayback()
+            }
         }
     }
     private val playbackListener = object : Player.Listener {
@@ -115,7 +123,7 @@ class PlaybackService : MediaSessionService() {
             val base = MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller).build()
             if (controller.packageName != packageName) return Futures.immediateFuture(base)
             return Futures.immediateFuture(MediaSession.ConnectionResult.accept(
-                base.availableSessionCommands.buildUpon().add(usbOutputCommand).add(moveCommand).build(),
+                base.availableSessionCommands.buildUpon().add(usbOutputCommand).add(moveCommand).add(sleepTimerCommand).build(),
                 base.availablePlayerCommands,
             ))
         }
@@ -142,6 +150,21 @@ class PlaybackService : MediaSessionService() {
                         SessionResult(if (player.moveInPlayOrder(move)) SessionResult.RESULT_SUCCESS else SessionError.ERROR_BAD_VALUE)
                     }
                 }
+                SleepTimerSessionContract.SET_ACTION -> {
+                    val request = SleepTimerSessionContract.readRequest(args)
+                        ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
+                    onMainThread {
+                        val applied = try {
+                            sleepTimer?.apply(request) == true
+                        } catch (_: SecurityException) {
+                            return@onMainThread SessionResult(SessionError.ERROR_PERMISSION_DENIED)
+                        }
+                        if (applied) {
+                            SessionResult(SessionResult.RESULT_SUCCESS,
+                                SleepTimerSessionContract.withState(android.os.Bundle.EMPTY, checkNotNull(sleepTimer).state))
+                        } else SessionResult(SessionError.ERROR_BAD_VALUE)
+                    }
+                }
                 else -> Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
             }
         }
@@ -164,6 +187,14 @@ class PlaybackService : MediaSessionService() {
             usbOutputCoordinator?.currentStatus() ?: UsbOutputStatus(),
         )
         SessionResult(SessionResult.RESULT_SUCCESS, extras)
+    }
+
+    private fun publishSessionExtras(
+        outputStatus: UsbOutputStatus = (application as VesqenApplication).usbOutputStateRepository.snapshot(),
+    ) {
+        val session = mediaSession ?: return
+        val combined = UsbOutputSessionContract.withStatus(session.sessionExtras, outputStatus)
+        session.setSessionExtras(SleepTimerSessionContract.withState(combined, sleepTimer?.state ?: SleepTimerState()))
     }
 
     /** The player and the output coordinator belong to the main thread. */
@@ -283,6 +314,9 @@ class PlaybackService : MediaSessionService() {
             }
         player.addListener((application as VesqenApplication).deviceReportRuntime.playbackListener(player))
         player.addListener(playbackListener)
+        sleepTimer = PlaybackSleepTimer(player, AndroidSleepTimerScheduler(this, mainHandler)) {
+            publishSessionExtras()
+        }
         player.addListener(object : Player.Listener {
             // Turning shuffle on starts the play order at the current track, so none of the others is
             // skipped (#158). A queue set while shuffled starts there already (PlayOrder.cloneAndSet).
@@ -328,7 +362,9 @@ class PlaybackService : MediaSessionService() {
             .setBitmapLoader(artworkLoader)
             .setSessionActivity(sessionActivity)
             .setCallback(sessionCallback)
-            .setSessionExtras(UsbOutputSessionContract.toBundle(outputStateRepository.snapshot()))
+            .setSessionExtras(SleepTimerSessionContract.withState(
+                UsbOutputSessionContract.toBundle(outputStateRepository.snapshot()), checkNotNull(sleepTimer).state,
+            ))
             .build()
         outputStateRepository.addListener(outputStateListener)
     }
@@ -427,6 +463,8 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        sleepTimer?.close()
+        sleepTimer = null
         (application as VesqenApplication).playbackTrackMerges.detach()
         serviceScope.cancel()
         (application as VesqenApplication).usbOutputStateRepository.removeListener(outputStateListener)

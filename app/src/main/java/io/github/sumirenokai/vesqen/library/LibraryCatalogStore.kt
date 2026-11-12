@@ -1010,8 +1010,9 @@ internal class LibraryCatalogStore internal constructor(
         private val merged = ArrayList<Pair<Long, Long>>()
 
         fun merge(from: Long, into: Long) {
-            mergeFollower.prepareMerge(from, into)
+            // A follower may fail after preparing some files. Include this pair in rollback.
             merged += from to into
+            mergeFollower.prepareMerge(from, into)
         }
 
         fun prepareCommit() {
@@ -1022,7 +1023,7 @@ internal class LibraryCatalogStore internal constructor(
             if (merged.isNotEmpty()) mergeFollower.mergesCommitted(merged)
         }
 
-        fun rolledBack() = merged.forEach { (from, into) -> mergeFollower.mergeRolledBack(from, into) }
+        fun rolledBack() = merged.asReversed().forEach { (from, into) -> mergeFollower.mergeRolledBack(from, into) }
     }
 
     private inline fun <T> withTrackMerges(transaction: SQLiteDatabase.(TrackMerges) -> T): T {

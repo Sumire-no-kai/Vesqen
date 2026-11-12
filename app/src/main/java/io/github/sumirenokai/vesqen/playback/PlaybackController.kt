@@ -17,8 +17,11 @@ import androidx.media3.common.Timeline
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionCommands
+import androidx.media3.session.SessionError
+import androidx.media3.session.SessionResult
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.Futures
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMediaItemExtras
 import io.github.sumirenokai.vesqen.verification.OutputVerificationMatch
@@ -53,7 +56,9 @@ class PlaybackController(
     private var released = false
     private val usbOutputCommand = SessionCommand(UsbOutputSessionContract.SET_MODE_ACTION, Bundle.EMPTY)
     private val moveCommand = SessionCommand(PlayOrderSessionContract.MOVE_ACTION, Bundle.EMPTY)
+    private val sleepTimerCommand = SessionCommand(SleepTimerSessionContract.SET_ACTION, Bundle.EMPTY)
     private var usbOutputStatus = UsbOutputStatus()
+    private var sleepTimerState = SleepTimerState()
 
     private var latestSnapshot = PlaybackSnapshot()
 
@@ -87,9 +92,17 @@ class PlaybackController(
     private val controllerListener = object : MediaController.Listener {
         override fun onExtrasChanged(controller: MediaController, extras: Bundle) {
             if (this@PlaybackController.controller !== controller) return
+            var changed = false
             UsbOutputSessionContract.fromBundle(extras)?.let { status ->
-                if (acceptUsbOutputStatus(status)) publish(controller)
+                if (acceptUsbOutputStatus(status)) changed = true
             }
+            SleepTimerSessionContract.fromExtras(extras)?.let { state ->
+                if (state.revision >= sleepTimerState.revision && state != sleepTimerState) {
+                    sleepTimerState = state
+                    changed = true
+                }
+            }
+            if (changed) publish(controller)
         }
 
         override fun onAvailableSessionCommandsChanged(
@@ -109,6 +122,7 @@ class PlaybackController(
                 observedAtElapsedRealtimeMs = SystemClock.elapsedRealtime(),
             )
             usbOutputStatus = disconnectedSnapshot.usbOutputStatus
+            sleepTimerState = SleepTimerState()
             updateSnapshot(disconnectedSnapshot)
             scheduleReconnect()
         }
@@ -139,6 +153,7 @@ class PlaybackController(
                         mainHandler.removeCallbacks(reconnectRunnable)
                         reconnectAttempt = 0
                         controller = resolvedController
+                        sleepTimerState = SleepTimerSessionContract.fromExtras(resolvedController.sessionExtras) ?: SleepTimerState()
                         UsbOutputSessionContract.fromBundle(resolvedController.sessionExtras)?.let { status ->
                             acceptUsbOutputStatus(status)
                         }
@@ -164,6 +179,8 @@ class PlaybackController(
                             latestSnapshot.copy(
                                 isControllerReady = false,
                                 canSetUsbOutputMode = false,
+                                canSetSleepTimer = false,
+                                sleepTimer = SleepTimerState(),
                                 isPlaying = false,
                                 showsPauseAction = false,
                                 outputVerification = null,
@@ -485,6 +502,35 @@ class PlaybackController(
         )
     }
 
+    fun setSleepTimer(durationMs: Long, finishCurrentTrack: Boolean = false): ListenableFuture<SessionResult> =
+        sendSleepTimerRequest(SleepTimerRequest.Countdown(durationMs, finishCurrentTrack))
+
+    fun pauseAfterCurrentTrack(queueEntryId: String? = latestSnapshot.queueEntryId): ListenableFuture<SessionResult> =
+        if (queueEntryId.isNullOrBlank()) Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
+        else sendSleepTimerRequest(SleepTimerRequest.EndOfTrack(queueEntryId))
+
+    fun cancelSleepTimer(): ListenableFuture<SessionResult> = sendSleepTimerRequest(SleepTimerRequest.Cancel)
+
+    private fun sendSleepTimerRequest(request: SleepTimerRequest): ListenableFuture<SessionResult> {
+        val activeController = controller
+            ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_SESSION_DISCONNECTED))
+        if (!activeController.isSessionCommandAvailable(sleepTimerCommand)) {
+            return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
+        }
+        val future = activeController.sendCustomCommand(sleepTimerCommand, SleepTimerSessionContract.arguments(request))
+        future.addListener({
+            if (controller !== activeController || released) return@addListener
+            val result = runCatching { future.get() }.getOrNull() ?: return@addListener
+            if (result.resultCode != SessionResult.RESULT_SUCCESS) return@addListener
+            val state = SleepTimerSessionContract.fromExtras(result.extras) ?: return@addListener
+            if (state.revision >= sleepTimerState.revision) {
+                sleepTimerState = state
+                publish(activeController)
+            }
+        }, executor)
+        return future
+    }
+
     fun refreshPosition() {
         controller?.let { player ->
             if (!queueCache.matches(player)) {
@@ -536,6 +582,8 @@ class PlaybackController(
                 isControllerReady = true,
                 canSetUsbOutputMode = (player as? MediaController)
                     ?.isSessionCommandAvailable(usbOutputCommand) == true,
+                canSetSleepTimer = (player as? MediaController)?.isSessionCommandAvailable(sleepTimerCommand) == true,
+                sleepTimer = sleepTimerState,
                 isPlaying = player.isPlaying,
                 showsPauseAction = playbackToggleAction(player.playWhenReady, player.playbackState) ==
                     PlaybackToggleAction.PAUSE,
@@ -1051,6 +1099,8 @@ internal fun PlaybackSnapshot.withDisconnectedController(
     return copy(
         isControllerReady = false,
         canSetUsbOutputMode = false,
+        canSetSleepTimer = false,
+        sleepTimer = SleepTimerState(),
         isPlaying = false,
         showsPauseAction = false,
         usbOutputStatus = disconnectedOutputStatus,
