@@ -14,7 +14,9 @@ constexpr int kMaxPacketsPerUrb = 128;  // The kernel's limit for one isochronou
 constexpr int kMaxUrbs = 32;
 constexpr int kMaxPacketBytes = 1024;  // Extra high-speed transactions are refused before this point.
 constexpr int kMaxRingFrames = 1 << 20;
+// Linux reads three or four bytes and asks for no more.
 constexpr int kMinFeedbackBytes = 3;
+constexpr int kMaxFeedbackBytes = 4;
 constexpr int kMaxFeedbackIntervalUs = 1000 << 15;  // bInterval 16 at full speed.
 // Two keep the endpoint polled while the stream thread handles the other.
 constexpr int kFeedbackUrbs = 2;
@@ -36,8 +38,8 @@ bool isValid(const StreamConfig& config) {
     if (config.ringFrames <= 0 || config.ringFrames > kMaxRingFrames) return false;
     const int64_t maxFrames = PacketSchedule::maxFrames(config.sampleRateHz, config.serviceIntervalUs);
     if (maxFrames <= 0 || maxFrames * config.frameBytes > config.maxPacketBytes) return false;
-    if (config.feedbackMaxPacketBytes == 0) return true;
-    if (config.feedbackMaxPacketBytes < kMinFeedbackBytes || config.feedbackMaxPacketBytes > kMaxPacketBytes) return false;
+    if (config.feedbackPacketBytes == 0) return true;
+    if (config.feedbackPacketBytes < kMinFeedbackBytes || config.feedbackPacketBytes > kMaxFeedbackBytes) return false;
     if (config.feedbackIntervalUs <= 0 || config.feedbackIntervalUs > kMaxFeedbackIntervalUs) return false;
     if (config.feedbackPacketsPerUrb <= 0 || config.feedbackPacketsPerUrb > kMaxPacketsPerUrb) return false;
     // A value must have a chance to arrive before one is missed.
@@ -69,8 +71,8 @@ StreamEngine::StreamEngine(const StreamConfig& config, IsoTransport& transport)
         }
     };
     allocate(urbs_, config.urbCount, config.packetsPerUrb, config.maxPacketBytes);
-    if (config.feedbackMaxPacketBytes > 0) {
-        allocate(feedbackUrbs_, kFeedbackUrbs, config.feedbackPacketsPerUrb, config.feedbackMaxPacketBytes);
+    if (config.feedbackPacketBytes > 0) {
+        allocate(feedbackUrbs_, kFeedbackUrbs, config.feedbackPacketsPerUrb, config.feedbackPacketBytes);
         for (IsoUrb& urb : feedbackUrbs_) urb.feedback = true;
     }
 }
@@ -311,7 +313,7 @@ bool StreamEngine::submitFeedback(IsoUrb& urb) {
     if (stopRequested_.load(std::memory_order_acquire)) return true;
     for (uint32_t i = 0; i < urb.packetCount; ++i) {
         urb.packets[i] = IsoPacket{};
-        urb.packets[i].length = static_cast<uint32_t>(config_.feedbackMaxPacketBytes);
+        urb.packets[i].length = static_cast<uint32_t>(config_.feedbackPacketBytes);
     }
     const int error = transport_.submit(urb);
     if (error != 0) {
@@ -332,7 +334,7 @@ bool StreamEngine::submitFeedback(IsoUrb& urb) {
 bool StreamEngine::reapFeedback(IsoUrb& urb) {
     urb.inFlight = false;
     --feedbackInFlight_;
-    const auto packetBytes = static_cast<size_t>(config_.feedbackMaxPacketBytes);
+    const auto packetBytes = static_cast<size_t>(config_.feedbackPacketBytes);
     for (uint32_t i = 0; i < urb.packetCount; ++i) {
         const IsoPacket& packet = urb.packets[i];
         const bool received = packet.status == 0 && packet.actualLength <= packet.length;
