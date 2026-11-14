@@ -1,9 +1,14 @@
 package io.github.sumirenokai.vesqen.usb.session
 
 import io.github.sumirenokai.vesqen.usb.control.Uac1ControlClient
+import io.github.sumirenokai.vesqen.usb.control.Uac2ControlClient
+import io.github.sumirenokai.vesqen.usb.control.UacFeatureControls
+import io.github.sumirenokai.vesqen.usb.control.UacRateRange
 import io.github.sumirenokai.vesqen.usb.control.UacVolumeRange
+import io.github.sumirenokai.vesqen.usb.descriptor.UacClockEntity
 import io.github.sumirenokai.vesqen.usb.descriptor.UacControlAccess
 import io.github.sumirenokai.vesqen.usb.descriptor.UacFunction
+import io.github.sumirenokai.vesqen.usb.descriptor.UacVersion
 import io.github.sumirenokai.vesqen.usb.engine.UsbStream
 import io.github.sumirenokai.vesqen.usb.engine.UsbStreamEngine
 import io.github.sumirenokai.vesqen.usb.engine.UsbStreamStats
@@ -102,7 +107,14 @@ class DirectUsbSession(
     @Volatile
     private var stream: UsbStream? = null
 
-    private val client = Uac1ControlClient(link.control)
+    private val uac1 = Uac1ControlClient(link.control)
+    private val uac2 = Uac2ControlClient(link.control)
+    private val controls: UacFeatureControls? = UacFeatureControls.of(function.version, link.control)
+
+    /** UAC2: the rates the stream's clock offered when the session last set it, for planning later items. */
+    @Volatile
+    var clockRates: List<UacRateRange>? = null
+        private set
     private val takeOverAsked = AtomicBoolean()
     private val claimed = mutableListOf<Int>()
     private var streamingInterface: Int? = null
@@ -301,6 +313,7 @@ class DirectUsbSession(
         val volume = volumeControl
         if ((state !is State.Streaming && state != State.Reconfiguring) || volume == null) return@execute onDone(null)
         val readBack = try {
+            val client = checkNotNull(controls)
             client.setVolume(volume.unitId, volume.controlInterface, volume.range.settingAtOrBelow(target))
             client.volume(volume.unitId, volume.controlInterface)
         } catch (_: SecurityException) {
@@ -349,8 +362,8 @@ class DirectUsbSession(
             claimed += number
         }
 
-        val terminalLink = function.streamingInterfaces.firstOrNull { it.interfaceNumber == plan.interfaceNumber }
-            ?.alternateSettings?.firstOrNull { it.alternateSetting == plan.alternateSetting }?.terminalLink
+        val client = controls ?: return failed(Reason.USB_ENGINE_UNAVAILABLE, "no control requests for ${function.version}")
+        val terminalLink = terminalOf(plan)
         val unit = terminalLink?.let { terminal -> function.featureUnitsAfter(terminal).firstOrNull { it.masterVolume != UacControlAccess.ABSENT } }
             ?: return failed(Reason.VOLUME_CONTROL_FAILED, "no master volume on the path")
         val controlInterface = function.controlInterface
@@ -389,11 +402,15 @@ class DirectUsbSession(
     }
 
     private fun startStream(plan: StreamingPlan): DirectUsbFailure? {
-        val terminal = function.streamingInterfaces.firstOrNull { it.interfaceNumber == plan.interfaceNumber }
-            ?.alternateSettings?.firstOrNull { it.alternateSetting == plan.alternateSetting }?.terminalLink
+        val terminal = terminalOf(plan)
         val unit = terminal?.let { function.featureUnitsAfter(it).firstOrNull { unit -> unit.masterVolume != UacControlAccess.ABSENT } }
         if (unit?.id != volumeControl?.unitId) {
             return DirectUsbFailure(Reason.VOLUME_CONTROL_FAILED, "the new stream uses another volume control")
+        }
+        // UAC2 clocks belong to the AudioControl interface. As in Linux, the rate is set while the
+        // streaming interface is still at alternate setting 0, then the setting is selected.
+        if (function.version == UacVersion.UAC2) {
+            prepareClock(plan, terminal)?.let { return it }
         }
         if (!link.selectAlternate(plan.interfaceNumber, plan.alternateSetting)) {
             return DirectUsbFailure(Reason.INTERFACE_CLAIM_FAILED, "alternate setting ${plan.alternateSetting} of interface ${plan.interfaceNumber}")
@@ -401,10 +418,10 @@ class DirectUsbSession(
         streamingInterface = plan.interfaceNumber
         // UAC1 addresses the rate to the endpoint, which only exists once its setting is active.
         if (plan.endpointSetsSampleRate) {
-            if (!client.setSampleRate(plan.endpointAddress, plan.sampleRateHz)) {
+            if (!uac1.setSampleRate(plan.endpointAddress, plan.sampleRateHz)) {
                 return DirectUsbFailure(Reason.SAMPLE_RATE_SET_FAILED, "${plan.sampleRateHz} Hz")
             }
-            val rate = client.sampleRate(plan.endpointAddress)
+            val rate = uac1.sampleRate(plan.endpointAddress)
             if (rate != plan.sampleRateHz) return DirectUsbFailure(Reason.SAMPLE_RATE_READBACK_MISMATCH, "set ${plan.sampleRateHz}, reads back $rate")
         }
 
@@ -420,6 +437,79 @@ class DirectUsbSession(
     }
 
     private fun failed(reason: Reason, detail: String) = Takeover.Failed(DirectUsbFailure(reason, detail))
+
+    private fun terminalOf(plan: StreamingPlan): Int? = function.streamingInterfaces
+        .firstOrNull { it.interfaceNumber == plan.interfaceNumber }
+        ?.alternateSettings?.firstOrNull { it.alternateSetting == plan.alternateSetting }?.terminalLink
+
+    /**
+     * UAC2 (#284): the clock the plan's terminal runs from must offer the rate, run at it and be valid.
+     * A clock that cannot report its rate, a selector that cannot report its input and a multiplier
+     * all fail closed; Linux would switch a selector or carry on with another rate (M7 plan, strict
+     * decisions). Written to the specification, to be measured with the reference DAC.
+     */
+    private fun prepareClock(plan: StreamingPlan, terminal: Int?): DirectUsbFailure? {
+        val iface = function.controlInterface
+        val first = terminal?.let { id ->
+            function.inputTerminals.firstOrNull { it.id == id }?.clockId ?: function.outputTerminals.firstOrNull { it.id == id }?.clockId
+        } ?: return DirectUsbFailure(Reason.SAMPLE_RATE_SET_FAILED, "the stream's terminal names no clock")
+        val source = when (val found = clockSource(first, iface, mutableSetOf())) {
+            is ClockLookup.Found -> found.source
+            is ClockLookup.Refused -> return DirectUsbFailure(Reason.SAMPLE_RATE_SET_FAILED, found.why)
+        }
+        if (source.frequency == UacControlAccess.ABSENT) {
+            return DirectUsbFailure(Reason.SAMPLE_RATE_READBACK_MISMATCH, "clock ${source.id} does not report its rate")
+        }
+        val rates = uac2.clockRates(source.id, iface)
+            ?: return DirectUsbFailure(Reason.SAMPLE_RATE_SET_FAILED, "clock ${source.id} did not list its rates")
+        clockRates = rates
+        if (rates.none { plan.sampleRateHz in it }) {
+            return DirectUsbFailure(Reason.SAMPLE_RATE_UNSUPPORTED, "${plan.sampleRateHz} Hz is not among clock ${source.id}'s rates")
+        }
+        if (uac2.clockRate(source.id, iface) != plan.sampleRateHz) {
+            if (source.frequency != UacControlAccess.WRITABLE) {
+                return DirectUsbFailure(Reason.SAMPLE_RATE_SET_FAILED, "clock ${source.id} cannot be set to ${plan.sampleRateHz} Hz")
+            }
+            if (!uac2.setClockRate(source.id, iface, plan.sampleRateHz)) {
+                return DirectUsbFailure(Reason.SAMPLE_RATE_SET_FAILED, "${plan.sampleRateHz} Hz")
+            }
+            val readBack = uac2.clockRate(source.id, iface)
+            if (readBack != plan.sampleRateHz) {
+                return DirectUsbFailure(Reason.SAMPLE_RATE_READBACK_MISMATCH, "set ${plan.sampleRateHz}, reads back $readBack")
+            }
+        }
+        // As in Linux, a clock that cannot report its validity is taken as valid.
+        if (source.validity != UacControlAccess.ABSENT && uac2.clockValid(source.id, iface) != true) {
+            return DirectUsbFailure(Reason.SAMPLE_RATE_SET_FAILED, "clock ${source.id} is not valid at ${plan.sampleRateHz} Hz")
+        }
+        return null
+    }
+
+    private sealed interface ClockLookup {
+        data class Found(val source: UacClockEntity.Source) : ClockLookup
+
+        data class Refused(val why: String) : ClockLookup
+    }
+
+    /** Follows each selector's current input, as the device reports it, down to a source. */
+    private fun clockSource(id: Int, iface: Int, seen: MutableSet<Int>): ClockLookup {
+        if (!seen.add(id)) return ClockLookup.Refused("the clock entities form a loop at $id")
+        return when (val entity = function.clockEntities.firstOrNull { it.id == id }) {
+            is UacClockEntity.Source -> ClockLookup.Found(entity)
+            is UacClockEntity.Selector -> {
+                val pin = when {
+                    entity.selection != UacControlAccess.ABSENT -> uac2.clockSelection(entity.id, iface)
+                    entity.inputIds.size == 1 -> 1
+                    else -> null
+                } ?: return ClockLookup.Refused("clock selector ${entity.id} does not report its input")
+                val input = entity.inputIds.getOrNull(pin - 1)
+                    ?: return ClockLookup.Refused("clock selector ${entity.id} reports input $pin of ${entity.inputIds.size}")
+                clockSource(input, iface, seen)
+            }
+            is UacClockEntity.Multiplier -> ClockLookup.Refused("clock multiplier ${entity.id} is not supported")
+            null -> ClockLookup.Refused("no clock entity $id")
+        }
+    }
 
     private fun connectionFailure(): DirectUsbFailure? = try {
         when {

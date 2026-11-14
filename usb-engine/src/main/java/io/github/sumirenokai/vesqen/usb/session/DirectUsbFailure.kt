@@ -9,6 +9,8 @@ data class DirectUsbFailure(val reason: Reason, val detail: String) {
         VOLUME_CONTROL_FAILED,
         SAMPLE_RATE_SET_FAILED,
         SAMPLE_RATE_READBACK_MISMATCH,
+        /** UAC2: the rate is not among those the device's clock offered once claimed (#284). */
+        SAMPLE_RATE_UNSUPPORTED,
         USB_ENGINE_UNAVAILABLE,
         USB_TRANSFER_FAILED,
         DEVICE_DISCONNECTED,
