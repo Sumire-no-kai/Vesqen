@@ -107,7 +107,7 @@ fun buildLibraryCollections(
         // The folder's own name leads; the path above it follows in the subtitle, so a narrow row or
         // large text never cuts off the part that tells folders apart (#35).
         LibraryBrowseMode.FOLDERS -> tracks.groupedCollections(
-            key = { track -> collectionKey("folder", folderStorageKey(track.contentUri), track.folderName) },
+            key = AudioTrack::folderCollectionKey,
             title = { track -> folderPathParts(track.folderName).second },
             subtitle = { group -> folderPathParts(group.first().folderName).first },
             trackOrder = compareBy(within) { it.fileName },
@@ -288,3 +288,7 @@ private fun albumTrackOrder(names: Comparator<String>): Comparator<AudioTrack> =
         .thenBy(names) { it.title }
 
 private const val AlbumNamespace = "album"
+
+/** Matches Library grouping across providers and storage volumes. */
+internal fun AudioTrack.folderCollectionKey(): String =
+    collectionKey("folder", folderStorageKey(contentUri), folderName)

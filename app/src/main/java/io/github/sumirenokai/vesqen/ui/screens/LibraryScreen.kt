@@ -141,6 +141,7 @@ import io.github.sumirenokai.vesqen.library.ArtistSplitSettings
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.library.LibraryBrowseMode
+import io.github.sumirenokai.vesqen.library.planFolderPlayback
 import io.github.sumirenokai.vesqen.library.LibraryCollection
 import io.github.sumirenokai.vesqen.library.LibraryPlaylist
 import io.github.sumirenokai.vesqen.library.LibraryScanState
@@ -247,6 +248,7 @@ fun LibraryScreen(
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     val listStateHolder = rememberSaveableStateHolder()
     var query by rememberSaveable { mutableStateOf("") }
+    var continueFolders by rememberSaveable { mutableStateOf(false) }
     // The search field opens from the title bar; a typed query keeps it open.
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     val showSearch = searchOpen || query.isNotEmpty()
@@ -700,9 +702,26 @@ fun LibraryScreen(
                                     selectedCollectionKey = null
                                 }
                             },
-                            onPlayQueue = onPlayQueue,
+                            folderScope = if (shownMode == LibraryBrowseMode.FOLDERS) continueFolders else null,
+                            onFolderScopeChanged = { continueFolders = it },
+                            onPlayQueue = { tracks, index ->
+                                val selected = tracks.getOrNull(index)
+                                if (shownMode == LibraryBrowseMode.FOLDERS && continueFolders && selected != null) {
+                                    planFolderPlayback(collections, activeCollection.key, selected.id)?.let { plan ->
+                                        onPlayQueue(plan.tracks, plan.startIndex)
+                                    }
+                                } else {
+                                    onPlayQueue(tracks, index)
+                                }
+                            },
                             onTrackSelected = { track ->
-                                onPlayQueue(activeCollection.tracks, activeCollection.tracks.indexOf(track))
+                                if (shownMode == LibraryBrowseMode.FOLDERS && continueFolders) {
+                                    planFolderPlayback(collections, activeCollection.key, track.id)?.let { plan ->
+                                        onPlayQueue(plan.tracks, plan.startIndex)
+                                    }
+                                } else {
+                                    onPlayQueue(activeCollection.tracks, activeCollection.tracks.indexOf(track))
+                                }
                             },
                             onTrackMore = { detailsTrackId = it.id },
                             editing = orderTarget != null,
@@ -1373,6 +1392,8 @@ private fun AlbumTrackRow(
 @Composable
 private fun CollectionTrackList(
     collection: LibraryCollection,
+    folderScope: Boolean? = null,
+    onFolderScopeChanged: (Boolean) -> Unit = {},
     playback: PlaybackSnapshot,
     onBack: () -> Unit,
     onPlayQueue: (List<AudioTrack>, Int) -> Unit,
@@ -1409,9 +1430,30 @@ private fun CollectionTrackList(
             IconButton(
                 onClick = { onPlayQueue(collection.tracks, 0) },
                 enabled = collection.tracks.isNotEmpty() && !editing,
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier.size(48.dp).testTag("vesqen.library.collection.play"),
             ) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.play_all))
+            }
+        }
+        folderScope?.let { continuous ->
+            var expanded by remember { mutableStateOf(false) }
+            Box(modifier = Modifier.padding(horizontal = VesqenSpacing.md)) {
+                TextButton(
+                    onClick = { expanded = true },
+                    enabled = !editing,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.folder.scope"),
+                ) {
+                    Text(stringResource(if (continuous) R.string.folder_scope_continuous else R.string.folder_scope_single))
+                }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    listOf(false, true).forEach { choice ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(if (choice) R.string.folder_scope_continuous else R.string.folder_scope_single)) },
+                            onClick = { expanded = false; onFolderScopeChanged(choice) },
+                            modifier = Modifier.semantics { selected = choice == continuous },
+                        )
+                    }
+                }
             }
         }
         if (collection.tracks.isEmpty()) {

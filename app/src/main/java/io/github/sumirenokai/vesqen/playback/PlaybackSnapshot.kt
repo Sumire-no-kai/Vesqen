@@ -25,6 +25,8 @@ data class PlaybackQueueItem(
     val listIndex: Int,
     /** Stays with the entry when the queue moves, unlike [listIndex]; see [queueEntryId]. */
     val entryId: String = "",
+    /** Opaque catalog grouping key; null when this entry's directory is unknown. */
+    val folderKey: String? = null,
 )
 
 /**
@@ -126,6 +128,8 @@ data class PlaybackSnapshot(
     val canSkipPrevious: Boolean = hasPrevious,
     /** True only when the session grants a usable route to the next queue item. */
     val canSkipNext: Boolean = hasNext,
+    val canSkipPreviousFolder: Boolean = false,
+    val canSkipNextFolder: Boolean = false,
     val shuffleEnabled: Boolean = false,
     val repeatMode: PlaybackRepeatMode = PlaybackRepeatMode.OFF,
     /** Zero-based place of the current item in the play order, and the item count. */
