@@ -46,12 +46,12 @@ data class StreamingPlan(
 }
 
 /**
- * An explicit feedback endpoint (#284). The data plane polls it every [serviceIntervalUs] and fails the
- * stream once no usable value has arrived for [timeoutUs] of bus time.
+ * An explicit feedback endpoint (#284). The data plane asks for [packetBytes] every [serviceIntervalUs]
+ * and fails the stream once no usable value has arrived for [timeoutUs] of bus time.
  */
 data class FeedbackPlan(
     val endpointAddress: Int,
-    val maxPacketBytes: Int,
+    val packetBytes: Int,
     val serviceIntervalUs: Int,
     val packetsPerUrb: Int,
     val timeoutUs: Int,
@@ -82,6 +82,9 @@ object StreamingPlanner {
     private const val FEEDBACK_TIMEOUT_PERIODS = 4
     private const val MIN_FEEDBACK_TIMEOUT_US = 1_000_000
 
+    // Linux asks a feedback endpoint for at most four bytes (endpoint.c, prepare_inbound_urb(), checked 2026-11-14).
+    private const val MAX_FEEDBACK_BYTES = 4
+
     /**
      * The planner picks the first setting that can carry the format exactly. A UAC2 device lists its
      * rates only in answer to a request on its clock, which needs the interfaces claimed: before the
@@ -104,6 +107,9 @@ object StreamingPlanner {
             UsbBusSpeed.UNKNOWN, UsbBusSpeed.LOW, UsbBusSpeed.WIRELESS ->
                 return StreamingPlanResult.Refused(StreamingRefusal.SPEED_UNSUPPORTED)
         }
+        // The USB core lowers a larger isochronous wMaxPacketSize to this before usbdevfs sees the endpoint
+        // (usb_parse_endpoint() in drivers/usb/core/config.c, checked 2026-11-14).
+        val payloadLimit = if (speed == UsbBusSpeed.FULL) 1023 else 1024
         val usable = function.streamingInterfaces.flatMap { streaming ->
             streaming.alternateSettings
                 .filter { it.isPlayback && it.streamingBlockers.isEmpty() && it.carries(sampleRateHz, bitResolution, function.version, clockRates) }
@@ -117,7 +123,8 @@ object StreamingPlanner {
             val serviceIntervalUs = baseIntervalUs shl (endpoint.interval - 1)
             val frameBytes = format.channels * format.subslotBytes
             val maxFrames = (sampleRateHz * serviceIntervalUs.toLong() + MICROS_PER_SECOND - 1) / MICROS_PER_SECOND
-            if (maxFrames * frameBytes > endpoint.maxPacketBytes) continue
+            val maxPacketBytes = minOf(endpoint.maxPacketBytes, payloadLimit)
+            if (maxFrames * frameBytes > maxPacketBytes) continue
             val packetsPerUrb = (TARGET_URB_US / serviceIntervalUs).coerceIn(1, MAX_PACKETS_PER_URB)
             val urbUs = packetsPerUrb * serviceIntervalUs
             return StreamingPlanResult.Planned(
@@ -131,7 +138,7 @@ object StreamingPlanner {
                     subslotBytes = format.subslotBytes,
                     bitResolution = format.bitResolution,
                     serviceIntervalUs = serviceIntervalUs,
-                    maxPacketBytes = endpoint.maxPacketBytes,
+                    maxPacketBytes = maxPacketBytes,
                     packetsPerUrb = packetsPerUrb,
                     urbCount = (TARGET_IN_FLIGHT_US + urbUs - 1) / urbUs,
                     ringFrames = sampleRateHz / 2,
@@ -146,14 +153,16 @@ object StreamingPlanner {
 
     /**
      * A UAC1 endpoint has a new value every 2^bRefresh ms, a UAC2 endpoint at every poll. Polling follows
-     * bInterval either way, since usbdevfs schedules an isochronous URB by the endpoint's descriptor.
+     * bInterval either way, since usbdevfs schedules an isochronous URB by the endpoint's descriptor. The
+     * size is not held against the bus speed: the data plane finds the format from the first value, so a
+     * high-speed endpoint answering in three bytes is read as Linux reads it.
      */
     private fun feedbackPlan(feedback: UacEndpoint, baseIntervalUs: Int): FeedbackPlan {
         val pollUs = baseIntervalUs shl (feedback.interval - 1)
         val updateUs = maxOf(pollUs, (feedback.refreshPeriodMs ?: 0) * 1000)
         return FeedbackPlan(
             endpointAddress = feedback.address,
-            maxPacketBytes = feedback.maxPacketBytes,
+            packetBytes = minOf(feedback.maxPacketBytes, MAX_FEEDBACK_BYTES),
             serviceIntervalUs = pollUs,
             packetsPerUrb = (TARGET_URB_US / pollUs).coerceIn(1, MAX_PACKETS_PER_URB),
             timeoutUs = maxOf(FEEDBACK_TIMEOUT_PERIODS * updateUs, MIN_FEEDBACK_TIMEOUT_US),

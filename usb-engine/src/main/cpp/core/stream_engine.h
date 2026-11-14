@@ -25,7 +25,7 @@ struct StreamConfig {
     int urbCount;
     int ringFrames;
     /** An asynchronous endpoint's feedback endpoint (#284). 0 bytes: packets follow the nominal rate. */
-    int feedbackMaxPacketBytes = 0;
+    int feedbackPacketBytes = 0;
     int feedbackIntervalUs = 0;
     int feedbackPacketsPerUrb = 0;
     /** Fails the stream once no value has been accepted for this long, counted in polls of the endpoint. */

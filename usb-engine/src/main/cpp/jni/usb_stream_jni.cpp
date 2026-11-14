@@ -32,12 +32,12 @@ JNIEXPORT jint JNICALL Java_io_github_sumirenokai_vesqen_usb_engine_UsbStreamEng
 JNIEXPORT jlong JNICALL Java_io_github_sumirenokai_vesqen_usb_engine_UsbStreamEngine_nativeCreate(
     JNIEnv*, jclass, jint fd, jint endpoint, jint sampleRateHz, jint frameBytes, jint serviceIntervalUs,
     jint maxPacketBytes, jint packetsPerUrb, jint urbCount, jint ringFrames, jint feedbackEndpoint,
-    jint feedbackMaxPacketBytes, jint feedbackIntervalUs, jint feedbackPacketsPerUrb, jint feedbackTimeoutUs) {
+    jint feedbackPacketBytes, jint feedbackIntervalUs, jint feedbackPacketsPerUrb, jint feedbackTimeoutUs) {
     const StreamConfig config{sampleRateHz, frameBytes, serviceIntervalUs, maxPacketBytes, packetsPerUrb, urbCount,
-                              ringFrames, feedbackMaxPacketBytes, feedbackIntervalUs, feedbackPacketsPerUrb,
+                              ringFrames, feedbackPacketBytes, feedbackIntervalUs, feedbackPacketsPerUrb,
                               feedbackTimeoutUs};
     // Only an OUT endpoint can be streamed to, and feedback only read from an IN endpoint.
-    const bool feedbackValid = feedbackMaxPacketBytes == 0
+    const bool feedbackValid = feedbackPacketBytes == 0
         ? feedbackEndpoint == 0
         : feedbackEndpoint > 0x80 && feedbackEndpoint <= 0x8F;
     if (fd < 0 || endpoint <= 0 || endpoint > 0x0F || !feedbackValid || !vesqen::usb::isValid(config)) return 0;

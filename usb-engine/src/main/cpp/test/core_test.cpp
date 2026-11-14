@@ -920,21 +920,30 @@ StreamConfig config44kAsync(int feedbackPacketsPerUrb = 8, int feedbackTimeoutUs
 /** A full-speed answer as specified: frames per 1 ms in 10.14 fixed point, three bytes. */
 FeedbackReply fullSpeed(double framesPerMs) { return {static_cast<uint32_t>(std::lround(framesPerMs * 16'384)), 3, 0}; }
 
+/** A high-speed answer as specified: frames per microframe in 16.16 fixed point, four bytes. */
+FeedbackReply highSpeed(double framesPerMicroframe) {
+    return {static_cast<uint32_t>(std::lround(framesPerMicroframe * 65'536)), 4, 0};
+}
+
 /**
  * Whether the data packets submitted while [from] to [to] (exclusive) feedback packets had arrived
- * carry [reply]'s rate: within one frame in total, as carrying the fraction forward allows.
+ * carry [framesQ16] frames each in 16.16: within one frame in total, as carrying the fraction forward allows.
  */
-bool packetsFollow(const std::vector<CapturedPacket>& captured, long from, long to, FeedbackReply reply, int64_t& packets) {
+bool packetsFollow(const std::vector<CapturedPacket>& captured, long from, long to, int64_t framesQ16,
+                   size_t frameBytes, int64_t& packets) {
     int64_t frames = 0;
     packets = 0;
     for (const CapturedPacket& packet : captured) {
         if (packet.feedbackSent < from || packet.feedbackSent >= to) continue;
-        frames += static_cast<int64_t>(packet.bytes.size() / 4);
+        frames += static_cast<int64_t>(packet.bytes.size() / frameBytes);
         ++packets;
     }
-    const int64_t difference = frames * 65'536 - packets * (static_cast<int64_t>(reply.value) << 2);
+    const int64_t difference = frames * 65'536 - packets * framesQ16;
     return packets > 0 && difference < 65'536 && difference > -65'536;
 }
+
+/** A full-speed answer read as 16.16 frames per 1 ms packet. */
+int64_t perMillisecond(FeedbackReply reply) { return static_cast<int64_t>(reply.value) << 2; }
 
 void testPacketsFollowTheFeedbackAndTheMediaArrivesUnchanged() {
     for (const double framesPerMs : {44.1 * 1.01, 44.1 * 0.99}) {
@@ -957,7 +966,7 @@ void testPacketsFollowTheFeedbackAndTheMediaArrivesUnchanged() {
         }
         CHECK(received == input);
         int64_t packets = 0;
-        CHECK(packetsFollow(transport.captured, 1, LONG_MAX, reply, packets));
+        CHECK(packetsFollow(transport.captured, 1, LONG_MAX, perMillisecond(reply), 4, packets));
         CHECK(packets > 300);
         // Silence of whatever length the feedback asked for never counts as media.
         CHECK_EQ(stat(engine, kStatMediaFramesWritten), 30'000);
@@ -980,8 +989,8 @@ void testAStepInTheFeedbackChangesThePacketLengths() {
     const std::vector<CapturedPacket> captured = transport.snapshot();
     int64_t before = 0;
     int64_t after = 0;
-    CHECK(packetsFollow(captured, 1, 65, slow, before));
-    CHECK(packetsFollow(captured, 65, LONG_MAX, fast, after));
+    CHECK(packetsFollow(captured, 1, 65, perMillisecond(slow), 4, before));
+    CHECK(packetsFollow(captured, 65, LONG_MAX, perMillisecond(fast), 4, after));
     CHECK(before >= 40);
     CHECK(after >= 40);
     CHECK_EQ(stat(engine, kStatFailure), kFailureNone);
@@ -1060,6 +1069,37 @@ void testARetirementKeepsTheFeedbackAndAStopReclaimsIt() {
     CHECK_EQ(stat(engine, kStatFailure), kFailureNone);
 }
 
+/**
+ * High speed (#284 step 3): 44.1 kHz in 32-bit frames, with a four-byte feedback endpoint polled every
+ * 1 ms. The value is per microframe, so a data endpoint served every 1 ms takes eight microframes' worth.
+ */
+void testHighSpeedFeedbackPacesPacketsAtEitherInterval() {
+    for (const int serviceIntervalUs : {125, 1000}) {
+        FakeTransport transport;
+        const FeedbackReply reply = highSpeed(5.5125 * 1.005);
+        transport.feedbackAt = [reply](long) { return reply; };
+        StreamEngine engine({44'100, 8, serviceIntervalUs, 400, 16, 3, 4410, 4, 1000, 8, 1'000'000}, transport);
+        const std::vector<uint8_t> input = pattern(20'000, 8);
+        CHECK(engine.start());
+        engine.setRunning(0, true);
+        writeAll(engine, input);
+        engine.markEndOfStream(0);
+        CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) == 20'000; }));
+        CHECK(engine.stop(2000));
+
+        std::vector<uint8_t> received;
+        for (const CapturedPacket& packet : transport.captured) {
+            received.insert(received.end(), packet.bytes.begin(), packet.bytes.begin() + packet.mediaFrames * 8);
+        }
+        CHECK(received == input);
+        int64_t packets = 0;
+        const int64_t perPacket = static_cast<int64_t>(reply.value) * (serviceIntervalUs / 125);
+        CHECK(packetsFollow(transport.captured, 1, LONG_MAX, perPacket, 8, packets));
+        CHECK(packets > 100);
+        CHECK_EQ(stat(engine, kStatFailure), kFailureNone);
+    }
+}
+
 void testFeedbackConfigurationIsCheckedAgain() {
     CHECK(isValid(config44kAsync()));
     const auto with = [](void (*change)(StreamConfig&)) {
@@ -1067,9 +1107,9 @@ void testFeedbackConfigurationIsCheckedAgain() {
         change(config);
         return isValid(config);
     };
-    CHECK(!with([](StreamConfig& c) { c.feedbackMaxPacketBytes = 2; }));
-    CHECK(with([](StreamConfig& c) { c.feedbackMaxPacketBytes = 1024; }));
-    CHECK(!with([](StreamConfig& c) { c.feedbackMaxPacketBytes = 1025; }));
+    CHECK(!with([](StreamConfig& c) { c.feedbackPacketBytes = 2; }));
+    CHECK(with([](StreamConfig& c) { c.feedbackPacketBytes = 4; }));
+    CHECK(!with([](StreamConfig& c) { c.feedbackPacketBytes = 5; }));
     CHECK(!with([](StreamConfig& c) { c.feedbackIntervalUs = 0; }));
     CHECK(with([](StreamConfig& c) { c.feedbackIntervalUs = c.feedbackTimeoutUs = 32'768'000; }));
     CHECK(!with([](StreamConfig& c) { c.feedbackIntervalUs = c.feedbackTimeoutUs = 32'768'001; }));
@@ -1118,6 +1158,7 @@ int main() {
     testASlowRefreshIsNotATimeoutButAnInterruptionIs();
     testFeedbackThatKeepsMissingTheRangeFailsAsOutOfRange();
     testARetirementKeepsTheFeedbackAndAStopReclaimsIt();
+    testHighSpeedFeedbackPacesPacketsAtEitherInterval();
     testFeedbackConfigurationIsCheckedAgain();
     if (failures == 0) std::printf("All checks passed\n");
     return failures == 0 ? 0 : 1;
