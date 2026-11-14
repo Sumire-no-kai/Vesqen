@@ -71,8 +71,8 @@ internal sealed interface DirectUsbInspection {
 
 /**
  * 4d: why no depth could be planned for [source], from each depth's refusal. A limit of the device
- * itself (protocol version, asynchronous endpoints, bus speed) comes before the format, so a UAC2
- * dongle is not reported as lacking the track's sample rate.
+ * itself (protocol version, bus speed) comes before the format, so such a device is not reported as
+ * lacking the track's sample rate.
  */
 internal fun directRefusal(
     topology: UsbAudioTopology,
@@ -84,7 +84,6 @@ internal fun directRefusal(
     } ?: return DirectUsbInspection.Refused("no_playback_function")
     return when {
         StreamingRefusal.VERSION_NOT_IMPLEMENTED in refusals -> DirectUsbInspection.Refused("uac_version_unsupported")
-        StreamingRefusal.ASYNCHRONOUS_NOT_IMPLEMENTED in refusals -> DirectUsbInspection.Refused("async_not_supported")
         StreamingRefusal.SPEED_UNSUPPORTED in refusals -> DirectUsbInspection.Refused("speed_unsupported")
         StreamingRefusal.PACKET_TOO_SMALL in refusals -> DirectUsbInspection.Refused("format_exceeds_bus", formatRefused = true)
         else -> {
@@ -832,6 +831,8 @@ internal fun DirectUsbFailure.toStrictFailure(): Pair<UsbOutputFailure, String> 
     DirectUsbFailure.Reason.SAMPLE_RATE_READBACK_MISMATCH,
     DirectUsbFailure.Reason.USB_ENGINE_UNAVAILABLE,
     DirectUsbFailure.Reason.USB_TRANSFER_FAILED,
+    DirectUsbFailure.Reason.FEEDBACK_TIMEOUT,
+    DirectUsbFailure.Reason.FEEDBACK_OUT_OF_RANGE,
     DirectUsbFailure.Reason.USB_PERMISSION_REVOKED,
     DirectUsbFailure.Reason.PCM_NOT_EXACT -> UsbOutputFailure.PLATFORM_ERROR
 } to when (reason) {

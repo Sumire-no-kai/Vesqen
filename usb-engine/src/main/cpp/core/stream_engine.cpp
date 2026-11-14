@@ -14,6 +14,10 @@ constexpr int kMaxPacketsPerUrb = 128;  // The kernel's limit for one isochronou
 constexpr int kMaxUrbs = 32;
 constexpr int kMaxPacketBytes = 1024;  // Extra high-speed transactions are refused before this point.
 constexpr int kMaxRingFrames = 1 << 20;
+constexpr int kMinFeedbackBytes = 3;
+constexpr int kMaxFeedbackIntervalUs = 1000 << 15;  // bInterval 16 at full speed.
+// Two keep the endpoint polled while the stream thread handles the other.
+constexpr int kFeedbackUrbs = 2;
 
 void sleepMs(int milliseconds) {
     timespec duration{milliseconds / 1000, (milliseconds % 1000) * 1'000'000L};
@@ -31,26 +35,43 @@ bool isValid(const StreamConfig& config) {
     if (config.urbCount <= 0 || config.urbCount > kMaxUrbs) return false;
     if (config.ringFrames <= 0 || config.ringFrames > kMaxRingFrames) return false;
     const int64_t maxFrames = PacketSchedule::maxFrames(config.sampleRateHz, config.serviceIntervalUs);
-    return maxFrames > 0 && maxFrames * config.frameBytes <= config.maxPacketBytes;
+    if (maxFrames <= 0 || maxFrames * config.frameBytes > config.maxPacketBytes) return false;
+    if (config.feedbackMaxPacketBytes == 0) return true;
+    if (config.feedbackMaxPacketBytes < kMinFeedbackBytes || config.feedbackMaxPacketBytes > kMaxPacketBytes) return false;
+    if (config.feedbackIntervalUs <= 0 || config.feedbackIntervalUs > kMaxFeedbackIntervalUs) return false;
+    if (config.feedbackPacketsPerUrb <= 0 || config.feedbackPacketsPerUrb > kMaxPacketsPerUrb) return false;
+    // A value must have a chance to arrive before one is missed.
+    if (config.feedbackTimeoutUs < config.feedbackIntervalUs) return false;
+    // Finding the format by shifting needs at least one frame per packet to compare with.
+    return FeedbackDecoder::nominalQ16(config.sampleRateHz, config.serviceIntervalUs) >= 1 << 16;
 }
 
 StreamEngine::StreamEngine(const StreamConfig& config, IsoTransport& transport)
     : config_(config),
       transport_(transport),
       schedule_(config.sampleRateHz, config.serviceIntervalUs),
-      ring_(static_cast<size_t>(config.ringFrames), static_cast<size_t>(config.frameBytes)) {
-    const auto packetCount = static_cast<uint32_t>(config.packetsPerUrb);
-    const size_t payloadBytes = static_cast<size_t>(config.maxPacketBytes) * packetCount;
-    const size_t stateBytes = transport.stateBytes(packetCount);
-    urbs_.resize(static_cast<size_t>(config.urbCount));
-    for (IsoUrb& urb : urbs_) {
-        payloads_.push_back(std::make_unique<uint8_t[]>(payloadBytes));
-        packets_.push_back(std::make_unique<IsoPacket[]>(packetCount));
-        transportStates_.push_back(std::make_unique<uint8_t[]>(stateBytes));
-        urb.data = payloads_.back().get();
-        urb.packets = packets_.back().get();
-        urb.packetCount = packetCount;
-        urb.transportState = transportStates_.back().get();
+      ring_(static_cast<size_t>(config.ringFrames), static_cast<size_t>(config.frameBytes)),
+      maxFramesPerPacket_(config.maxPacketBytes / config.frameBytes),
+      feedback_(config.sampleRateHz, config.serviceIntervalUs, maxFramesPerPacket_) {
+    const auto allocate = [&](std::vector<IsoUrb>& urbs, int count, int packetsPerUrb, int packetBytes) {
+        const auto packetCount = static_cast<uint32_t>(packetsPerUrb);
+        const size_t payloadBytes = static_cast<size_t>(packetBytes) * packetCount;
+        const size_t stateBytes = transport.stateBytes(packetCount);
+        urbs.resize(static_cast<size_t>(count));
+        for (IsoUrb& urb : urbs) {
+            payloads_.push_back(std::make_unique<uint8_t[]>(payloadBytes));
+            packets_.push_back(std::make_unique<IsoPacket[]>(packetCount));
+            transportStates_.push_back(std::make_unique<uint8_t[]>(stateBytes));
+            urb.data = payloads_.back().get();
+            urb.packets = packets_.back().get();
+            urb.packetCount = packetCount;
+            urb.transportState = transportStates_.back().get();
+        }
+    };
+    allocate(urbs_, config.urbCount, config.packetsPerUrb, config.maxPacketBytes);
+    if (config.feedbackMaxPacketBytes > 0) {
+        allocate(feedbackUrbs_, kFeedbackUrbs, config.feedbackPacketsPerUrb, config.feedbackMaxPacketBytes);
+        for (IsoUrb& urb : feedbackUrbs_) urb.feedback = true;
     }
 }
 
@@ -151,6 +172,7 @@ void StreamEngine::run() {
     stats_[kStatThreadPolicy].store(report.schedulerPolicy, std::memory_order_relaxed);
 
     bool healthy = submitIdle();
+    for (IsoUrb& urb : feedbackUrbs_) healthy = healthy && submitFeedback(urb);
     while (healthy && !stopRequested_.load(std::memory_order_acquire)) {
         if (retirePending()) {
             healthy = retireInFlight();
@@ -170,6 +192,10 @@ void StreamEngine::run() {
                 healthy = false;
                 break;
             case ReapResult::kUrb: {
+                if (urb->feedback) {
+                    healthy = reapFeedback(*urb);
+                    break;
+                }
                 account(*urb, false);
                 urb->inFlight = false;
                 --inFlight_;
@@ -180,14 +206,19 @@ void StreamEngine::run() {
         }
     }
 
-    discardInFlight();
-    while (inFlight_ > 0) {
+    discardInFlight(urbs_);
+    discardInFlight(feedbackUrbs_);
+    while (inFlight_ > 0 || feedbackInFlight_ > 0) {
         IsoUrb* urb = nullptr;
         int error = 0;
         switch (transport_.reap(urb, kReapTimeoutMs, error)) {
             case ReapResult::kUrb:
-                account(*urb, true);
                 urb->inFlight = false;
+                if (urb->feedback) {
+                    --feedbackInFlight_;
+                    break;
+                }
+                account(*urb, true);
                 --inFlight_;
                 break;
             case ReapResult::kNothing:
@@ -207,12 +238,16 @@ bool StreamEngine::retirePending() const {
 
 /** Returns false when the stream failed. Nothing is acknowledged before every URB is back. */
 bool StreamEngine::retireInFlight() {
-    discardInFlight();
+    discardInFlight(urbs_);
     while (inFlight_ > 0) {
         IsoUrb* urb = nullptr;
         int error = 0;
         switch (transport_.reap(urb, kReapTimeoutMs, error)) {
             case ReapResult::kUrb:
+                if (urb->feedback) {
+                    if (!reapFeedback(*urb)) return false;
+                    break;
+                }
                 account(*urb, true);
                 urb->inFlight = false;
                 --inFlight_;
@@ -271,9 +306,58 @@ bool StreamEngine::submitOne(IsoUrb& urb) {
     return true;
 }
 
+/** Returns false when the submit failed. Nothing is submitted once a stop has been asked for. */
+bool StreamEngine::submitFeedback(IsoUrb& urb) {
+    if (stopRequested_.load(std::memory_order_acquire)) return true;
+    for (uint32_t i = 0; i < urb.packetCount; ++i) {
+        urb.packets[i] = IsoPacket{};
+        urb.packets[i].length = static_cast<uint32_t>(config_.feedbackMaxPacketBytes);
+    }
+    const int error = transport_.submit(urb);
+    if (error != 0) {
+        failSubmit(error);
+        return false;
+    }
+    urb.inFlight = true;
+    urb.discarded = false;
+    ++feedbackInFlight_;
+    return true;
+}
+
+/**
+ * Takes the newest value a completed feedback URB carries and sends the URB again. The time without
+ * an accepted value counts the endpoint's polls, not the clock, so a stream thread that ran late
+ * cannot mistake its own delay for silence from the device. Returns false when the stream failed.
+ */
+bool StreamEngine::reapFeedback(IsoUrb& urb) {
+    urb.inFlight = false;
+    --feedbackInFlight_;
+    const auto packetBytes = static_cast<size_t>(config_.feedbackMaxPacketBytes);
+    for (uint32_t i = 0; i < urb.packetCount; ++i) {
+        const IsoPacket& packet = urb.packets[i];
+        const bool received = packet.status == 0 && packet.actualLength <= packet.length;
+        const FeedbackDecoder::Result result = received
+            ? feedback_.decode(urb.data + i * packetBytes, packet.actualLength)
+            : FeedbackDecoder::Result::kIgnored;
+        if (result == FeedbackDecoder::Result::kAccepted) {
+            feedbackQuietUs_ = 0;
+            feedbackOutOfRange_ = false;
+            schedule_.follow(feedback_.framesQ16(), maxFramesPerPacket_);
+            continue;
+        }
+        if (result == FeedbackDecoder::Result::kOutOfRange) feedbackOutOfRange_ = true;
+        feedbackQuietUs_ += config_.feedbackIntervalUs;
+    }
+    if (feedbackQuietUs_ > config_.feedbackTimeoutUs) {
+        fail(feedbackOutOfRange_ ? kFailureFeedbackOutOfRange : kFailureFeedbackTimeout, 0);
+        return false;
+    }
+    return submitFeedback(urb);
+}
+
 // A discarded URB still comes back through reap, and until it does the kernel owns its buffers.
-void StreamEngine::discardInFlight() {
-    for (IsoUrb& urb : urbs_) {
+void StreamEngine::discardInFlight(std::vector<IsoUrb>& urbs) {
+    for (IsoUrb& urb : urbs) {
         if (urb.inFlight && !urb.discarded) {
             transport_.discard(urb);
             urb.discarded = true;

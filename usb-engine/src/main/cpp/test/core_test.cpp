@@ -5,13 +5,17 @@
 #include <time.h>
 
 #include <atomic>
+#include <climits>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <deque>
+#include <functional>
 #include <mutex>
 #include <thread>
 #include <vector>
 
+#include "core/feedback_decoder.h"
 #include "core/packet_schedule.h"
 #include "core/ring_buffer.h"
 #include "core/stream_engine.h"
@@ -57,15 +61,32 @@ bool waitUntil(Condition condition, int timeoutMs = 5000) {
 struct CapturedPacket {
     std::vector<uint8_t> bytes;
     uint32_t mediaFrames;
+    /** How many feedback packets the device had sent when this packet was submitted. */
+    long feedbackSent = 0;
 };
 
-/** Completes URBs in order, as fast as asked. It keeps what each packet carried when submitted. */
+/** One packet from the feedback endpoint, as the host controller hands it back. */
+struct FeedbackReply {
+    uint32_t value = 0;
+    uint32_t length = 0;
+    int32_t status = 0;
+};
+
+/**
+ * Completes URBs in order, as fast as asked. It keeps what each data packet carried when submitted,
+ * and answers the feedback endpoint's polls from [feedbackAt], one reply per packet in order.
+ */
 class FakeTransport final : public IsoTransport {
 public:
     size_t stateBytes(uint32_t) const override { return 1; }
 
     int submit(IsoUrb& urb) override {
         std::lock_guard<std::mutex> lock(mutex_);
+        if (urb.feedback) {
+            queue_.push_back(&urb);
+            ++feedbackSubmitted;
+            return 0;
+        }
         if (submitError != 0) return submitError;
         if (submitsLeftBeforeError == 0) {
             submitsLeftBeforeError = -1;
@@ -74,7 +95,8 @@ public:
         if (submitsLeftBeforeError > 0) --submitsLeftBeforeError;
         const uint8_t* data = urb.data;
         for (uint32_t i = 0; i < urb.packetCount; ++i) {
-            captured.push_back({std::vector<uint8_t>(data, data + urb.packets[i].length), urb.packets[i].mediaFrames});
+            captured.push_back({std::vector<uint8_t>(data, data + urb.packets[i].length), urb.packets[i].mediaFrames,
+                                feedbackSent.load()});
             data += urb.packets[i].length;
         }
         queue_.push_back(&urb);
@@ -86,6 +108,11 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         for (IsoUrb* pending : cancelled_) {
             if (pending == &urb) ++doubleDiscards;
+        }
+        if (urb.feedback) {
+            ++feedbackDiscards;
+            cancelled_.push_back(&urb);
+            return;
         }
         ++discards;
         if (!ignoreDiscard) cancelled_.push_back(&urb);
@@ -127,6 +154,18 @@ public:
         }
         urb = queue_.front();
         queue_.pop_front();
+        if (urb->feedback) {
+            uint8_t* data = urb->data;
+            for (uint32_t i = 0; i < urb->packetCount; ++i) {
+                const FeedbackReply reply = feedbackAt ? feedbackAt(feedbackSent.load()) : FeedbackReply{};
+                ++feedbackSent;
+                for (uint32_t b = 0; b < 4 && b < urb->packets[i].length; ++b) data[b] = static_cast<uint8_t>(reply.value >> (8 * b));
+                urb->packets[i].actualLength = reply.length;
+                urb->packets[i].status = reply.status;
+                data += urb->packets[i].length;
+            }
+            return ReapResult::kUrb;
+        }
         for (uint32_t i = 0; i < urb->packetCount; ++i) {
             urb->packets[i].status = 0;
             urb->packets[i].actualLength = urb->packets[i].length;
@@ -151,6 +190,11 @@ public:
         return captured;
     }
 
+    size_t queued() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return queue_.size();
+    }
+
     std::vector<CapturedPacket> captured;
     std::atomic<int> submitted{0};
     std::atomic<int> discards{0};
@@ -168,6 +212,11 @@ public:
     std::atomic<bool> insideReap{false};
     long failNextPacket = -1;
     long shortNextPacket = -1;
+    /** Called on the stream thread with the index of each feedback packet. Unset: empty packets. */
+    std::function<FeedbackReply(long)> feedbackAt;
+    std::atomic<long> feedbackSent{0};
+    std::atomic<int> feedbackSubmitted{0};
+    std::atomic<int> feedbackDiscards{0};
 
 private:
     std::mutex mutex_;
@@ -795,6 +844,245 @@ void testARetiredOutputsCommandsChangeNothing() {
     CHECK(engine.stop(2000));
 }
 
+
+void testFeedbackDecoderReadsWhatLinuxReads() {
+    using Result = FeedbackDecoder::Result;
+    const auto decode = [](FeedbackDecoder& decoder, uint32_t value, uint32_t length) {
+        const uint8_t bytes[4] = {static_cast<uint8_t>(value), static_cast<uint8_t>(value >> 8),
+                                  static_cast<uint8_t>(value >> 16), static_cast<uint8_t>(value >> 24)};
+        return decoder.decode(bytes, length);
+    };
+    // Full speed as specified: 10.14 frames per 1 ms frame, three bytes.
+    FeedbackDecoder full(48'000, 1000, 49);
+    CHECK(decode(full, 48 << 14, 3) == Result::kAccepted);
+    CHECK_EQ(full.framesQ16(), 48 << 16);
+    CHECK(decode(full, (48 << 14) + (1 << 13), 3) == Result::kAccepted);
+    CHECK_EQ(full.framesQ16(), (48 << 16) + (1 << 15));
+    // Three bytes are three bytes, whatever follows them in the buffer.
+    CHECK(decode(full, 0xFF000000u | (47 << 14), 3) == Result::kAccepted);
+    CHECK_EQ(full.framesQ16(), 47 << 16);
+    // Nothing to read: a short packet or a zero value. The last value stays.
+    CHECK(decode(full, 48 << 14, 2) == Result::kIgnored);
+    CHECK(decode(full, 0, 3) == Result::kIgnored);
+    CHECK_EQ(full.framesQ16(), 47 << 16);
+
+    // High speed as specified: 16.16 frames per microframe, four bytes, of which Linux keeps 28 bits.
+    FeedbackDecoder high(48'000, 125, 7);
+    CHECK(decode(high, 0xF0000000u | (6 << 16), 4) == Result::kAccepted);
+    CHECK_EQ(high.framesQ16(), 6 << 16);
+    // A data endpoint served every 1 ms at high speed takes eight microframes' worth per packet.
+    FeedbackDecoder everyMillisecond(48'000, 1000, 49);
+    CHECK(decode(everyMillisecond, 6 << 16, 4) == Result::kAccepted);
+    CHECK_EQ(everyMillisecond.framesQ16(), 48 << 16);
+    // A high-speed device answering in the full-speed format is read as well.
+    FeedbackDecoder misformatted(48'000, 125, 7);
+    CHECK(decode(misformatted, 48 << 14, 3) == Result::kAccepted);
+    CHECK_EQ(misformatted.framesQ16(), 6 << 16);
+
+    // Linux's limits: 12.5 % below the nominal rate, and up to what one packet holds (49 frames here).
+    FeedbackDecoder edges(48'000, 1000, 49);
+    CHECK(decode(edges, 48 << 14, 3) == Result::kAccepted);
+    CHECK(decode(edges, 42 << 14, 3) == Result::kAccepted);
+    CHECK(decode(edges, 49 << 14, 3) == Result::kAccepted);
+    CHECK(decode(edges, (42 << 14) - 1, 3) == Result::kOutOfRange);
+    CHECK_EQ(edges.framesQ16(), 49 << 16);
+    // After a refusal the format is found again, here a four-byte one.
+    CHECK(decode(edges, 48 << 16, 4) == Result::kAccepted);
+    CHECK_EQ(edges.framesQ16(), 48 << 16);
+    CHECK(decode(edges, (49 << 16) + 1, 4) == Result::kOutOfRange);
+    // Where a packet holds more, the limit is 50 % above the nominal rate.
+    FeedbackDecoder roomy(48'000, 1000, 100);
+    CHECK(decode(roomy, 48 << 14, 3) == Result::kAccepted);
+    CHECK(decode(roomy, 72 << 14, 3) == Result::kAccepted);
+    CHECK(decode(roomy, (72 << 14) + 1, 3) == Result::kOutOfRange);
+}
+
+void testPacketScheduleFollowsFeedback() {
+    PacketSchedule schedule(44'100, 1000);
+    schedule.follow((44 << 16) + (1 << 15), 50);
+    int total = 0;
+    for (int i = 0; i < 1000; ++i) {
+        const int frames = schedule.nextFrames();
+        CHECK(frames == 44 || frames == 45);
+        total += frames;
+    }
+    CHECK_EQ(total, 44'500);
+    // Never more than a packet holds, whatever the feedback says.
+    schedule.follow(60 << 16, 50);
+    for (int i = 0; i < 10; ++i) CHECK_EQ(schedule.nextFrames(), 50);
+}
+
+// 44.1 kHz at full speed with a three-byte feedback endpoint polled every 1 ms. 50 frames fit a packet.
+StreamConfig config44kAsync(int feedbackPacketsPerUrb = 8, int feedbackTimeoutUs = 1'000'000) {
+    return {44'100, 4, 1000, 200, 8, 3, 4410, 3, 1000, feedbackPacketsPerUrb, feedbackTimeoutUs};
+}
+
+/** A full-speed answer as specified: frames per 1 ms in 10.14 fixed point, three bytes. */
+FeedbackReply fullSpeed(double framesPerMs) { return {static_cast<uint32_t>(std::lround(framesPerMs * 16'384)), 3, 0}; }
+
+/**
+ * Whether the data packets submitted while [from] to [to] (exclusive) feedback packets had arrived
+ * carry [reply]'s rate: within one frame in total, as carrying the fraction forward allows.
+ */
+bool packetsFollow(const std::vector<CapturedPacket>& captured, long from, long to, FeedbackReply reply, int64_t& packets) {
+    int64_t frames = 0;
+    packets = 0;
+    for (const CapturedPacket& packet : captured) {
+        if (packet.feedbackSent < from || packet.feedbackSent >= to) continue;
+        frames += static_cast<int64_t>(packet.bytes.size() / 4);
+        ++packets;
+    }
+    const int64_t difference = frames * 65'536 - packets * (static_cast<int64_t>(reply.value) << 2);
+    return packets > 0 && difference < 65'536 && difference > -65'536;
+}
+
+void testPacketsFollowTheFeedbackAndTheMediaArrivesUnchanged() {
+    for (const double framesPerMs : {44.1 * 1.01, 44.1 * 0.99}) {
+        FakeTransport transport;
+        const FeedbackReply reply = fullSpeed(framesPerMs);
+        transport.feedbackAt = [reply](long) { return reply; };
+        StreamEngine engine(config44kAsync(), transport);
+        const std::vector<uint8_t> input = pattern(30'000, 4);
+        CHECK(engine.start());
+        engine.setRunning(0, true);
+        writeAll(engine, input);
+        engine.markEndOfStream(0);
+        CHECK(waitUntil([&] { return stat(engine, kStatMediaFramesProcessed) == 30'000; }));
+        CHECK(engine.stop(2000));
+
+        std::vector<uint8_t> received;
+        for (const CapturedPacket& packet : transport.captured) {
+            received.insert(received.end(), packet.bytes.begin(), packet.bytes.begin() + packet.mediaFrames * 4);
+            for (size_t i = packet.mediaFrames * 4; i < packet.bytes.size(); ++i) CHECK_EQ(packet.bytes[i], 0);
+        }
+        CHECK(received == input);
+        int64_t packets = 0;
+        CHECK(packetsFollow(transport.captured, 1, LONG_MAX, reply, packets));
+        CHECK(packets > 300);
+        // Silence of whatever length the feedback asked for never counts as media.
+        CHECK_EQ(stat(engine, kStatMediaFramesWritten), 30'000);
+        CHECK_EQ(stat(engine, kStatMediaFramesDelivered), 30'000);
+        CHECK_EQ(stat(engine, kStatLastDeliveredMediaFrame), 30'000);
+        CHECK_EQ(stat(engine, kStatFailure), kFailureNone);
+    }
+}
+
+void testAStepInTheFeedbackChangesThePacketLengths() {
+    FakeTransport transport;
+    const FeedbackReply slow = fullSpeed(44.1 * 0.995);
+    const FeedbackReply fast = fullSpeed(44.1 * 1.005);
+    transport.feedbackAt = [=](long index) { return index < 64 ? slow : fast; };
+    StreamEngine engine(config44kAsync(), transport);
+    CHECK(engine.start());
+    CHECK(waitUntil([&] { return transport.feedbackSent >= 400; }));
+    CHECK(engine.stop(2000));
+
+    const std::vector<CapturedPacket> captured = transport.snapshot();
+    int64_t before = 0;
+    int64_t after = 0;
+    CHECK(packetsFollow(captured, 1, 65, slow, before));
+    CHECK(packetsFollow(captured, 65, LONG_MAX, fast, after));
+    CHECK(before >= 40);
+    CHECK(after >= 40);
+    CHECK_EQ(stat(engine, kStatFailure), kFailureNone);
+}
+
+/**
+ * bRefresh 9 sends a value every 512 ms and empty packets between, so the planner allows 2048 ms.
+ * One packet per URB lets the poll the stream gave up on be read exactly.
+ */
+void testASlowRefreshIsNotATimeoutButAnInterruptionIs() {
+    FakeTransport transport;
+    const FeedbackReply value = fullSpeed(44.1);
+    const FeedbackReply low = fullSpeed(44.1 * 0.8);
+    transport.feedbackAt = [=](long index) {
+        // One stray value early on must not colour the failure that comes much later.
+        if (index == 100) return low;
+        // Nor is a value read from a packet the controller reports as failed.
+        if (index == 6'100) return FeedbackReply{value.value, 3, -EXDEV};
+        return index % 512 == 0 && index < 6'000 ? value : FeedbackReply{};
+    };
+    StreamEngine engine(config44kAsync(1, 2'048'000), transport);
+    CHECK(engine.start());
+    CHECK(waitUntil([&] { return stat(engine, kStatFailure) != kFailureNone; }));
+    CHECK(engine.stop(2000));
+
+    // The last value came with poll 5632. The stream gave up at the 2049th empty poll after it.
+    CHECK_EQ(stat(engine, kStatFailure), kFailureFeedbackTimeout);
+    CHECK_EQ(transport.feedbackSent, 5'632 + 2'049 + 1);
+}
+
+void testFeedbackThatKeepsMissingTheRangeFailsAsOutOfRange() {
+    FakeTransport transport;
+    const FeedbackReply good = fullSpeed(44.1);
+    const FeedbackReply low = fullSpeed(44.1 * 0.8);
+    transport.feedbackAt = [=](long index) { return index < 100 ? good : low; };
+    StreamEngine engine(config44kAsync(), transport);
+    CHECK(engine.start());
+    CHECK(waitUntil([&] { return stat(engine, kStatFailure) != kFailureNone; }));
+    CHECK(engine.stop(2000));
+    CHECK_EQ(stat(engine, kStatFailure), kFailureFeedbackOutOfRange);
+    CHECK(transport.feedbackSent > 100 + 1'000);
+    CHECK(transport.feedbackSent <= 100 + 1'000 + 8);
+
+    // Without a single usable value it is still out of range: the device did answer.
+    FakeTransport never;
+    never.feedbackAt = [=](long) { return low; };
+    StreamEngine neverEngine(config44kAsync(), never);
+    CHECK(neverEngine.start());
+    CHECK(waitUntil([&] { return stat(neverEngine, kStatFailure) != kFailureNone; }));
+    CHECK(neverEngine.stop(2000));
+    CHECK_EQ(stat(neverEngine, kStatFailure), kFailureFeedbackOutOfRange);
+}
+
+void testARetirementKeepsTheFeedbackAndAStopReclaimsIt() {
+    FakeTransport transport;
+    const FeedbackReply reply = fullSpeed(44.1 * 1.01);
+    transport.feedbackAt = [=](long) { return reply; };
+    StreamEngine engine(config44kAsync(), transport);
+    CHECK(engine.start());
+    CHECK(waitUntil([&] { return transport.feedbackSent >= 64; }));
+    const int64_t next = engine.retireOutput();
+    CHECK(waitUntil([&] { return stat(engine, kStatEpoch) == next; }));
+    // Only the data URBs were cancelled; the endpoint stayed polled throughout.
+    CHECK(transport.discards >= 1);
+    CHECK_EQ(transport.feedbackDiscards, 0);
+    const long sent = transport.feedbackSent;
+    CHECK(waitUntil([&] { return transport.feedbackSent >= sent + 64; }));
+
+    transport.hold = true;
+    CHECK(waitUntil([&] { return transport.queued() == 5; }));
+    const int dataDiscards = transport.discards;
+    CHECK(engine.stop(2000));
+    CHECK_EQ(transport.feedbackDiscards, 2);
+    CHECK_EQ(transport.discards, dataDiscards + 3);
+    CHECK_EQ(transport.doubleDiscards, 0);
+    CHECK_EQ(stat(engine, kStatFailure), kFailureNone);
+}
+
+void testFeedbackConfigurationIsCheckedAgain() {
+    CHECK(isValid(config44kAsync()));
+    const auto with = [](void (*change)(StreamConfig&)) {
+        StreamConfig config = config44kAsync();
+        change(config);
+        return isValid(config);
+    };
+    CHECK(!with([](StreamConfig& c) { c.feedbackMaxPacketBytes = 2; }));
+    CHECK(with([](StreamConfig& c) { c.feedbackMaxPacketBytes = 1024; }));
+    CHECK(!with([](StreamConfig& c) { c.feedbackMaxPacketBytes = 1025; }));
+    CHECK(!with([](StreamConfig& c) { c.feedbackIntervalUs = 0; }));
+    CHECK(with([](StreamConfig& c) { c.feedbackIntervalUs = c.feedbackTimeoutUs = 32'768'000; }));
+    CHECK(!with([](StreamConfig& c) { c.feedbackIntervalUs = c.feedbackTimeoutUs = 32'768'001; }));
+    CHECK(!with([](StreamConfig& c) { c.feedbackPacketsPerUrb = 0; }));
+    CHECK(with([](StreamConfig& c) { c.feedbackPacketsPerUrb = 128; }));
+    CHECK(!with([](StreamConfig& c) { c.feedbackPacketsPerUrb = 129; }));
+    CHECK(with([](StreamConfig& c) { c.feedbackTimeoutUs = 1000; }));
+    CHECK(!with([](StreamConfig& c) { c.feedbackTimeoutUs = 999; }));
+    // Below one frame per packet the feedback's format cannot be found by shifting.
+    CHECK(isValid({8'000, 4, 125, 1024, 8, 3, 4410, 4, 125, 8, 1'000'000}));
+    CHECK(!isValid({7'999, 4, 125, 1024, 8, 3, 4410, 4, 125, 8, 1'000'000}));
+}
+
 }  // namespace
 
 int main() {
@@ -823,6 +1111,14 @@ int main() {
     testEveryRetirementCancelsWhatIsInFlight();
     testADeviceRemovedDuringARetirementEndsTheStreamAndEveryUrbStillComesBack();
     testStatsNeverMixTwoOutputs();
+    testFeedbackDecoderReadsWhatLinuxReads();
+    testPacketScheduleFollowsFeedback();
+    testPacketsFollowTheFeedbackAndTheMediaArrivesUnchanged();
+    testAStepInTheFeedbackChangesThePacketLengths();
+    testASlowRefreshIsNotATimeoutButAnInterruptionIs();
+    testFeedbackThatKeepsMissingTheRangeFailsAsOutOfRange();
+    testARetirementKeepsTheFeedbackAndAStopReclaimsIt();
+    testFeedbackConfigurationIsCheckedAgain();
     if (failures == 0) std::printf("All checks passed\n");
     return failures == 0 ? 0 : 1;
 }

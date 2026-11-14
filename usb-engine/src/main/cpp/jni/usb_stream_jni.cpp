@@ -12,7 +12,8 @@ using vesqen::usb::UsbfsTransport;
 namespace {
 
 struct Stream {
-    Stream(int fd, unsigned char endpoint, const StreamConfig& config) : transport(fd, endpoint), engine(config, transport) {}
+    Stream(int fd, unsigned char endpoint, unsigned char feedbackEndpoint, const StreamConfig& config)
+        : transport(fd, endpoint, feedbackEndpoint), engine(config, transport) {}
 
     UsbfsTransport transport;
     StreamEngine engine;
@@ -30,11 +31,18 @@ JNIEXPORT jint JNICALL Java_io_github_sumirenokai_vesqen_usb_engine_UsbStreamEng
 
 JNIEXPORT jlong JNICALL Java_io_github_sumirenokai_vesqen_usb_engine_UsbStreamEngine_nativeCreate(
     JNIEnv*, jclass, jint fd, jint endpoint, jint sampleRateHz, jint frameBytes, jint serviceIntervalUs,
-    jint maxPacketBytes, jint packetsPerUrb, jint urbCount, jint ringFrames) {
-    const StreamConfig config{sampleRateHz, frameBytes, serviceIntervalUs, maxPacketBytes, packetsPerUrb, urbCount, ringFrames};
-    // Only an OUT endpoint can be streamed to.
-    if (fd < 0 || endpoint <= 0 || endpoint > 0x0F || !vesqen::usb::isValid(config)) return 0;
-    return reinterpret_cast<jlong>(new Stream(fd, static_cast<unsigned char>(endpoint), config));
+    jint maxPacketBytes, jint packetsPerUrb, jint urbCount, jint ringFrames, jint feedbackEndpoint,
+    jint feedbackMaxPacketBytes, jint feedbackIntervalUs, jint feedbackPacketsPerUrb, jint feedbackTimeoutUs) {
+    const StreamConfig config{sampleRateHz, frameBytes, serviceIntervalUs, maxPacketBytes, packetsPerUrb, urbCount,
+                              ringFrames, feedbackMaxPacketBytes, feedbackIntervalUs, feedbackPacketsPerUrb,
+                              feedbackTimeoutUs};
+    // Only an OUT endpoint can be streamed to, and feedback only read from an IN endpoint.
+    const bool feedbackValid = feedbackMaxPacketBytes == 0
+        ? feedbackEndpoint == 0
+        : feedbackEndpoint > 0x80 && feedbackEndpoint <= 0x8F;
+    if (fd < 0 || endpoint <= 0 || endpoint > 0x0F || !feedbackValid || !vesqen::usb::isValid(config)) return 0;
+    return reinterpret_cast<jlong>(new Stream(fd, static_cast<unsigned char>(endpoint),
+                                              static_cast<unsigned char>(feedbackEndpoint), config));
 }
 
 JNIEXPORT jboolean JNICALL Java_io_github_sumirenokai_vesqen_usb_engine_UsbStreamEngine_nativeStart(JNIEnv*, jclass, jlong handle) {

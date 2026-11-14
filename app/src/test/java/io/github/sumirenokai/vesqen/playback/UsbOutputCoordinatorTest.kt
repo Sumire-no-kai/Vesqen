@@ -2176,11 +2176,11 @@ class UsbOutputCoordinatorTest {
         connect(dac)
         start(direct = direct)
         loadTrack()
-        direct.inspection = DirectUsbInspection.Refused("async_not_supported", deviceName = "Moondrop Echo-A")
+        direct.inspection = DirectUsbInspection.Refused("speed_unsupported", deviceName = "Moondrop Echo-A")
 
         requestStrict()
 
-        assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.async_not_supported")
+        assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.speed_unsupported")
         assertEquals("Moondrop Echo-A", status().deviceName)
     }
 

@@ -25,17 +25,6 @@ class DirectUsbRefusalTest {
     private val cd = SourcePcmFormat(sampleRateHz = 44_100, bitDepth = 16, channelCount = 2)
 
     @Test
-    fun `an asynchronous UAC2 device is named for that, not as lacking the track's format`() {
-        val refusal = directRefusal(
-            topology(function(alt(16), alt(24, alternate = 2), version = UacVersion.UAC2)),
-            listOf(StreamingRefusal.ASYNCHRONOUS_NOT_IMPLEMENTED, StreamingRefusal.ASYNCHRONOUS_NOT_IMPLEMENTED),
-            cd,
-        )
-
-        assertEquals(DirectUsbInspection.Refused("async_not_supported"), refusal)
-    }
-
-    @Test
     fun `a UAC2 device offers the rates its clock listed once claimed`() {
         val uac2 = function(alt(16, rates = SampleRates.RuntimeUnknown), alt(24, alternate = 2, rates = SampleRates.RuntimeUnknown), version = UacVersion.UAC2)
         val clock = listOf(UacRateRange(44_100, 44_100, 0), UacRateRange(48_000, 96_000, 48_000), UacRateRange(176_400, 192_000, 0))
@@ -59,6 +48,18 @@ class DirectUsbRefusalTest {
     }
 
     @Test
+    fun `a feedback failure keeps its own code`() {
+        assertEquals(
+            UsbOutputFailure.PLATFORM_ERROR to "direct_usb.feedback_timeout",
+            DirectUsbFailure(DirectUsbFailure.Reason.FEEDBACK_TIMEOUT, "").toStrictFailure(),
+        )
+        assertEquals(
+            UsbOutputFailure.PLATFORM_ERROR to "direct_usb.feedback_out_of_range",
+            DirectUsbFailure(DirectUsbFailure.Reason.FEEDBACK_OUT_OF_RANGE, "").toStrictFailure(),
+        )
+    }
+
+    @Test
     fun `another protocol version is not called UAC2`() {
         val refusal = directRefusal(
             topology(function(alt(16), version = UacVersion.OTHER)),
@@ -70,14 +71,14 @@ class DirectUsbRefusalTest {
     }
 
     @Test
-    fun `an asynchronous endpoint at one depth outranks a missing format at another`() {
+    fun `a bus limit at one depth outranks a missing format at another`() {
         val refusal = directRefusal(
-            topology(function(alt(24, rates = SampleRates.Discrete(listOf(44_100)), sync = UacSyncType.ASYNCHRONOUS))),
-            listOf(StreamingRefusal.NO_MATCHING_FORMAT, StreamingRefusal.ASYNCHRONOUS_NOT_IMPLEMENTED),
+            topology(function(alt(24, rates = SampleRates.Discrete(listOf(44_100))))),
+            listOf(StreamingRefusal.NO_MATCHING_FORMAT, StreamingRefusal.SPEED_UNSUPPORTED),
             cd,
         )
 
-        assertEquals(DirectUsbInspection.Refused("async_not_supported"), refusal)
+        assertEquals("speed_unsupported", refusal.code)
     }
 
     @Test

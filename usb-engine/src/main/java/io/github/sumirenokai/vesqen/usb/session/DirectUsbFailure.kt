@@ -13,6 +13,10 @@ data class DirectUsbFailure(val reason: Reason, val detail: String) {
         SAMPLE_RATE_UNSUPPORTED,
         USB_ENGINE_UNAVAILABLE,
         USB_TRANSFER_FAILED,
+        /** An asynchronous DAC's feedback endpoint sent no usable value for too long (#284). */
+        FEEDBACK_TIMEOUT,
+        /** As above, and what it did send lay outside the range Linux accepts. */
+        FEEDBACK_OUT_OF_RANGE,
         DEVICE_DISCONNECTED,
         USB_PERMISSION_REVOKED,
         // The format layers (D10), checked before an output is opened, and the samples while it runs.
@@ -142,5 +146,9 @@ fun UsbStreamStats.asFailure(): DirectUsbFailure? = when (failure) {
     UsbStreamStats.Failure.NONE -> null
     UsbStreamStats.Failure.DEVICE_GONE ->
         DirectUsbFailure(DirectUsbFailure.Reason.DEVICE_DISCONNECTED, "the stream lost the device")
+    UsbStreamStats.Failure.FEEDBACK_TIMEOUT ->
+        DirectUsbFailure(DirectUsbFailure.Reason.FEEDBACK_TIMEOUT, "no usable feedback value in time")
+    UsbStreamStats.Failure.FEEDBACK_OUT_OF_RANGE ->
+        DirectUsbFailure(DirectUsbFailure.Reason.FEEDBACK_OUT_OF_RANGE, "feedback values outside the accepted range")
     else -> DirectUsbFailure(DirectUsbFailure.Reason.USB_TRANSFER_FAILED, "$failure, errno $failureErrno")
 }

@@ -115,7 +115,6 @@
     <string name="usb_failure_direct_lossless_codec">厳格出力で再生できるのは、FLAC、WAV、AIFF などの 16 ビットまたは 24 ビットのロスレス音声のみです。この曲は %1$s です。</string>
     <string name="usb_failure_direct_lossless_bits">厳格出力で再生できるのは、FLAC、WAV、AIFF などの 16 ビットまたは 24 ビットのロスレス音声のみです。この曲は %1$d ビットです。</string>
     <string name="usb_failure_direct_uac_version">%1$s が使用している USB Audio Class のバージョンには、現在対応していません。</string>
-    <string name="usb_failure_direct_async">%1$s は非同期転送を使用しています。Vesqen の直接出力は、現在この転送方式に対応していません。</string>
     <string name="usb_failure_direct_bus">この曲の形式は、%1$s との現在の USB 接続で転送できる範囲を超えています。</string>
     <string name="usb_failure_direct_permission_required">Vesqen は %1$s へのアクセス許可をまだ得ていません。再生を開始するときに許可を求めます。</string>
     <string name="usb_failure_direct_permission_denied">Vesqen による %1$s へのアクセスは許可されませんでした。</string>

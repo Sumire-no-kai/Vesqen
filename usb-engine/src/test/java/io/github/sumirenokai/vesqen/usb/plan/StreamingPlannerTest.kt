@@ -178,23 +178,56 @@ class StreamingPlannerTest {
     }
 
     @Test
-    fun `protocols past uac2 and asynchronous devices wait for what they need`() {
+    fun `protocols past uac2 wait for what they need`() {
         assertEquals(
             StreamingRefusal.VERSION_NOT_IMPLEMENTED,
             refused(function(alt(endpoint()), version = UacVersion.OTHER), UsbBusSpeed.HIGH, 48_000, 16),
         )
-        val asynchronous = alt(
-            endpoint(sync = UacSyncType.ASYNCHRONOUS, synchAddress = 0x81),
-            feedback = feedbackEndpoint(),
-        )
+    }
+
+    /** #284: the data plane follows the feedback endpoint, polled as its bInterval says. */
+    @Test
+    fun `an asynchronous endpoint plans its feedback`() {
+        val asynchronous = alt(endpoint(sync = UacSyncType.ASYNCHRONOUS, synchAddress = 0x81), feedback = feedbackEndpoint())
+
         assertEquals(
-            StreamingRefusal.ASYNCHRONOUS_NOT_IMPLEMENTED,
-            refused(function(asynchronous), UsbBusSpeed.FULL, 48_000, 16),
+            FeedbackPlan(endpointAddress = 0x81, maxPacketBytes = 3, serviceIntervalUs = 1000, packetsPerUrb = 32, timeoutUs = 1_000_000),
+            planned(function(asynchronous), UsbBusSpeed.FULL, 48_000, 16).feedback,
         )
-        assertEquals(
-            5,
-            planned(function(asynchronous, alt(endpoint(), alternate = 5)), UsbBusSpeed.FULL, 48_000, 16).alternateSetting,
-        )
+        // An adaptive endpoint follows the nominal rate, and the first setting that fits is still taken.
+        val adaptiveFirst = function(alt(endpoint(), alternate = 5), asynchronous)
+        assertEquals(null, planned(adaptiveFirst, UsbBusSpeed.FULL, 48_000, 16).feedback)
+        assertEquals(1, planned(function(asynchronous, alt(endpoint(), alternate = 5)), UsbBusSpeed.FULL, 48_000, 16).alternateSetting)
+    }
+
+    @Test
+    fun `the feedback timeout allows four updates and never less than a second`() {
+        fun feedbackOf(feedback: UacEndpoint, speed: UsbBusSpeed = UsbBusSpeed.FULL, version: UacVersion = UacVersion.UAC1): FeedbackPlan {
+            val asynchronous = alt(endpoint(sync = UacSyncType.ASYNCHRONOUS, synchAddress = 0x81), feedback = feedback, version = version)
+            return checkNotNull(planned(function(asynchronous, version = version), speed, 48_000, 16).feedback)
+        }
+
+        // UAC1's slowest refresh, bRefresh 9: a value every 512 ms.
+        with(feedbackOf(feedbackEndpoint(refresh = 9))) {
+            assertEquals(1000, serviceIntervalUs)
+            assertEquals(2_048_000, timeoutUs)
+        }
+        // UAC2 has no bRefresh. At high speed bInterval 4 polls every 1 ms, and bInterval 1 every microframe.
+        with(feedbackOf(feedbackEndpoint(interval = 4, maxPacket = 4, refresh = null), UsbBusSpeed.HIGH, UacVersion.UAC2)) {
+            assertEquals(1000, serviceIntervalUs)
+            assertEquals(32, packetsPerUrb)
+            assertEquals(1_000_000, timeoutUs)
+        }
+        with(feedbackOf(feedbackEndpoint(interval = 1, maxPacket = 4, refresh = null), UsbBusSpeed.HIGH, UacVersion.UAC2)) {
+            assertEquals(125, serviceIntervalUs)
+            assertEquals(128, packetsPerUrb)
+        }
+        // A rare poll every 512 ms: one packet per URB, and four polls before the stream gives up.
+        with(feedbackOf(feedbackEndpoint(interval = 10, refresh = null), version = UacVersion.UAC2)) {
+            assertEquals(512_000, serviceIntervalUs)
+            assertEquals(1, packetsPerUrb)
+            assertEquals(2_048_000, timeoutUs)
+        }
     }
 
     private fun planned(function: UacFunction, speed: UsbBusSpeed, rate: Int, bits: Int, clock: List<UacRateRange>? = null): StreamingPlan =
@@ -227,8 +260,9 @@ class StreamingPlannerTest {
         alternate: Int = 1,
         rates: SampleRates = SampleRates.Discrete(listOf(8_000, 48_000)),
         feedback: UacEndpoint? = null,
+        version: UacVersion = UacVersion.UAC1,
     ) = UacAltSetting(
-        version = UacVersion.UAC1,
+        version = version,
         alternateSetting = alternate,
         terminalLink = 1,
         format = UacFormat(UacPcmKind.LINEAR_PCM, true, 2, 2, 16, rates),
@@ -255,15 +289,15 @@ class StreamingPlannerTest {
         synchAddress = synchAddress,
     )
 
-    private fun feedbackEndpoint() = UacEndpoint(
+    private fun feedbackEndpoint(interval: Int = 1, maxPacket: Int = 3, refresh: Int? = 5) = UacEndpoint(
         address = 0x81,
         isIsochronous = true,
         syncType = UacSyncType.NONE,
         usage = UacEndpointUsage.FEEDBACK,
-        maxPacketBytes = 3,
+        maxPacketBytes = maxPacket,
         additionalTransactions = 0,
-        interval = 1,
-        refresh = 5,
+        interval = interval,
+        refresh = refresh,
         synchAddress = 0,
     )
 }

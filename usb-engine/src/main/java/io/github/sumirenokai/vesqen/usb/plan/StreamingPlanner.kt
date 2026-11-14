@@ -3,6 +3,7 @@ package io.github.sumirenokai.vesqen.usb.plan
 import io.github.sumirenokai.vesqen.usb.control.UacRateRange
 import io.github.sumirenokai.vesqen.usb.descriptor.SampleRates
 import io.github.sumirenokai.vesqen.usb.descriptor.UacAltSetting
+import io.github.sumirenokai.vesqen.usb.descriptor.UacEndpoint
 import io.github.sumirenokai.vesqen.usb.descriptor.UacFunction
 import io.github.sumirenokai.vesqen.usb.descriptor.UacSyncType
 import io.github.sumirenokai.vesqen.usb.descriptor.UacVersion
@@ -38,17 +39,28 @@ data class StreamingPlan(
     val packetsPerUrb: Int,
     val urbCount: Int,
     val ringFrames: Int,
+    /** Present for an asynchronous endpoint, whose packets follow this feedback instead of the nominal rate. */
+    val feedback: FeedbackPlan? = null,
 ) {
     val frameBytes: Int get() = channels * subslotBytes
 }
+
+/**
+ * An explicit feedback endpoint (#284). The data plane polls it every [serviceIntervalUs] and fails the
+ * stream once no usable value has arrived for [timeoutUs] of bus time.
+ */
+data class FeedbackPlan(
+    val endpointAddress: Int,
+    val maxPacketBytes: Int,
+    val serviceIntervalUs: Int,
+    val packetsPerUrb: Int,
+    val timeoutUs: Int,
+)
 
 enum class StreamingRefusal {
     /** UAC1 and UAC2 are implemented; UAC3 and anything else is not. */
     VERSION_NOT_IMPLEMENTED,
     NO_MATCHING_FORMAT,
-
-    /** The first transfers run at the nominal rate. Feedback arrives in M7-3. */
-    ASYNCHRONOUS_NOT_IMPLEMENTED,
     SPEED_UNSUPPORTED,
     PACKET_TOO_SMALL,
 }
@@ -64,6 +76,11 @@ object StreamingPlanner {
     private const val TARGET_URB_US = 32_000
     private const val TARGET_IN_FLIGHT_US = 96_000
     private const val MAX_PACKETS_PER_URB = 128
+
+    // Linux keeps the last feedback value for as long as none arrives. A stream that stops hearing from
+    // the device's clock fails instead, but only after several update periods (strict decisions, M7 plan).
+    private const val FEEDBACK_TIMEOUT_PERIODS = 4
+    private const val MIN_FEEDBACK_TIMEOUT_US = 1_000_000
 
     /**
      * The planner picks the first setting that can carry the format exactly. A UAC2 device lists its
@@ -94,10 +111,7 @@ object StreamingPlanner {
         }
         if (usable.isEmpty()) return StreamingPlanResult.Refused(StreamingRefusal.NO_MATCHING_FORMAT)
 
-        val adaptive = usable.filter { (_, alt) -> alt.dataEndpoint?.syncType != UacSyncType.ASYNCHRONOUS }
-        if (adaptive.isEmpty()) return StreamingPlanResult.Refused(StreamingRefusal.ASYNCHRONOUS_NOT_IMPLEMENTED)
-
-        for ((interfaceNumber, alt) in adaptive) {
+        for ((interfaceNumber, alt) in usable) {
             val endpoint = alt.dataEndpoint ?: continue
             val format = alt.format ?: continue
             val serviceIntervalUs = baseIntervalUs shl (endpoint.interval - 1)
@@ -121,10 +135,29 @@ object StreamingPlanner {
                     packetsPerUrb = packetsPerUrb,
                     urbCount = (TARGET_IN_FLIGHT_US + urbUs - 1) / urbUs,
                     ringFrames = sampleRateHz / 2,
+                    // streamingBlockers has already refused an asynchronous endpoint without a usable one.
+                    feedback = alt.feedbackEndpoint?.takeIf { endpoint.syncType == UacSyncType.ASYNCHRONOUS }
+                        ?.let { feedbackPlan(it, baseIntervalUs) },
                 ),
             )
         }
         return StreamingPlanResult.Refused(StreamingRefusal.PACKET_TOO_SMALL)
+    }
+
+    /**
+     * A UAC1 endpoint has a new value every 2^bRefresh ms, a UAC2 endpoint at every poll. Polling follows
+     * bInterval either way, since usbdevfs schedules an isochronous URB by the endpoint's descriptor.
+     */
+    private fun feedbackPlan(feedback: UacEndpoint, baseIntervalUs: Int): FeedbackPlan {
+        val pollUs = baseIntervalUs shl (feedback.interval - 1)
+        val updateUs = maxOf(pollUs, (feedback.refreshPeriodMs ?: 0) * 1000)
+        return FeedbackPlan(
+            endpointAddress = feedback.address,
+            maxPacketBytes = feedback.maxPacketBytes,
+            serviceIntervalUs = pollUs,
+            packetsPerUrb = (TARGET_URB_US / pollUs).coerceIn(1, MAX_PACKETS_PER_URB),
+            timeoutUs = maxOf(FEEDBACK_TIMEOUT_PERIODS * updateUs, MIN_FEEDBACK_TIMEOUT_US),
+        )
     }
 
     private fun UacAltSetting.carries(sampleRateHz: Int, bitResolution: Int, version: UacVersion, clockRates: List<UacRateRange>?): Boolean {
