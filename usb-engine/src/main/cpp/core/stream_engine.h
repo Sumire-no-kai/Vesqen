@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "core/feedback_decoder.h"
 #include "core/mutex.h"
 #include "core/packet_schedule.h"
 #include "core/ring_buffer.h"
@@ -23,6 +24,12 @@ struct StreamConfig {
     int packetsPerUrb;
     int urbCount;
     int ringFrames;
+    /** An asynchronous endpoint's feedback endpoint (#284). 0 bytes: packets follow the nominal rate. */
+    int feedbackMaxPacketBytes = 0;
+    int feedbackIntervalUs = 0;
+    int feedbackPacketsPerUrb = 0;
+    /** Fails the stream once no value has been accepted for this long, counted in polls of the endpoint. */
+    int feedbackTimeoutUs = 0;
 };
 
 bool isValid(const StreamConfig& config);
@@ -43,6 +50,8 @@ struct IsoUrb {
     bool inFlight = false;
     /** Asked back from the kernel and not yet reaped, so it must not be discarded a second time. */
     bool discarded = false;
+    /** An IN URB of the feedback endpoint. It carries no media and outlives every epoch. */
+    bool feedback = false;
 };
 
 enum class ReapResult { kUrb, kNothing, kDeviceGone, kFailed };
@@ -58,7 +67,7 @@ public:
     virtual ~IsoTransport() = default;
     /** Bytes of IsoUrb::transportState each URB needs. */
     virtual size_t stateBytes(uint32_t packetCount) const = 0;
-    /** Returns 0 or an errno. */
+    /** Returns 0 or an errno. A feedback URB goes to the feedback endpoint. */
     virtual int submit(IsoUrb& urb) = 0;
     /** The URB still has to be reaped afterwards. */
     virtual void discard(IsoUrb& urb) = 0;
@@ -102,6 +111,10 @@ enum StreamFailure : int64_t {
     kFailureSubmit = 2,
     kFailureDeviceGone = 3,
     kFailureReap = 4,
+    /** The feedback endpoint sent no usable value for the configured time. */
+    kFailureFeedbackTimeout = 5,
+    /** As above, and what it did send lay outside the range Linux accepts. */
+    kFailureFeedbackOutOfRange = 6,
 };
 
 /**
@@ -109,6 +122,9 @@ enum StreamFailure : int64_t {
  * and is counted apart from media so progress never includes it. Nothing here calls back into the
  * JVM, and no call made from outside the stream thread waits for URBs, except [stop] and only up to
  * its limit.
+ *
+ * An asynchronous endpoint's feedback is polled throughout, and each packet follows the last value
+ * it accepted. Feedback URBs are never cancelled for a retirement: they belong to the device's clock.
  *
  * The stream outlives each output written to it. Every output has an epoch, the first being 0.
  * [retireOutput] ends the current one at once: from then on nothing of it is submitted, the URBs in
@@ -147,7 +163,9 @@ private:
     bool retireInFlight();
     bool submitIdle();
     bool submitOne(IsoUrb& urb);
-    void discardInFlight();
+    bool submitFeedback(IsoUrb& urb);
+    bool reapFeedback(IsoUrb& urb);
+    void discardInFlight(std::vector<IsoUrb>& urbs);
     void fill(IsoUrb& urb);
     void account(const IsoUrb& urb, bool cancelling);
     void fail(StreamFailure failure, int error);
@@ -158,7 +176,9 @@ private:
     IsoTransport& transport_;
     PacketSchedule schedule_;
     FrameRingBuffer ring_;
+    const int maxFramesPerPacket_;
     std::vector<IsoUrb> urbs_;
+    std::vector<IsoUrb> feedbackUrbs_;
     std::vector<std::unique_ptr<uint8_t[]>> payloads_;
     std::vector<std::unique_ptr<IsoPacket[]>> packets_;
     std::vector<std::unique_ptr<uint8_t[]>> transportStates_;
@@ -186,6 +206,10 @@ private:
     bool mediaStarted_ = false;
     bool inUnderrun_ = false;
     int inFlight_ = 0;
+    int feedbackInFlight_ = 0;
+    FeedbackDecoder feedback_;
+    int64_t feedbackQuietUs_ = 0;
+    bool feedbackOutOfRange_ = false;
 };
 
 }  // namespace vesqen::usb

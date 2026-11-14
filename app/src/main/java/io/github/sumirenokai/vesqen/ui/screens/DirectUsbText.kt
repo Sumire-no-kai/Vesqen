@@ -63,7 +63,6 @@ internal fun directUsbFailureSpec(status: UsbOutputStatus, device: String, rateS
             ?.let { StringSpec(R.string.usb_failure_direct_lossless_bits, listOf(it)) }
             ?: StringSpec(R.string.usb_failure_direct_lossless)
         "uac_version_unsupported" -> StringSpec(R.string.usb_failure_direct_uac_version, listOf(device))
-        "async_not_supported" -> StringSpec(R.string.usb_failure_direct_async, listOf(device))
         "speed_unsupported", "format_exceeds_bus" -> StringSpec(R.string.usb_failure_direct_bus, listOf(device))
         "permission_required" -> StringSpec(R.string.usb_failure_direct_permission_required, listOf(device))
         "permission_denied" -> StringSpec(R.string.usb_failure_direct_permission_denied, listOf(device))
@@ -76,7 +75,9 @@ internal fun directUsbFailureSpec(status: UsbOutputStatus, device: String, rateS
         "no_playback_function" -> StringSpec(R.string.usb_failure_direct_no_playback, listOf(device))
         "decoder_precision_lost" -> StringSpec(R.string.usb_failure_direct_decoder_precision)
         "pcm_not_exact" -> StringSpec(R.string.usb_failure_direct_pcm_not_exact)
-        "usb_transfer_failed" -> StringSpec(R.string.usb_failure_direct_transfer, listOf(device))
+        // Feedback is part of the transfer; texts of its own come with M7-5's failure reasons.
+        "usb_transfer_failed", "feedback_timeout", "feedback_out_of_range" ->
+            StringSpec(R.string.usb_failure_direct_transfer, listOf(device))
         "usb_engine_unavailable", "engine_unavailable" -> StringSpec(R.string.usb_failure_direct_engine)
         else -> null
     }

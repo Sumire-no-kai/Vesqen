@@ -30,7 +30,7 @@ data class UsbStreamStats(
     val lastDeliveredMediaFrame: Long = mediaFramesDelivered,
 ) {
     /** The order matches `enum StreamFailure` in core/stream_engine.h. */
-    enum class Failure { NONE, THREAD_START, SUBMIT, DEVICE_GONE, REAP }
+    enum class Failure { NONE, THREAD_START, SUBMIT, DEVICE_GONE, REAP, FEEDBACK_TIMEOUT, FEEDBACK_OUT_OF_RANGE }
 }
 
 /**
@@ -159,6 +159,11 @@ class UsbStreamEngine private constructor(private var handle: Long) : UsbStream 
                 plan.packetsPerUrb,
                 plan.urbCount,
                 plan.ringFrames,
+                plan.feedback?.endpointAddress ?: 0,
+                plan.feedback?.maxPacketBytes ?: 0,
+                plan.feedback?.serviceIntervalUs ?: 0,
+                plan.feedback?.packetsPerUrb ?: 0,
+                plan.feedback?.timeoutUs ?: 0,
             )
             return if (handle == 0L) Creation.PlanRefused else Creation.Created(UsbStreamEngine(handle))
         }
@@ -180,6 +185,11 @@ class UsbStreamEngine private constructor(private var handle: Long) : UsbStream 
             packetsPerUrb: Int,
             urbCount: Int,
             ringFrames: Int,
+            feedbackEndpoint: Int,
+            feedbackMaxPacketBytes: Int,
+            feedbackIntervalUs: Int,
+            feedbackPacketsPerUrb: Int,
+            feedbackTimeoutUs: Int,
         ): Long
 
         @JvmStatic

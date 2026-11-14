@@ -112,9 +112,16 @@ class DirectUsbTextTest {
     @Test
     fun `device limits name the device`() {
         assertEquals(
-            StringSpec(R.string.usb_failure_direct_async, listOf("JBL Flip 7")),
-            spec(failed("direct_usb.async_not_supported", UsbOutputFailure.PLATFORM_ERROR)),
+            StringSpec(R.string.usb_failure_direct_uac_version, listOf("JBL Flip 7")),
+            spec(failed("direct_usb.uac_version_unsupported", UsbOutputFailure.PLATFORM_ERROR)),
         )
+        // Feedback is part of the transfer until it has texts of its own.
+        for (code in listOf("usb_transfer_failed", "feedback_timeout", "feedback_out_of_range")) {
+            assertEquals(
+                StringSpec(R.string.usb_failure_direct_transfer, listOf("JBL Flip 7")),
+                spec(failed("direct_usb.$code", UsbOutputFailure.PLATFORM_ERROR)),
+            )
+        }
         assertEquals(
             StringSpec(R.string.usb_failure_direct_permission_required, listOf("JBL Flip 7")),
             spec(failed("direct_usb.permission_required", UsbOutputFailure.PLATFORM_ERROR)),
