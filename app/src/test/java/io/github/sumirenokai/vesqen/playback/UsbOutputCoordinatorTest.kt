@@ -2176,11 +2176,11 @@ class UsbOutputCoordinatorTest {
         connect(dac)
         start(direct = direct)
         loadTrack()
-        direct.inspection = DirectUsbInspection.Refused("uac2_not_supported", deviceName = "Moondrop Echo-A")
+        direct.inspection = DirectUsbInspection.Refused("async_not_supported", deviceName = "Moondrop Echo-A")
 
         requestStrict()
 
-        assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.uac2_not_supported")
+        assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.async_not_supported")
         assertEquals("Moondrop Echo-A", status().deviceName)
     }
 
@@ -2251,6 +2251,24 @@ class UsbOutputCoordinatorTest {
         assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.volume_control_failed")
         assertEquals("release", direct.calls.last())
         assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `a rate the clock refused at takeover keeps what the DAC offers`() {
+        connect(dac)
+        start(direct = direct)
+        loadTrack()
+        val failure = DirectUsbFailure(DirectUsbFailure.Reason.SAMPLE_RATE_UNSUPPORTED, "48000 Hz is not among clock 10's rates")
+        val offered = DirectUsbDetails(sourceSampleRateHz = 48_000, deviceSampleRatesHz = listOf(44_100..44_100))
+        direct.takeoverFailure = failure
+        direct.takeoverDetails = failure to offered
+        requestStrict()
+
+        player.play()
+        idle()
+
+        assertFailed(UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED, "direct_usb.rate_unsupported")
+        assertEquals(offered, status().directDetails)
     }
 
     @Test
@@ -2663,6 +2681,10 @@ class UsbOutputCoordinatorTest {
             beforePermissionResult?.invoke()
             onResult(permissionGranted)
         }
+
+        var takeoverDetails: Pair<DirectUsbFailure, DirectUsbDetails>? = null
+
+        override fun detailsFor(failure: DirectUsbFailure): DirectUsbDetails? = takeoverDetails?.takeIf { it.first === failure }?.second
 
         override fun takeOver(onDone: (DirectUsbFailure?) -> Unit) {
             calls += "takeOver"

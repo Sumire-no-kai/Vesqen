@@ -1,5 +1,7 @@
 package io.github.sumirenokai.vesqen.usb.control
 
+import io.github.sumirenokai.vesqen.usb.descriptor.UacVersion
+
 /** UsbDeviceConnection.controlTransfer, kept small so the request flows can run against a fake. */
 fun interface UsbControlTransfer {
     fun transfer(requestType: Int, request: Int, value: Int, index: Int, buffer: ByteArray, length: Int, timeoutMs: Int): Int
@@ -15,32 +17,22 @@ data class UacVolumeRange(val minimum: Int, val maximum: Int, val resolution: In
 }
 
 /**
- * UAC1 control requests. Each answer's length and value are checked, and a null result means the
- * device did not give a usable answer, which is different from answering "not supported" in its
- * descriptors. These requests need the interface or endpoint they address to be claimed.
+ * A Feature Unit's master volume and mute, as UAC1 and UAC2 each address them. Each answer's length
+ * and value are checked, and a null result means the device did not give a usable answer, which is
+ * different from answering "not supported" in its descriptors. The requests need the interface they
+ * address to be claimed.
  */
-class Uac1ControlClient(private val usb: UsbControlTransfer, private val timeoutMs: Int = 500) {
-    fun volumeRange(unitId: Int, interfaceNumber: Int): UacVolumeRange? {
-        val minimum = readFeature(GET_MIN, VOLUME_CONTROL, unitId, interfaceNumber, 2)?.toSigned16() ?: return null
-        val maximum = readFeature(GET_MAX, VOLUME_CONTROL, unitId, interfaceNumber, 2)?.toSigned16() ?: return null
-        val resolution = readFeature(GET_RES, VOLUME_CONTROL, unitId, interfaceNumber, 2)?.toSigned16() ?: return null
-        // 0x8000 means silence and is legal only as a current value.
-        if (minimum == UAC1_VOLUME_SILENCE || minimum > maximum || resolution <= 0) return null
-        return UacVolumeRange(minimum, maximum, resolution)
-    }
+interface UacFeatureControls {
+    fun volumeRange(unitId: Int, interfaceNumber: Int): UacVolumeRange?
 
     /** The current volume in 1/256 dB. [UAC1_VOLUME_SILENCE] is a legal answer. */
-    fun volume(unitId: Int, interfaceNumber: Int): Int? =
-        readFeature(GET_CUR, VOLUME_CONTROL, unitId, interfaceNumber, 2)?.toSigned16()
+    fun volume(unitId: Int, interfaceNumber: Int): Int?
 
-    fun setVolume(unitId: Int, interfaceNumber: Int, value: Int): Boolean =
-        writeFeature(VOLUME_CONTROL, unitId, interfaceNumber, byteArrayOf(value.toByte(), (value shr 8).toByte()))
+    fun setVolume(unitId: Int, interfaceNumber: Int, value: Int): Boolean
 
-    fun mute(unitId: Int, interfaceNumber: Int): Boolean? =
-        readFeature(GET_CUR, MUTE_CONTROL, unitId, interfaceNumber, 1)?.let { it[0].toInt() != 0 }
+    fun mute(unitId: Int, interfaceNumber: Int): Boolean?
 
-    fun setMute(unitId: Int, interfaceNumber: Int, muted: Boolean): Boolean =
-        writeFeature(MUTE_CONTROL, unitId, interfaceNumber, byteArrayOf(if (muted) 1 else 0))
+    fun setMute(unitId: Int, interfaceNumber: Int, muted: Boolean): Boolean
 
     /** Restore the saved level before unmuting, and verify writes before the recovery record is cleared. */
     fun restoreSettings(unit: Int, number: Int, level: Int, muted: Boolean?): Boolean {
@@ -50,6 +42,39 @@ class Uac1ControlClient(private val usb: UsbControlTransfer, private val timeout
         if (!setVolume(unit, number, level) || volume(unit, number) != level) return false
         return muted != false || restoreMute(false)
     }
+
+    companion object {
+        /** The client for [version]'s requests; other protocol versions have none. */
+        fun of(version: UacVersion, usb: UsbControlTransfer): UacFeatureControls? = when (version) {
+            UacVersion.UAC1 -> Uac1ControlClient(usb)
+            UacVersion.UAC2 -> Uac2ControlClient(usb)
+            UacVersion.OTHER -> null
+        }
+    }
+}
+
+/** UAC1 control requests, including the sampling frequency its endpoints take. */
+class Uac1ControlClient(private val usb: UsbControlTransfer, private val timeoutMs: Int = 500) : UacFeatureControls {
+    override fun volumeRange(unitId: Int, interfaceNumber: Int): UacVolumeRange? {
+        val minimum = readFeature(GET_MIN, VOLUME_CONTROL, unitId, interfaceNumber, 2)?.toSigned16() ?: return null
+        val maximum = readFeature(GET_MAX, VOLUME_CONTROL, unitId, interfaceNumber, 2)?.toSigned16() ?: return null
+        val resolution = readFeature(GET_RES, VOLUME_CONTROL, unitId, interfaceNumber, 2)?.toSigned16() ?: return null
+        // 0x8000 means silence and is legal only as a current value.
+        if (minimum == UAC1_VOLUME_SILENCE || minimum > maximum || resolution <= 0) return null
+        return UacVolumeRange(minimum, maximum, resolution)
+    }
+
+    override fun volume(unitId: Int, interfaceNumber: Int): Int? =
+        readFeature(GET_CUR, VOLUME_CONTROL, unitId, interfaceNumber, 2)?.toSigned16()
+
+    override fun setVolume(unitId: Int, interfaceNumber: Int, value: Int): Boolean =
+        writeFeature(VOLUME_CONTROL, unitId, interfaceNumber, byteArrayOf(value.toByte(), (value shr 8).toByte()))
+
+    override fun mute(unitId: Int, interfaceNumber: Int): Boolean? =
+        readFeature(GET_CUR, MUTE_CONTROL, unitId, interfaceNumber, 1)?.let { it[0].toInt() != 0 }
+
+    override fun setMute(unitId: Int, interfaceNumber: Int, muted: Boolean): Boolean =
+        writeFeature(MUTE_CONTROL, unitId, interfaceNumber, byteArrayOf(if (muted) 1 else 0))
 
     fun sampleRate(endpointAddress: Int): Int? {
         val answer = ByteArray(3)

@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen.playback
 
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceFacts
+import io.github.sumirenokai.vesqen.usb.control.UacRateRange
 import io.github.sumirenokai.vesqen.usb.descriptor.SampleRates
 import io.github.sumirenokai.vesqen.usb.descriptor.UacAltSetting
 import io.github.sumirenokai.vesqen.usb.descriptor.UacConfiguration
@@ -15,6 +16,7 @@ import io.github.sumirenokai.vesqen.usb.descriptor.UacVersion
 import io.github.sumirenokai.vesqen.usb.descriptor.UsbAudioTopology
 import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
 import io.github.sumirenokai.vesqen.usb.plan.StreamingRefusal
+import io.github.sumirenokai.vesqen.usb.session.DirectUsbFailure
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -23,14 +25,37 @@ class DirectUsbRefusalTest {
     private val cd = SourcePcmFormat(sampleRateHz = 44_100, bitDepth = 16, channelCount = 2)
 
     @Test
-    fun `a UAC2 device is named as such, not as lacking the track's format`() {
+    fun `an asynchronous UAC2 device is named for that, not as lacking the track's format`() {
         val refusal = directRefusal(
             topology(function(alt(16), alt(24, alternate = 2), version = UacVersion.UAC2)),
-            listOf(StreamingRefusal.VERSION_NOT_IMPLEMENTED, StreamingRefusal.VERSION_NOT_IMPLEMENTED),
+            listOf(StreamingRefusal.ASYNCHRONOUS_NOT_IMPLEMENTED, StreamingRefusal.ASYNCHRONOUS_NOT_IMPLEMENTED),
             cd,
         )
 
-        assertEquals(DirectUsbInspection.Refused("uac2_not_supported"), refusal)
+        assertEquals(DirectUsbInspection.Refused("async_not_supported"), refusal)
+    }
+
+    @Test
+    fun `a UAC2 device offers the rates its clock listed once claimed`() {
+        val uac2 = function(alt(16, rates = SampleRates.RuntimeUnknown), alt(24, alternate = 2, rates = SampleRates.RuntimeUnknown), version = UacVersion.UAC2)
+        val clock = listOf(UacRateRange(44_100, 44_100, 0), UacRateRange(48_000, 96_000, 48_000), UacRateRange(176_400, 192_000, 0))
+        val details = cd.toDirectDetails().withOffer(uac2, clock)
+
+        assertEquals(listOf(44_100..44_100, 48_000..96_000, 176_400..176_400), details.deviceSampleRatesHz)
+        assertEquals(24, details.deviceMaxBitsAtSourceRate)
+        assertEquals("Before the clock answers nothing is known", emptyList<IntRange>(), cd.toDirectDetails().withOffer(uac2).deviceSampleRatesHz)
+    }
+
+    @Test
+    fun `a rate the clock refused after the takeover reads like a refusal before it`() {
+        assertEquals(
+            UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED to "direct_usb.rate_unsupported",
+            DirectUsbFailure(DirectUsbFailure.Reason.SAMPLE_RATE_UNSUPPORTED, "48000 Hz").toStrictFailure(),
+        )
+        assertEquals(
+            UsbOutputFailure.PLATFORM_ERROR to "direct_usb.sample_rate_set_failed",
+            DirectUsbFailure(DirectUsbFailure.Reason.SAMPLE_RATE_SET_FAILED, "48000 Hz").toStrictFailure(),
+        )
     }
 
     @Test

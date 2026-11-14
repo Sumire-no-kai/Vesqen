@@ -1678,7 +1678,7 @@ internal class UsbOutputCoordinator(
             directAttemptGeneration = NO_GENERATION
             if (failure != null) {
                 val (reason, code) = failure.toStrictFailure()
-                failClosed(reason, code, expectedGeneration = generation)
+                failClosed(reason, code, expectedGeneration = generation, directDetails = route.detailsFor(failure))
                 return@takeOver
             }
             // AudioManager may already list the mixer before its added callback is delivered.

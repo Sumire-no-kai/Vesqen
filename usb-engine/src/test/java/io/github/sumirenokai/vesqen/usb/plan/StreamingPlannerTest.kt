@@ -1,5 +1,7 @@
 package io.github.sumirenokai.vesqen.usb.plan
 
+import io.github.sumirenokai.vesqen.usb.control.UacRateRange
+
 import io.github.sumirenokai.vesqen.usb.descriptor.SampleRates
 import io.github.sumirenokai.vesqen.usb.descriptor.UacAltSetting
 import io.github.sumirenokai.vesqen.usb.descriptor.UacDescriptorParser
@@ -165,10 +167,21 @@ class StreamingPlannerTest {
     }
 
     @Test
-    fun `uac2 and asynchronous devices wait for what they need`() {
+    fun `uac2 plans before its clock answers and follows the clock once it has`() {
+        val uac2 = function(alt(endpoint(), rates = SampleRates.RuntimeUnknown), version = UacVersion.UAC2)
+        assertEquals(96_000, planned(uac2, UsbBusSpeed.HIGH, 96_000, 16).sampleRateHz)
+        val clock = listOf(UacRateRange(44_100, 44_100, 0), UacRateRange(48_000, 192_000, 48_000))
+        assertEquals(96_000, planned(uac2, UsbBusSpeed.HIGH, 96_000, 16, clock).sampleRateHz)
+        assertEquals(44_100, planned(uac2, UsbBusSpeed.HIGH, 44_100, 16, clock).sampleRateHz)
+        assertEquals(StreamingRefusal.NO_MATCHING_FORMAT, refused(uac2, UsbBusSpeed.HIGH, 88_200, 16, clock))
+        assertEquals(StreamingRefusal.NO_MATCHING_FORMAT, refused(uac2, UsbBusSpeed.HIGH, 72_000, 16, clock))
+    }
+
+    @Test
+    fun `protocols past uac2 and asynchronous devices wait for what they need`() {
         assertEquals(
             StreamingRefusal.VERSION_NOT_IMPLEMENTED,
-            refused(function(alt(endpoint()), version = UacVersion.UAC2), UsbBusSpeed.HIGH, 48_000, 16),
+            refused(function(alt(endpoint()), version = UacVersion.OTHER), UsbBusSpeed.HIGH, 48_000, 16),
         )
         val asynchronous = alt(
             endpoint(sync = UacSyncType.ASYNCHRONOUS, synchAddress = 0x81),
@@ -184,11 +197,11 @@ class StreamingPlannerTest {
         )
     }
 
-    private fun planned(function: UacFunction, speed: UsbBusSpeed, rate: Int, bits: Int): StreamingPlan =
-        (StreamingPlanner.plan(function, speed, rate, bits) as StreamingPlanResult.Planned).plan
+    private fun planned(function: UacFunction, speed: UsbBusSpeed, rate: Int, bits: Int, clock: List<UacRateRange>? = null): StreamingPlan =
+        (StreamingPlanner.plan(function, speed, rate, bits, clock) as StreamingPlanResult.Planned).plan
 
-    private fun refused(function: UacFunction, speed: UsbBusSpeed, rate: Int, bits: Int): StreamingRefusal =
-        (StreamingPlanner.plan(function, speed, rate, bits) as StreamingPlanResult.Refused).reason
+    private fun refused(function: UacFunction, speed: UsbBusSpeed, rate: Int, bits: Int, clock: List<UacRateRange>? = null): StreamingRefusal =
+        (StreamingPlanner.plan(function, speed, rate, bits, clock) as StreamingPlanResult.Refused).reason
 
     private fun jblFlip7(): UacFunction {
         val hex = checkNotNull(javaClass.getResource("/descriptors/jbl-flip-7-0ecb-2107.hex")).readText()

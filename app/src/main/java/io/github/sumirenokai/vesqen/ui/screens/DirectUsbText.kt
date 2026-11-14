@@ -62,7 +62,6 @@ internal fun directUsbFailureSpec(status: UsbOutputStatus, device: String, rateS
         "source_bit_depth_unsupported" -> details?.sourceBitDepth
             ?.let { StringSpec(R.string.usb_failure_direct_lossless_bits, listOf(it)) }
             ?: StringSpec(R.string.usb_failure_direct_lossless)
-        "uac2_not_supported" -> StringSpec(R.string.usb_failure_direct_uac2, listOf(device))
         "uac_version_unsupported" -> StringSpec(R.string.usb_failure_direct_uac_version, listOf(device))
         "async_not_supported" -> StringSpec(R.string.usb_failure_direct_async, listOf(device))
         "speed_unsupported", "format_exceeds_bus" -> StringSpec(R.string.usb_failure_direct_bus, listOf(device))

@@ -1,6 +1,6 @@
 package io.github.sumirenokai.vesqen.usb.session
 
-import io.github.sumirenokai.vesqen.usb.control.Uac1ControlClient
+import io.github.sumirenokai.vesqen.usb.control.UacFeatureControls
 import io.github.sumirenokai.vesqen.usb.descriptor.UacControlAccess
 import io.github.sumirenokai.vesqen.usb.descriptor.UacFunction
 import io.github.sumirenokai.vesqen.usb.descriptor.UacVersion
@@ -21,7 +21,7 @@ class UsbTakeoverRecovery(
         }
         val claimed = mutableListOf<Int>()
         val function = functions.singleOrNull {
-            it.version == UacVersion.UAC1 && it.streamingInterfaces.isNotEmpty() &&
+            (it.version == UacVersion.UAC1 || it.version == UacVersion.UAC2) && it.streamingInterfaces.isNotEmpty() &&
                 (marker.controlInterface == null || it.controlInterface == marker.controlInterface)
         }
         // Older records did not name the function. Never force-claim an unrelated audio function.
@@ -49,8 +49,9 @@ class UsbTakeoverRecovery(
                         it.masterVolume != UacControlAccess.ABSENT && it.masterVolume != UacControlAccess.READ_ONLY &&
                             (marker.volumeUnitId == null || marker.volumeUnitId == it.id)
                     }
-                    settingsRestored = target != null && function.controlInterface in claimed && attempt {
-                        Uac1ControlClient(link.control).restoreSettings(target.id, function.controlInterface, marker.volumeBefore, marker.mutedBefore)
+                    val controls = UacFeatureControls.of(function.version, link.control)
+                    settingsRestored = target != null && controls != null && function.controlInterface in claimed && attempt {
+                        controls.restoreSettings(target.id, function.controlInterface, marker.volumeBefore, marker.mutedBefore)
                     }
                     steps += CleanupStep("volume restored", settingsRestored)
                 }

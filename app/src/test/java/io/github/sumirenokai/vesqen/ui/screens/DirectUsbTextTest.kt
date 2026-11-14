@@ -112,10 +112,6 @@ class DirectUsbTextTest {
     @Test
     fun `device limits name the device`() {
         assertEquals(
-            StringSpec(R.string.usb_failure_direct_uac2, listOf("JBL Flip 7")),
-            spec(failed("direct_usb.uac2_not_supported", UsbOutputFailure.PLATFORM_ERROR)),
-        )
-        assertEquals(
             StringSpec(R.string.usb_failure_direct_async, listOf("JBL Flip 7")),
             spec(failed("direct_usb.async_not_supported", UsbOutputFailure.PLATFORM_ERROR)),
         )

@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.usb.plan
 
+import io.github.sumirenokai.vesqen.usb.control.UacRateRange
 import io.github.sumirenokai.vesqen.usb.descriptor.SampleRates
 import io.github.sumirenokai.vesqen.usb.descriptor.UacAltSetting
 import io.github.sumirenokai.vesqen.usb.descriptor.UacFunction
@@ -42,7 +43,7 @@ data class StreamingPlan(
 }
 
 enum class StreamingRefusal {
-    /** D3 starts with what the JBL Flip 7 uses. UAC2 waits for a device that can test it. */
+    /** UAC1 and UAC2 are implemented; UAC3 and anything else is not. */
     VERSION_NOT_IMPLEMENTED,
     NO_MATCHING_FORMAT,
 
@@ -64,9 +65,20 @@ object StreamingPlanner {
     private const val TARGET_IN_FLIGHT_US = 96_000
     private const val MAX_PACKETS_PER_URB = 128
 
-    /** The planner picks the first setting that can carry the format exactly. */
-    fun plan(function: UacFunction, speed: UsbBusSpeed, sampleRateHz: Int, bitResolution: Int): StreamingPlanResult {
-        if (function.version != UacVersion.UAC1) {
+    /**
+     * The planner picks the first setting that can carry the format exactly. A UAC2 device lists its
+     * rates only in answer to a request on its clock, which needs the interfaces claimed: before the
+     * takeover [clockRates] is null and the rate is confirmed by the session, after it the session's
+     * answer decides.
+     */
+    fun plan(
+        function: UacFunction,
+        speed: UsbBusSpeed,
+        sampleRateHz: Int,
+        bitResolution: Int,
+        clockRates: List<UacRateRange>? = null,
+    ): StreamingPlanResult {
+        if (function.version != UacVersion.UAC1 && function.version != UacVersion.UAC2) {
             return StreamingPlanResult.Refused(StreamingRefusal.VERSION_NOT_IMPLEMENTED)
         }
         val baseIntervalUs = when (speed) {
@@ -77,7 +89,7 @@ object StreamingPlanner {
         }
         val usable = function.streamingInterfaces.flatMap { streaming ->
             streaming.alternateSettings
-                .filter { it.isPlayback && it.streamingBlockers.isEmpty() && it.carries(sampleRateHz, bitResolution) }
+                .filter { it.isPlayback && it.streamingBlockers.isEmpty() && it.carries(sampleRateHz, bitResolution, function.version, clockRates) }
                 .map { streaming.interfaceNumber to it }
         }
         if (usable.isEmpty()) return StreamingPlanResult.Refused(StreamingRefusal.NO_MATCHING_FORMAT)
@@ -115,13 +127,14 @@ object StreamingPlanner {
         return StreamingPlanResult.Refused(StreamingRefusal.PACKET_TOO_SMALL)
     }
 
-    private fun UacAltSetting.carries(sampleRateHz: Int, bitResolution: Int): Boolean {
+    private fun UacAltSetting.carries(sampleRateHz: Int, bitResolution: Int, version: UacVersion, clockRates: List<UacRateRange>?): Boolean {
         val format = format ?: return false
         if (format.bitResolution != bitResolution) return false
         return when (val rates = format.sampleRates) {
             is SampleRates.Discrete -> sampleRateHz in rates.ratesHz
             is SampleRates.Continuous -> sampleRateHz in rates.minHz..rates.maxHz
-            SampleRates.RuntimeUnknown -> false
+            // Only a UAC2 clock answers at run time; UAC1 lists its rates in the descriptors.
+            SampleRates.RuntimeUnknown -> version == UacVersion.UAC2 && (clockRates == null || clockRates.any { sampleRateHz in it })
         }
     }
 }
