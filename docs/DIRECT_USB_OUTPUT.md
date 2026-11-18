@@ -6,7 +6,7 @@ This guide describes the M7 development builds. Direct USB output remains disabl
 
 Choose Strict USB output in Settings. On a phone without Android's official bit-perfect channel, an enabled build can use Vesqen's own USB output. Before its first playback, Vesqen explains exclusive access, volume control and USB permission. Cancelling keeps playback stopped. The explanation remains available under Settings → Playback output → Direct USB output.
 
-While Vesqen holds the DAC, other apps and notification sounds may be inaudible. Ringtone and alarm routing depends on the phone and still needs device testing. Pausing eventually releases the DAC according to the pause policy; choosing System output requests its release immediately. A failed release keeps playback stopped and requires recovery before another takeover.
+While Vesqen holds the DAC, other apps and notification sounds may be inaudible. Where ringtones and alarms play depends on the phone. Pausing eventually releases the DAC according to the pause policy; choosing System output requests its release immediately. A failed release keeps playback stopped and requires recovery before another takeover.
 
 Android asks for access to the connected USB device. A DAC with microphone input may require permission after every replug. Disabling microphone access in Android can prevent USB permission. Vesqen does not request microphone permission. Android's default-application choice, when available, can also open Vesqen when a DAC is connected while Strict USB output is selected.
 
@@ -16,7 +16,7 @@ Start with the DAC or amplifier volume low. When the selected path has writable 
 
 A path without writable volume requires a separate full-scale digital-output confirmation for that DAC model. Until confirmed, no audio interface is claimed and no stream starts. Volume must then be adjusted on the DAC or amplifier. Vesqen hides the slider and reports fixed volume to Android; it does not substitute software volume or unmute the DAC. A device that advertises writable master volume but fails its read, write or read-back checks is stopped rather than treated as fixed volume. Per-channel-only volume controls remain unsupported.
 
-On the tested iQOO 9, foreground and background volume keys work with writable hardware volume while the screen is on. Screen-off keys did not work in the recorded test. Other phones and DACs require their own checks. The optional screen-off keep-alive track and the manufacturer's background-power setting are described in Settings; the keep-alive option is off by default and may produce noise from the phone speaker.
+With writable hardware volume, the volume keys adjust the DAC while the screen is on. Some phones, including some vivo and iQOO models, do not pass volume key presses to Vesqen while the screen is off. When this happens, adjust the volume on the DAC or amplifier. The optional screen-off keep-alive track and the manufacturer's background-power setting are described in Settings; the keep-alive option is off by default and may produce noise from the phone speaker.
 
 ## Reading the chain and failures
 
@@ -28,4 +28,4 @@ An already configured output waiting for delivery or paused is described as wait
 
 ## Local records
 
-Vesqen keeps the first-use confirmation, per-model hardware volume and fixed-volume confirmation locally. A recovery marker records the temporary connection ID and the original volume/mute settings. The connection ID is not a serial number. These records, wire readings and USB transfer counters are excluded from reports and diagnostic exports. See the [privacy policy](PRIVACY_POLICY.md).
+Vesqen keeps the first-use confirmation, so that the explanation is not shown again; the hardware volume for each DAC model, used to choose the starting volume on the next connection; and the fixed-volume confirmation for each DAC model. While Vesqen holds a DAC, a takeover marker records the temporary connection ID, the DAC's vendor and product ID, the interface numbers needed to restore its volume, and its original volume and mute settings. The marker is deleted after the DAC is released; if the app stops unexpectedly, Vesqen uses it to release the DAC and restore its volume. The connection ID is not a serial number. These records, wire readings and USB transfer counters stay on the phone and are excluded from reports and diagnostic exports. See the [privacy policy](PRIVACY_POLICY.md).
