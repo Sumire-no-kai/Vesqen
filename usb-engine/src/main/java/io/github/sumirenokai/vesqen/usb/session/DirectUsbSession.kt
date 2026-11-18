@@ -612,10 +612,11 @@ class DirectUsbSession(
             allReleased = cleanupStep("alternate setting 0 on interface $number") { link.selectAlternate(number, 0) }
             streamingInterface = null
         }
-        restoreVolume?.let { restore ->
+        val volumeRestoreFailed = restoreVolume?.let { restore ->
             restorePending = !cleanupStep("volume restored", restore)
             restoreVolume = null
-        }
+            restorePending
+        } ?: false
         claimed.asReversed().forEach { number ->
             val released = cleanupStep("interface $number released") { link.release(number) }
             allReleased = allReleased && released
@@ -627,7 +628,7 @@ class DirectUsbSession(
         if (markerWritten) {
             cleanupSteps += CleanupStep("takeover marker cleared", markers.finish(allReleased, settingsRestored = !restorePending))
         }
-        val record = CleanupRecord(cleanupSteps.toList())
+        val record = CleanupRecord(cleanupSteps.toList(), onlyVolumeRestoreFailed = allReleased && volumeRestoreFailed)
         val failure = (state as? State.Releasing)?.failure
         state = State.Released(record, failure)
         listener.onReleased(record, failure)

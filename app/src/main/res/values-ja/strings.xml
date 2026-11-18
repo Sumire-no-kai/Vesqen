@@ -1088,6 +1088,9 @@
     <string name="usb_failure_direct_feedback_timeout">%1$s から使用可能な USB クロックフィードバックが届かなくなりました。</string>
     <string name="usb_failure_direct_feedback_range">%1$s の USB クロックフィードバックが対応範囲を超えた状態が続きました。</string>
     <string name="usb_failure_direct_confirmation">確認を反映できませんでした。USB デバイスまたは曲が変わったか、確認を保存できませんでした。もう一度再生を開始してください。</string>
+    <string name="usb_system_volume_not_restored_title">システム出力に切り替えました</string>
+    <string name="usb_system_volume_not_restored_body">%1$s の音量を使用前の設定に戻せなかったため、音量が以前と異なる可能性があります。再生は一時停止しています。再生を続ける前に、DAC またはアンプの音量を確認してください。</string>
+    <string name="usb_system_volume_not_restored_ok">OK</string>
     <string name="usb_failure_direct_unknown">USB 出力を安全に設定できませんでした。失敗した段階は特定できていません。</string>
     <string name="chain_usb_continuity">失敗パケット：%1$s · 欠落フレーム：%2$s</string>
     <string name="usb_fixed_volume_pending">再生する前に固定音量出力の注意事項を確認してください。</string>

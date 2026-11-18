@@ -202,7 +202,7 @@ data class UsbOutputStatus(
     val hardwareIdentity: UsbHardwareIdentity? = null,
     val sourceFormat: AudioFormatSummary? = null,
     val sinkFormat: AudioFormatSummary? = null,
-    val decisionCode: String = "system_audio_route",
+    val decisionCode: String = SYSTEM_AUDIO_ROUTE,
     val observedAtEpochMs: Long = 0,
     val observedAtElapsedRealtimeMs: Long = 0,
     val generation: Long = 0,
@@ -274,6 +274,8 @@ class UsbOutputStateRepository {
 
 internal const val DIRECT_USB_INTRODUCTION = "direct_usb.introduction_required"
 internal const val FIXED_VOLUME_CONFIRMATION = "direct_usb.fixed_volume_confirmation_required"
+internal const val SYSTEM_AUDIO_ROUTE = "system_audio_route"
+internal const val SYSTEM_USB_VOLUME_NOT_RESTORED = "direct_usb.system_volume_not_restored"
 
 internal object UsbOutputSessionContract {
     const val OUTPUT_CONSENT_ACTION = "io.github.sumirenokai.vesqen.playback.USB_OUTPUT_CONSENT_DECISION"

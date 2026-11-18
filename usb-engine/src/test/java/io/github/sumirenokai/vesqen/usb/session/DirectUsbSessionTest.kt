@@ -627,6 +627,7 @@ class DirectUsbSessionTest {
         val (record, _) = release()
 
         assertEquals("volume restored", record.firstFailure?.name)
+        assertTrue(record.onlyVolumeRestoreFailed)
         assertTrue(events.containsAll(listOf("release 2", "release 1", "close")))
         assertEquals(-2560, markers.persisted?.volumeBefore)
     }
@@ -639,8 +640,22 @@ class DirectUsbSessionTest {
         val (record, _) = release()
 
         assertEquals("interface 2 released", record.firstFailure?.name)
+        assertFalse(record.onlyVolumeRestoreFailed)
         assertFalse(events.contains("marker cleared"))
         assertFalse(record.steps.single { it.name == "takeover marker cleared" }.succeeded)
+    }
+
+    @Test
+    fun `volume failure followed by an interface release failure is not volume only`() {
+        takeOver()
+        device.failVolumeWrites = true
+        link.failingReleases += 2
+
+        val (record, _) = release()
+
+        assertEquals("volume restored", record.firstFailure?.name)
+        assertFalse(record.onlyVolumeRestoreFailed)
+        assertEquals(-2560, markers.persisted?.volumeBefore)
     }
 
     @Test

@@ -20,6 +20,7 @@ import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.playback.DIRECT_USB_INTRODUCTION
+import io.github.sumirenokai.vesqen.playback.SYSTEM_USB_VOLUME_NOT_RESTORED
 import io.github.sumirenokai.vesqen.playback.DirectUsbDetails
 import io.github.sumirenokai.vesqen.playback.DirectUsbVolumeControl
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
@@ -139,6 +140,24 @@ class DirectUsbPresentationUiTest(private val language: String, private val larg
         }
         compose.onNodeWithText(context.getString(R.string.settings_strict_usb_active_direct_fixed,
             "Test DAC", context.getString(R.string.usb_wire_format, "48 kHz", 24))).assertIsDisplayed()
+    }
+
+    @Test fun systemVolumeWarningShowsTheDeviceNameAndCanBeDismissed() {
+        val status = prompt.copy(
+            mode = UsbOutputMode.SYSTEM,
+            phase = UsbOutputPhase.SYSTEM,
+            decisionCode = SYSTEM_USB_VOLUME_NOT_RESTORED,
+        )
+        content {
+            StrictUsbFailureDialog(status, true, { error("Dismissing the warning must not change modes") })
+        }
+        compose.onNodeWithText(context.getString(R.string.usb_system_volume_not_restored_title)).assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.usb_system_volume_not_restored_body, "Test DAC"))
+            .assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.usb_system_volume_not_restored_ok))
+            .assertIsDisplayed()
+            .performClick()
+        compose.onNodeWithTag("vesqen.output.system-volume-warning-dialog").assertDoesNotExist()
     }
 
     /** Opt-in review evidence, outside the app's normal data and playback paths. */

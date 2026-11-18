@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.playback.DIRECT_USB_INTRODUCTION
 import io.github.sumirenokai.vesqen.playback.FIXED_VOLUME_CONFIRMATION
+import io.github.sumirenokai.vesqen.playback.SYSTEM_USB_VOLUME_NOT_RESTORED
 import io.github.sumirenokai.vesqen.playback.OfficialMixerApiSupport
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailureOrigin
@@ -101,6 +102,27 @@ internal fun StrictUsbFailureDialog(
     // A fresh failed attempt has a new coordinator generation. Telemetry refreshes do not.
     val failureKey = "${status.generation}:${status.observedAtEpochMs}:${status.decisionCode}"
     if (dismissedFailure == failureKey) return
+    if (status.decisionCode == SYSTEM_USB_VOLUME_NOT_RESTORED) {
+        val device = status.deviceName ?: stringResource(R.string.settings_usb_device_unknown)
+        val dismiss = { dismissedFailure = failureKey }
+        AlertDialog(
+            modifier = Modifier.testTag("vesqen.output.system-volume-warning-dialog"),
+            onDismissRequest = dismiss,
+            title = { Text(stringResource(R.string.usb_system_volume_not_restored_title)) },
+            text = {
+                Text(
+                    stringResource(R.string.usb_system_volume_not_restored_body, device),
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = dismiss, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.usb_system_volume_not_restored_ok))
+                }
+            },
+        )
+        return
+    }
     if (status.decisionCode == FIXED_VOLUME_CONFIRMATION || status.decisionCode == DIRECT_USB_INTRODUCTION) {
         val introduction = status.decisionCode == DIRECT_USB_INTRODUCTION
         val tag = if (introduction) "vesqen.output.introduction" else "vesqen.output.fixed-volume"

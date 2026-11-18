@@ -34,7 +34,11 @@ data class DirectUsbFailure(val reason: Reason, val detail: String) {
 /** One release step. A failed step is recorded and the rest still run, except past the safety barrier. */
 data class CleanupStep(val name: String, val succeeded: Boolean)
 
-data class CleanupRecord(val steps: List<CleanupStep>) {
+data class CleanupRecord(
+    val steps: List<CleanupStep>,
+    /** All interfaces and the connection are back. The marker was kept to retry volume restoration. */
+    val onlyVolumeRestoreFailed: Boolean = false,
+) {
     val firstFailure: CleanupStep? get() = steps.firstOrNull { !it.succeeded }
 }
 

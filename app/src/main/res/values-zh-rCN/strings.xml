@@ -1088,6 +1088,9 @@
     <string name="usb_failure_direct_feedback_timeout">%1$s 不再提供可用的 USB 时钟反馈。</string>
     <string name="usb_failure_direct_feedback_range">%1$s 的 USB 时钟反馈持续超出支持范围。</string>
     <string name="usb_failure_direct_confirmation">确认未能生效。USB 设备或曲目已变化，或确认无法保存。请重新开始播放。</string>
+    <string name="usb_system_volume_not_restored_title">已切换为系统输出</string>
+    <string name="usb_system_volume_not_restored_body">Vesqen 未能将 %1$s 的音量恢复为使用前的设置，当前音量可能与之前不同。播放已暂停。请先在 DAC 或功放上确认音量，再继续播放。</string>
+    <string name="usb_system_volume_not_restored_ok">确定</string>
     <string name="usb_failure_direct_unknown">Vesqen 无法安全建立 USB 输出，未能确定失败发生在哪个环节。</string>
     <string name="chain_usb_continuity">失败包：%1$s · 丢失帧：%2$s</string>
     <string name="usb_fixed_volume_pending">开始播放前，请确认固定音量输出提示。</string>

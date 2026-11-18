@@ -1488,7 +1488,7 @@ internal class UsbOutputCoordinator(
         }
     }
 
-    private fun completeSystemOutput(rebuild: Boolean, resume: Boolean) {
+    private fun completeSystemOutput(rebuild: Boolean, resume: Boolean, volumeRestoreFailed: Boolean = false) {
         synchronized(lock) {
             mode = UsbOutputMode.SYSTEM
             resumeAfterConfiguration = false
@@ -1497,12 +1497,13 @@ internal class UsbOutputCoordinator(
         val activePlayer = player
         activePlayer?.setPreferredAudioDevice(null)
         activePlayer?.setHandleAudioBecomingNoisy(true)
-        publishSystem()
-        if (rebuild && activePlayer != null && activePlayer.mediaItemCount > 0) {
-            activePlayer.pause()
-            activePlayer.stop()
-            activePlayer.prepare()
-            if (resume) activePlayer.play()
+        val rebuildPlayer = activePlayer?.takeIf { rebuild && it.mediaItemCount > 0 }
+        if (volumeRestoreFailed || rebuildPlayer != null) activePlayer?.pause()
+        publishSystem(volumeRestoreFailed)
+        if (rebuildPlayer != null) {
+            rebuildPlayer.stop()
+            rebuildPlayer.prepare()
+            if (resume) rebuildPlayer.play()
         }
     }
 
@@ -1569,11 +1570,13 @@ internal class UsbOutputCoordinator(
         } else {
             publishDirect(UsbOutputPhase.APPLYING, "direct_usb.interrupted")
         }
-        route.release { released ->
+        route.release { result ->
             if (!isGenerationCurrent(generation)) return@release
             val selected = returnTarget ?: return@release
             returnTarget = null
-            if (!released || route.recoveryPending) {
+            if (selected == UsbOutputMode.SYSTEM && result == DirectUsbReleaseResult.VOLUME_RESTORE_FAILED) {
+                completeSystemOutput(rebuild = true, resume = false, volumeRestoreFailed = true)
+            } else if (result != DirectUsbReleaseResult.RELEASED || route.recoveryPending) {
                 synchronized(lock) { awaitingReattach = true }
                 val code = if (route.lastCleanup?.firstFailure?.name == "volume restored") {
                     "direct_usb.volume_control_failed"
@@ -1840,11 +1843,12 @@ internal class UsbOutputCoordinator(
             .sortedWith(compareBy(AudioDeviceInfo::getType, AudioDeviceInfo::getId))
     }.getOrDefault(emptyList())
 
-    private fun publishSystem() {
+    private fun publishSystem(volumeRestoreFailed: Boolean = false) {
         publish(
             phase = UsbOutputPhase.SYSTEM,
-            decisionCode = "system_audio_route",
+            decisionCode = if (volumeRestoreFailed) SYSTEM_USB_VOLUME_NOT_RESTORED else SYSTEM_AUDIO_ROUTE,
             explicitMode = UsbOutputMode.SYSTEM,
+            deviceName = if (volumeRestoreFailed) synchronized(lock) { directDeviceName } else null,
         )
     }
 

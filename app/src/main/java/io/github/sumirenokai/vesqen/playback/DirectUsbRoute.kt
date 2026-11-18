@@ -264,7 +264,7 @@ internal interface DirectUsbRoute {
     fun detailsFor(failure: DirectUsbFailure): DirectUsbDetails? = null
 
     /** Gives the device back. Safe to call at any time and more than once. */
-    fun release(onReleased: ((Boolean) -> Unit)? = null)
+    fun release(onReleased: ((DirectUsbReleaseResult) -> Unit)? = null)
 
     fun close()
 }
@@ -281,27 +281,35 @@ private class OutputSource(
     override fun onFailed(failure: DirectUsbFailure) = onFailure(failure)
 }
 
+internal enum class DirectUsbReleaseResult {
+    RELEASED,
+    VOLUME_RESTORE_FAILED,
+    CLEANUP_FAILED,
+}
+
 /** Main-thread release barrier. The route drops a session before its control thread finishes cleanup. */
 internal class PendingUsbReleases {
     private var outstanding = 0
-    private var allSucceeded = true
-    private val waiting = mutableListOf<(Boolean) -> Unit>()
+    private var result = DirectUsbReleaseResult.RELEASED
+    private val waiting = mutableListOf<(DirectUsbReleaseResult) -> Unit>()
     val pending: Boolean get() = outstanding > 0
 
     fun begin() { outstanding++ }
 
-    fun await(callback: (Boolean) -> Unit) {
-        if (pending) waiting += callback else callback(true)
+    fun await(callback: (DirectUsbReleaseResult) -> Unit) {
+        if (pending) waiting += callback else callback(DirectUsbReleaseResult.RELEASED)
     }
 
-    fun complete(succeeded: Boolean) {
-        allSucceeded = allSucceeded && succeeded
+    fun complete(finished: DirectUsbReleaseResult) {
+        if (finished == DirectUsbReleaseResult.CLEANUP_FAILED || result == DirectUsbReleaseResult.RELEASED) {
+            result = finished
+        }
         if (--outstanding > 0) return
-        val result = allSucceeded
-        allSucceeded = true
+        val completed = result
+        result = DirectUsbReleaseResult.RELEASED
         val callbacks = waiting.toList()
         waiting.clear()
-        callbacks.forEach { it(result) }
+        callbacks.forEach { it(completed) }
     }
 }
 
@@ -752,7 +760,7 @@ internal class AndroidDirectUsbRoute(
         }
     }
 
-    override fun release(onReleased: ((Boolean) -> Unit)?) {
+    override fun release(onReleased: ((DirectUsbReleaseResult) -> Unit)?) {
         streamingFacts = null
         volumeWaiting = null
         volumes.publish(null)
@@ -767,7 +775,11 @@ internal class AndroidDirectUsbRoute(
             current.release { cleanup ->
                 main.post {
                     lastCleanup = cleanup
-                    releases.complete(cleanup.firstFailure == null)
+                    releases.complete(when {
+                        cleanup.firstFailure == null -> DirectUsbReleaseResult.RELEASED
+                        cleanup.onlyVolumeRestoreFailed -> DirectUsbReleaseResult.VOLUME_RESTORE_FAILED
+                        else -> DirectUsbReleaseResult.CLEANUP_FAILED
+                    })
                     listener?.onReleased(cleanup)
                 }
             }
