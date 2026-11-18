@@ -61,7 +61,13 @@ class DirectUsbVolumeTest {
     fun `fixed remote provider has no adjustment commands and consumes keys without a request`() {
         val control = DirectUsbVolumeControl()
         control.attach { throw AssertionError("fixed output should receive no volume request") }
-        val session = DeviceVolumeSessionPlayer(player, control)
+        var forwarded = 0
+        val wrapped = object : androidx.media3.common.ForwardingPlayer(player) {
+            override fun setDeviceVolume(volume: Int, flags: Int) { forwarded++ }
+            override fun decreaseDeviceVolume(flags: Int) { forwarded++ }
+            override fun setDeviceMuted(muted: Boolean, flags: Int) { forwarded++ }
+        }
+        val session = DeviceVolumeSessionPlayer(wrapped, control)
         try {
             control.publish(null, fixed = true)
             assertNull(control.state.value)
@@ -75,6 +81,7 @@ class DirectUsbVolumeTest {
             session.setDeviceVolume(10, 0)
             session.decreaseDeviceVolume(0)
             session.setDeviceMuted(true, 0)
+            assertEquals(0, forwarded)
             assertEquals(0L, control.keyPresses.value)
             control.publish(jbl)
             assertTrue(session.isCommandAvailable(Player.COMMAND_ADJUST_DEVICE_VOLUME_WITH_FLAGS))
