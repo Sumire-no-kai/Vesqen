@@ -52,9 +52,9 @@ class PlaybackResumptionDeviceTest {
             currentQueueIndex = 1,
         )
         store.save(saved)
+        val service = ComponentName(app, PlaybackService::class.java)
         val future = main {
-            MediaController.Builder(app, SessionToken(app, ComponentName(app, PlaybackService::class.java)))
-                .buildAsync()
+            MediaController.Builder(app, SessionToken(app, service)).buildAsync()
         }
         try {
             val controller = withContext(Dispatchers.IO) { future.get(15, TimeUnit.SECONDS) }
@@ -75,8 +75,15 @@ class PlaybackResumptionDeviceTest {
             assertFalse(main { controller.isPlaying })
             assertEquals("The saved queue must survive a failed restore", saved, store.load())
         } finally {
-            main { MediaController.releaseFuture(future) }
-            if (previous != null) store.save(previous) else store.clear()
+            try {
+                main {
+                    MediaController.releaseFuture(future)
+                    app.stopService(Intent().setComponent(service))
+                }
+                withTimeout(15_000) { while (serviceRunning(service)) delay(25) }
+            } finally {
+                if (previous != null) store.save(previous) else store.clear()
+            }
         }
     }
 
@@ -101,13 +108,24 @@ class PlaybackResumptionDeviceTest {
         )
         store.save(saved)
         val service = ComponentName(app, PlaybackService::class.java)
+        val token = SessionToken(app, service)
         try {
+            assertFalse("The media-button test requires a cold service", serviceRunning(service))
             val press = Intent(Intent.ACTION_MEDIA_BUTTON)
                 .setComponent(service)
                 .putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY))
             main { ContextCompat.startForegroundService(app, press) }
-            withTimeout(15_000) { while (!serviceRunning(service)) delay(25) }
-            // Ended without playback: out of the foreground, the hidden notification gone.
+            val future = main { MediaController.Builder(app, token).buildAsync() }
+            try {
+                val controller = withContext(Dispatchers.IO) { future.get(15, TimeUnit.SECONDS) }
+                // The service record can appear before onStartCommand has processed the media key.
+                // Wait for the empty queue's Play request to finish before checking its notification.
+                withTimeout(15_000) {
+                    while (main { controller.playbackState } != Player.STATE_ENDED) delay(25)
+                }
+            } finally {
+                main { MediaController.releaseFuture(future) }
+            }
             withTimeout(15_000) { while (serviceInForeground(service)) delay(25) }
             val notifications = app.getSystemService(NotificationManager::class.java).activeNotifications
             assertTrue(
