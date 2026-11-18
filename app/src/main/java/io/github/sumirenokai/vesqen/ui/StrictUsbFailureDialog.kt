@@ -79,6 +79,15 @@ private fun UsbOutputStatus.userInitiatedAttempt(): Boolean = when (failureOrigi
 /** #245: another DAC does not undo the setting, and the reason already says how to retry. */
 internal fun UsbOutputFailure.dialogAddsGenericAdvice(): Boolean = this != UsbOutputFailure.MIXER_CLEAR_FAILED
 
+/** A confirmation that lapsed or could not be saved is no fault of the DAC; its reason asks for playback again. */
+internal fun UsbOutputStatus.dialogAddsGenericAdvice(): Boolean =
+    failure?.dialogAddsGenericAdvice() == true && decisionCode !in CONFIRMATION_FAILURES
+
+private val CONFIRMATION_FAILURES = setOf(
+    "direct_usb.introduction_confirmation_failed",
+    "direct_usb.fixed_volume_confirmation_failed",
+)
+
 /** The app shell owns feedback, including failures started from Library or the mini-player. */
 @Composable
 internal fun StrictUsbFailureDialog(
@@ -130,7 +139,7 @@ internal fun StrictUsbFailureDialog(
             Text(
                 when {
                     openPremium != null -> stringResource(R.string.player_trial_ended_body, reason)
-                    failure.dialogAddsGenericAdvice() -> stringResource(R.string.player_strict_failure_body, reason)
+                    status.dialogAddsGenericAdvice() -> stringResource(R.string.player_strict_failure_body, reason)
                     else -> reason
                 },
                 modifier = Modifier.verticalScroll(rememberScrollState()),
