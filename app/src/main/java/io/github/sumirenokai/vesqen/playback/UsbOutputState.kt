@@ -272,11 +272,12 @@ class UsbOutputStateRepository {
     }
 }
 
+internal const val DIRECT_USB_INTRODUCTION = "direct_usb.introduction_required"
 internal const val FIXED_VOLUME_CONFIRMATION = "direct_usb.fixed_volume_confirmation_required"
 
 internal object UsbOutputSessionContract {
-    const val FIXED_VOLUME_ACTION = "io.github.sumirenokai.vesqen.playback.FIXED_VOLUME_DECISION"
-    const val ACCEPT_FIXED_VOLUME = "accept_fixed_volume"
+    const val OUTPUT_CONSENT_ACTION = "io.github.sumirenokai.vesqen.playback.USB_OUTPUT_CONSENT_DECISION"
+    const val ACCEPT_OUTPUT_CONSENT = "accept_output_consent"
     const val SET_MODE_ACTION = "io.github.sumirenokai.vesqen.playback.SET_USB_OUTPUT_MODE"
     const val MODE_ARGUMENT = "usb_output_mode"
 

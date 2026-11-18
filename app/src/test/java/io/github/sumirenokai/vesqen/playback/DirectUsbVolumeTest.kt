@@ -36,6 +36,15 @@ class DirectUsbVolumeTest {
     }
 
     @Test
+    fun `the direct USB introduction is remembered independently of fixed output models`() {
+        val memory = PreferencesDirectUsbVolumeMemory(context)
+        assertFalse(memory.introductionConfirmed())
+        assertTrue(memory.confirmIntroduction())
+        assertTrue(PreferencesDirectUsbVolumeMemory(context).introductionConfirmed())
+        assertFalse(memory.fixedVolumeConfirmed(UsbDeviceIdentity(1, 2, 3)))
+    }
+
+    @Test
     fun `consent survives a replug and recreation only for this vendor and product`() {
         val first = UsbDeviceIdentity(1, 0x1234, 0x5678)
         val memory = PreferencesDirectUsbVolumeMemory(context)

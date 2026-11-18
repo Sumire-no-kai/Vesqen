@@ -3,6 +3,8 @@ package io.github.sumirenokai.vesqen.playback
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -17,11 +19,13 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.Rule
 
 /**
  * #158 through the real service and session: with shuffle on, Play next plays next, Add to queue
@@ -29,6 +33,9 @@ import org.junit.Test
  * insert is one queue change that the controller shows at once, in the play order.
  */
 class ShuffleQueueEditDeviceTest {
+    // These are Play requests from the app UI. Android 15 requires a top app or an existing
+    // foreground service to grant focus, so keep an empty host visible without a UI controller.
+    @get:Rule val activity = ActivityScenarioRule(ComponentActivity::class.java)
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val app = isolatedPlaybackTestApplication()
     private val playback = AtomicReference(PlaybackSnapshot())
@@ -611,11 +618,21 @@ class ShuffleQueueEditDeviceTest {
         .setMediaMetadata(MediaMetadata.Builder().setExtras(Bundle().apply { putString(PLAYBACK_OCCURRENCE_EXTRA, occurrence) }).build())
         .build()
 
-    private suspend fun awaitPlayback(predicate: (PlaybackSnapshot) -> Boolean) = withTimeout(15_000) {
-        while (true) {
-            main { controller.refreshPosition() }
-            if (predicate(playback.get())) break
-            delay(50)
+    private suspend fun awaitPlayback(predicate: (PlaybackSnapshot) -> Boolean) {
+        try {
+            withTimeout(15_000) {
+                while (true) {
+                    main { controller.refreshPosition() }
+                    if (predicate(playback.get())) break
+                    delay(50)
+                }
+            }
+        } catch (failure: TimeoutCancellationException) {
+            val state = playback.get()
+            throw AssertionError("Playback did not reach the expected state: track=${state.trackId}, " +
+                "position=${state.positionMs}, size=${state.queueSize}, index=${state.queueIndex}, " +
+                "order=${state.playbackOrderMode}, playing=${state.isPlaying}, " +
+                "output=${state.usbOutputStatus.decisionCode}", failure)
         }
     }
 

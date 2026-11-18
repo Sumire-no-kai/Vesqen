@@ -56,6 +56,8 @@ internal sealed interface DirectUsbInspection {
         val needsFixedVolumeConsent: UsbDeviceIdentity? = null,
     ) : DirectUsbInspection
 
+    data class IntroductionNeeded(val deviceName: String, val device: UsbDeviceIdentity) : DirectUsbInspection
+
     data object NoDevice : DirectUsbInspection
 
     data object SeveralDevices : DirectUsbInspection
@@ -241,6 +243,8 @@ internal interface DirectUsbRoute {
     fun invalidateOutput() = Unit
 
     fun inspect(source: SourcePcmFormat): DirectUsbInspection
+
+    fun confirmIntroduction(expected: UsbDeviceIdentity): Boolean = false
 
     fun confirmFixedVolume(expected: UsbDeviceIdentity): Boolean = false
 
@@ -499,6 +503,7 @@ internal class AndroidDirectUsbRoute(
             1 -> devices.single()
             else -> return DirectUsbInspection.SeveralDevices
         }
+        if (!volumeMemory.introductionConfirmed()) return DirectUsbInspection.IntroductionNeeded(device.displayName(), device.identity())
         if (!usbManager.hasPermission(device)) return DirectUsbInspection.PermissionNeeded(device.displayName())
         val held = prepared
         if (held != null && streaming && held.device.deviceId == device.deviceId && held.plan.carries(source)) {
@@ -591,6 +596,11 @@ internal class AndroidDirectUsbRoute(
     override fun detailsFor(failure: DirectUsbFailure): DirectUsbDetails? = failureDetails?.takeIf { it.first === failure }?.second
 
     private fun UsbDevice.identity() = UsbDeviceIdentity(deviceId, vendorId, productId)
+
+    override fun confirmIntroduction(expected: UsbDeviceIdentity): Boolean {
+        val device = usbManager.deviceList.values.filter(UsbDevice::isUsbAudioDevice).singleOrNull() ?: return false
+        return device.identity() == expected && volumeMemory.confirmIntroduction()
+    }
 
     override fun confirmFixedVolume(expected: UsbDeviceIdentity): Boolean {
         val device = usbManager.deviceList.values.filter(UsbDevice::isUsbAudioDevice).singleOrNull() ?: return false

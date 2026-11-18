@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.playback.DIRECT_USB_INTRODUCTION
 import io.github.sumirenokai.vesqen.playback.FIXED_VOLUME_CONFIRMATION
 import io.github.sumirenokai.vesqen.playback.OfficialMixerApiSupport
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
@@ -85,32 +86,34 @@ internal fun StrictUsbFailureDialog(
     canChangeOutputMode: Boolean,
     onSetUsbOutputMode: (UsbOutputMode) -> Unit,
     onOpenPremium: (() -> Unit)? = null,
-    onAnswerFixedVolume: (UsbOutputStatus, Boolean) -> Unit = { _, _ -> },
+    onAnswerUsbOutputConsent: (UsbOutputStatus, Boolean) -> Unit = { _, _ -> },
 ) {
     var dismissedFailure by rememberSaveable { mutableStateOf<String?>(null) }
     // A fresh failed attempt has a new coordinator generation. Telemetry refreshes do not.
     val failureKey = "${status.generation}:${status.observedAtEpochMs}:${status.decisionCode}"
     if (dismissedFailure == failureKey) return
-    if (status.decisionCode == FIXED_VOLUME_CONFIRMATION) {
+    if (status.decisionCode == FIXED_VOLUME_CONFIRMATION || status.decisionCode == DIRECT_USB_INTRODUCTION) {
+        val introduction = status.decisionCode == DIRECT_USB_INTRODUCTION
+        val tag = if (introduction) "vesqen.output.introduction" else "vesqen.output.fixed-volume"
         if (!status.userInitiatedAttempt()) return
         fun answer(accept: Boolean) {
             dismissedFailure = failureKey
-            onAnswerFixedVolume(status, accept)
+            onAnswerUsbOutputConsent(status, accept)
         }
         AlertDialog(
-            modifier = Modifier.testTag("vesqen.output.fixed-volume-dialog"),
+            modifier = Modifier.testTag("$tag-dialog"),
             onDismissRequest = { answer(false) },
-            title = { Text(stringResource(R.string.usb_fixed_volume_title)) },
-            text = { Text(stringResource(R.string.usb_fixed_volume_body,
+            title = { Text(stringResource(if (introduction) R.string.usb_direct_intro_title else R.string.usb_fixed_volume_title)) },
+            text = { Text(stringResource(if (introduction) R.string.usb_direct_intro_body else R.string.usb_fixed_volume_body,
                 status.deviceName ?: stringResource(R.string.settings_usb_device_unknown)),
                 modifier = Modifier.verticalScroll(rememberScrollState())) },
             confirmButton = {
                 TextButton(onClick = { answer(true) }, enabled = canChangeOutputMode,
-                    modifier = Modifier.testTag("vesqen.output.fixed-volume-confirm")) {
-                    Text(stringResource(R.string.usb_fixed_volume_accept))
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("$tag-confirm")) {
+                    Text(stringResource(if (introduction) R.string.usb_direct_intro_accept else R.string.usb_fixed_volume_accept))
                 }
             },
-            dismissButton = { TextButton(onClick = { answer(false) }) { Text(stringResource(R.string.cancel)) } },
+            dismissButton = { TextButton(onClick = { answer(false) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.cancel)) } },
         )
         return
     }

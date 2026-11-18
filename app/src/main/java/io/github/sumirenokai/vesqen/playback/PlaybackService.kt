@@ -33,6 +33,7 @@ import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
 import io.github.sumirenokai.vesqen.BuildConfig
 import io.github.sumirenokai.vesqen.R
@@ -75,14 +76,14 @@ class PlaybackService : MediaSessionService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mediaButtonStart = MediaButtonStartObligation()
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val fixedVolumeCommand = SessionCommand(UsbOutputSessionContract.FIXED_VOLUME_ACTION, android.os.Bundle.EMPTY)
+    private val outputConsentCommand = SessionCommand(UsbOutputSessionContract.OUTPUT_CONSENT_ACTION, android.os.Bundle.EMPTY)
     private val usbOutputCommand = SessionCommand(UsbOutputSessionContract.SET_MODE_ACTION, android.os.Bundle.EMPTY)
     private val moveCommand = SessionCommand(PlayOrderSessionContract.MOVE_ACTION, android.os.Bundle.EMPTY)
     private val outputStateListener: (UsbOutputStatus) -> Unit = { status ->
         mainHandler.post {
             mediaSession?.setSessionExtras(UsbOutputSessionContract.toBundle(status))
-            // A strict failure stops the requested Play without sound (PRD 9.2), which also ends a
-            // media button start.
+            // A strict failure or consent prompt stops this Play without sound, ending any media
+            // button start's foreground obligation too.
             if (status.stopsRequestedPlayback()) endMediaButtonStartWithoutPlayback()
         }
     }
@@ -104,13 +105,13 @@ class PlaybackService : MediaSessionService() {
 
     /** Whether the platform session gets the queue ([PLATFORM_QUEUE_LIMIT]); Media3's default is yes. */
     private var platformQueuePublished = true
+    private val platformCommandsReady = SettableFuture.create<Unit>()
 
     /**
      * Withdraws a queue that grows past [PLATFORM_QUEUE_LIMIT] from the platform session, and gives a
      * queue back once it is short again. Added to the player before the session is built, so it runs
-     * before the session's own listener and a long timeline is never handed to the platform session.
-     * Until the media notification controller connects there is nothing to change; its connection
-     * applies the current length.
+     * before the session's own listener. Client connections wait for the notification controller,
+     * so the first enqueue or media-button restore also has a controller to apply the cap through.
      */
     private val platformQueueListener = object : Player.Listener {
         override fun onTimelineChanged(timeline: Timeline, reason: Int) {
@@ -148,8 +149,17 @@ class PlaybackService : MediaSessionService() {
         ): ListenableFuture<MediaSession.ConnectionResult> {
             if (session.isMediaNotificationController(controller)) {
                 platformQueuePublished = session.player.mediaItemCount <= PLATFORM_QUEUE_LIMIT
+                return Futures.immediateFuture(connectionResult(session, controller))
             }
-            return Futures.immediateFuture(connectionResult(session, controller))
+            // Media3 initially publishes with its default commands. Keep the empty player private
+            // until the notification controller's result has configured the platform session.
+            return Futures.transform(Futures.nonCancellationPropagating(platformCommandsReady),
+                { connectionResult(session, controller) }, MoreExecutors.directExecutor())
+        }
+
+        override fun onPostConnect(session: MediaSession, controller: MediaSession.ControllerInfo) {
+            // onConnectAsync returns before Media3 applies its result; onPostConnect runs after it.
+            if (session.isMediaNotificationController(controller)) platformCommandsReady.set(Unit)
         }
 
         override fun onCustomCommand(
@@ -166,11 +176,11 @@ class PlaybackService : MediaSessionService() {
                 UsbOutputSessionContract.SET_MODE_ACTION -> UsbOutputSessionContract.readMode(args)
                     ?.let(::applyUsbOutputMode)
                     ?: Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
-                UsbOutputSessionContract.FIXED_VOLUME_ACTION -> onMainThread {
-                    val answered = usbOutputCoordinator?.answerFixedVolume(
+                UsbOutputSessionContract.OUTPUT_CONSENT_ACTION -> onMainThread {
+                    val answered = usbOutputCoordinator?.answerUsbOutputConsent(
                         args.getLong(UsbOutputSessionContract.GENERATION, -1L),
                         args.getLong(UsbOutputSessionContract.OBSERVED_AT_ELAPSED, -1L),
-                        args.getBoolean(UsbOutputSessionContract.ACCEPT_FIXED_VOLUME),
+                        args.getBoolean(UsbOutputSessionContract.ACCEPT_OUTPUT_CONSENT),
                     ) == true
                     SessionResult(if (answered) SessionResult.RESULT_SUCCESS else SessionError.ERROR_BAD_VALUE)
                 }
@@ -216,7 +226,7 @@ class PlaybackService : MediaSessionService() {
             base.availablePlayerCommands
         }
         return MediaSession.ConnectionResult.accept(
-            base.availableSessionCommands.buildUpon().add(usbOutputCommand).add(fixedVolumeCommand).add(moveCommand).build(),
+            base.availableSessionCommands.buildUpon().add(usbOutputCommand).add(outputConsentCommand).add(moveCommand).build(),
             playerCommands,
         )
     }
@@ -499,6 +509,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        platformCommandsReady.cancel(false)
         (application as VesqenApplication).playbackTrackMerges.detach()
         serviceScope.cancel()
         (application as VesqenApplication).usbOutputStateRepository.removeListener(outputStateListener)

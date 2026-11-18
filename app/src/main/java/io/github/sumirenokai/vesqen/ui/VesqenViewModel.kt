@@ -539,7 +539,7 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     fun cyclePlaybackOrderMode() = playbackController?.cyclePlaybackOrderMode()
 
-    fun answerFixedVolume(status: UsbOutputStatus, accept: Boolean) = playbackController().answerFixedVolume(status, accept)
+    fun answerUsbOutputConsent(status: UsbOutputStatus, accept: Boolean) = playbackController().answerUsbOutputConsent(status, accept)
 
     fun setUsbOutputMode(mode: UsbOutputMode) = playbackController().setUsbOutputMode(mode)
 

@@ -127,6 +127,9 @@ internal interface DirectUsbVolumeMemory {
     /** The connection ended: its level no longer applies as it is. */
     fun forgetConnection()
 
+    fun introductionConfirmed(): Boolean
+    fun confirmIntroduction(): Boolean
+
     fun fixedVolumeConfirmed(device: UsbDeviceIdentity): Boolean
     fun confirmFixedVolume(device: UsbDeviceIdentity): Boolean
 }
@@ -151,11 +154,18 @@ internal class PreferencesDirectUsbVolumeMemory(context: Context) : DirectUsbVol
         preferences.edit().putInt(device.modelKey(), volume).apply()
     }
 
+    override fun introductionConfirmed(): Boolean = preferences.getBoolean("introduction", false)
+
+    override fun confirmIntroduction(): Boolean = saveConfirmation("introduction")
+
     override fun fixedVolumeConfirmed(device: UsbDeviceIdentity): Boolean =
         preferences.getBoolean("fixed.${device.modelKey()}", false)
 
     override fun confirmFixedVolume(device: UsbDeviceIdentity): Boolean {
-        val key = "fixed.${device.modelKey()}"
+        return saveConfirmation("fixed.${device.modelKey()}")
+    }
+
+    private fun saveConfirmation(key: String): Boolean {
         if (preferences.edit().putBoolean(key, true).commit()) return true
         // A failed commit still changes SharedPreferences in memory. Keep retries behind the prompt.
         preferences.edit().remove(key).apply()

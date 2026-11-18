@@ -6,6 +6,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
     <application>
+        <!-- Isolated Compose content is installed by the test, so an inset-driven size change
+             must not recreate its empty host. Locale and font changes still recreate it. -->
+        <activity
+            android:name="androidx.activity.ComponentActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" />
         <!-- M7-1: reads a USB audio device's descriptors, started over adb. It claims no interface
              and sends no audio. -->
         <activity

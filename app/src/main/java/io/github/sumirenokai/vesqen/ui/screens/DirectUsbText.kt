@@ -49,14 +49,13 @@ internal fun directUsbFailureSpec(status: UsbOutputStatus, device: String, rateS
         StringSpec(R.string.usb_failure_direct_channels, listOf(channels, device, deviceChannels))
     }
     return when (status.decisionCode.removePrefix(DIRECT_USB_CODE_PREFIX)) {
-        "fixed_volume_confirmation_failed" -> StringSpec(R.string.usb_fixed_volume_failed)
         "usb_permission_revoked" -> StringSpec(R.string.usb_failure_permission_revoked)
         "rate_unsupported" -> rateSpec
         "depth_unsupported" -> depthSpec
         "channels_unsupported" -> channelSpec
-        // The DAC is already set for the previous item; until it can be set again (M7-4 4c), say so
-        // only when the DAC lacks the new rate or depth altogether.
-        "no_matching_direct_format" -> rateSpec ?: depthSpec ?: channelSpec
+        // Prefer a known source mismatch; otherwise name the negotiation that found no plan.
+        "no_matching_direct_format", "no_matching_format" -> rateSpec ?: depthSpec ?: channelSpec
+            ?: StringSpec(R.string.usb_failure_direct_interface, listOf(device))
         "source_not_lossless" -> details?.sourceCodec
             ?.let { StringSpec(R.string.usb_failure_direct_lossless_codec, listOf(it)) }
             ?: StringSpec(R.string.usb_failure_direct_lossless)
@@ -76,12 +75,28 @@ internal fun directUsbFailureSpec(status: UsbOutputStatus, device: String, rateS
         "no_playback_function" -> StringSpec(R.string.usb_failure_direct_no_playback, listOf(device))
         "decoder_precision_lost" -> StringSpec(R.string.usb_failure_direct_decoder_precision)
         "pcm_not_exact" -> StringSpec(R.string.usb_failure_direct_pcm_not_exact)
-        // Feedback is part of the transfer; texts of its own come with M7-5's failure reasons.
-        "usb_transfer_failed", "feedback_timeout", "feedback_out_of_range" ->
+        "feedback_timeout" -> StringSpec(R.string.usb_failure_direct_feedback_timeout, listOf(device))
+        "feedback_out_of_range" -> StringSpec(R.string.usb_failure_direct_feedback_range, listOf(device))
+        "usb_transfer_failed" ->
             StringSpec(R.string.usb_failure_direct_transfer, listOf(device))
         "usb_engine_unavailable", "engine_unavailable" -> StringSpec(R.string.usb_failure_direct_engine)
-        else -> null
+        "introduction_confirmation_failed", "fixed_volume_confirmation_failed" -> StringSpec(R.string.usb_failure_direct_confirmation)
+        else -> if (status.failure == io.github.sumirenokai.vesqen.playback.UsbOutputFailure.PLATFORM_ERROR) {
+            StringSpec(R.string.usb_failure_direct_unknown)
+        } else null
     }
+}
+
+/** State wording does not equate a configured or suspended output with an ongoing takeover. */
+internal fun directUsbStateSpec(status: UsbOutputStatus): StringSpec? = when (status.decisionCode) {
+    "direct_usb.configured_not_playing" -> StringSpec(R.string.usb_output_waiting)
+    "direct_usb.permission_requested" -> StringSpec(R.string.usb_output_permission_requested)
+    "direct_usb.returning_to_system" -> StringSpec(R.string.usb_output_returning)
+    "direct_usb.interrupted" -> StringSpec(R.string.usb_output_interrupted)
+    "direct_usb.recovering" -> StringSpec(R.string.usb_recovery_in_progress)
+    "direct_usb.introduction_required", "direct_usb.introduction_pending_play" -> StringSpec(R.string.usb_output_introduction_pending)
+    "direct_usb.fixed_volume_confirmation_required" -> StringSpec(R.string.usb_fixed_volume_pending)
+    else -> null
 }
 
 /** "44.1 kHz", "48 kHz": the rate as written on a DAC, without trailing zeros. */

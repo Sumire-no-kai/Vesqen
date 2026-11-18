@@ -5,6 +5,8 @@ import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Intent
 import android.view.KeyEvent
+import androidx.activity.ComponentActivity
+import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.core.content.ContextCompat
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -23,12 +25,16 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.Rule
 
 /**
  * #52 on the isolated deviceTest application, whose queue and catalog are its own. Run without
  * the app UI open, so no other controller restores the queue.
  */
 class PlaybackResumptionDeviceTest {
+    // A media-button foreground start requires a visible activity. This empty host provides it
+    // without the app UI's controller, which would itself change the queue being tested.
+    @get:Rule val activity = ActivityScenarioRule(ComponentActivity::class.java)
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val app = isolatedPlaybackTestApplication()
 

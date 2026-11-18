@@ -62,7 +62,7 @@ class DirectUsbTextTest {
         )
         assertEquals(listOf("44.1 kHz", "JBL Flip 7", "48 kHz"), spec(status)?.args)
 
-        // A rate the DAC has needs it set again, which the own output cannot do yet (4c).
+        // A supported rate does not establish that an interface/format plan was found.
         val supported = status.copy(
             directDetails = DirectUsbDetails(
                 sourceSampleRateHz = 44_100,
@@ -71,7 +71,7 @@ class DirectUsbTextTest {
                 deviceMaxBitsAtSourceRate = 24,
             ),
         )
-        assertNull(spec(supported))
+        assertEquals(StringSpec(R.string.usb_failure_direct_interface, listOf("JBL Flip 7")), spec(supported))
     }
 
     @Test
@@ -115,8 +115,7 @@ class DirectUsbTextTest {
             StringSpec(R.string.usb_failure_direct_uac_version, listOf("JBL Flip 7")),
             spec(failed("direct_usb.uac_version_unsupported", UsbOutputFailure.PLATFORM_ERROR)),
         )
-        // Feedback is part of the transfer until it has texts of its own.
-        for (code in listOf("usb_transfer_failed", "feedback_timeout", "feedback_out_of_range")) {
+        for (code in listOf("usb_transfer_failed")) {
             assertEquals(
                 StringSpec(R.string.usb_failure_direct_transfer, listOf("JBL Flip 7")),
                 spec(failed("direct_usb.$code", UsbOutputFailure.PLATFORM_ERROR)),
@@ -142,6 +141,25 @@ class DirectUsbTextTest {
         assertEquals("48 kHz", formatKilohertz(48_000))
         assertEquals("352.8 kHz", formatKilohertz(352_800))
         assertEquals("11.025 kHz", formatKilohertz(11_025))
+    }
+
+    @Test
+    fun `feedback faults and unknown stages describe only the observed failure`() {
+        assertEquals(StringSpec(R.string.usb_failure_direct_feedback_timeout, listOf("JBL Flip 7")),
+            spec(failed("direct_usb.feedback_timeout", UsbOutputFailure.PLATFORM_ERROR)))
+        assertEquals(StringSpec(R.string.usb_failure_direct_feedback_range, listOf("JBL Flip 7")),
+            spec(failed("direct_usb.feedback_out_of_range", UsbOutputFailure.PLATFORM_ERROR)))
+        assertEquals(StringSpec(R.string.usb_failure_direct_unknown),
+            spec(failed("direct_usb.future_failure", UsbOutputFailure.PLATFORM_ERROR)))
+    }
+
+    @Test
+    fun `configured audio is waiting instead of taking over while paused or before delivery`() {
+        val status = UsbOutputStatus(mode = UsbOutputMode.STRICT_BIT_PERFECT, phase = UsbOutputPhase.APPLYING,
+            decisionCode = "direct_usb.configured_not_playing")
+        assertEquals(StringSpec(R.string.usb_output_waiting), directUsbStateSpec(status))
+        assertNull(directUsbStateSpec(status.copy(decisionCode = "direct_usb.taking_over")))
+        assertNull(directUsbStateSpec(status.copy(decisionCode = "strict_usb.configured_not_playing")))
     }
 
     private fun spec(status: UsbOutputStatus) = directUsbFailureSpec(status, device = "JBL Flip 7", rateSeparator = "、")

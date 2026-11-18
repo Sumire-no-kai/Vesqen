@@ -404,7 +404,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
         onRefreshPlaybackPosition = viewModel::refreshPlaybackPosition,
         onCyclePlaybackOrder = viewModel::cyclePlaybackOrderMode,
         onSetUsbOutputMode = viewModel::setUsbOutputMode,
-        onAnswerFixedVolume = viewModel::answerFixedVolume,
+        onAnswerUsbOutputConsent = viewModel::answerUsbOutputConsent,
         verificationRegistryState = verificationRegistryState,
         verificationImportResult = verificationImportResult,
         onImportVerificationRegistry = {
@@ -488,7 +488,7 @@ fun VesqenAppContent(
     onRefreshPlaybackPosition: () -> Unit = {},
     onCyclePlaybackOrder: () -> Unit,
     onSetUsbOutputMode: (UsbOutputMode) -> Unit = {},
-    onAnswerFixedVolume: (UsbOutputStatus, Boolean) -> Unit = { _, _ -> },
+    onAnswerUsbOutputConsent: (UsbOutputStatus, Boolean) -> Unit = { _, _ -> },
     onAddLibraryFolder: () -> Unit = {},
     onRemoveLibraryFolder: (String) -> Unit = {},
     onPauseLibraryScan: () -> Unit = {},
@@ -842,7 +842,7 @@ fun VesqenAppContent(
             canChangeOutputMode = state.playback.canSetUsbOutputMode,
             onSetUsbOutputMode = setUsbOutputMode,
             onOpenPremium = if (premiumAccess != null) ::openPremium else null,
-            onAnswerFixedVolume = onAnswerFixedVolume,
+            onAnswerUsbOutputConsent = onAnswerUsbOutputConsent,
         )
     }
 

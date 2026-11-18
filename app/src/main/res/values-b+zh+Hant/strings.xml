@@ -1074,6 +1074,22 @@
     <string name="usb_fixed_volume_title">以固定音量播放？</string>
     <string name="usb_fixed_volume_body">Vesqen 會向 %1$s 輸出滿幅數位音訊，手機音量鍵無法調低音量。請先調低 DAC 或擴大機上的音量，再確認播放。此手機會記住你對這款 DAC 的確認。</string>
     <string name="usb_fixed_volume_accept">確認並播放</string>
-    <string name="usb_fixed_volume_failed">無法確認此 DAC。請檢查 USB 連線，再嘗試播放。</string>
     <string name="usb_fixed_volume_label">請在 DAC 或擴大機上調整音量</string>
+    <string name="usb_direct_intro_title">USB 直接輸出</string>
+    <string name="usb_direct_intro_body">Vesqen 會獨佔使用 DAC。在釋放裝置之前，其他應用程式和通知可能無法發聲。鈴聲和鬧鐘的輸出位置取決於手機，仍需逐機實測。\n\nAndroid 會要求 USB 存取授權。帶麥克風輸入的 DAC 可能每次重新插入都需要授權；在系統中關閉麥克風存取可能導致 USB 授權遭拒。Vesqen 不申請錄音權限。\n\n嚴格輸出維持曲目原有取樣率，不使用軟體音量。支援時可在 Vesqen 中調整 DAC 硬體音量，否則請使用 DAC 或擴大機上的音量控制。開始前請先調低音量。</string>
+    <string name="usb_direct_intro_accept">繼續</string>
+    <string name="usb_direct_info_summary">獨佔使用、音量和 USB 授權</string>
+    <string name="usb_output_waiting_title">等待 USB 音訊</string>
+    <string name="usb_output_waiting">DAC 已設定，音訊尚未開始傳送或已暫停。</string>
+    <string name="usb_output_permission_requested">正在等待 Android 的 USB 授權結果，播放維持停止。</string>
+    <string name="usb_output_returning">Vesqen 正在釋放 DAC 並還原原有設定，播放維持停止。</string>
+    <string name="usb_output_introduction_pending">開始播放前，請閱讀並確認 USB 直接輸出說明。</string>
+    <string name="usb_failure_direct_interface">Vesqen 未在 %1$s 上找到支援的音訊介面、端點和格式組合，嚴格輸出已停止。</string>
+    <string name="usb_failure_direct_feedback_timeout">%1$s 未繼續提供可用的 USB 時脈回授，嚴格輸出已停止。</string>
+    <string name="usb_failure_direct_feedback_range">%1$s 的 USB 時脈回授持續超出支援範圍，嚴格輸出已停止。</string>
+    <string name="usb_failure_direct_confirmation">USB 裝置或播放要求已變更，或確認記錄無法儲存。請重新開始播放，核對目前的要求。</string>
+    <string name="usb_failure_direct_unknown">Vesqen 無法安全建立 USB 輸出，尚不能確定失敗發生的環節。播放維持停止。</string>
+    <string name="chain_usb_continuity">失敗封包 %1$s 個 · 遺失 %2$s 影格</string>
+    <string name="usb_fixed_volume_pending">開始播放前，請確認固定音量輸出提示。</string>
+    <string name="settings_strict_usb_active_direct_fixed">已在 %1$s 生效，%2$s。依據是 Vesqen 對裝置的設定與讀回，尚未經過外部驗證。DAC 接收滿幅數位音訊，請在 DAC 或擴大機上調整音量，手機音量控制無法降低這條輸出的音量。</string>
 </resources>

@@ -137,6 +137,16 @@ class PlaybackResumptionTest {
     }
 
     @Test
+    fun `a consent prompt ends a media button start without claiming that audio has started`() {
+        for (code in listOf(DIRECT_USB_INTRODUCTION, FIXED_VOLUME_CONFIRMATION)) {
+            val prompt = UsbOutputStatus(mode = UsbOutputMode.STRICT_BIT_PERFECT, phase = UsbOutputPhase.AVAILABLE,
+                decisionCode = code, failureOrigin = UsbOutputFailureOrigin.USER_PLAYBACK)
+            assertTrue(prompt.stopsRequestedPlayback())
+            assertFalse(prompt.copy(failureOrigin = UsbOutputFailureOrigin.QUEUE_RESTORE).stopsRequestedPlayback())
+        }
+    }
+
+    @Test
     fun `a media button start that ends without playback is settled once`() {
         val loaded = MediaButtonStartObligation().apply { open(enteredForeground = false) }
         assertEquals(MediaButtonStartObligation.Ending.ENTER_AND_LEAVE, loaded.endWithoutPlayback(mediaInForeground = false))

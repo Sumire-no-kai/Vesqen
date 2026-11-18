@@ -2052,6 +2052,56 @@ class UsbOutputCoordinatorTest {
         direct.calls.clear()
     }
 
+    private fun requestIntroduction(): UsbOutputStatus {
+        direct.inspection = DirectUsbInspection.IntroductionNeeded("Test DAC", UsbDeviceIdentity(1, 2, 3))
+        connect(dac)
+        start(direct = direct)
+        loadTrack()
+        requestStrict()
+        assertStatus(UsbOutputPhase.SYSTEM, "direct_usb.introduction_pending_play")
+        assertEquals(OutputDeclaration.SYSTEM_MIXED, status().declaration)
+        player.play()
+        idle()
+        assertStatus(UsbOutputPhase.APPLYING, DIRECT_USB_INTRODUCTION)
+        assertEquals(OutputDeclaration.BIT_PERFECT_REQUESTED, status().declaration)
+        assertFalse(player.playWhenReady)
+        assertFalse("takeOver" in direct.calls || "requestPermission" in direct.calls)
+        return status()
+    }
+
+    @Test
+    fun `the exclusive output introduction precedes USB permission and can be cancelled`() {
+        val first = requestIntroduction()
+        assertTrue(answer(first, false))
+        assertEquals(OutputDeclaration.SYSTEM_MIXED, status().declaration)
+        player.play()
+        idle()
+        assertStatus(UsbOutputPhase.APPLYING, DIRECT_USB_INTRODUCTION)
+        assertFalse(answer(first, true))
+        assertTrue(answer(status(), true))
+        idle()
+        assertTrue("introduced" in direct.calls)
+        assertTrue("takeOver" in direct.calls)
+    }
+
+    @Test
+    fun `an introduction for a disconnected DAC cannot start a replacement device`() {
+        val first = requestIntroduction()
+        direct.inspection = DirectUsbInspection.IntroductionNeeded("Other DAC", UsbDeviceIdentity(2, 2, 3))
+        assertFalse(answer(first, true))
+        idle()
+        assertFalse("takeOver" in direct.calls || "introduced" in direct.calls)
+    }
+
+    @Test
+    fun `clearing the queue invalidates a pending introduction`() {
+        val first = requestIntroduction()
+        player.clearMediaItems()
+        idle()
+        assertFalse(answer(first, true))
+        assertFalse("takeOver" in direct.calls || "introduced" in direct.calls)
+    }
+
     private fun requestFixedVolume(): UsbOutputStatus {
         direct.inspection = DirectUsbInspection.Ready("Fixed DAC", PLAN_48K_24, UsbDeviceIdentity(1, 2, 3))
         connect(dac)
@@ -2069,7 +2119,7 @@ class UsbOutputCoordinatorTest {
     }
 
     private fun answer(prompt: UsbOutputStatus, accept: Boolean) =
-        coordinator.answerFixedVolume(prompt.generation, prompt.observedAtElapsedRealtimeMs, accept)
+        coordinator.answerUsbOutputConsent(prompt.generation, prompt.observedAtElapsedRealtimeMs, accept)
 
     @Test
     fun `cancelling consumes only that prompt and retry requires a fresh confirmation`() {
@@ -2616,8 +2666,10 @@ class UsbOutputCoordinatorTest {
     @Config(shadows = [RevokedDescriptorConnection::class])
     fun `revocation during descriptor inspection closes the connection and fails before takeover`() {
         attachUsbHardware("/dev/bus/usb/001/002", vendorId = 0x1234, productId = 0x5678)
+        val memory = PreferencesDirectUsbVolumeMemory(context)
+        assertTrue(memory.confirmIntroduction())
         val route = AndroidDirectUsbRoute(context, PreferencesTakeoverMarkerStore(context),
-            DirectUsbVolumeControl(), PreferencesDirectUsbVolumeMemory(context))
+            DirectUsbVolumeControl(), memory)
         RevokedDescriptorConnection.closes = 0
         start(direct = route)
         loadTrack()
@@ -2681,6 +2733,13 @@ class UsbOutputCoordinatorTest {
     private class FakeDirectRoute : DirectUsbRoute {
         val calls = mutableListOf<String>()
         var inspection: DirectUsbInspection = DirectUsbInspection.Ready("JBL Flip 7", PLAN_48K_24)
+        override fun confirmIntroduction(expected: UsbDeviceIdentity): Boolean {
+            val current = inspection as? DirectUsbInspection.IntroductionNeeded ?: return false
+            if (current.device != expected) return false
+            calls += "introduced"
+            inspection = DirectUsbInspection.Ready(current.deviceName, PLAN_48K_24)
+            return true
+        }
         override fun confirmFixedVolume(expected: UsbDeviceIdentity): Boolean {
             val current = inspection as? DirectUsbInspection.Ready ?: return false
             if (current.needsFixedVolumeConsent != expected) return false

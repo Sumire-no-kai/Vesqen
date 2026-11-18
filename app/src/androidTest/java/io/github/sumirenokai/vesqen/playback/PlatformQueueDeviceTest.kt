@@ -5,6 +5,8 @@ import android.content.ComponentName
 import android.content.Intent
 import android.media.session.MediaSessionManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.test.platform.app.InstrumentationRegistry
@@ -12,6 +14,8 @@ import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.telemetry.isolatedPlaybackTestApplication
 import java.io.File
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -20,6 +24,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 
@@ -46,11 +51,20 @@ class PlatformQueueDeviceTest {
             sampleRateHz = 8_000, bitDepth = 16, channelCount = 1)
         val service = ComponentName(app, PlaybackService::class.java)
         val future = main { MediaController.Builder(app, SessionToken(app, service)).buildAsync() }
+        var platform: android.media.session.MediaController? = null
+        val largestQueue = AtomicInteger()
+        val shortQueueObserved = AtomicBoolean()
+        val observer = object : android.media.session.MediaController.Callback() {
+            override fun onQueueChanged(queue: MutableList<android.media.session.MediaSession.QueueItem>?) {
+                val size = queue?.size ?: 0
+                largestQueue.accumulateAndGet(size, ::maxOf)
+                if (size == PLATFORM_QUEUE_LIMIT) shortQueueObserved.set(true)
+            }
+        }
         instrumentation.uiAutomation.adoptShellPermissionIdentity(Manifest.permission.MEDIA_CONTENT_CONTROL)
         try {
-            val controller = withContext(Dispatchers.IO) { future.get(15, TimeUnit.SECONDS) }
             val sessions = app.getSystemService(MediaSessionManager::class.java)
-            val platform = withTimeout(15_000) {
+            val connectedPlatform = withTimeout(15_000) {
                 var session: android.media.session.MediaController? = null
                 while (session == null) {
                     session = sessions.getActiveSessions(null).firstOrNull { it.packageName == app.packageName }
@@ -58,17 +72,34 @@ class PlatformQueueDeviceTest {
                 }
                 session
             }
+            platform = connectedPlatform
+            connectedPlatform.registerCallback(observer, Handler(Looper.getMainLooper()))
+            val controller = withContext(Dispatchers.IO) { future.get(15, TimeUnit.SECONDS) }
 
-            main { controller.setMediaItems(List(PLATFORM_QUEUE_LIMIT) { track.toPlaybackMediaItem() }) }
-            awaitPlatformQueue(platform, PLATFORM_QUEUE_LIMIT)
+            // The first command after a cold connection is already a long queue. Watch every
+            // platform callback, so publishing the full list and clearing it later cannot pass.
+            val longQueueSize = 2_010
+            main { controller.setMediaItems(List(longQueueSize) { track.toPlaybackMediaItem() }) }
+            withTimeout(15_000) {
+                while (connectedPlatform.metadata?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE) != track.title) delay(25)
+            }
+            awaitPlatformQueue(connectedPlatform, null)
+            assertEquals("The app keeps its initial long queue", longQueueSize, main { controller.mediaItemCount })
+
+            main { controller.removeMediaItems(PLATFORM_QUEUE_LIMIT, longQueueSize) }
+            awaitPlatformQueue(connectedPlatform, PLATFORM_QUEUE_LIMIT)
+            withTimeout(15_000) { while (!shortQueueObserved.get()) delay(25) }
 
             main { controller.addMediaItem(track.toPlaybackMediaItem()) }
-            awaitPlatformQueue(platform, null)
+            awaitPlatformQueue(connectedPlatform, null)
             assertEquals("The app keeps the whole queue", PLATFORM_QUEUE_LIMIT + 1, main { controller.mediaItemCount })
 
             main { controller.removeMediaItem(0) }
-            awaitPlatformQueue(platform, PLATFORM_QUEUE_LIMIT)
+            awaitPlatformQueue(connectedPlatform, PLATFORM_QUEUE_LIMIT)
+            assertTrue("No initial or later platform callback may contain a long queue: ${largestQueue.get()}",
+                largestQueue.get() <= PLATFORM_QUEUE_LIMIT)
         } finally {
+            platform?.unregisterCallback(observer)
             instrumentation.uiAutomation.dropShellPermissionIdentity()
             main {
                 if (future.isDone) future.get().clearMediaItems()
