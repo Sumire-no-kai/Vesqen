@@ -38,6 +38,7 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetryMediaItemExtras
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceFacts
 import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
 import io.github.sumirenokai.vesqen.usb.session.DirectUsbFailure
+import io.github.sumirenokai.vesqen.usb.session.UsbDeviceIdentity
 import java.nio.ByteBuffer
 
 /**
@@ -101,6 +102,9 @@ internal class UsbOutputCoordinator(
     private var internalPauseInProgress = false
     private var reconfigurePosted = false
     private var closed = false
+    // Main-thread only. A controller answers the displayed attempt, never supplies a USB identity.
+    private data class OutputConsent(val device: UsbDeviceIdentity, val period: Any, val generation: Long, val introduction: Boolean = false)
+    private var pendingOutputConsent: OutputConsent? = null
     private var statusGeneration = stateRepository.snapshot().generation
 
     /** The current strict attempt uses Vesqen's own USB output; set from a ready inspection until it ends. */
@@ -322,6 +326,41 @@ internal class UsbOutputCoordinator(
             saveMode(requestedMode)
             scheduleReconfigure(resume = player?.playWhenReady == true, origin = UsbOutputFailureOrigin.USER_MODE_CHANGE)
         }
+    }
+
+    fun answerUsbOutputConsent(generation: Long, observedAt: Long, accept: Boolean): Boolean {
+        val request = pendingOutputConsent ?: return false
+        val status = currentStatus()
+        val expectedCode = if (request.introduction) DIRECT_USB_INTRODUCTION else FIXED_VOLUME_CONFIRMATION
+        if (request.generation != generation || status.generation != generation ||
+            status.observedAtElapsedRealtimeMs != observedAt || status.decisionCode != expectedCode) return false
+        pendingOutputConsent = null
+        if (!accept) {
+            publish(phase = if (request.introduction) UsbOutputPhase.SYSTEM else UsbOutputPhase.AVAILABLE,
+                decisionCode = if (request.introduction) "direct_usb.introduction_pending_play" else "direct_usb.available",
+                source = sourceFormat, deviceName = status.deviceName)
+            return true
+        }
+        val active = player ?: return false
+        val timeline = active.currentTimeline
+        if (closed || reconfigurePosted || currentMode() != UsbOutputMode.STRICT_BIT_PERFECT ||
+            interrupted || focusSuppressed || communicationActive || timeline.isEmpty ||
+            timeline.getUidOfPeriod(active.currentPeriodIndex) != request.period) return false
+        val confirmed = try {
+            if (request.introduction) directRoute?.confirmIntroduction(request.device) == true
+            else directRoute?.confirmFixedVolume(request.device) == true
+        } catch (_: SecurityException) {
+            false
+        } catch (_: IllegalStateException) {
+            false
+        }
+        if (!confirmed) {
+            failClosed(UsbOutputFailure.PLATFORM_ERROR, if (request.introduction) "direct_usb.introduction_confirmation_failed" else "direct_usb.fixed_volume_confirmation_failed",
+                origin = UsbOutputFailureOrigin.USER_PLAYBACK, directDevice = status.deviceName)
+            return false
+        }
+        scheduleReconfigure(resume = true, origin = UsbOutputFailureOrigin.USER_PLAYBACK)
+        return true
     }
 
     fun currentStatus(): UsbOutputStatus = stateRepository.snapshot()
@@ -573,6 +612,7 @@ internal class UsbOutputCoordinator(
             mainHandler.post { scheduleReconfigure(resume, origin) }
             return
         }
+        pendingOutputConsent = null
         if (recoveryInProgress) {
             resumeAfterRecovery = resumeAfterRecovery || resume
             return
@@ -1448,7 +1488,7 @@ internal class UsbOutputCoordinator(
         }
     }
 
-    private fun completeSystemOutput(rebuild: Boolean, resume: Boolean) {
+    private fun completeSystemOutput(rebuild: Boolean, resume: Boolean, volumeRestoreFailed: Boolean = false) {
         synchronized(lock) {
             mode = UsbOutputMode.SYSTEM
             resumeAfterConfiguration = false
@@ -1457,12 +1497,13 @@ internal class UsbOutputCoordinator(
         val activePlayer = player
         activePlayer?.setPreferredAudioDevice(null)
         activePlayer?.setHandleAudioBecomingNoisy(true)
-        publishSystem()
-        if (rebuild && activePlayer != null && activePlayer.mediaItemCount > 0) {
-            activePlayer.pause()
-            activePlayer.stop()
-            activePlayer.prepare()
-            if (resume) activePlayer.play()
+        val rebuildPlayer = activePlayer?.takeIf { rebuild && it.mediaItemCount > 0 }
+        if (volumeRestoreFailed || rebuildPlayer != null) activePlayer?.pause()
+        publishSystem(volumeRestoreFailed)
+        if (rebuildPlayer != null) {
+            rebuildPlayer.stop()
+            rebuildPlayer.prepare()
+            if (resume) rebuildPlayer.play()
         }
     }
 
@@ -1529,11 +1570,13 @@ internal class UsbOutputCoordinator(
         } else {
             publishDirect(UsbOutputPhase.APPLYING, "direct_usb.interrupted")
         }
-        route.release { released ->
+        route.release { result ->
             if (!isGenerationCurrent(generation)) return@release
             val selected = returnTarget ?: return@release
             returnTarget = null
-            if (!released || route.recoveryPending) {
+            if (selected == UsbOutputMode.SYSTEM && result == DirectUsbReleaseResult.VOLUME_RESTORE_FAILED) {
+                completeSystemOutput(rebuild = true, resume = false, volumeRestoreFailed = true)
+            } else if (result != DirectUsbReleaseResult.RELEASED || route.recoveryPending) {
                 synchronized(lock) { awaitingReattach = true }
                 val code = if (route.lastCleanup?.firstFailure?.name == "volume restored") {
                     "direct_usb.volume_control_failed"
@@ -1588,6 +1631,16 @@ internal class UsbOutputCoordinator(
                 failClosed(UsbOutputFailure.NO_USB_AUDIO_DEVICE, "direct_usb.no_usb_audio_device", expectedGeneration = generation)
             DirectUsbInspection.SeveralDevices ->
                 failClosed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.device_ambiguous", expectedGeneration = generation)
+            is DirectUsbInspection.IntroductionNeeded -> {
+                if (activePlayer.playWhenReady || synchronized(lock) { resumeAfterConfiguration }) {
+                    requestOutputConsent(route, activePlayer, source, inspection.deviceName, inspection.device, introduction = true)
+                } else {
+                    // Permission and descriptors have not been checked. The chosen mode alone
+                    // cannot establish that a bit-perfect path is available.
+                    publish(phase = UsbOutputPhase.SYSTEM, source = source, deviceName = inspection.deviceName,
+                        decisionCode = "direct_usb.introduction_pending_play")
+                }
+            }
             is DirectUsbInspection.PermissionNeeded -> requestDirectPermission(route, generation, source, inspection.deviceName)
             is DirectUsbInspection.Refused -> failClosed(
                 if (inspection.formatRefused) UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED else UsbOutputFailure.PLATFORM_ERROR,
@@ -1662,6 +1715,10 @@ internal class UsbOutputCoordinator(
         publishDirect(UsbOutputPhase.AVAILABLE, "direct_usb.available", source)
         // As on the official path, inspection on startup or queue restoration takes nothing over.
         if (!activePlayer.playWhenReady && !synchronized(lock) { resumeAfterConfiguration }) return
+        inspection.needsFixedVolumeConsent?.let { device ->
+            requestOutputConsent(route, activePlayer, source, inspection.deviceName, device, introduction = false)
+            return
+        }
         publishDirect(UsbOutputPhase.APPLYING, "direct_usb.taking_over", source)
         synchronized(lock) { directOutputOpened = false }
         if (activePlayer.playWhenReady) {
@@ -1695,6 +1752,35 @@ internal class UsbOutputCoordinator(
             }
             resumeAfterDirectRebuild(activePlayer, generation)
         }
+    }
+
+    /** No interfaces or audio remain owned while either first-use decision is pending. */
+    private fun requestOutputConsent(
+        route: DirectUsbRoute,
+        activePlayer: ExoPlayer,
+        source: SourcePcmFormat,
+        deviceName: String,
+        device: UsbDeviceIdentity,
+        introduction: Boolean,
+    ) {
+        val timeline = activePlayer.currentTimeline
+        val period = if (timeline.isEmpty) null else timeline.getUidOfPeriod(activePlayer.currentPeriodIndex)
+        val origin = synchronized(lock) {
+            configurationGeneration++
+            resumeAfterConfiguration = false
+            directPath = false
+            directOutputOpened = false
+            awaitingReattach = true
+            configurationOrigin
+        }
+        route.release()
+        activePlayer.pause()
+        activePlayer.stop()
+        communicationMonitor?.setEnabled(false)
+        publish(phase = if (introduction) UsbOutputPhase.APPLYING else UsbOutputPhase.AVAILABLE, source = source,
+            decisionCode = if (introduction) DIRECT_USB_INTRODUCTION else FIXED_VOLUME_CONFIRMATION,
+            deviceName = deviceName, failureOrigin = origin)
+        if (period != null) pendingOutputConsent = OutputConsent(device, period, currentStatus().generation, introduction)
     }
 
     private fun resumeAfterDirectRebuild(activePlayer: ExoPlayer, generation: Long) {
@@ -1757,11 +1843,12 @@ internal class UsbOutputCoordinator(
             .sortedWith(compareBy(AudioDeviceInfo::getType, AudioDeviceInfo::getId))
     }.getOrDefault(emptyList())
 
-    private fun publishSystem() {
+    private fun publishSystem(volumeRestoreFailed: Boolean = false) {
         publish(
             phase = UsbOutputPhase.SYSTEM,
-            decisionCode = "system_audio_route",
+            decisionCode = if (volumeRestoreFailed) SYSTEM_USB_VOLUME_NOT_RESTORED else SYSTEM_AUDIO_ROUTE,
             explicitMode = UsbOutputMode.SYSTEM,
+            deviceName = if (volumeRestoreFailed) synchronized(lock) { directDeviceName } else null,
         )
     }
 

@@ -36,6 +36,20 @@ class StrictUsbFailurePolicyTest {
         }
     }
 
+    @Test fun `a lapsed confirmation does not suggest another DAC`() {
+        fun failed(failure: UsbOutputFailure, code: String) = UsbOutputStatus(
+            mode = UsbOutputMode.STRICT_BIT_PERFECT,
+            phase = UsbOutputPhase.FAILED,
+            failure = failure,
+            decisionCode = code,
+        )
+        listOf("direct_usb.introduction_confirmation_failed", "direct_usb.fixed_volume_confirmation_failed").forEach { code ->
+            assertFalse(code, failed(UsbOutputFailure.PLATFORM_ERROR, code).dialogAddsGenericAdvice())
+        }
+        assertTrue(failed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed").dialogAddsGenericAdvice())
+        assertFalse(failed(UsbOutputFailure.MIXER_CLEAR_FAILED, "mixer_clear_failed").dialogAddsGenericAdvice())
+    }
+
     @Test fun `a saved strict mode turns off even where it can never turn on`() {
         assertTrue(strictUsbSwitchEnabled(canSetMode = true, platformUnavailable = true, strictOn = true))
         assertFalse(strictUsbSwitchEnabled(canSetMode = true, platformUnavailable = true, strictOn = false))

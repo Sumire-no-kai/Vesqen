@@ -207,6 +207,34 @@ class TrackTagExtractorTest {
     }
 
     @Test
+    fun zeroPaddingOutsideTheId3TagDoesNotHideTheFirstMp3Frame() {
+        val tag = id3(3, frame3("TCOM", utf8Frame("Composer")))
+        val frame = byteArrayOf(0xff.toByte(), 0xfb.toByte(), 0x90.toByte(), 0x64) + ByteArray(413)
+        for (padding in listOf(1, 4096, 64 * 1024)) {
+            val tags = extract(tag + ByteArray(padding) + frame)
+            assertEquals("padding: $padding", "MPEG Audio", tags.container)
+            assertEquals("Composer", tags.composer)
+        }
+    }
+
+    @Test
+    fun postTagProbeStopsAtUnknownDataTruncationOrItsPaddingLimit() {
+        val tag = id3(3, frame3("TCOM", utf8Frame("Composer")))
+        val header = byteArrayOf(0xff.toByte(), 0xfb.toByte(), 0x90.toByte(), 0x64)
+        val unrecognized = listOf(
+            ByteArray(20),
+            byteArrayOf(0, 0, 0xff.toByte()),
+            byteArrayOf(0, 1) + header,
+            ByteArray(64 * 1024 + 1) + header,
+        )
+        for (tail in unrecognized) {
+            val tags = extract(tag + tail)
+            assertNull(tags.container)
+            assertEquals("Composer", tags.composer)
+        }
+    }
+
+    @Test
     fun repeatedCommentCreditsAreAllKept() {
         val tags = extract(
             "fLaC".toByteArray() + flacBlock(

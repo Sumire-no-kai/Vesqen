@@ -26,6 +26,7 @@ import io.github.sumirenokai.vesqen.usb.plan.UsbBusSpeed
 import io.github.sumirenokai.vesqen.usb.session.DirectUsbFailure.Reason
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -48,6 +49,24 @@ class DirectUsbSessionUac2Test {
 
     @After fun stopControl() {
         control.shutdownNow()
+    }
+
+    @Test
+    fun `a confirmed fixed volume UAC2 output still configures its clock without touching volume`() {
+        val fixed = FUNCTION.copy(featureUnits = FUNCTION.featureUnits.map {
+            it.copy(masterVolume = UacControlAccess.READ_ONLY)
+        })
+        device.rate = 44_100
+        val session = session(fixed)
+        val ready = takeOver(session, plan(48_000, fixed), fixedVolumeConfirmed = true) as DirectUsbSession.Takeover.Ready
+        assertNull(ready.volumeBefore)
+        assertNull(ready.volumeNow)
+        assertNull(session.volumeRange)
+        assertTrue(events.indexOf("set clock 10 48000") in 0 until events.indexOf("alternate 1/1"))
+        assertFalse(events.any { it.contains("volume") })
+        session.release()
+        control.submit {}.get(2, TimeUnit.SECONDS)
+        assertTrue(events.contains("close"))
     }
 
     @Test
@@ -181,10 +200,10 @@ class DirectUsbSessionUac2Test {
         timing = DirectUsbSession.Timing(monitorPeriodMs = 10, retireTimeoutMs = 150, destroyTimeoutMs = 1, destroyRetryMs = 20),
     )
 
-    private fun takeOver(session: DirectUsbSession, plan: StreamingPlan): DirectUsbSession.Takeover {
+    private fun takeOver(session: DirectUsbSession, plan: StreamingPlan, fixedVolumeConfirmed: Boolean = false): DirectUsbSession.Takeover {
         val result = AtomicReference<DirectUsbSession.Takeover>()
         val done = CountDownLatch(1)
-        session.takeOver(plan, START_VOLUME) {
+        session.takeOver(plan, START_VOLUME, fixedVolumeConfirmed) {
             result.set(it)
             done.countDown()
         }

@@ -464,6 +464,17 @@ class PlaybackController(
         }
     }
 
+    fun answerUsbOutputConsent(status: UsbOutputStatus, accept: Boolean) {
+        val active = controller ?: return
+        val command = SessionCommand(UsbOutputSessionContract.OUTPUT_CONSENT_ACTION, Bundle.EMPTY)
+        if (!active.isSessionCommandAvailable(command)) return
+        active.sendCustomCommand(command, Bundle().apply {
+            putLong(UsbOutputSessionContract.GENERATION, status.generation)
+            putLong(UsbOutputSessionContract.OBSERVED_AT_ELAPSED, status.observedAtElapsedRealtimeMs)
+            putBoolean(UsbOutputSessionContract.ACCEPT_OUTPUT_CONSENT, accept)
+        })
+    }
+
     fun setUsbOutputMode(mode: UsbOutputMode) {
         val activeController = controller ?: return
         if (!activeController.isSessionCommandAvailable(usbOutputCommand)) return
