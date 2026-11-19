@@ -1,7 +1,7 @@
 # Vesqen Privacy Policy
 
 - Effective date: September 26, 2026
-- Last updated: November 16, 2026
+- Last updated: November 19, 2026
 
 This policy explains what information the Vesqen Android app handles, where that information stays, what the app sends over the network, and what we receive when you contact us or join a test. It applies to every build of Vesqen we distribute, including Google Play and GitHub Releases, and to the Vesqen website.
 
