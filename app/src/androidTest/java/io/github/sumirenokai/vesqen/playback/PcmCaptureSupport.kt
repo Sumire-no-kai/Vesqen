@@ -11,6 +11,7 @@ import androidx.media3.exoplayer.audio.AudioOutput
 import androidx.media3.exoplayer.audio.AudioOutputProvider
 import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
 import androidx.media3.exoplayer.audio.ForwardingAudioOutputProvider
+import androidx.test.platform.app.InstrumentationRegistry
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
@@ -20,7 +21,22 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.floor
 import kotlin.math.min
 
-internal enum class PcmContainer { WAV, FLAC, AIFF }
+internal enum class PcmContainer {
+    WAV,
+    FLAC,
+    AIFF,
+
+    /**
+     * Android has no ALAC encoder, so `tools/generate_alac_fixtures.py` encodes the same samples on a
+     * computer and the test APK carries them; only the names that script lists exist (#270).
+     */
+    ALAC;
+
+    companion object {
+        /** The containers a [PcmFixture] writes itself, for any rate, depth and duration. */
+        val generated = listOf(WAV, FLAC, AIFF)
+    }
+}
 
 /** Deterministic full-range stereo noise: every sample differs, so alignment is unambiguous. */
 internal class PcmFixture(
@@ -44,6 +60,11 @@ internal class PcmFixture(
             PcmContainer.WAV -> File(directory, "$name.wav").also { it.writeBytes(wavBytes()) }
             PcmContainer.FLAC -> File(directory, "$name.flac").also { it.writeBytes(flacBytes()) }
             PcmContainer.AIFF -> File(directory, "$name.aiff").also { it.writeBytes(aiffBytes()) }
+            PcmContainer.ALAC -> File(directory, "$name.m4a").also { file ->
+                InstrumentationRegistry.getInstrumentation().context.assets.open("pcm-capture/$name.m4a").use { input ->
+                    file.outputStream().use(input::copyTo)
+                }
+            }
         }
     }
 

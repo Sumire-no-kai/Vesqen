@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen.playback
 
 import android.content.Context
+import android.media.MediaCodecList
 import android.media.MediaCrypto
 import android.net.Uri
 import android.os.Handler
@@ -75,19 +76,35 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
     }
 
     @Test
-    fun wholeFile() = forEachFixture { fixture ->
-        capture { session ->
-            session.play(fixture.write(directory))
-            session.awaitEnded()
-            val output = session.outputs.single()
-            if (!output.lostPrecision(fixture, "whole")) {
-                val comparison = output.compareWith(fixture.samples, fixture)
-                report("whole", fixture, comparison)
-                assertStartAsExpected(fixture, comparison, "whole ${fixture.name}")
-                assertWholeSource(comparison, "whole ${fixture.name}")
-                session.assertEndedAt(fixture.durationUs, "whole ${fixture.name}")
-            }
+    fun wholeFile() = forEachFixture(::assertWholeFile)
+
+    /**
+     * #270: Qualcomm's ALAC decoders rejected the decoder configuration Media3 passes, so every
+     * ALAC file failed to play. Whatever decoder the phone picks must now return the source samples.
+     */
+    @Test
+    fun alacWholeFile() {
+        assumeTrue("This device has no ALAC decoder", hasDecoder(MimeTypes.AUDIO_ALAC))
+        for ((sampleRateHz, bitDepth) in listOf(44_100 to 16, 48_000 to 24, 96_000 to 24)) {
+            assertWholeFile(PcmFixture(PcmContainer.ALAC, sampleRateHz, bitDepth, ALAC_DURATION_MS, seed = 1))
         }
+    }
+
+    private fun assertWholeFile(fixture: PcmFixture) = capture { session ->
+        session.play(fixture.write(directory))
+        session.awaitEnded()
+        val output = session.outputs.single()
+        if (!output.lostPrecision(fixture, "whole")) {
+            val comparison = output.compareWith(fixture.samples, fixture)
+            report("whole", fixture, comparison)
+            assertStartAsExpected(fixture, comparison, "whole ${fixture.name}")
+            assertWholeSource(comparison, "whole ${fixture.name}")
+            session.assertEndedAt(fixture.durationUs, "whole ${fixture.name}")
+        }
+    }
+
+    private fun hasDecoder(mimeType: String) = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { codec ->
+        !codec.isEncoder && codec.supportedTypes.any { it.equals(mimeType, ignoreCase = true) }
     }
 
     @Test
@@ -172,7 +189,7 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
 
     @Test
     fun formatChanges() {
-        for (container in PcmContainer.entries) {
+        for (container in PcmContainer.generated) {
             val tracks = listOf(
                 PcmFixture(container, 44_100, 16, DURATION_MS, seed = 1),
                 PcmFixture(container, 96_000, 24, DURATION_MS, seed = 2),
@@ -199,7 +216,7 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
     /** Shorter than the fade: the baseline fades all of it, and EOS must still close. */
     @Test
     fun trackShorterThanTheFade() {
-        for (container in PcmContainer.entries) {
+        for (container in PcmContainer.generated) {
             val fixture = PcmFixture(container, 48_000, 16, SHORT_DURATION_MS, seed = 1)
             capture { session ->
                 session.play(fixture.write(directory))
@@ -236,7 +253,7 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
 
     @Test
     fun progressFollowsTheSourceAfterSeek() {
-        for (container in PcmContainer.entries) {
+        for (container in PcmContainer.generated) {
             val fixture = PcmFixture(container, 48_000, 16, DURATION_MS, seed = 1)
             capture(progressOptions(fixture)) { session ->
                 session.play(fixture.write(directory))
@@ -257,7 +274,7 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
     /** A full output accepts part of a buffer. */
     @Test
     fun partialWrites() {
-        for (container in PcmContainer.entries) {
+        for (container in PcmContainer.generated) {
             val fixture = PcmFixture(container, 48_000, 16, DURATION_MS / 2, seed = 1)
             capture(CaptureOptions(maxFramesPerWrite = 64)) { session ->
                 session.play(fixture.write(directory))
@@ -475,7 +492,7 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
     }
 
     private fun forEachFixture(block: (PcmFixture) -> Unit) {
-        for (container in PcmContainer.entries) {
+        for (container in PcmContainer.generated) {
             block(PcmFixture(container, 44_100, 16, DURATION_MS, seed = 1))
             block(PcmFixture(container, 48_000, 24, DURATION_MS, seed = 1))
             block(PcmFixture(container, 96_000, 24, DURATION_MS, seed = 1))
@@ -504,6 +521,9 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
         private const val TAG = "Media3PcmCapture"
         private const val DURATION_MS = 2_000
         private const val SHORT_DURATION_MS = 10
+
+        /** The length `tools/generate_alac_fixtures.py` encodes. */
+        private const val ALAC_DURATION_MS = 200
         private const val SEEK_POSITION_MS = 1_000
         private const val PROGRESS_SAMPLE_US = 300_000L
         private const val DRAIN_WAIT_MS = 500L
