@@ -10,6 +10,8 @@ import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
 import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
 import androidx.media3.exoplayer.video.VideoRendererEventListener
 import androidx.test.platform.app.InstrumentationRegistry
+import java.nio.ByteBuffer
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -28,6 +30,26 @@ class VesqenAudioRendererDeviceTest {
         val withoutRequest = MediaFormat.createAudioFormat("audio/mpeg", 44_100, 2)
         withoutRequest.keepIntegerPcmForOmx("OMX.google.mp3.decoder")
         assertFalse(withoutRequest.containsKey(MediaFormat.KEY_PCM_ENCODING))
+    }
+
+    /** #270: only Qualcomm's ALAC decoders get the little-endian cookie; others keep Media3's box. */
+    @Test
+    fun onlyQualcommAlacDecodersGetTheLittleEndianCookie() {
+        val box = byteArrayOf(0, 0, 0, 0x24, 0x61, 0x6c, 0x61, 0x63, 0, 0, 0, 0) +
+            byteArrayOf(0, 0, 0x10, 0, 0, 0x10, 0x28, 0x0a, 0x0e, 0x02, 0, 0xff.toByte()) +
+            byteArrayOf(0, 0, 0x07, 0x9b.toByte(), 0, 0x02, 0x61, 0x2b, 0, 0, 0xac.toByte(), 0x44)
+        fun csdFor(codecName: String, mimeType: String = "audio/alac"): ByteArray {
+            val format = MediaFormat.createAudioFormat(mimeType, 44_100, 2)
+            format.setByteBuffer("csd-0", ByteBuffer.wrap(box))
+            format.adaptToDecoder(codecName)
+            val csd = format.getByteBuffer("csd-0")!!
+            return ByteArray(csd.remaining()).also { csd.duplicate().get(it) }
+        }
+        assertArrayEquals(alacLittleEndianCookie(box), csdFor("c2.qti.alac.sw.decoder"))
+        assertArrayEquals(alacLittleEndianCookie(box), csdFor("c2.qti.alac.hw.decoder"))
+        assertArrayEquals(box, csdFor("c2.vivo.alac.decoder"))
+        assertArrayEquals(box, csdFor("OMX.vivo.alac.decoder"))
+        assertArrayEquals(box, csdFor("c2.qti.alac.sw.decoder", mimeType = "audio/flac"))
     }
 
     @Test

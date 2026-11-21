@@ -6,6 +6,7 @@ import android.media.MediaCrypto
 import android.media.MediaFormat
 import android.os.Handler
 import androidx.media3.common.Format
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.Renderer
@@ -18,6 +19,8 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
 import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import io.github.sumirenokai.vesqen.telemetry.DecoderOutputFormat
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /** Media3 stays the engine; this factory exposes its exact AudioTrack request to the M3 adapter. */
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -86,7 +89,7 @@ private class VesqenAudioRenderer(
         codecOperatingRate: Float,
     ): MediaCodecAdapter.Configuration =
         super.getMediaCodecConfiguration(codecInfo, format, crypto, codecOperatingRate).also {
-            it.mediaFormat.keepIntegerPcmForOmx(codecInfo.name)
+            it.mediaFormat.adaptToDecoder(codecInfo.name)
         }
 
     override fun onOutputFormatChanged(format: Format, mediaFormat: MediaFormat?) {
@@ -121,6 +124,50 @@ internal fun decoderOutputFormat(format: Format, mediaFormat: MediaFormat?): Dec
             fromCodec = true,
         )
     }
+
+/** What every Vesqen audio renderer changes in Media3's codec configuration for the chosen decoder. */
+internal fun MediaFormat.adaptToDecoder(codecName: String) {
+    keepIntegerPcmForOmx(codecName)
+    useQualcommAlacCookie(codecName)
+}
+
+/**
+ * #270: Media3 passes an ALAC track's whole 36-byte `alac` box as csd-0, and AOSP's MP4 extractor
+ * passes the 24-byte cookie inside it unchanged, big-endian. Qualcomm's Codec2 ALAC decoders accept
+ * neither: they take the cookie only with its multi-byte fields little-endian, as that phone's own
+ * extractor hands it over, and otherwise fail at the first input. Other decoders keep Media3's box.
+ */
+internal fun MediaFormat.useQualcommAlacCookie(codecName: String) {
+    if (!codecName.startsWith(QUALCOMM_ALAC_DECODER_PREFIX) || getString(MediaFormat.KEY_MIME) != MimeTypes.AUDIO_ALAC) return
+    val csd = getByteBuffer(CSD_0) ?: return
+    val box = ByteArray(csd.remaining()).also { csd.duplicate().get(it) }
+    alacLittleEndianCookie(box)?.let { setByteBuffer(CSD_0, ByteBuffer.wrap(it)) }
+}
+
+/**
+ * The 24-byte ALACSpecificConfig of a 36-byte `alac` box, with frameLength, maxRun, maxFrameBytes,
+ * avgBitRate and sampleRate little-endian. Null for anything else, which is then passed on as it is.
+ */
+internal fun alacLittleEndianCookie(box: ByteArray): ByteArray? {
+    if (box.size != ALAC_BOX_BYTES) return null
+    val source = ByteBuffer.wrap(box).order(ByteOrder.BIG_ENDIAN)
+    if (source.getInt(0) != ALAC_BOX_BYTES || source.getInt(4) != ALAC_BOX_TYPE || source.getInt(8) != 0) return null
+    // The config follows the box size, type, version and flags.
+    val config = 12
+    return ByteBuffer.allocate(ALAC_BOX_BYTES - config).order(ByteOrder.LITTLE_ENDIAN).apply {
+        putInt(source.getInt(config)) // frameLength
+        put(box, config + 4, 6) // compatibleVersion, bitDepth, pb, mb, kb, numChannels
+        putShort(source.getShort(config + 10)) // maxRun
+        putInt(source.getInt(config + 12)) // maxFrameBytes
+        putInt(source.getInt(config + 16)) // avgBitRate
+        putInt(source.getInt(config + 20)) // sampleRate
+    }.array()
+}
+
+private const val QUALCOMM_ALAC_DECODER_PREFIX = "c2.qti.alac."
+private const val CSD_0 = "csd-0"
+private const val ALAC_BOX_BYTES = 36
+private const val ALAC_BOX_TYPE = 0x616c6163 // "alac"
 
 /**
  * With float output on, Media3 asks every decoder for float PCM. Codec2 decoders (`c2.*`) handle
