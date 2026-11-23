@@ -32,24 +32,23 @@ class VesqenAudioRendererDeviceTest {
         assertFalse(withoutRequest.containsKey(MediaFormat.KEY_PCM_ENCODING))
     }
 
-    /** #270: only Qualcomm's ALAC decoders get the little-endian cookie; others keep Media3's box. */
+    /** #270: only Qualcomm's ALAC decoders get the little-endian config; others keep Media3's. */
     @Test
-    fun onlyQualcommAlacDecodersGetTheLittleEndianCookie() {
-        val box = byteArrayOf(0, 0, 0, 0x24, 0x61, 0x6c, 0x61, 0x63, 0, 0, 0, 0) +
-            byteArrayOf(0, 0, 0x10, 0, 0, 0x10, 0x28, 0x0a, 0x0e, 0x02, 0, 0xff.toByte()) +
+    fun onlyQualcommAlacDecodersGetTheLittleEndianConfig() {
+        val stored = byteArrayOf(0, 0, 0x10, 0, 0, 0x10, 0x28, 0x0a, 0x0e, 0x02, 0, 0xff.toByte()) +
             byteArrayOf(0, 0, 0x07, 0x9b.toByte(), 0, 0x02, 0x61, 0x2b, 0, 0, 0xac.toByte(), 0x44)
         fun csdFor(codecName: String, mimeType: String = "audio/alac"): ByteArray {
             val format = MediaFormat.createAudioFormat(mimeType, 44_100, 2)
-            format.setByteBuffer("csd-0", ByteBuffer.wrap(box))
+            format.setByteBuffer("csd-0", ByteBuffer.wrap(stored))
             format.adaptToDecoder(codecName)
             val csd = format.getByteBuffer("csd-0")!!
             return ByteArray(csd.remaining()).also { csd.duplicate().get(it) }
         }
-        assertArrayEquals(alacLittleEndianCookie(box), csdFor("c2.qti.alac.sw.decoder"))
-        assertArrayEquals(alacLittleEndianCookie(box), csdFor("c2.qti.alac.hw.decoder"))
-        assertArrayEquals(box, csdFor("c2.vivo.alac.decoder"))
-        assertArrayEquals(box, csdFor("OMX.vivo.alac.decoder"))
-        assertArrayEquals(box, csdFor("c2.qti.alac.sw.decoder", mimeType = "audio/flac"))
+        assertArrayEquals(alacLittleEndianCookie(stored, 44_100), csdFor("c2.qti.alac.sw.decoder"))
+        assertArrayEquals(alacLittleEndianCookie(stored, 44_100), csdFor("c2.qti.alac.hw.decoder"))
+        assertArrayEquals(stored, csdFor("c2.vivo.alac.decoder"))
+        assertArrayEquals(stored, csdFor("OMX.vivo.alac.decoder"))
+        assertArrayEquals(stored, csdFor("c2.qti.alac.sw.decoder", mimeType = "audio/flac"))
     }
 
     @Test

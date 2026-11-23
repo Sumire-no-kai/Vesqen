@@ -132,42 +132,41 @@ internal fun MediaFormat.adaptToDecoder(codecName: String) {
 }
 
 /**
- * #270: Media3 passes an ALAC track's whole 36-byte `alac` box as csd-0, and AOSP's MP4 extractor
- * passes the 24-byte cookie inside it unchanged, big-endian. Qualcomm's Codec2 ALAC decoders accept
- * neither: they take the cookie only with its multi-byte fields little-endian, as that phone's own
- * extractor hands it over, and otherwise fail at the first input. Other decoders keep Media3's box.
+ * #270: Media3 passes an ALAC track's 24-byte ALACSpecificConfig as csd-0 the way the file stores
+ * it, big-endian, as AOSP's MP4 extractor does. Qualcomm's Codec2 ALAC decoders reject that and
+ * fail right after starting: they take the config only with its multi-byte fields little-endian,
+ * as that phone's own extractor hands it over. Other decoders keep the config as it is.
  */
 internal fun MediaFormat.useQualcommAlacCookie(codecName: String) {
     if (!codecName.startsWith(QUALCOMM_ALAC_DECODER_PREFIX) || getString(MediaFormat.KEY_MIME) != MimeTypes.AUDIO_ALAC) return
+    if (!containsKey(MediaFormat.KEY_SAMPLE_RATE)) return
     val csd = getByteBuffer(CSD_0) ?: return
-    val box = ByteArray(csd.remaining()).also { csd.duplicate().get(it) }
-    alacLittleEndianCookie(box)?.let { setByteBuffer(CSD_0, ByteBuffer.wrap(it)) }
+    val config = ByteArray(csd.remaining()).also { csd.duplicate().get(it) }
+    alacLittleEndianCookie(config, getInteger(MediaFormat.KEY_SAMPLE_RATE))?.let { setByteBuffer(CSD_0, ByteBuffer.wrap(it)) }
 }
 
 /**
- * The 24-byte ALACSpecificConfig of a 36-byte `alac` box, with frameLength, maxRun, maxFrameBytes,
- * avgBitRate and sampleRate little-endian. Null for anything else, which is then passed on as it is.
+ * A big-endian ALACSpecificConfig with frameLength, maxRun, maxFrameBytes, avgBitRate and
+ * sampleRate made little-endian. Null unless it is 24 bytes and states [sampleRateHz] big-endian,
+ * so a config that is already little-endian, or anything else, passes on unchanged.
  */
-internal fun alacLittleEndianCookie(box: ByteArray): ByteArray? {
-    if (box.size != ALAC_BOX_BYTES) return null
-    val source = ByteBuffer.wrap(box).order(ByteOrder.BIG_ENDIAN)
-    if (source.getInt(0) != ALAC_BOX_BYTES || source.getInt(4) != ALAC_BOX_TYPE || source.getInt(8) != 0) return null
-    // The config follows the box size, type, version and flags.
-    val config = 12
-    return ByteBuffer.allocate(ALAC_BOX_BYTES - config).order(ByteOrder.LITTLE_ENDIAN).apply {
-        putInt(source.getInt(config)) // frameLength
-        put(box, config + 4, 6) // compatibleVersion, bitDepth, pb, mb, kb, numChannels
-        putShort(source.getShort(config + 10)) // maxRun
-        putInt(source.getInt(config + 12)) // maxFrameBytes
-        putInt(source.getInt(config + 16)) // avgBitRate
-        putInt(source.getInt(config + 20)) // sampleRate
+internal fun alacLittleEndianCookie(config: ByteArray, sampleRateHz: Int): ByteArray? {
+    if (config.size != ALAC_CONFIG_BYTES) return null
+    val source = ByteBuffer.wrap(config).order(ByteOrder.BIG_ENDIAN)
+    if (source.getInt(20) != sampleRateHz) return null
+    return ByteBuffer.allocate(ALAC_CONFIG_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
+        putInt(source.getInt(0)) // frameLength
+        put(config, 4, 6) // compatibleVersion, bitDepth, pb, mb, kb, numChannels
+        putShort(source.getShort(10)) // maxRun
+        putInt(source.getInt(12)) // maxFrameBytes
+        putInt(source.getInt(16)) // avgBitRate
+        putInt(source.getInt(20)) // sampleRate
     }.array()
 }
 
 private const val QUALCOMM_ALAC_DECODER_PREFIX = "c2.qti.alac."
 private const val CSD_0 = "csd-0"
-private const val ALAC_BOX_BYTES = 36
-private const val ALAC_BOX_TYPE = 0x616c6163 // "alac"
+private const val ALAC_CONFIG_BYTES = 24
 
 /**
  * With float output on, Media3 asks every decoder for float PCM. Codec2 decoders (`c2.*`) handle
