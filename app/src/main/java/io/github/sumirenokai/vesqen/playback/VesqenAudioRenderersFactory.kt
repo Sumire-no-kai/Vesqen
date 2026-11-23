@@ -5,10 +5,13 @@ import android.media.AudioFormat
 import android.media.MediaCrypto
 import android.media.MediaFormat
 import android.os.Handler
+import androidx.media3.common.C
 import androidx.media3.common.Format
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.RendererCapabilities
 import androidx.media3.exoplayer.audio.AudioOutputProvider
 import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioSink
@@ -79,6 +82,9 @@ private class VesqenAudioRenderer(
     context, codecAdapterFactory, mediaCodecSelector, enableDecoderFallback,
     eventHandler, eventListener, audioSink,
 ) {
+    override fun supportsFormat(mediaCodecSelector: MediaCodecSelector, format: Format): Int =
+        reportMissingDecoder(super.supportsFormat(mediaCodecSelector, format), format.sampleMimeType)
+
     override fun getMediaCodecConfiguration(
         codecInfo: MediaCodecInfo,
         format: Format,
@@ -120,6 +126,24 @@ internal fun decoderOutputFormat(format: Format, mediaFormat: MediaFormat?): Dec
             },
             fromCodec = true,
         )
+    }
+
+/**
+ * #344: with no usable decoder for an encoded audio track, Media3 answers FORMAT_UNSUPPORTED_SUBTYPE,
+ * leaves the track unselected and lets the item run silently to its end: no error, and a listen is
+ * counted. Answered as FORMAT_EXCEEDS_CAPABILITIES, the track is selected anyway, decoder
+ * initialisation fails and the usual playback error (4001) stops on that track. For encoded audio
+ * the answer otherwise only means that the sink refuses 16-bit PCM at the track's channel count and
+ * rate, which both of Vesqen's sinks accept; that would now fail visibly as well. Raw PCM keeps the
+ * answer, because there it means the sink refuses the encoding. Recheck after a Media3 upgrade.
+ */
+internal fun reportMissingDecoder(capabilities: Int, sampleMimeType: String?): Int =
+    if (RendererCapabilities.getFormatSupport(capabilities) == C.FORMAT_UNSUPPORTED_SUBTYPE &&
+        sampleMimeType != MimeTypes.AUDIO_RAW
+    ) {
+        RendererCapabilities.create(C.FORMAT_EXCEEDS_CAPABILITIES)
+    } else {
+        capabilities
     }
 
 /**

@@ -1087,7 +1087,8 @@ private const val RECONNECT_BASE_DELAY_MS = 500L
 private const val RECONNECT_MAX_SHIFT = 5
 private const val RECONNECT_MAX_DELAY_MS = 10_000L
 
-private fun PlaybackException.toPlaybackProblem(): PlaybackProblem {
+/** Internal so tests can pin which existing text each kind of failure shows. */
+internal fun PlaybackException.toPlaybackProblem(): PlaybackProblem {
     val name = errorCodeName.uppercase()
     return when {
         "FILE_NOT_FOUND" in name || "NO_PERMISSION" in name -> PlaybackProblem.SOURCE_UNAVAILABLE
