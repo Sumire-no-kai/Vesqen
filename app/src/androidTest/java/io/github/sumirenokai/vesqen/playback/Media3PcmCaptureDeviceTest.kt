@@ -22,6 +22,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.RenderersFactory
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioOutput
 import androidx.media3.exoplayer.audio.AudioOutputProvider
 import androidx.media3.exoplayer.audio.ForwardingAudioOutputProvider
@@ -37,6 +38,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
@@ -85,27 +87,69 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
     @Test
     fun alacWholeFile() {
         assumeTrue("This device has no ALAC decoder", hasDecoder(MimeTypes.AUDIO_ALAC))
-        for ((sampleRateHz, bitDepth) in listOf(44_100 to 16, 48_000 to 24, 96_000 to 24)) {
-            assertWholeFile(PcmFixture(PcmContainer.ALAC, sampleRateHz, bitDepth, ALAC_DURATION_MS, seed = 1))
+        for (fixture in alacFixtures()) {
+            // Only an OMX decoder, which Vesqen asks for 16-bit PCM, may drop a 24-bit file's low bits.
+            assertWholeFile(fixture, precisionMayDrop = { decoders -> decoders.none { it.startsWith("c2.") } })
         }
     }
 
-    private fun assertWholeFile(fixture: PcmFixture) = capture { session ->
+    /**
+     * #270: Qualcomm's ALAC hardware decoder mislabels its PCM: asked for float it wrote 16-bit
+     * samples, asked for 16-bit it wrote a 24-bit file's 24-bit samples. Even when the platform lists
+     * it first, the software decoder must decode every file exactly.
+     */
+    @Test
+    fun alacWithQualcommHardwareDecoderListedFirst() {
+        assumeTrue(
+            "This device lacks Qualcomm's ALAC decoders",
+            hasDecoderNamed(QUALCOMM_ALAC_HARDWARE) && hasDecoderNamed(QUALCOMM_ALAC_SOFTWARE),
+        )
+        for (fixture in alacFixtures()) {
+            assertWholeFile(fixture, listedFirst = QUALCOMM_ALAC_HARDWARE, precisionMayDrop = { false }) { decoders ->
+                assertEquals("decoders for ${fixture.name}", listOf(QUALCOMM_ALAC_SOFTWARE), decoders)
+            }
+        }
+    }
+
+    /**
+     * When the decoder delivers fewer bits than the file holds, no sample comparison can succeed,
+     * but the output must still be whole and [precisionMayDrop] must allow it for the decoders that
+     * ran. [listedFirst] moves that decoder to the front of the platform's list.
+     */
+    private fun assertWholeFile(
+        fixture: PcmFixture,
+        listedFirst: String? = null,
+        precisionMayDrop: (List<String>) -> Boolean = { true },
+        checkDecoders: (List<String>) -> Unit = {},
+    ) = capture(listedFirst = listedFirst) { session ->
         session.play(fixture.write(directory))
         session.awaitEnded()
+        val label = "whole ${fixture.name}"
+        checkDecoders(session.audioDecoders)
+        session.assertEndedAt(fixture.durationUs, label)
         val output = session.outputs.single()
-        if (!output.lostPrecision(fixture, "whole")) {
+        if (output.lostPrecision(fixture, "whole")) {
+            assertTrue("$label: ${session.audioDecoders} dropped the source's bit depth", precisionMayDrop(session.audioDecoders))
+            assertEquals("$label: frames", fixture.frameCount, output.capturedPcm().frameCount)
+        } else {
             val comparison = output.compareWith(fixture.samples, fixture)
             report("whole", fixture, comparison)
-            assertStartAsExpected(fixture, comparison, "whole ${fixture.name}")
-            assertWholeSource(comparison, "whole ${fixture.name}")
-            session.assertEndedAt(fixture.durationUs, "whole ${fixture.name}")
+            assertStartAsExpected(fixture, comparison, label)
+            assertWholeSource(comparison, label)
         }
     }
 
-    private fun hasDecoder(mimeType: String) = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { codec ->
-        !codec.isEncoder && codec.supportedTypes.any { it.equals(mimeType, ignoreCase = true) }
+    private fun alacFixtures() = listOf(44_100 to 16, 48_000 to 24, 96_000 to 24).map { (sampleRateHz, bitDepth) ->
+        PcmFixture(PcmContainer.ALAC, sampleRateHz, bitDepth, ALAC_DURATION_MS, seed = 1)
     }
+
+    private fun decoders() = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filterNot { it.isEncoder }
+
+    private fun hasDecoder(mimeType: String) = decoders().any { codec ->
+        codec.supportedTypes.any { it.equals(mimeType, ignoreCase = true) }
+    }
+
+    private fun hasDecoderNamed(name: String) = decoders().any { it.name == name }
 
     @Test
     fun afterSeek() = forEachFixture { fixture ->
@@ -499,16 +543,22 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
         }
     }
 
-    private fun capture(options: CaptureOptions = CaptureOptions(), block: (CaptureSession) -> Unit) {
+    /** [listedFirst] moves that decoder to the front of the platform's list; the renderer still filters it. */
+    private fun capture(options: CaptureOptions = CaptureOptions(), listedFirst: String? = null, block: (CaptureSession) -> Unit) {
         val provider = CapturingAudioOutputProvider(
             context,
             options.copy(answersFormats = guard == PcmGuard.STRICT_SINK),
         )
         val probe = if (guard == PcmGuard.NONE) null else PositionProbeAudioSink(StrictPcmAudioSink(provider))
-        val factory: RenderersFactory = if (probe == null) {
+        val factory: DefaultRenderersFactory = if (probe == null) {
             VesqenAudioRenderersFactory(context, provider)
         } else {
             GuardedRenderersFactory(context, probe)
+        }
+        listedFirst?.let { name ->
+            factory.setMediaCodecSelector { mimeType, secure, tunneling ->
+                MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, secure, tunneling).sortedBy { it.name != name }
+            }
         }
         CaptureSession(context, factory, provider, probe).use(block)
     }
@@ -524,6 +574,8 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
 
         /** The length `tools/generate_alac_fixtures.py` encodes. */
         private const val ALAC_DURATION_MS = 200
+        private const val QUALCOMM_ALAC_HARDWARE = "c2.qti.alac.hw.decoder"
+        private const val QUALCOMM_ALAC_SOFTWARE = "c2.qti.alac.sw.decoder"
         private const val SEEK_POSITION_MS = 1_000
         private const val PROGRESS_SAMPLE_US = 300_000L
         private const val DRAIN_WAIT_MS = 500L
@@ -577,12 +629,25 @@ private class CaptureSession(
     @Volatile
     private var ended = CountDownLatch(1)
 
+    /** The audio decoders Media3 initialised, in order. */
+    val audioDecoders = CopyOnWriteArrayList<String>()
+
     private val player: ExoPlayer = onPlayer {
         ExoPlayer.Builder(context, factory)
             .setMediaSourceFactory(DefaultMediaSourceFactory(context, VesqenExtractorsFactory()))
             .setLooper(thread.looper)
             .build()
             .also { player ->
+                player.addAnalyticsListener(object : AnalyticsListener {
+                    override fun onAudioDecoderInitialized(
+                        eventTime: AnalyticsListener.EventTime,
+                        decoderName: String,
+                        initializedTimestampMs: Long,
+                        initializationDurationMs: Long,
+                    ) {
+                        audioDecoders += decoderName
+                    }
+                })
                 player.addListener(object : Player.Listener {
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         if (playbackState == Player.STATE_ENDED) ended.countDown()

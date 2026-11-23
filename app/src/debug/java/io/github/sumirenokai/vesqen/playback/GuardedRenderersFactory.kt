@@ -38,7 +38,8 @@ internal class GuardedRenderersFactory(
     ) {
         out.add(
             object : MediaCodecAudioRenderer(
-                context, codecAdapterFactory, mediaCodecSelector, enableDecoderFallback,
+                context, EmptyOutputDroppingAdapterFactory(codecAdapterFactory),
+                mediaCodecSelector.withoutMislabellingDecoders(), enableDecoderFallback,
                 eventHandler, eventListener, audioSink,
             ) {
                 override fun getMediaCodecConfiguration(

@@ -2,6 +2,7 @@ package io.github.sumirenokai.vesqen.playback
 
 import android.content.Context
 import android.media.AudioFormat
+import android.media.MediaCodec
 import android.media.MediaCrypto
 import android.media.MediaFormat
 import android.os.Handler
@@ -61,7 +62,8 @@ internal class VesqenAudioRenderersFactory(
         // Vesqen ships no decoder extensions, so this is the whole list Media3 would build.
         out.add(
             VesqenAudioRenderer(
-                context, codecAdapterFactory, mediaCodecSelector, enableDecoderFallback,
+                context, EmptyOutputDroppingAdapterFactory(codecAdapterFactory),
+                mediaCodecSelector.withoutMislabellingDecoders(), enableDecoderFallback,
                 eventHandler, eventListener, audioSink, onDecoderOutputFormat,
             ),
         )
@@ -125,6 +127,49 @@ internal fun decoderOutputFormat(format: Format, mediaFormat: MediaFormat?): Dec
         )
     }
 
+/**
+ * #270: whatever PCM encoding it is asked for, Qualcomm's ALAC hardware decoder writes the file's
+ * own bit depth and reports the requested encoding: float for a 16-bit file, 16-bit for a 24-bit one
+ * (iQOO 9, Android 15). Media3 then reads noise of the wrong length. The software decoder Qualcomm
+ * lists beside it decodes exactly, so the hardware one is never offered to a Vesqen renderer.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+internal fun MediaCodecSelector.withoutMislabellingDecoders() = MediaCodecSelector { mimeType, secure, tunneling ->
+    getDecoderInfos(mimeType, secure, tunneling).filterNot { it.name == QUALCOMM_ALAC_HARDWARE_DECODER }
+}
+
+/**
+ * #270: right after starting, before any input, Qualcomm's ALAC decoders answer the codec config
+ * with an empty output buffer (no data, no flags, time 0; 30 of 30 starts on an iQOO 9). When
+ * Media3 drains it before queueing the first sample, it has no format for it and fails with a
+ * NullPointerException, about one start in twenty. Such a buffer carries nothing, so it is released
+ * before Media3 sees it. Other decoders keep their adapters as they are.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+internal class EmptyOutputDroppingAdapterFactory(private val delegate: MediaCodecAdapter.Factory) : MediaCodecAdapter.Factory {
+    override fun createAdapter(configuration: MediaCodecAdapter.Configuration): MediaCodecAdapter {
+        val adapter = delegate.createAdapter(configuration)
+        return if (configuration.codecInfo.name.startsWith(QUALCOMM_ALAC_DECODER_PREFIX)) EmptyOutputDroppingAdapter(adapter) else adapter
+    }
+}
+
+@androidx.annotation.OptIn(UnstableApi::class)
+internal class EmptyOutputDroppingAdapter(private val delegate: MediaCodecAdapter) : MediaCodecAdapter by delegate {
+    override fun dequeueOutputBufferIndex(bufferInfo: MediaCodec.BufferInfo): Int {
+        while (true) {
+            val index = delegate.dequeueOutputBufferIndex(bufferInfo)
+            if (index < 0 || bufferInfo.size > 0 || bufferInfo.flags != 0) return index
+            delegate.releaseOutputBuffer(index, false)
+        }
+    }
+
+    // Kotlin delegation does not forward Java default methods.
+    override fun useInputBuffer(runnable: Runnable) = delegate.useInputBuffer(runnable)
+
+    override fun registerOnBufferAvailableListener(listener: MediaCodecAdapter.OnBufferAvailableListener) =
+        delegate.registerOnBufferAvailableListener(listener)
+}
+
 /** What every Vesqen audio renderer changes in Media3's codec configuration for the chosen decoder. */
 internal fun MediaFormat.adaptToDecoder(codecName: String) {
     keepIntegerPcmForOmx(codecName)
@@ -165,6 +210,7 @@ internal fun alacLittleEndianCookie(config: ByteArray, sampleRateHz: Int): ByteA
 }
 
 private const val QUALCOMM_ALAC_DECODER_PREFIX = "c2.qti.alac."
+private const val QUALCOMM_ALAC_HARDWARE_DECODER = "c2.qti.alac.hw.decoder"
 private const val CSD_0 = "csd-0"
 private const val ALAC_CONFIG_BYTES = 24
 
