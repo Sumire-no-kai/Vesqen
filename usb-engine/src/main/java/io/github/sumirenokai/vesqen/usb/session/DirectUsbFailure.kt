@@ -31,8 +31,15 @@ data class DirectUsbFailure(val reason: Reason, val detail: String) {
     }
 }
 
-/** One release step. A failed step is recorded and the rest still run, except past the safety barrier. */
-data class CleanupStep(val name: String, val succeeded: Boolean)
+/**
+ * [name] describes the step in diagnostics. [failureReason] classifies it if it fails.
+ * The remaining steps still run, except past the safety barrier.
+ */
+data class CleanupStep(
+    val name: String,
+    val succeeded: Boolean,
+    val failureReason: DirectUsbFailure.Reason = DirectUsbFailure.Reason.USB_TRANSFER_FAILED,
+)
 
 data class CleanupRecord(
     val steps: List<CleanupStep>,

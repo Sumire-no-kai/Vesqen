@@ -497,9 +497,7 @@ internal class AndroidDirectUsbRoute(
             return DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.descriptors_refused")
         }
         val record = UsbTakeoverRecovery(marker.device, AndroidUsbLink(device, connection), parsed.topology.functions, markers).recover()
-        val failure = record.firstFailure ?: return DirectUsbRecoveryResult(cleanup = record)
-        val code = if (failure.name == "volume restored") "direct_usb.volume_control_failed" else "direct_usb.usb_transfer_failed"
-        return DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, code, record)
+        return record.toRecoveryResult()
     }
 
     override fun hasUsbAudioDevice(): Boolean = usbManager.deviceList.values.any(UsbDevice::isUsbAudioDevice)
@@ -885,8 +883,15 @@ internal fun DirectUsbFailure.toStrictFailure(): Pair<UsbOutputFailure, String> 
     DirectUsbFailure.Reason.FEEDBACK_OUT_OF_RANGE,
     DirectUsbFailure.Reason.USB_PERMISSION_REVOKED,
     DirectUsbFailure.Reason.PCM_NOT_EXACT -> UsbOutputFailure.PLATFORM_ERROR
-} to when (reason) {
+} to reason.decisionCode()
+
+internal fun CleanupRecord.toRecoveryResult(): DirectUsbRecoveryResult {
+    val failure = firstFailure ?: return DirectUsbRecoveryResult(cleanup = this)
+    return DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, failure.failureReason.decisionCode(), this)
+}
+
+internal fun DirectUsbFailure.Reason.decisionCode(): String = when (this) {
     // The code a refusal before the takeover uses, so the user reads the same explanation (#284).
     DirectUsbFailure.Reason.SAMPLE_RATE_UNSUPPORTED -> "direct_usb.rate_unsupported"
-    else -> "direct_usb.${reason.name.lowercase()}"
+    else -> "direct_usb.${name.lowercase()}"
 }

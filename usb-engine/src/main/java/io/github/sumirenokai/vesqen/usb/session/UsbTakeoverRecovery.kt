@@ -53,7 +53,7 @@ class UsbTakeoverRecovery(
                     settingsRestored = target != null && controls != null && function.controlInterface in claimed && attempt {
                         controls.restoreSettings(target.id, function.controlInterface, marker.volumeBefore, marker.mutedBefore)
                     }
-                    steps += CleanupStep("volume restored", settingsRestored)
+                    steps += CleanupStep("volume restored", settingsRestored, DirectUsbFailure.Reason.VOLUME_CONTROL_FAILED)
                 }
             }
         } finally {

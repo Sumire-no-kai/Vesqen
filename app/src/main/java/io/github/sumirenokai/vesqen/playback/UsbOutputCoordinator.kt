@@ -1578,12 +1578,8 @@ internal class UsbOutputCoordinator(
                 completeSystemOutput(rebuild = true, resume = false, volumeRestoreFailed = true)
             } else if (result != DirectUsbReleaseResult.RELEASED || route.recoveryPending) {
                 synchronized(lock) { awaitingReattach = true }
-                val code = if (route.lastCleanup?.firstFailure?.name == "volume restored") {
-                    "direct_usb.volume_control_failed"
-                } else {
-                    "direct_usb.usb_transfer_failed"
-                }
-                failClosed(UsbOutputFailure.PLATFORM_ERROR, code, origin = configurationOrigin)
+                val reason = route.lastCleanup?.firstFailure?.failureReason ?: DirectUsbFailure.Reason.USB_TRANSFER_FAILED
+                failClosed(UsbOutputFailure.PLATFORM_ERROR, reason.decisionCode(), origin = configurationOrigin)
             } else if (selected == UsbOutputMode.SYSTEM) {
                 completeSystemOutput(rebuild = true, resume = resumeAfterConfiguration)
             } else if (interrupted) {

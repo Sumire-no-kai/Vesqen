@@ -98,7 +98,7 @@ class DirectUsbSessionTest {
         markers.persisted = marker
         device.muted = true
         device.failVolumeWrites = true
-        assertEquals("volume restored", recover().firstFailure?.name)
+        assertEquals(CleanupStep("volume restored", false, Reason.VOLUME_CONTROL_FAILED), recover().firstFailure)
         assertTrue(events.containsAll(listOf("release 2", "release 1", "close")))
         assertEquals(marker, markers.persisted)
         assertTrue("a failed level write must leave the DAC muted", device.muted)
@@ -111,7 +111,7 @@ class DirectUsbSessionTest {
     fun `recovery releases successful claims when a later interface refuses`() {
         markers.persisted = TakeoverMarker(UsbDeviceIdentity(1003, 0x0ecb, 0x2107), -1280, false)
         link.failingClaims += 2
-        assertEquals("interface 2 reclaimed", recover().firstFailure?.name)
+        assertEquals(CleanupStep("interface 2 reclaimed", false, Reason.USB_TRANSFER_FAILED), recover().firstFailure)
         assertTrue(events.containsAll(listOf("release 1", "close")))
         assertFalse(events.contains("release 2"))
         assertTrue(markers.isOccupied())
@@ -164,6 +164,17 @@ class DirectUsbSessionTest {
         assertEquals("alternate setting 0 on interface 2", recover().firstFailure?.name)
         assertEquals(marker, markers.persisted)
         assertTrue(events.containsAll(listOf("release 1", "release 2", "close")))
+    }
+
+    @Test
+    fun `startup recovery reports the earlier interface failure when volume restoration also fails`() {
+        markers.persisted = TakeoverMarker(UsbDeviceIdentity(1003, 0x0ecb, 0x2107), -1280, false)
+        link.refuseAlternateZero = true
+        device.failVolumeWrites = true
+
+        val record = recover()
+        assertEquals(CleanupStep("alternate setting 0 on interface 2", false, Reason.USB_TRANSFER_FAILED), record.firstFailure)
+        assertTrue(CleanupStep("volume restored", false, Reason.VOLUME_CONTROL_FAILED) in record.steps)
     }
 
     private fun recover(functions: List<UacFunction> = listOf(JBL)) =
@@ -626,7 +637,7 @@ class DirectUsbSessionTest {
 
         val (record, _) = release()
 
-        assertEquals("volume restored", record.firstFailure?.name)
+        assertEquals(CleanupStep("volume restored", false, Reason.VOLUME_CONTROL_FAILED), record.firstFailure)
         assertTrue(record.onlyVolumeRestoreFailed)
         assertTrue(events.containsAll(listOf("release 2", "release 1", "close")))
         assertEquals(-2560, markers.persisted?.volumeBefore)
@@ -639,7 +650,7 @@ class DirectUsbSessionTest {
 
         val (record, _) = release()
 
-        assertEquals("interface 2 released", record.firstFailure?.name)
+        assertEquals(CleanupStep("interface 2 released", false, Reason.USB_TRANSFER_FAILED), record.firstFailure)
         assertFalse(record.onlyVolumeRestoreFailed)
         assertFalse(events.contains("marker cleared"))
         assertFalse(record.steps.single { it.name == "takeover marker cleared" }.succeeded)
@@ -653,7 +664,7 @@ class DirectUsbSessionTest {
 
         val (record, _) = release()
 
-        assertEquals("volume restored", record.firstFailure?.name)
+        assertEquals(CleanupStep("volume restored", false, Reason.VOLUME_CONTROL_FAILED), record.firstFailure)
         assertFalse(record.onlyVolumeRestoreFailed)
         assertEquals(-2560, markers.persisted?.volumeBefore)
     }

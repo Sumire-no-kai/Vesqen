@@ -613,7 +613,7 @@ class DirectUsbSession(
             streamingInterface = null
         }
         val volumeRestoreFailed = restoreVolume?.let { restore ->
-            restorePending = !cleanupStep("volume restored", restore)
+            restorePending = !cleanupStep("volume restored", Reason.VOLUME_CONTROL_FAILED, restore)
             restoreVolume = null
             restorePending
         } ?: false
@@ -648,7 +648,11 @@ class DirectUsbSession(
         return stats
     }
 
-    private fun cleanupStep(name: String, action: () -> Boolean): Boolean {
+    private fun cleanupStep(
+        name: String,
+        failureReason: Reason = Reason.USB_TRANSFER_FAILED,
+        action: () -> Boolean,
+    ): Boolean {
         val succeeded = try {
             action()
         } catch (_: SecurityException) {
@@ -656,7 +660,7 @@ class DirectUsbSession(
         } catch (_: IllegalStateException) {
             false
         }
-        cleanupSteps += CleanupStep(name, succeeded)
+        cleanupSteps += CleanupStep(name, succeeded, failureReason)
         return succeeded
     }
 
