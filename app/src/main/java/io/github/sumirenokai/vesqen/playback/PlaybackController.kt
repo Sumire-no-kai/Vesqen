@@ -420,8 +420,6 @@ class PlaybackController(
         val targets = folderNavigation(queue, player.repeatMode.toPlaybackRepeatMode())
         val index = (if (forward) targets.next else targets.previous) ?: return
         player.seekToDefaultPosition(index)
-        if (player.playbackState == Player.STATE_IDLE) player.prepare()
-        player.play()
         publish(player, rebuildQueue = true)
     }
 

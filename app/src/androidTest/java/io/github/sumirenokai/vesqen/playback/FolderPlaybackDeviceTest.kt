@@ -21,6 +21,23 @@ class FolderPlaybackDeviceTest {
     private val playback = AtomicReference(PlaybackSnapshot())
     private lateinit var controller: PlaybackController
 
+    @Test fun skippingToNextFolderWhilePausedKeepsPlaybackPaused() = runBlocking {
+        val tracks = listOf(track(1, "A"), track(2, "B"), track(3, "B"))
+        try {
+            connect()
+            main { controller.playQueue(tracks, 0) }
+            await { it.trackId == tracks.first().id && it.isPlaying }
+            main { controller.togglePlayback() }
+            await { !it.showsPauseAction }
+
+            main { controller.skipToNextFolder() }
+            await { it.trackId == tracks[1].id }
+            assertFalse("Skipping to the next folder resumed paused playback", playback.get().showsPauseAction)
+        } finally {
+            release()
+        }
+    }
+
     @Test fun folderBoundaryPlaysAutomaticallyAndRestoresWithItsPosition() = runBlocking {
         val tracks = listOf(track(1, "A"), track(2, "A"), track(3, "B"), track(4, "B"))
         try {
@@ -51,7 +68,8 @@ class FolderPlaybackDeviceTest {
             assertTrue(playback.get().canSkipPreviousFolder)
             assertFalse(playback.get().canSkipNextFolder)
             main { controller.skipToPreviousFolder() }
-            await { it.trackId == tracks[0].id && it.isPlaying }
+            await { it.trackId == tracks[0].id }
+            assertFalse(playback.get().showsPauseAction)
         } finally {
             release()
         }
@@ -66,7 +84,7 @@ class FolderPlaybackDeviceTest {
             assertFalse(playback.get().canSkipPreviousFolder)
             assertTrue(playback.get().canSkipNextFolder)
             main { controller.skipToNextFolder() }
-            await { it.trackId == tracks[2].id }
+            await { it.trackId == tracks[2].id && it.isPlaying }
             main { controller.skipToPreviousFolder() }
             await { it.trackId == tracks[0].id }
 
@@ -112,11 +130,12 @@ class FolderPlaybackDeviceTest {
     }
 
     private suspend fun connect() {
+        PlaybackStateStore(app).clear(PlaybackOrderSettings(false, PlaybackRepeatMode.OFF))
         main { controller = PlaybackController(app) { playback.set(it) } }
         await { it.isControllerReady }
         main {
-            controller.clearQueue()
             controller.cycleTo(PlaybackOrderMode.SEQUENTIAL) { playback.get().playbackOrderMode }
+            controller.clearQueue()
         }
     }
 
