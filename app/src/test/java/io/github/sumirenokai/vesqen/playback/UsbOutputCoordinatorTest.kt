@@ -1802,6 +1802,24 @@ class UsbOutputCoordinatorTest {
     }
 
     @Test
+    fun `an end of media item pause returns the DAC after thirty seconds`() {
+        reachDirectActive(listOf(mediaItem(mediaId = "first"), mediaItem(mediaId = "next")))
+
+        // Update the real player's state without handing the coordinator a USER_REQUEST pause.
+        player.removeListener(coordinator)
+        player.pause()
+        idle()
+        player.addListener(coordinator)
+        coordinator.onPlayWhenReadyChanged(false, Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM)
+
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(29))
+        assertFalse("release" in direct.calls)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(1))
+        assertTrue("The end-of-item pause did not return the DAC", "release" in direct.calls)
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
     fun `clearing a paused queue still returns the DAC without inspecting an empty source`() {
         reachDirectActive()
         shadowOf(audioManager).removeOutputDevice(dac, false)

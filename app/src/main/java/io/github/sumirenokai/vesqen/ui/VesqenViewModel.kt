@@ -18,6 +18,7 @@ import io.github.sumirenokai.vesqen.library.LibraryCatalog
 import io.github.sumirenokai.vesqen.library.LibraryCatalogSnapshot
 import io.github.sumirenokai.vesqen.library.LibraryScanProgress
 import io.github.sumirenokai.vesqen.library.LibraryScanState
+import io.github.sumirenokai.vesqen.library.LibrarySourceId
 import io.github.sumirenokai.vesqen.library.LibrarySourceScanResult
 import io.github.sumirenokai.vesqen.library.FolderGrantRenewalResult
 import io.github.sumirenokai.vesqen.library.UnmatchedLibraryRecord
@@ -401,7 +402,22 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     internal fun removeLyrics(trackId: Long) {
-        viewModelScope.launch(Dispatchers.IO) { lyricsStore.remove(trackId) }
+        val generation = lyricsStore.generation()
+        val rebuildsBefore = catalogRebuilds.value
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    // A pending track merge may still need the imported lyrics' adjustment.
+                    catalog.withTrackContentUri(trackId) { contentUri ->
+                        if (contentUri != null) lyricsStore.remove(trackId, generation)
+                    }
+                }
+            } catch (_: SQLiteException) {
+                if (!catalogRebuiltSince(rebuildsBefore)) updateLibrary { it.copy(catalogMutationFailed = true) }
+            } catch (failure: IllegalStateException) {
+                failure.rethrowUnlessCatalogRebuiltSince(rebuildsBefore)
+            }
+        }
     }
 
     /** Provider reads precede the catalog gate; only the guarded local write holds track identity. */
@@ -778,8 +794,8 @@ internal fun scanResultsAfterSourcesRead(
     sources: List<LibrarySource>,
 ): List<LibrarySourceScanResult> {
     if (results.isEmpty()) return results
-    val previous = previousSources.associateBy(LibrarySource::id)
-    val current = sources.associateBy(LibrarySource::id)
+    val previous = previousSources.associateBy { LibrarySourceId.forScan(it.id) }
+    val current = sources.associateBy { LibrarySourceId.forScan(it.id) }
     return results.filter { result ->
         val before = previous[result.sourceId]
         val after = current[result.sourceId]
@@ -792,7 +808,7 @@ private fun LibraryCatalogSnapshot.pausedProgress(): LibraryScanProgress? = sour
     it.scanState == LibraryScanState.PAUSED
 }?.let { source ->
     LibraryScanProgress(
-        sourceId = source.id,
+        sourceId = LibrarySourceId.forScan(source.id),
         sourceName = source.displayName,
         scannedTrackCount = 0,
         isPaused = true,
@@ -839,7 +855,7 @@ private fun pausedProgressFrom(sources: List<LibrarySource>): LibraryScanProgres
     it.scanState == LibraryScanState.SCANNING || it.scanState == LibraryScanState.PAUSED
 }?.let { source ->
     LibraryScanProgress(
-        sourceId = source.id,
+        sourceId = LibrarySourceId.forScan(source.id),
         sourceName = source.displayName,
         scannedTrackCount = 0,
         isPaused = source.scanState == LibraryScanState.PAUSED,

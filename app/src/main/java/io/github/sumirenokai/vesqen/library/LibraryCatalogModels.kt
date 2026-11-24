@@ -1,5 +1,7 @@
 package io.github.sumirenokai.vesqen.library
 
+import java.security.MessageDigest
+
 /** A durable source that contributes tracks to the local catalog. */
 enum class LibrarySourceKind {
     DEVICE,
@@ -31,6 +33,7 @@ data class LibrarySource(
 
 /** UI-safe scan feedback. Total work is intentionally omitted because providers do not expose it. */
 data class LibraryScanProgress(
+    /** An opaque source identifier shared with [LibrarySourceScanResult]. */
     val sourceId: String,
     val sourceName: String,
     val scannedTrackCount: Int,
@@ -114,6 +117,7 @@ enum class UnsupportedAudioFormat {
 }
 
 data class LibrarySourceScanResult(
+    /** An opaque source identifier shared with [LibraryScanProgress]. */
     val sourceId: String,
     val sourceName: String,
     val status: LibrarySourceScanStatus,
@@ -180,6 +184,11 @@ internal object LibrarySourceId {
     const val DEVICE = "media:external"
 
     fun forTree(treeUri: String): String = "tree:$treeUri"
+
+    /** A durable folder ID embeds its tree URI. Scan feedback only needs a stable match. */
+    fun forScan(sourceId: String): String = MessageDigest.getInstance("SHA-256")
+        .digest(sourceId.encodeToByteArray())
+        .toHexString()
 }
 
 /** Bump when provider/container enrichment semantics change, invalidating scan cache keys. */

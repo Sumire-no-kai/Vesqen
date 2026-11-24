@@ -297,6 +297,7 @@ class LyricsAdjustmentStoreTest {
 
     @Test
     fun sweepRebuildAndExplicitRemovalCleanCorrectionsWithoutPruningNewRows() {
+        assertEquals(LyricsImportResult.IMPORTED, store.import(2, "[00:01.00]one".toByteArray(), store.generation()))
         listOf(1L, 2L, 9L).forEach { adjust(it, LyricsAdjustmentAction.ADVANCE) }
         store.sweep(CatalogTrackIds(setOf(2), 5), store.generation())
         assertEquals(0L, store.userAdvance(1, content))

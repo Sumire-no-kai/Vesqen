@@ -18,6 +18,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 
 /** What Now shows for a track (#169). */
@@ -116,18 +117,19 @@ internal class LocalLyricsResolver(
         folderLyricsFiles.evictAll()
         val current = resolve(track, generation)
         val found = current.lyrics as? TrackLyrics.Found
-            ?: return@withContext LyricsAdjustmentResult.UNAVAILABLE
-        if (found.contentRevision != expected.contentRevision || found.source != expected.source) {
-            return@withContext LyricsAdjustmentResult.LYRICS_CHANGED
+        val result = when {
+            found == null || !current.complete -> LyricsAdjustmentResult.UNAVAILABLE
+            found.contentRevision != expected.contentRevision || found.source != expected.source ->
+                LyricsAdjustmentResult.LYRICS_CHANGED
+            else -> commit { store.adjust(track.id, found.contentRevision, action, generation, contentEpoch) }
         }
-        if (!current.complete) return@withContext LyricsAdjustmentResult.UNAVAILABLE
-        val result = commit {
-            store.adjust(track.id, found.contentRevision, action, generation, contentEpoch)
+        when (result) {
+            LyricsAdjustmentResult.APPLIED -> results.evictAll()
+            LyricsAdjustmentResult.LYRICS_CHANGED, LyricsAdjustmentResult.UNAVAILABLE ->
+                results.remove(track.lyricsKey(store.importedLyrics.value.revision))
+            else -> return@withContext result
         }
-        if (result == LyricsAdjustmentResult.APPLIED) {
-            results.evictAll()
-            forgottenListings.value++
-        }
+        forgottenListings.update { it + 1 }
         result
     }
 
@@ -144,7 +146,7 @@ internal class LocalLyricsResolver(
     fun forgetFolderListings() {
         folderLyricsFiles.evictAll()
         results.snapshot().forEach { (key, lyrics) -> if (lyrics is TrackLyrics.None) results.remove(key) }
-        forgottenListings.value++
+        forgottenListings.update { it + 1 }
     }
 
     private fun resolve(track: AudioTrack, generation: Long): ResolvedLyrics {

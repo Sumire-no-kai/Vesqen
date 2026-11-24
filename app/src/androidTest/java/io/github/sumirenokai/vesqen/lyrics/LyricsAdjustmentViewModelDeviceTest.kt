@@ -3,17 +3,25 @@ package io.github.sumirenokai.vesqen.lyrics
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.sumirenokai.vesqen.library.AndroidLibraryCatalog
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.library.LibraryTrackCandidate
 import io.github.sumirenokai.vesqen.telemetry.isolatedPlaybackTestApplication
 import io.github.sumirenokai.vesqen.ui.VesqenViewModel
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /** Exercises the catalog identity guard and application-owned resolver without a rendered UI. */
@@ -74,6 +82,40 @@ class LyricsAdjustmentViewModelDeviceTest {
             val unchanged = app.lyricsResolver.load(track) as TrackLyrics.Found
             assertEquals(0L, unchanged.userAdvanceMs)
             assertEquals(2_000L, unchanged.synced().lines.first().timeMs)
+        }
+    }
+
+    @Test
+    fun removalWaitsForAnInFlightCatalogEdit() = runBlocking {
+        withFixture { viewModel, track ->
+            val original = "[00:02.00]Import for the surviving track".toByteArray()
+            import(track, original)
+            val found = app.lyricsResolver.load(track) as TrackLyrics.Found
+            assertEquals(LyricsAdjustmentResult.APPLIED, adjust(viewModel, track, found, LyricsAdjustmentAction.ADVANCE))
+            val imports = app.lyricsStore.importedLyrics
+            AndroidLibraryCatalog(app, app.libraryCatalogStore).use { otherCatalog ->
+                val entered = CompletableDeferred<Unit>()
+                val release = CountDownLatch(1)
+                val edit = launch(Dispatchers.IO) {
+                    otherCatalog.withTrackContentUri(track.id) {
+                        entered.complete(Unit)
+                        check(release.await(5, TimeUnit.SECONDS))
+                    }
+                }
+                try {
+                    entered.await()
+                    withContext(Dispatchers.Main) { viewModel.removeLyrics(track.id) }
+                    val removed = withTimeoutOrNull(1_000) { imports.first { track.id !in it.trackIds } }
+                    assertNull("Removal crossed the catalog edit gate", removed)
+                    assertEquals(500L, app.lyricsStore.userAdvance(track.id, found.contentRevision))
+                } finally {
+                    release.countDown()
+                    edit.join()
+                }
+            }
+            imports.first { track.id !in it.trackIds }
+            assertNull(app.lyricsStore.read(track.id))
+            assertEquals(0L, app.lyricsStore.userAdvance(track.id, found.contentRevision))
         }
     }
 

@@ -2,6 +2,7 @@ package io.github.sumirenokai.vesqen.library
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -57,7 +58,23 @@ class LibraryScanDiagnosticsTest {
         assertEquals(0, before.scannedTrackCount)
         assertEquals(mapOf(UnsupportedAudioFormat.APE to 1), progress.skippedUnsupportedAudio)
         assertEquals(2, report.result(LibrarySourceScanStatus.COMPLETED).skippedUnsupportedAudioCount)
-        assertEquals(source.id, before.sourceId)
+        assertEquals(progress.sourceId, before.sourceId)
+    }
+
+    @Test fun `folder progress and results correlate without carrying the tree URI or private path`() {
+        val treeUri = "content://com.android.externalstorage.documents/tree/primary%3AMusic%2FPrivateCollection%2FLive"
+        val folder = source.copy(id = LibrarySourceId.forTree(treeUri), treeUri = treeUri, displayName = "Live")
+        val progress = SourceScanReport(folder).progress()
+        val result = SourceScanReport(folder).result(LibrarySourceScanStatus.COMPLETED)
+        val otherTreeUri = treeUri.replace("PrivateCollection", "OtherCollection")
+        val other = folder.copy(id = LibrarySourceId.forTree(otherTreeUri), treeUri = otherTreeUri)
+
+        assertEquals(progress.sourceId, result.sourceId)
+        assertNotEquals(result.sourceId, SourceScanReport(other).progress().sourceId)
+        for (observation in listOf(progress.toString(), result.toString())) {
+            assertFalse("Scan data contains the tree URI: $observation", treeUri in observation)
+            assertFalse("Scan data contains part of the private path: $observation", "PrivateCollection" in observation)
+        }
     }
 
     @Test fun `unchanged unavailable and failed results do not claim cached tracks were checked`() {

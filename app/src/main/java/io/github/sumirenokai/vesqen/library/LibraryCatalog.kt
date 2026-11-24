@@ -704,7 +704,7 @@ internal fun scanFailureReason(failure: Exception): LibraryScanFailureReason = w
 }
 
 internal class SourceScanReport(source: StoredLibrarySource) {
-    private val sourceId = source.id
+    private val sourceId = LibrarySourceId.forScan(source.id)
     var sourceName = source.displayName
     private var checked = 0
     private val skipped = linkedMapOf<UnsupportedAudioFormat, Int>()

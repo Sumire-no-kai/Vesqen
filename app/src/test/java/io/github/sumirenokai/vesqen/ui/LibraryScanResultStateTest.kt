@@ -3,6 +3,7 @@ package io.github.sumirenokai.vesqen.ui
 import io.github.sumirenokai.vesqen.library.LibraryScanProgress
 import io.github.sumirenokai.vesqen.library.LibraryScanState
 import io.github.sumirenokai.vesqen.library.LibrarySource
+import io.github.sumirenokai.vesqen.library.LibrarySourceId
 import io.github.sumirenokai.vesqen.library.LibrarySourceKind
 import io.github.sumirenokai.vesqen.library.LibrarySourceScanResult
 import io.github.sumirenokai.vesqen.library.LibrarySourceScanStatus
@@ -77,6 +78,6 @@ class LibraryScanResultStateTest {
     }
 
     private fun result(source: LibrarySource) = LibrarySourceScanResult(
-        source.id, source.displayName, LibrarySourceScanStatus.COMPLETED, scannedTrackCount = 5,
+        LibrarySourceId.forScan(source.id), source.displayName, LibrarySourceScanStatus.COMPLETED, scannedTrackCount = 5,
     )
 }

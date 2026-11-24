@@ -154,11 +154,21 @@ internal class LyricsStore(
         }
     }
 
-    fun remove(trackId: Long) {
+    fun remove(trackId: Long, expectedGeneration: Long = generation()) {
         synchronized(lock) {
-            val removed = removeImport(trackId)
-            val adjustmentsRemoved = adjustmentFiles(trackId).map(File::delete).any { it }
-            if (removed || adjustmentsRemoved) publish()
+            if (generation != expectedGeneration) return
+            val imported = try {
+                read(trackId)?.let(::readLyricsFile) as? SourceLyrics.Readable
+            } catch (_: IOException) {
+                null
+            }
+            if (removeImport(trackId)) {
+                // If the import cannot be read, its adjustment has no known key and stays for sweep.
+                (imported?.lyrics as? Lyrics.Synced)?.let { lyrics ->
+                    adjustmentFile(trackId, lyrics.contentRevision(LyricsSource.Imported)).delete()
+                }
+                publish()
+            }
         }
     }
 
@@ -300,7 +310,9 @@ internal class LyricsStore(
     private fun fileFor(trackId: Long) = File(directory, "$trackId$LYRICS_SUFFIX")
 
     private fun removeImport(trackId: Long): Boolean {
-        val removed = fileFor(trackId).delete()
+        val file = fileFor(trackId)
+        val removed = file.delete()
+        if (!removed && file.exists()) return false
         return (trackIds().remove(trackId) || removed).also { if (it) contentChanged(trackId) }
     }
 
@@ -313,10 +325,8 @@ internal class LyricsStore(
         return File(directory, "$trackId.$contentRevision$ADJUSTMENT_SUFFIX")
     }
 
-    private fun adjustmentFiles(trackId: Long? = null): List<File> = directory.listFiles().orEmpty().filter { file ->
-        ADJUSTMENT_FILE.matches(file.name) && file.name.substringBefore('.').toLongOrNull()?.let { id ->
-            trackId == null || id == trackId
-        } == true
+    private fun adjustmentFiles(): List<File> = directory.listFiles().orEmpty().filter { file ->
+        ADJUSTMENT_FILE.matches(file.name) && file.name.substringBefore('.').toLongOrNull() != null
     }
 
     private fun adjustmentTrackId(file: File): Long = file.name.substringBefore('.').toLong()
