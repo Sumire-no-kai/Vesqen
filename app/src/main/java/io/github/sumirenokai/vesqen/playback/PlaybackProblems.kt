@@ -133,14 +133,16 @@ internal class PlaybackProblemGuard(
                 arrival = Arrival.AUTO
                 check(trusted = true)
             }
-            Player.DISCONTINUITY_REASON_SEEK -> if (oldPosition.mediaItemIndex != newPosition.mediaItemIndex) {
+            Player.DISCONTINUITY_REASON_SEEK -> {
                 val own = ownSeekArrival
                 ownSeekArrival = null
                 if (own != null) {
                     arrival = own
                 } else {
-                    // The listener moved: a queue tap next to the current track is still a pick.
+                    // The listener sought: a queue tap, next to the current track or on it, is a new
+                    // choice, so a Play after it explains this track again (PR #345 review).
                     recovering = false
+                    heldEntry = null
                     arrival = navigationArrival ?: Arrival.PICKED
                 }
             }

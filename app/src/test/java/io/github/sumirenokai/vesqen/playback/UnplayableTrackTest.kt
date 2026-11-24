@@ -271,6 +271,23 @@ class UnplayableTrackTest {
         assertEquals(2, stopped.size)
     }
 
+    /** PR #345 review: tapping the paused track in the queue chooses it again; it is not a second Play. */
+    @Test
+    fun `picking the paused unplayable track again pauses there again`() {
+        play(listOf(flacFile(), wavFile()))
+        runUntil { interruptions.current.value != null }
+        val first = interruptions.current.value!!.id
+
+        session!!.seekToDefaultPosition(0)
+        player!!.play()
+        runUntil { interruptions.current.value.let { it != null && it.id != first } }
+        repeat(5) { settle() }
+
+        assertEquals(0, player!!.currentMediaItemIndex)
+        assertFalse(player!!.playWhenReady)
+        assertEquals(listOf(0), visited)
+    }
+
     @Test
     fun `a track the listener picked pauses even with auto-skip on`() {
         skip = true
