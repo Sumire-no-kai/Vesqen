@@ -137,6 +137,7 @@ internal fun decoderOutputFormat(format: Format, mediaFormat: MediaFormat?): Dec
  * rate, which both of Vesqen's sinks accept; that would now fail visibly as well. Raw PCM keeps the
  * answer, because there it means the sink refuses the encoding. Recheck after a Media3 upgrade.
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 internal fun reportMissingDecoder(capabilities: Int, sampleMimeType: String?): Int =
     if (RendererCapabilities.getFormatSupport(capabilities) == C.FORMAT_UNSUPPORTED_SUBTYPE &&
         sampleMimeType != MimeTypes.AUDIO_RAW

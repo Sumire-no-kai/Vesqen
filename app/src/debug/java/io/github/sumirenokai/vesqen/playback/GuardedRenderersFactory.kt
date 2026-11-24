@@ -14,7 +14,7 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
 import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 
-/** The debug probes' factory with a given sink; the renderer keeps #107's OMX protection. */
+/** The debug probes' factory with a given sink; the renderer keeps #107's OMX protection and #344's missing-decoder answer. */
 @androidx.annotation.OptIn(UnstableApi::class)
 internal class GuardedRenderersFactory(
     context: Context,
@@ -41,6 +41,9 @@ internal class GuardedRenderersFactory(
                 context, codecAdapterFactory, mediaCodecSelector, enableDecoderFallback,
                 eventHandler, eventListener, audioSink,
             ) {
+                override fun supportsFormat(mediaCodecSelector: MediaCodecSelector, format: Format): Int =
+                    reportMissingDecoder(super.supportsFormat(mediaCodecSelector, format), format.sampleMimeType)
+
                 override fun getMediaCodecConfiguration(
                     codecInfo: MediaCodecInfo,
                     format: Format,

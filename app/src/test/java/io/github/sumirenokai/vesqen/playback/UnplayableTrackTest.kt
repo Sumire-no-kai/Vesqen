@@ -112,6 +112,21 @@ class UnplayableTrackTest {
         assertEquals(emptyList<Long>(), counted)
     }
 
+    /**
+     * Reading ahead into an undecodable track stops the queue there with the error, and that track is
+     * not counted. Whether the playable track before it counts depends on it having started playing
+     * first, which a 200 ms file here does not reliably do; a device run covers that part.
+     */
+    @Test
+    fun `an undecodable track after a playable one stops the queue there`() {
+        play(listOf(wavFile(), flacFile()), withoutDecoders())
+        runUntil { player!!.playerError != null || player!!.playbackState == Player.STATE_ENDED }
+
+        assertEquals(PlaybackException.ERROR_CODE_DECODER_INIT_FAILED, player!!.playerError?.errorCode)
+        assertEquals(1, player!!.currentMediaItemIndex)
+        assertFalse("the undecodable track was counted", 2L in counted)
+    }
+
     /** Stands in for the silent paths the renderer cannot catch, such as a track the sink refuses. */
     @Test
     fun `an item whose audio track is not selected counts no listen`() {
@@ -140,7 +155,11 @@ class UnplayableTrackTest {
     private fun withoutDecoders() = VesqenAudioRenderersFactory(context, AudioTrackAudioOutputProvider.Builder(context).build())
         .setMediaCodecSelector { _, _, _ -> emptyList() }
 
-    private fun play(file: File, factory: androidx.media3.exoplayer.RenderersFactory, configure: (ExoPlayer) -> Unit = {}) {
+    private fun play(file: File, factory: androidx.media3.exoplayer.RenderersFactory, configure: (ExoPlayer) -> Unit = {}) =
+        play(listOf(file), factory, configure)
+
+    /** Plays [files] as one queue; the first has media ID 1, the next 2, and so on. */
+    private fun play(files: List<File>, factory: androidx.media3.exoplayer.RenderersFactory, configure: (ExoPlayer) -> Unit = {}) {
         val created = ExoPlayer.Builder(context, factory)
             .setMediaSourceFactory(DefaultMediaSourceFactory(context, VesqenExtractorsFactory()))
             .build()
@@ -161,7 +180,7 @@ class UnplayableTrackTest {
             onPlaybackStarted = { counted += it },
         ).start()
         configure(created)
-        created.setMediaItem(MediaItem.Builder().setUri(Uri.fromFile(file)).setMediaId("1").build())
+        created.setMediaItems(files.mapIndexed { index, file -> MediaItem.Builder().setUri(Uri.fromFile(file)).setMediaId("${index + 1}").build() })
         created.prepare()
         created.play()
     }
@@ -182,12 +201,15 @@ class UnplayableTrackTest {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(10))
     }
 
+    /** Bounded by real time: preparing reads the file on Media3's own loader thread, which settle() does not wait for. */
     private fun runUntil(condition: () -> Boolean) {
-        repeat(500) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        while (System.nanoTime() < deadline) {
             if (condition()) return
             settle()
+            Thread.sleep(2)
         }
-        fail("the player did not reach the expected state")
+        fail("the player did not reach the expected state within 10 s")
     }
 
     private companion object {

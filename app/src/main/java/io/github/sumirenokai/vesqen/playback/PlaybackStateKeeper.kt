@@ -87,7 +87,7 @@ internal class PlaybackStateKeeper(
         if (mediaItemTransition || positionDiscontinuity) {
             queueEnded = queueEndedAfter(queueEnded, player.playbackState, movedAway = true)
         }
-        if (mediaItemTransition || playingChanged || events.contains(Player.EVENT_TRACKS_CHANGED)) {
+        if (mediaItemTransition || playingChanged) {
             playbackStartGate.trackStarted(
                 // #344: an item whose audio track was never selected advances in silence; not a listen.
                 isPlaying = player.isPlaying && player.currentTracks.isTypeSelected(C.TRACK_TYPE_AUDIO),
