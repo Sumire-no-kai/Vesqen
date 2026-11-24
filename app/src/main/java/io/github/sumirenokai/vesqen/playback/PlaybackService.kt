@@ -20,6 +20,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.datasource.DefaultDataSource
@@ -32,6 +33,7 @@ import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
 import io.github.sumirenokai.vesqen.BuildConfig
 import io.github.sumirenokai.vesqen.R
@@ -48,6 +50,17 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * The longest queue the platform session publishes. Media3 1.11 copies every queue item into the
+ * platform session on each timeline change, including the two as each upcoming track is prepared,
+ * and Android sends each copy to every system controller. One item with Vesqen's extras is about
+ * 1.7 KB, so on the 2026-11-09 emulator run a 2,010-track queue of 0.5 s tracks sent about 200 copies
+ * of 3.5 MB in 20 s and the Bluetooth app ran out of memory. A longer queue stays in the app: the
+ * platform session then has no queue, and the notification, lock screen and Bluetooth controls keep
+ * the current track and its commands.
+ */
+internal const val PLATFORM_QUEUE_LIMIT = 100
+
 @androidx.annotation.OptIn(UnstableApi::class)
 class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
@@ -56,6 +69,7 @@ class PlaybackService : MediaSessionService() {
     private var sessionArtworkLoader: SessionArtworkLoader? = null
     private var usbOutputCoordinator: UsbOutputCoordinator? = null
     private var directUsbRoute: DirectUsbRoute? = null
+    private var screenOffKeepAlive: ScreenOffKeepAliveController? = null
     private var sleepTimer: PlaybackSleepTimer? = null
     private var notificationProvider: DefaultMediaNotificationProvider? = null
     /** Opened on the first playback resumption; the UI keeps its own catalog. */
@@ -63,14 +77,15 @@ class PlaybackService : MediaSessionService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mediaButtonStart = MediaButtonStartObligation()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val outputConsentCommand = SessionCommand(UsbOutputSessionContract.OUTPUT_CONSENT_ACTION, android.os.Bundle.EMPTY)
     private val usbOutputCommand = SessionCommand(UsbOutputSessionContract.SET_MODE_ACTION, android.os.Bundle.EMPTY)
     private val moveCommand = SessionCommand(PlayOrderSessionContract.MOVE_ACTION, android.os.Bundle.EMPTY)
     private val sleepTimerCommand = SessionCommand(SleepTimerSessionContract.SET_ACTION, android.os.Bundle.EMPTY)
     private val outputStateListener: (UsbOutputStatus) -> Unit = { status ->
         mainHandler.post {
             publishSessionExtras(status)
-            // A strict failure stops the requested Play without sound (PRD 9.2), which also ends a
-            // media button start.
+            // A strict failure or consent prompt stops this Play without sound, ending any media
+            // button start's foreground obligation too.
             if (status.stopsRequestedPlayback()) {
                 // An output refusal can pause without raising PlayerError. Do not retain its gate.
                 if (status == (application as VesqenApplication).usbOutputStateRepository.snapshot()) {
@@ -96,6 +111,28 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    /** Whether the platform session gets the queue ([PLATFORM_QUEUE_LIMIT]); Media3's default is yes. */
+    private var platformQueuePublished = true
+    private val platformCommandsReady = SettableFuture.create<Unit>()
+
+    /**
+     * Withdraws a queue that grows past [PLATFORM_QUEUE_LIMIT] from the platform session, and gives a
+     * queue back once it is short again. Added to the player before the session is built, so it runs
+     * before the session's own listener. Client connections wait for the notification controller,
+     * so the first enqueue or media-button restore also has a controller to apply the cap through.
+     */
+    private val platformQueueListener = object : Player.Listener {
+        override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+            val publish = timeline.windowCount <= PLATFORM_QUEUE_LIMIT
+            if (publish == platformQueuePublished) return
+            val session = mediaSession ?: return
+            val controller = session.mediaNotificationControllerInfo ?: return
+            platformQueuePublished = publish
+            val commands = connectionResult(session, controller)
+            session.setAvailableCommands(controller, commands.availableSessionCommands, commands.availablePlayerCommands)
+        }
+    }
+
     private val resumption = PlaybackResumption(
         loadSavedState = { playbackStateStore.load() },
         readPlayableTracks = {
@@ -118,14 +155,19 @@ class PlaybackService : MediaSessionService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
         ): ListenableFuture<MediaSession.ConnectionResult> {
-            // Media3 1.11's deprecated onConnect default is a sentinel with empty commands.
-            // Resolve the controller's trust-aware defaults before adding our private command.
-            val base = MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller).build()
-            if (controller.packageName != packageName) return Futures.immediateFuture(base)
-            return Futures.immediateFuture(MediaSession.ConnectionResult.accept(
-                base.availableSessionCommands.buildUpon().add(usbOutputCommand).add(moveCommand).add(sleepTimerCommand).build(),
-                base.availablePlayerCommands,
-            ))
+            if (session.isMediaNotificationController(controller)) {
+                platformQueuePublished = session.player.mediaItemCount <= PLATFORM_QUEUE_LIMIT
+                return Futures.immediateFuture(connectionResult(session, controller))
+            }
+            // Media3 initially publishes with its default commands. Keep the empty player private
+            // until the notification controller's result has configured the platform session.
+            return Futures.transform(Futures.nonCancellationPropagating(platformCommandsReady),
+                { connectionResult(session, controller) }, MoreExecutors.directExecutor())
+        }
+
+        override fun onPostConnect(session: MediaSession, controller: MediaSession.ControllerInfo) {
+            // onConnectAsync returns before Media3 applies its result; onPostConnect runs after it.
+            if (session.isMediaNotificationController(controller)) platformCommandsReady.set(Unit)
         }
 
         override fun onCustomCommand(
@@ -142,6 +184,14 @@ class PlaybackService : MediaSessionService() {
                 UsbOutputSessionContract.SET_MODE_ACTION -> UsbOutputSessionContract.readMode(args)
                     ?.let(::applyUsbOutputMode)
                     ?: Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
+                UsbOutputSessionContract.OUTPUT_CONSENT_ACTION -> onMainThread {
+                    val answered = usbOutputCoordinator?.answerUsbOutputConsent(
+                        args.getLong(UsbOutputSessionContract.GENERATION, -1L),
+                        args.getLong(UsbOutputSessionContract.OBSERVED_AT_ELAPSED, -1L),
+                        args.getBoolean(UsbOutputSessionContract.ACCEPT_OUTPUT_CONSENT),
+                    ) == true
+                    SessionResult(if (answered) SessionResult.RESULT_SUCCESS else SessionError.ERROR_BAD_VALUE)
+                }
                 PlayOrderSessionContract.MOVE_ACTION -> {
                     val move = PlayOrderSessionContract.readMove(args)
                         ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
@@ -179,6 +229,30 @@ class PlaybackService : MediaSessionService() {
             isForPlayback: Boolean,
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> =
             resumeSavedQueue(mediaSession.player, isForPlayback)
+    }
+
+    /**
+     * Media3 1.11's deprecated onConnect default is a sentinel with empty commands, so this resolves
+     * the controller's trust-aware defaults before adding the app's private commands. Media3 gives the
+     * media notification controller's commands to the platform session too, so that controller reads
+     * the timeline only while [platformQueuePublished].
+     */
+    private fun connectionResult(
+        session: MediaSession,
+        controller: MediaSession.ControllerInfo,
+    ): MediaSession.ConnectionResult {
+        val base = MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller).build()
+        if (controller.packageName != packageName) return base
+        val playerCommands = if (session.isMediaNotificationController(controller) && !platformQueuePublished) {
+            base.availablePlayerCommands.buildUpon().remove(Player.COMMAND_GET_TIMELINE).build()
+        } else {
+            base.availablePlayerCommands
+        }
+        return MediaSession.ConnectionResult.accept(
+            base.availableSessionCommands.buildUpon()
+                .add(usbOutputCommand).add(outputConsentCommand).add(moveCommand).add(sleepTimerCommand).build(),
+            playerCommands,
+        )
     }
 
     private fun applyUsbOutputMode(mode: UsbOutputMode): ListenableFuture<SessionResult> = onMainThread {
@@ -314,6 +388,7 @@ class PlaybackService : MediaSessionService() {
             }
         player.addListener((application as VesqenApplication).deviceReportRuntime.playbackListener(player))
         player.addListener(playbackListener)
+        player.addListener(platformQueueListener)
         sleepTimer = PlaybackSleepTimer(player, AndroidSleepTimerScheduler(this, mainHandler)) {
             publishSessionExtras()
         }
@@ -367,6 +442,14 @@ class PlaybackService : MediaSessionService() {
             ))
             .build()
         outputStateRepository.addListener(outputStateListener)
+        if (directRoute != null) {
+            // D13: only Vesqen's own output needs it; the system path keeps the app alive by itself.
+            val settings = (application as VesqenApplication).screenOffKeepAlive
+            val keepAlive = ScreenOffKeepAliveController(this, mainHandler, ScreenOffKeepAlive { SpeakerKeepAliveTrack.start(this) })
+            screenOffKeepAlive = keepAlive
+            outputStateRepository.addListener(keepAlive.statusListener)
+            serviceScope.launch { settings.enabled.collect(keepAlive::setEnabled) }
+        }
     }
 
     @UnstableApi
@@ -463,11 +546,17 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        platformCommandsReady.cancel(false)
         sleepTimer?.close()
         sleepTimer = null
         (application as VesqenApplication).playbackTrackMerges.detach()
         serviceScope.cancel()
         (application as VesqenApplication).usbOutputStateRepository.removeListener(outputStateListener)
+        screenOffKeepAlive?.let { keepAlive ->
+            (application as VesqenApplication).usbOutputStateRepository.removeListener(keepAlive.statusListener)
+            keepAlive.close()
+        }
+        screenOffKeepAlive = null
         usbOutputCoordinator?.close()
         usbOutputCoordinator = null
         (application as VesqenApplication).directUsbReadings.detach()
@@ -479,6 +568,7 @@ class PlaybackService : MediaSessionService() {
             val exoPlayer = exoPlayer()
             (player as? DeviceVolumeSessionPlayer)?.stopReporting()
             exoPlayer.removeListener(playbackListener)
+            exoPlayer.removeListener(platformQueueListener)
             (application as VesqenApplication).telemetryRuntime.detachPlayer(exoPlayer)
             exoPlayer.release()
             release()

@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen.playback
 
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceFacts
+import io.github.sumirenokai.vesqen.usb.control.UacRateRange
 import io.github.sumirenokai.vesqen.usb.descriptor.SampleRates
 import io.github.sumirenokai.vesqen.usb.descriptor.UacAltSetting
 import io.github.sumirenokai.vesqen.usb.descriptor.UacConfiguration
@@ -15,6 +16,7 @@ import io.github.sumirenokai.vesqen.usb.descriptor.UacVersion
 import io.github.sumirenokai.vesqen.usb.descriptor.UsbAudioTopology
 import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
 import io.github.sumirenokai.vesqen.usb.plan.StreamingRefusal
+import io.github.sumirenokai.vesqen.usb.session.DirectUsbFailure
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -23,14 +25,38 @@ class DirectUsbRefusalTest {
     private val cd = SourcePcmFormat(sampleRateHz = 44_100, bitDepth = 16, channelCount = 2)
 
     @Test
-    fun `a UAC2 device is named as such, not as lacking the track's format`() {
-        val refusal = directRefusal(
-            topology(function(alt(16), alt(24, alternate = 2), version = UacVersion.UAC2)),
-            listOf(StreamingRefusal.VERSION_NOT_IMPLEMENTED, StreamingRefusal.VERSION_NOT_IMPLEMENTED),
-            cd,
-        )
+    fun `a UAC2 device offers the rates its clock listed once claimed`() {
+        val uac2 = function(alt(16, rates = SampleRates.RuntimeUnknown), alt(24, alternate = 2, rates = SampleRates.RuntimeUnknown), version = UacVersion.UAC2)
+        val clock = listOf(UacRateRange(44_100, 44_100, 0), UacRateRange(48_000, 96_000, 48_000), UacRateRange(176_400, 192_000, 0))
+        val details = cd.toDirectDetails().withOffer(uac2, clock)
 
-        assertEquals(DirectUsbInspection.Refused("uac2_not_supported"), refusal)
+        assertEquals(listOf(44_100..44_100, 48_000..96_000, 176_400..176_400), details.deviceSampleRatesHz)
+        assertEquals(24, details.deviceMaxBitsAtSourceRate)
+        assertEquals("Before the clock answers nothing is known", emptyList<IntRange>(), cd.toDirectDetails().withOffer(uac2).deviceSampleRatesHz)
+    }
+
+    @Test
+    fun `a rate the clock refused after the takeover reads like a refusal before it`() {
+        assertEquals(
+            UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED to "direct_usb.rate_unsupported",
+            DirectUsbFailure(DirectUsbFailure.Reason.SAMPLE_RATE_UNSUPPORTED, "48000 Hz").toStrictFailure(),
+        )
+        assertEquals(
+            UsbOutputFailure.PLATFORM_ERROR to "direct_usb.sample_rate_set_failed",
+            DirectUsbFailure(DirectUsbFailure.Reason.SAMPLE_RATE_SET_FAILED, "48000 Hz").toStrictFailure(),
+        )
+    }
+
+    @Test
+    fun `a feedback failure keeps its own code`() {
+        assertEquals(
+            UsbOutputFailure.PLATFORM_ERROR to "direct_usb.feedback_timeout",
+            DirectUsbFailure(DirectUsbFailure.Reason.FEEDBACK_TIMEOUT, "").toStrictFailure(),
+        )
+        assertEquals(
+            UsbOutputFailure.PLATFORM_ERROR to "direct_usb.feedback_out_of_range",
+            DirectUsbFailure(DirectUsbFailure.Reason.FEEDBACK_OUT_OF_RANGE, "").toStrictFailure(),
+        )
     }
 
     @Test
@@ -45,14 +71,14 @@ class DirectUsbRefusalTest {
     }
 
     @Test
-    fun `an asynchronous endpoint at one depth outranks a missing format at another`() {
+    fun `a bus limit at one depth outranks a missing format at another`() {
         val refusal = directRefusal(
-            topology(function(alt(24, rates = SampleRates.Discrete(listOf(44_100)), sync = UacSyncType.ASYNCHRONOUS))),
-            listOf(StreamingRefusal.NO_MATCHING_FORMAT, StreamingRefusal.ASYNCHRONOUS_NOT_IMPLEMENTED),
+            topology(function(alt(24, rates = SampleRates.Discrete(listOf(44_100))))),
+            listOf(StreamingRefusal.NO_MATCHING_FORMAT, StreamingRefusal.SPEED_UNSUPPORTED),
             cd,
         )
 
-        assertEquals(DirectUsbInspection.Refused("async_not_supported"), refusal)
+        assertEquals("speed_unsupported", refusal.code)
     }
 
     @Test

@@ -16,6 +16,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.playback.DIRECT_USB_INTRODUCTION
+import io.github.sumirenokai.vesqen.playback.FIXED_VOLUME_CONFIRMATION
+import io.github.sumirenokai.vesqen.playback.SYSTEM_USB_VOLUME_NOT_RESTORED
 import io.github.sumirenokai.vesqen.playback.OfficialMixerApiSupport
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailureOrigin
@@ -58,7 +61,9 @@ internal fun StrictUsbUnavailableDialog(
  * from startup, queue restore, route or processing changes and service stop stay non-modal;
  * the Now status chip and output dialog, Chain and Settings show the reason.
  */
-internal fun UsbOutputStatus.failureInterruptsUser(): Boolean = failure != null && when (failureOrigin) {
+internal fun UsbOutputStatus.failureInterruptsUser(): Boolean = failure != null && userInitiatedAttempt()
+
+private fun UsbOutputStatus.userInitiatedAttempt(): Boolean = when (failureOrigin) {
     UsbOutputFailureOrigin.USER_PLAYBACK,
     UsbOutputFailureOrigin.TRACK_TRANSITION,
     UsbOutputFailureOrigin.USER_MODE_CHANGE,
@@ -75,6 +80,15 @@ internal fun UsbOutputStatus.failureInterruptsUser(): Boolean = failure != null 
 /** #245: another DAC does not undo the setting, and the reason already says how to retry. */
 internal fun UsbOutputFailure.dialogAddsGenericAdvice(): Boolean = this != UsbOutputFailure.MIXER_CLEAR_FAILED
 
+/** A confirmation that lapsed or could not be saved is no fault of the DAC; its reason asks for playback again. */
+internal fun UsbOutputStatus.dialogAddsGenericAdvice(): Boolean =
+    failure?.dialogAddsGenericAdvice() == true && decisionCode !in CONFIRMATION_FAILURES
+
+private val CONFIRMATION_FAILURES = setOf(
+    "direct_usb.introduction_confirmation_failed",
+    "direct_usb.fixed_volume_confirmation_failed",
+)
+
 /** The app shell owns feedback, including failures started from Library or the mini-player. */
 @Composable
 internal fun StrictUsbFailureDialog(
@@ -82,12 +96,59 @@ internal fun StrictUsbFailureDialog(
     canChangeOutputMode: Boolean,
     onSetUsbOutputMode: (UsbOutputMode) -> Unit,
     onOpenPremium: (() -> Unit)? = null,
+    onAnswerUsbOutputConsent: (UsbOutputStatus, Boolean) -> Unit = { _, _ -> },
 ) {
     var dismissedFailure by rememberSaveable { mutableStateOf<String?>(null) }
-    val failure = status.failure?.takeIf { status.failureInterruptsUser() } ?: return
     // A fresh failed attempt has a new coordinator generation. Telemetry refreshes do not.
-    val failureKey = "${status.generation}:${status.observedAtEpochMs}:${failure.name}"
+    val failureKey = "${status.generation}:${status.observedAtEpochMs}:${status.decisionCode}"
     if (dismissedFailure == failureKey) return
+    if (status.decisionCode == SYSTEM_USB_VOLUME_NOT_RESTORED) {
+        val device = status.deviceName ?: stringResource(R.string.settings_usb_device_unknown)
+        val dismiss = { dismissedFailure = failureKey }
+        AlertDialog(
+            modifier = Modifier.testTag("vesqen.output.system-volume-warning-dialog"),
+            onDismissRequest = dismiss,
+            title = { Text(stringResource(R.string.usb_system_volume_not_restored_title)) },
+            text = {
+                Text(
+                    stringResource(R.string.usb_system_volume_not_restored_body, device),
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = dismiss, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.usb_system_volume_not_restored_ok))
+                }
+            },
+        )
+        return
+    }
+    if (status.decisionCode == FIXED_VOLUME_CONFIRMATION || status.decisionCode == DIRECT_USB_INTRODUCTION) {
+        val introduction = status.decisionCode == DIRECT_USB_INTRODUCTION
+        val tag = if (introduction) "vesqen.output.introduction" else "vesqen.output.fixed-volume"
+        if (!status.userInitiatedAttempt()) return
+        fun answer(accept: Boolean) {
+            dismissedFailure = failureKey
+            onAnswerUsbOutputConsent(status, accept)
+        }
+        AlertDialog(
+            modifier = Modifier.testTag("$tag-dialog"),
+            onDismissRequest = { answer(false) },
+            title = { Text(stringResource(if (introduction) R.string.usb_direct_intro_title else R.string.usb_fixed_volume_title)) },
+            text = { Text(stringResource(if (introduction) R.string.usb_direct_intro_body else R.string.usb_fixed_volume_body,
+                status.deviceName ?: stringResource(R.string.settings_usb_device_unknown)),
+                modifier = Modifier.verticalScroll(rememberScrollState())) },
+            confirmButton = {
+                TextButton(onClick = { answer(true) }, enabled = canChangeOutputMode,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("$tag-confirm")) {
+                    Text(stringResource(if (introduction) R.string.usb_direct_intro_accept else R.string.usb_fixed_volume_accept))
+                }
+            },
+            dismissButton = { TextButton(onClick = { answer(false) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.cancel)) } },
+        )
+        return
+    }
+    val failure = status.failure?.takeIf { status.failureInterruptsUser() } ?: return
     // #119: an ended trial is not fixed by another DAC; offer Pro features instead of keeping strict.
     val openPremium = onOpenPremium?.takeIf { failure == UsbOutputFailure.TRIAL_ENDED }
 
@@ -100,7 +161,7 @@ internal fun StrictUsbFailureDialog(
             Text(
                 when {
                     openPremium != null -> stringResource(R.string.player_trial_ended_body, reason)
-                    failure.dialogAddsGenericAdvice() -> stringResource(R.string.player_strict_failure_body, reason)
+                    status.dialogAddsGenericAdvice() -> stringResource(R.string.player_strict_failure_body, reason)
                     else -> reason
                 },
                 modifier = Modifier.verticalScroll(rememberScrollState()),

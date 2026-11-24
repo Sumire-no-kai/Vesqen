@@ -202,7 +202,7 @@ data class UsbOutputStatus(
     val hardwareIdentity: UsbHardwareIdentity? = null,
     val sourceFormat: AudioFormatSummary? = null,
     val sinkFormat: AudioFormatSummary? = null,
-    val decisionCode: String = "system_audio_route",
+    val decisionCode: String = SYSTEM_AUDIO_ROUTE,
     val observedAtEpochMs: Long = 0,
     val observedAtElapsedRealtimeMs: Long = 0,
     val generation: Long = 0,
@@ -272,7 +272,14 @@ class UsbOutputStateRepository {
     }
 }
 
+internal const val DIRECT_USB_INTRODUCTION = "direct_usb.introduction_required"
+internal const val FIXED_VOLUME_CONFIRMATION = "direct_usb.fixed_volume_confirmation_required"
+internal const val SYSTEM_AUDIO_ROUTE = "system_audio_route"
+internal const val SYSTEM_USB_VOLUME_NOT_RESTORED = "direct_usb.system_volume_not_restored"
+
 internal object UsbOutputSessionContract {
+    const val OUTPUT_CONSENT_ACTION = "io.github.sumirenokai.vesqen.playback.USB_OUTPUT_CONSENT_DECISION"
+    const val ACCEPT_OUTPUT_CONSENT = "accept_output_consent"
     const val SET_MODE_ACTION = "io.github.sumirenokai.vesqen.playback.SET_USB_OUTPUT_MODE"
     const val MODE_ARGUMENT = "usb_output_mode"
 
@@ -287,8 +294,8 @@ internal object UsbOutputSessionContract {
     private const val DEVICE_DESCRIPTOR_VERSION = "usb_output_device_descriptor_version"
     private const val DECISION_CODE = "usb_output_decision_code"
     private const val OBSERVED_AT = "usb_output_observed_at"
-    private const val OBSERVED_AT_ELAPSED = "usb_output_observed_at_elapsed"
-    private const val GENERATION = "usb_output_generation"
+    const val OBSERVED_AT_ELAPSED = "usb_output_observed_at_elapsed"
+    const val GENERATION = "usb_output_generation"
     private const val SOURCE_RATE = "usb_output_source_rate"
     private const val SOURCE_CHANNELS = "usb_output_source_channels"
     private const val SOURCE_ENCODING = "usb_output_source_encoding"

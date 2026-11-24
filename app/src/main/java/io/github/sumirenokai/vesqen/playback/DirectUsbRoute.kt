@@ -20,6 +20,7 @@ import androidx.media3.exoplayer.audio.AudioOutputProvider
 import androidx.media3.exoplayer.audio.AudioSink
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMediaItemExtras
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySourceFacts
+import io.github.sumirenokai.vesqen.usb.control.UacRateRange
 import io.github.sumirenokai.vesqen.usb.descriptor.SampleRates
 import io.github.sumirenokai.vesqen.usb.descriptor.UacDescriptorParser
 import io.github.sumirenokai.vesqen.usb.descriptor.UacFunction
@@ -41,13 +42,21 @@ import io.github.sumirenokai.vesqen.usb.session.TakeoverMarker
 import io.github.sumirenokai.vesqen.usb.session.TakeoverMarkerStore
 import io.github.sumirenokai.vesqen.usb.session.CleanupRecord
 import io.github.sumirenokai.vesqen.usb.session.UsbTakeoverRecovery
+import io.github.sumirenokai.vesqen.usb.session.UsbPlaybackVolume
+import io.github.sumirenokai.vesqen.usb.session.playbackVolume
 import io.github.sumirenokai.vesqen.usb.session.UsbDeviceIdentity
 import java.util.concurrent.Executors
 
 /** What strict mode found when it looked at Vesqen's own USB path for a source (M7-4). */
 internal sealed interface DirectUsbInspection {
     /** One USB audio device with permission, and a plan that carries the source. */
-    data class Ready(val deviceName: String, val plan: StreamingPlan) : DirectUsbInspection
+    data class Ready(
+        val deviceName: String,
+        val plan: StreamingPlan,
+        val needsFixedVolumeConsent: UsbDeviceIdentity? = null,
+    ) : DirectUsbInspection
+
+    data class IntroductionNeeded(val deviceName: String, val device: UsbDeviceIdentity) : DirectUsbInspection
 
     data object NoDevice : DirectUsbInspection
 
@@ -70,8 +79,8 @@ internal sealed interface DirectUsbInspection {
 
 /**
  * 4d: why no depth could be planned for [source], from each depth's refusal. A limit of the device
- * itself (protocol version, asynchronous endpoints, bus speed) comes before the format, so a UAC2
- * dongle is not reported as lacking the track's sample rate.
+ * itself (protocol version, bus speed) comes before the format, so such a device is not reported as
+ * lacking the track's sample rate.
  */
 internal fun directRefusal(
     topology: UsbAudioTopology,
@@ -82,10 +91,7 @@ internal fun directRefusal(
         candidate.streamingInterfaces.any { streaming -> streaming.alternateSettings.any { it.isPlayback } }
     } ?: return DirectUsbInspection.Refused("no_playback_function")
     return when {
-        StreamingRefusal.VERSION_NOT_IMPLEMENTED in refusals -> DirectUsbInspection.Refused(
-            if (function.version == UacVersion.UAC2) "uac2_not_supported" else "uac_version_unsupported",
-        )
-        StreamingRefusal.ASYNCHRONOUS_NOT_IMPLEMENTED in refusals -> DirectUsbInspection.Refused("async_not_supported")
+        StreamingRefusal.VERSION_NOT_IMPLEMENTED in refusals -> DirectUsbInspection.Refused("uac_version_unsupported")
         StreamingRefusal.SPEED_UNSUPPORTED in refusals -> DirectUsbInspection.Refused("speed_unsupported")
         StreamingRefusal.PACKET_TOO_SMALL in refusals -> DirectUsbInspection.Refused("format_exceeds_bus", formatRefused = true)
         else -> {
@@ -125,22 +131,30 @@ internal fun SourcePcmFormat.toDirectDetails() = DirectUsbDetails(
 /**
  * Adds what [function]'s settings offer to these details: every rate, and the deepest depth at the
  * source's rate. Settings the own output cannot stream through at all are left out, and so are rates
- * a device cannot mean, such as 0 Hz or a range that ends below its start (#290).
+ * a device cannot mean, such as 0 Hz or a range that ends below its start (#290). A UAC2 device's
+ * rates come from its clock once the session has asked it ([clockRates], #284).
  */
-internal fun DirectUsbDetails.withOffer(function: UacFunction): DirectUsbDetails {
+internal fun DirectUsbDetails.withOffer(function: UacFunction, clockRates: List<UacRateRange>? = null): DirectUsbDetails {
     val formats = function.streamingInterfaces.flatMap { it.alternateSettings }
         .filter { it.isPlayback && it.streamingBlockers.isEmpty() }
         .mapNotNull { it.format }
     val rate = sourceSampleRateHz
+    fun SampleRates.offered(): List<IntRange> =
+        if (this == SampleRates.RuntimeUnknown) clockRates.orEmpty().map(UacRateRange::offered) else ranges()
+    fun SampleRates.offers(rateHz: Int): Boolean =
+        if (this == SampleRates.RuntimeUnknown) clockRates.orEmpty().any { rateHz in it } else rateHz in this
     return copy(
-        deviceSampleRatesHz = formats.flatMap { it.sampleRates.ranges() }
+        deviceSampleRatesHz = formats.flatMap { it.sampleRates.offered() }
             .filter { it.first in 1..it.last }
             .distinct()
             .sortedBy { it.first },
-        deviceMaxBitsAtSourceRate = rate?.let { formats.filter { format -> rate in format.sampleRates }.maxOfOrNull { it.bitResolution } },
+        deviceMaxBitsAtSourceRate = rate?.let { formats.filter { format -> format.sampleRates.offers(rate) }.maxOfOrNull { it.bitResolution } },
         deviceChannelCount = formats.map { it.channels }.distinct().singleOrNull(),
     )
 }
+
+/** A subrange with a resolution of 0 offers its minimum alone. */
+private fun UacRateRange.offered(): IntRange = if (resolution == 0) minimum..minimum else minimum..maximum
 
 internal fun UacFunction.protocolToken(): String = when (version) {
     UacVersion.UAC1 -> "uac1"
@@ -230,6 +244,10 @@ internal interface DirectUsbRoute {
 
     fun inspect(source: SourcePcmFormat): DirectUsbInspection
 
+    fun confirmIntroduction(expected: UsbDeviceIdentity): Boolean = false
+
+    fun confirmFixedVolume(expected: UsbDeviceIdentity): Boolean = false
+
     /** USB Host lists an audio-class device, whether or not Android has an audio route for it (#293). */
     fun hasUsbAudioDevice(): Boolean
 
@@ -242,8 +260,11 @@ internal interface DirectUsbRoute {
     /** Takes over the device [inspect] planned for. [onDone] runs on the main thread, with null on success. */
     fun takeOver(onDone: (DirectUsbFailure?) -> Unit)
 
+    /** What the device offers, for a takeover failure that depends on the source's format; null otherwise. */
+    fun detailsFor(failure: DirectUsbFailure): DirectUsbDetails? = null
+
     /** Gives the device back. Safe to call at any time and more than once. */
-    fun release(onReleased: ((Boolean) -> Unit)? = null)
+    fun release(onReleased: ((DirectUsbReleaseResult) -> Unit)? = null)
 
     fun close()
 }
@@ -260,27 +281,35 @@ private class OutputSource(
     override fun onFailed(failure: DirectUsbFailure) = onFailure(failure)
 }
 
+internal enum class DirectUsbReleaseResult {
+    RELEASED,
+    VOLUME_RESTORE_FAILED,
+    CLEANUP_FAILED,
+}
+
 /** Main-thread release barrier. The route drops a session before its control thread finishes cleanup. */
 internal class PendingUsbReleases {
     private var outstanding = 0
-    private var allSucceeded = true
-    private val waiting = mutableListOf<(Boolean) -> Unit>()
+    private var result = DirectUsbReleaseResult.RELEASED
+    private val waiting = mutableListOf<(DirectUsbReleaseResult) -> Unit>()
     val pending: Boolean get() = outstanding > 0
 
     fun begin() { outstanding++ }
 
-    fun await(callback: (Boolean) -> Unit) {
-        if (pending) waiting += callback else callback(true)
+    fun await(callback: (DirectUsbReleaseResult) -> Unit) {
+        if (pending) waiting += callback else callback(DirectUsbReleaseResult.RELEASED)
     }
 
-    fun complete(succeeded: Boolean) {
-        allSucceeded = allSucceeded && succeeded
+    fun complete(finished: DirectUsbReleaseResult) {
+        if (finished == DirectUsbReleaseResult.CLEANUP_FAILED || result == DirectUsbReleaseResult.RELEASED) {
+            result = finished
+        }
         if (--outstanding > 0) return
-        val result = allSucceeded
-        allSucceeded = true
+        val completed = result
+        result = DirectUsbReleaseResult.RELEASED
         val callbacks = waiting.toList()
         waiting.clear()
-        callbacks.forEach { it(result) }
+        callbacks.forEach { it(completed) }
     }
 }
 
@@ -302,8 +331,11 @@ internal class AndroidDirectUsbRoute(
 
     private class Prepared(
         val device: UsbDevice, val connection: UsbDeviceConnection, val function: UacFunction,
-        @Volatile var plan: StreamingPlan, val speed: UsbBusSpeed,
+        @Volatile var plan: StreamingPlan, val speed: UsbBusSpeed, val source: SourcePcmFormat,
     )
+
+    /** The takeover failure whose details [detailsFor] gives, kept past the release that follows it. */
+    private var failureDetails: Pair<DirectUsbFailure, DirectUsbDetails>? = null
 
     private val releases = PendingUsbReleases()
     private var recovering = false
@@ -320,7 +352,7 @@ internal class AndroidDirectUsbRoute(
         val device: UsbDeviceIdentity,
         @Volatile var plan: StreamingPlan,
         val function: UacFunction,
-        @Volatile var volume: Int,
+        @Volatile var volume: Int?,
     )
 
     /** Main thread: one volume request goes to the device at a time, and only the newest waits. */
@@ -479,6 +511,7 @@ internal class AndroidDirectUsbRoute(
             1 -> devices.single()
             else -> return DirectUsbInspection.SeveralDevices
         }
+        if (!volumeMemory.introductionConfirmed()) return DirectUsbInspection.IntroductionNeeded(device.displayName(), device.identity())
         if (!usbManager.hasPermission(device)) return DirectUsbInspection.PermissionNeeded(device.displayName())
         val held = prepared
         if (held != null && streaming && held.device.deviceId == device.deviceId && held.plan.carries(source)) {
@@ -516,8 +549,14 @@ internal class AndroidDirectUsbRoute(
                             details = source.toDirectDetails().withOffer(preflight.function),
                         )
                     }
-                    prepared = Prepared(device, connection, preflight.function, preflight.plan, preflight.speed)
-                    return DirectUsbInspection.Ready(name, preflight.plan)
+                    val identity = device.identity()
+                    val needsConsent = when (preflight.function.playbackVolume(preflight.plan)) {
+                        UsbPlaybackVolume.Unsupported -> return DirectUsbInspection.Refused("volume_control_failed", deviceName = name)
+                        UsbPlaybackVolume.Fixed -> identity.takeUnless(volumeMemory::fixedVolumeConfirmed)
+                        is UsbPlaybackVolume.Master -> null
+                    }
+                    prepared = Prepared(device, connection, preflight.function, preflight.plan, preflight.speed, source)
+                    return DirectUsbInspection.Ready(name, preflight.plan, needsConsent)
                 }
                 StreamPreflight.NoPlaybackFunction ->
                     return DirectUsbInspection.Refused("no_playback_function", deviceName = name)
@@ -562,9 +601,23 @@ internal class AndroidDirectUsbRoute(
         return true
     }
 
+    override fun detailsFor(failure: DirectUsbFailure): DirectUsbDetails? = failureDetails?.takeIf { it.first === failure }?.second
+
+    private fun UsbDevice.identity() = UsbDeviceIdentity(deviceId, vendorId, productId)
+
+    override fun confirmIntroduction(expected: UsbDeviceIdentity): Boolean {
+        val device = usbManager.deviceList.values.filter(UsbDevice::isUsbAudioDevice).singleOrNull() ?: return false
+        return device.identity() == expected && volumeMemory.confirmIntroduction()
+    }
+
+    override fun confirmFixedVolume(expected: UsbDeviceIdentity): Boolean {
+        val device = usbManager.deviceList.values.filter(UsbDevice::isUsbAudioDevice).singleOrNull() ?: return false
+        return device.identity() == expected && usbManager.hasPermission(device) && volumeMemory.confirmFixedVolume(expected)
+    }
+
     override fun takeOver(onDone: (DirectUsbFailure?) -> Unit) {
         val target = prepared ?: return onDone(DirectUsbFailure(DirectUsbFailure.Reason.USB_TRANSFER_FAILED, "nothing was inspected"))
-        val identity = UsbDeviceIdentity(target.device.deviceId, target.device.vendorId, target.device.productId)
+        val identity = target.device.identity()
         lateinit var next: DirectUsbSession
         next = DirectUsbSession(
             device = identity,
@@ -592,7 +645,7 @@ internal class AndroidDirectUsbRoute(
             },
         )
         session = next
-        next.takeOver(target.plan, volumeMemory.startVolume(identity)) { result ->
+        next.takeOver(target.plan, volumeMemory.startVolume(identity), volumeMemory.fixedVolumeConfirmed(identity)) { result ->
             main.post {
                 if (session !== next) return@post
                 when (result) {
@@ -600,7 +653,13 @@ internal class AndroidDirectUsbRoute(
                         streamingFacts = StreamingFacts(
                             next, identity, target.plan, target.function, result.volumeNow,
                         )
-                        next.volumeRange?.let { volumes.publish(DirectUsbVolume(result.volumeNow, it.minimum, it.maximum, it.resolution)) }
+                        val level = result.volumeNow
+                        if (level == null) {
+                            volumes.publish(null, fixed = true)
+                        } else {
+                            val range = checkNotNull(next.volumeRange)
+                            volumes.publish(DirectUsbVolume(level, range.minimum, range.maximum, range.resolution))
+                        }
                         sessionProvider = DirectUsbAudioOutputProvider(
                             target.plan,
                             openOutput = next::openOutput,
@@ -610,14 +669,14 @@ internal class AndroidDirectUsbRoute(
                                 if (activePlan.carries(source)) activePlan else {
                                     WIRE_DEPTHS.asSequence().filter { it >= source.bitDepth }.mapNotNull { bits ->
                                         (StreamingPlanner.plan(
-                                            target.function, target.speed, source.sampleRateHz, bits,
+                                            target.function, target.speed, source.sampleRateHz, bits, next.clockRates,
                                         ) as? StreamingPlanResult.Planned)?.plan
                                     }.firstOrNull { it.carries(source) }
                                 }
                             },
                             source = { configuringSource },
                             onFailure = { failure ->
-                                val details = configuringSource?.toDirectDetails()?.withOffer(target.function)
+                                val details = configuringSource?.toDirectDetails()?.withOffer(target.function, next.clockRates)
                                 if (configuringGeneration == outputGeneration) listener?.onFailed(failure, details, configuringPeriodUid)
                             },
                             listenerFactory = { continuing ->
@@ -625,7 +684,7 @@ internal class AndroidDirectUsbRoute(
                                 val generation = outputGeneration
                                 val token = Any()
                                 val follows = (continuing as? OutputSource)?.token
-                                val details = configuringSource?.toDirectDetails()?.withOffer(target.function)
+                                val details = configuringSource?.toDirectDetails()?.withOffer(target.function, next.clockRates)
                                 if (uid != null) main.post {
                                     if (session === next && outputGeneration == generation) listener?.onOutputOpened(uid, token, follows)
                                 }
@@ -646,6 +705,9 @@ internal class AndroidDirectUsbRoute(
                         onDone(null)
                     }
                     is DirectUsbSession.Takeover.Failed -> {
+                        // A UAC2 clock lists its rates only once claimed: say which ones it offered (#284).
+                        failureDetails = result.failure.takeIf { it.reason == DirectUsbFailure.Reason.SAMPLE_RATE_UNSUPPORTED }
+                            ?.let { it to target.source.toDirectDetails().withOffer(target.function, next.clockRates) }
                         release()
                         onDone(result.failure)
                     }
@@ -666,7 +728,7 @@ internal class AndroidDirectUsbRoute(
             protocol = facts.function.protocolToken(),
             syncType = facts.function.syncToken(plan),
             // UAC volume is in 1/256 dB.
-            hardwareVolumeDb = facts.volume / 256.0,
+            hardwareVolumeDb = facts.volume?.div(256.0),
             deliveredFrames = totals.deliveredFrames,
             underruns = totals.underruns,
             lostFrames = totals.lostFrames,
@@ -677,6 +739,7 @@ internal class AndroidDirectUsbRoute(
     /** Main thread. The device's read-back, not the request, is what gets published and remembered. */
     private fun setVolume(target: Int) {
         val facts = streamingFacts ?: return
+        if (facts.volume == null) return
         if (volumeInFlight) {
             volumeWaiting = target
             return
@@ -697,7 +760,7 @@ internal class AndroidDirectUsbRoute(
         }
     }
 
-    override fun release(onReleased: ((Boolean) -> Unit)?) {
+    override fun release(onReleased: ((DirectUsbReleaseResult) -> Unit)?) {
         streamingFacts = null
         volumeWaiting = null
         volumes.publish(null)
@@ -712,7 +775,11 @@ internal class AndroidDirectUsbRoute(
             current.release { cleanup ->
                 main.post {
                     lastCleanup = cleanup
-                    releases.complete(cleanup.firstFailure == null)
+                    releases.complete(when {
+                        cleanup.firstFailure == null -> DirectUsbReleaseResult.RELEASED
+                        cleanup.onlyVolumeRestoreFailed -> DirectUsbReleaseResult.VOLUME_RESTORE_FAILED
+                        else -> DirectUsbReleaseResult.CLEANUP_FAILED
+                    })
                     listener?.onReleased(cleanup)
                 }
             }
@@ -805,7 +872,8 @@ internal fun DirectUsbFailure.toStrictFailure(): Pair<UsbOutputFailure, String> 
     DirectUsbFailure.Reason.SOURCE_BIT_DEPTH_UNSUPPORTED,
     DirectUsbFailure.Reason.SOURCE_FORMAT_UNSUPPORTED,
     DirectUsbFailure.Reason.DECODER_PRECISION_LOST,
-    DirectUsbFailure.Reason.NO_MATCHING_DIRECT_FORMAT -> UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED
+    DirectUsbFailure.Reason.NO_MATCHING_DIRECT_FORMAT,
+    DirectUsbFailure.Reason.SAMPLE_RATE_UNSUPPORTED -> UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED
     DirectUsbFailure.Reason.DEVICE_DISCONNECTED -> UsbOutputFailure.DEVICE_DISCONNECTED
     DirectUsbFailure.Reason.INTERFACE_CLAIM_FAILED,
     DirectUsbFailure.Reason.VOLUME_CONTROL_FAILED,
@@ -813,6 +881,12 @@ internal fun DirectUsbFailure.toStrictFailure(): Pair<UsbOutputFailure, String> 
     DirectUsbFailure.Reason.SAMPLE_RATE_READBACK_MISMATCH,
     DirectUsbFailure.Reason.USB_ENGINE_UNAVAILABLE,
     DirectUsbFailure.Reason.USB_TRANSFER_FAILED,
+    DirectUsbFailure.Reason.FEEDBACK_TIMEOUT,
+    DirectUsbFailure.Reason.FEEDBACK_OUT_OF_RANGE,
     DirectUsbFailure.Reason.USB_PERMISSION_REVOKED,
     DirectUsbFailure.Reason.PCM_NOT_EXACT -> UsbOutputFailure.PLATFORM_ERROR
-} to "direct_usb.${reason.name.lowercase()}"
+} to when (reason) {
+    // The code a refusal before the takeover uses, so the user reads the same explanation (#284).
+    DirectUsbFailure.Reason.SAMPLE_RATE_UNSUPPORTED -> "direct_usb.rate_unsupported"
+    else -> "direct_usb.${reason.name.lowercase()}"
+}

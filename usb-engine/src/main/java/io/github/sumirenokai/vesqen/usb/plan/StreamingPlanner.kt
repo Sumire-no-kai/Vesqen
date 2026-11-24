@@ -1,7 +1,9 @@
 package io.github.sumirenokai.vesqen.usb.plan
 
+import io.github.sumirenokai.vesqen.usb.control.UacRateRange
 import io.github.sumirenokai.vesqen.usb.descriptor.SampleRates
 import io.github.sumirenokai.vesqen.usb.descriptor.UacAltSetting
+import io.github.sumirenokai.vesqen.usb.descriptor.UacEndpoint
 import io.github.sumirenokai.vesqen.usb.descriptor.UacFunction
 import io.github.sumirenokai.vesqen.usb.descriptor.UacSyncType
 import io.github.sumirenokai.vesqen.usb.descriptor.UacVersion
@@ -37,17 +39,28 @@ data class StreamingPlan(
     val packetsPerUrb: Int,
     val urbCount: Int,
     val ringFrames: Int,
+    /** Present for an asynchronous endpoint, whose packets follow this feedback instead of the nominal rate. */
+    val feedback: FeedbackPlan? = null,
 ) {
     val frameBytes: Int get() = channels * subslotBytes
 }
 
+/**
+ * An explicit feedback endpoint (#284). The data plane asks for [packetBytes] every [serviceIntervalUs]
+ * and fails the stream once no usable value has arrived for [timeoutUs] of bus time.
+ */
+data class FeedbackPlan(
+    val endpointAddress: Int,
+    val packetBytes: Int,
+    val serviceIntervalUs: Int,
+    val packetsPerUrb: Int,
+    val timeoutUs: Int,
+)
+
 enum class StreamingRefusal {
-    /** D3 starts with what the JBL Flip 7 uses. UAC2 waits for a device that can test it. */
+    /** UAC1 and UAC2 are implemented; UAC3 and anything else is not. */
     VERSION_NOT_IMPLEMENTED,
     NO_MATCHING_FORMAT,
-
-    /** The first transfers run at the nominal rate. Feedback arrives in M7-3. */
-    ASYNCHRONOUS_NOT_IMPLEMENTED,
     SPEED_UNSUPPORTED,
     PACKET_TOO_SMALL,
 }
@@ -64,9 +77,28 @@ object StreamingPlanner {
     private const val TARGET_IN_FLIGHT_US = 96_000
     private const val MAX_PACKETS_PER_URB = 128
 
-    /** The planner picks the first setting that can carry the format exactly. */
-    fun plan(function: UacFunction, speed: UsbBusSpeed, sampleRateHz: Int, bitResolution: Int): StreamingPlanResult {
-        if (function.version != UacVersion.UAC1) {
+    // Linux keeps the last feedback value for as long as none arrives. A stream that stops hearing from
+    // the device's clock fails instead, but only after several update periods (strict decisions, M7 plan).
+    private const val FEEDBACK_TIMEOUT_PERIODS = 4
+    private const val MIN_FEEDBACK_TIMEOUT_US = 1_000_000
+
+    // Linux asks a feedback endpoint for at most four bytes (endpoint.c, prepare_inbound_urb(), checked 2026-11-14).
+    private const val MAX_FEEDBACK_BYTES = 4
+
+    /**
+     * The planner picks the first setting that can carry the format exactly. A UAC2 device lists its
+     * rates only in answer to a request on its clock, which needs the interfaces claimed: before the
+     * takeover [clockRates] is null and the rate is confirmed by the session, after it the session's
+     * answer decides.
+     */
+    fun plan(
+        function: UacFunction,
+        speed: UsbBusSpeed,
+        sampleRateHz: Int,
+        bitResolution: Int,
+        clockRates: List<UacRateRange>? = null,
+    ): StreamingPlanResult {
+        if (function.version != UacVersion.UAC1 && function.version != UacVersion.UAC2) {
             return StreamingPlanResult.Refused(StreamingRefusal.VERSION_NOT_IMPLEMENTED)
         }
         val baseIntervalUs = when (speed) {
@@ -75,23 +107,24 @@ object StreamingPlanner {
             UsbBusSpeed.UNKNOWN, UsbBusSpeed.LOW, UsbBusSpeed.WIRELESS ->
                 return StreamingPlanResult.Refused(StreamingRefusal.SPEED_UNSUPPORTED)
         }
+        // The USB core lowers a larger isochronous wMaxPacketSize to this before usbdevfs sees the endpoint
+        // (usb_parse_endpoint() in drivers/usb/core/config.c, checked 2026-11-14).
+        val payloadLimit = if (speed == UsbBusSpeed.FULL) 1023 else 1024
         val usable = function.streamingInterfaces.flatMap { streaming ->
             streaming.alternateSettings
-                .filter { it.isPlayback && it.streamingBlockers.isEmpty() && it.carries(sampleRateHz, bitResolution) }
+                .filter { it.isPlayback && it.streamingBlockers.isEmpty() && it.carries(sampleRateHz, bitResolution, function.version, clockRates) }
                 .map { streaming.interfaceNumber to it }
         }
         if (usable.isEmpty()) return StreamingPlanResult.Refused(StreamingRefusal.NO_MATCHING_FORMAT)
 
-        val adaptive = usable.filter { (_, alt) -> alt.dataEndpoint?.syncType != UacSyncType.ASYNCHRONOUS }
-        if (adaptive.isEmpty()) return StreamingPlanResult.Refused(StreamingRefusal.ASYNCHRONOUS_NOT_IMPLEMENTED)
-
-        for ((interfaceNumber, alt) in adaptive) {
+        for ((interfaceNumber, alt) in usable) {
             val endpoint = alt.dataEndpoint ?: continue
             val format = alt.format ?: continue
             val serviceIntervalUs = baseIntervalUs shl (endpoint.interval - 1)
             val frameBytes = format.channels * format.subslotBytes
             val maxFrames = (sampleRateHz * serviceIntervalUs.toLong() + MICROS_PER_SECOND - 1) / MICROS_PER_SECOND
-            if (maxFrames * frameBytes > endpoint.maxPacketBytes) continue
+            val maxPacketBytes = minOf(endpoint.maxPacketBytes, payloadLimit)
+            if (maxFrames * frameBytes > maxPacketBytes) continue
             val packetsPerUrb = (TARGET_URB_US / serviceIntervalUs).coerceIn(1, MAX_PACKETS_PER_URB)
             val urbUs = packetsPerUrb * serviceIntervalUs
             return StreamingPlanResult.Planned(
@@ -105,23 +138,45 @@ object StreamingPlanner {
                     subslotBytes = format.subslotBytes,
                     bitResolution = format.bitResolution,
                     serviceIntervalUs = serviceIntervalUs,
-                    maxPacketBytes = endpoint.maxPacketBytes,
+                    maxPacketBytes = maxPacketBytes,
                     packetsPerUrb = packetsPerUrb,
                     urbCount = (TARGET_IN_FLIGHT_US + urbUs - 1) / urbUs,
                     ringFrames = sampleRateHz / 2,
+                    // streamingBlockers has already refused an asynchronous endpoint without a usable one.
+                    feedback = alt.feedbackEndpoint?.takeIf { endpoint.syncType == UacSyncType.ASYNCHRONOUS }
+                        ?.let { feedbackPlan(it, baseIntervalUs) },
                 ),
             )
         }
         return StreamingPlanResult.Refused(StreamingRefusal.PACKET_TOO_SMALL)
     }
 
-    private fun UacAltSetting.carries(sampleRateHz: Int, bitResolution: Int): Boolean {
+    /**
+     * A UAC1 endpoint has a new value every 2^bRefresh ms, a UAC2 endpoint at every poll. Polling follows
+     * bInterval either way, since usbdevfs schedules an isochronous URB by the endpoint's descriptor. The
+     * size is not held against the bus speed: the data plane finds the format from the first value, so a
+     * high-speed endpoint answering in three bytes is read as Linux reads it.
+     */
+    private fun feedbackPlan(feedback: UacEndpoint, baseIntervalUs: Int): FeedbackPlan {
+        val pollUs = baseIntervalUs shl (feedback.interval - 1)
+        val updateUs = maxOf(pollUs, (feedback.refreshPeriodMs ?: 0) * 1000)
+        return FeedbackPlan(
+            endpointAddress = feedback.address,
+            packetBytes = minOf(feedback.maxPacketBytes, MAX_FEEDBACK_BYTES),
+            serviceIntervalUs = pollUs,
+            packetsPerUrb = (TARGET_URB_US / pollUs).coerceIn(1, MAX_PACKETS_PER_URB),
+            timeoutUs = maxOf(FEEDBACK_TIMEOUT_PERIODS * updateUs, MIN_FEEDBACK_TIMEOUT_US),
+        )
+    }
+
+    private fun UacAltSetting.carries(sampleRateHz: Int, bitResolution: Int, version: UacVersion, clockRates: List<UacRateRange>?): Boolean {
         val format = format ?: return false
         if (format.bitResolution != bitResolution) return false
         return when (val rates = format.sampleRates) {
             is SampleRates.Discrete -> sampleRateHz in rates.ratesHz
             is SampleRates.Continuous -> sampleRateHz in rates.minHz..rates.maxHz
-            SampleRates.RuntimeUnknown -> false
+            // Only a UAC2 clock answers at run time; UAC1 lists its rates in the descriptors.
+            SampleRates.RuntimeUnknown -> version == UacVersion.UAC2 && (clockRates == null || clockRates.any { sampleRateHz in it })
         }
     }
 }

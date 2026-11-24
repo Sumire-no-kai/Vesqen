@@ -35,11 +35,16 @@ import androidx.media3.exoplayer.audio.AudioOutput
 import androidx.media3.exoplayer.audio.AudioOutputProvider
 import androidx.media3.exoplayer.audio.AudioSink
 import io.github.sumirenokai.vesqen.library.AudioTrack as LibraryTrack
+import io.github.sumirenokai.vesqen.playback.DirectUsbReleaseResult.CLEANUP_FAILED
+import io.github.sumirenokai.vesqen.playback.DirectUsbReleaseResult.RELEASED
+import io.github.sumirenokai.vesqen.playback.DirectUsbReleaseResult.VOLUME_RESTORE_FAILED
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMediaItemExtras
 import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
+import io.github.sumirenokai.vesqen.usb.session.CleanupRecord
+import io.github.sumirenokai.vesqen.usb.session.CleanupStep
 import io.github.sumirenokai.vesqen.usb.session.TakeoverMarker
-import io.github.sumirenokai.vesqen.usb.session.UsbDeviceIdentity
 import io.github.sumirenokai.vesqen.usb.session.DirectUsbFailure
+import io.github.sumirenokai.vesqen.usb.session.UsbDeviceIdentity
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 import java.nio.ByteBuffer
@@ -291,7 +296,7 @@ class UsbOutputCoordinatorTest {
         val done = checkNotNull(direct.pendingRelease)
         shadowOf(audioManager).addOutputDevice(audioDevice(id = 12), true)
         idle()
-        done(true)
+        done(RELEASED)
         idle()
         assertStatus(UsbOutputPhase.APPLYING, "direct_usb.interrupted")
         assertEquals(0, direct.calls.count { it == "takeOver" })
@@ -312,7 +317,7 @@ class UsbOutputCoordinatorTest {
         idle()
         assertEquals(0, direct.calls.count { it == "takeOver" })
         direct.deferTakeover = false
-        checkNotNull(direct.pendingRelease)(true)
+        checkNotNull(direct.pendingRelease)(RELEASED)
         idle()
         assertEquals(1, direct.calls.count { it == "takeOver" })
     }
@@ -360,7 +365,7 @@ class UsbOutputCoordinatorTest {
         direct.deferTakeover = true
         coordinator.onCommunicationChanged(true)
         coordinator.requestMode(UsbOutputMode.SYSTEM)
-        checkNotNull(direct.pendingRelease)(true)
+        checkNotNull(direct.pendingRelease)(RELEASED)
         idle()
         assertStatus(UsbOutputPhase.SYSTEM, "system_audio_route")
         assertFalse(player.playWhenReady)
@@ -395,7 +400,7 @@ class UsbOutputCoordinatorTest {
         direct.calls.clear()
         coordinator.onPlayWhenReadyChanged(false, Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS)
         direct.deferTakeover = false
-        checkNotNull(direct.pendingRelease)(true)
+        checkNotNull(direct.pendingRelease)(RELEASED)
         stale(null)
         idle()
         assertFalse("takeOver" in direct.calls)
@@ -1566,7 +1571,7 @@ class UsbOutputCoordinatorTest {
         coordinator.requestMode(UsbOutputMode.SYSTEM)
         idle()
         assertFalse(playerCalls.contains("prepare"))
-        checkNotNull(direct.pendingRelease)(true)
+        checkNotNull(direct.pendingRelease)(RELEASED)
         idle()
         assertEquals(UsbOutputPhase.SYSTEM, status().phase)
     }
@@ -1585,7 +1590,7 @@ class UsbOutputCoordinatorTest {
         player.pause()
         val done = checkNotNull(direct.pendingRelease)
         direct.recoveryPending = false
-        done(true)
+        done(RELEASED)
         idle()
         assertEquals(UsbOutputPhase.SYSTEM, status().phase)
         assertFalse(player.playWhenReady)
@@ -1599,7 +1604,7 @@ class UsbOutputCoordinatorTest {
         val released = checkNotNull(direct.pendingRelease)
         shadowOf(audioManager).addOutputDevice(audioDevice(id = 12), true)
         idle()
-        released(true)
+        released(RELEASED)
         idle()
         assertStatus(UsbOutputPhase.SYSTEM, "system_audio_route")
         assertTrue(player.playWhenReady)
@@ -1617,7 +1622,7 @@ class UsbOutputCoordinatorTest {
         assertStatus(UsbOutputPhase.APPLYING, "direct_usb.returning_to_system")
         assertEquals(1, direct.calls.count { it == "release" })
         direct.recoveryPending = false
-        released(true)
+        released(RELEASED)
         idle()
         assertStatus(UsbOutputPhase.SYSTEM, "system_audio_route")
         assertTrue(player.playWhenReady)
@@ -1641,31 +1646,72 @@ class UsbOutputCoordinatorTest {
     @Test
     fun `a system request can join cleanup already started after a failure`() {
         val releases = PendingUsbReleases()
-        val results = mutableListOf<Boolean>()
+        val results = mutableListOf<DirectUsbReleaseResult>()
         releases.begin() // The failed session was released before the user selected system.
         releases.await(results::add)
         assertTrue(releases.pending)
         assertTrue(results.isEmpty())
-        releases.complete(true)
+        releases.complete(RELEASED)
         assertFalse(releases.pending)
-        assertEquals(listOf(true), results)
+        assertEquals(listOf(RELEASED), results)
     }
 
     @Test
     fun `all outstanding sessions must finish before a waiting release is acknowledged`() {
         val releases = PendingUsbReleases()
-        val results = mutableListOf<Boolean>()
+        val results = mutableListOf<DirectUsbReleaseResult>()
         releases.begin()
         releases.begin()
         releases.await(results::add)
-        releases.complete(false)
+        releases.complete(CLEANUP_FAILED)
         assertTrue(results.isEmpty())
-        releases.complete(true)
-        assertEquals(listOf(false), results)
+        releases.complete(VOLUME_RESTORE_FAILED)
+        assertEquals(listOf(CLEANUP_FAILED), results)
         releases.begin()
         releases.await(results::add)
-        releases.complete(true)
-        assertEquals(listOf(false, true), results)
+        releases.complete(RELEASED)
+        assertEquals(listOf(CLEANUP_FAILED, RELEASED), results)
+    }
+
+    @Test
+    fun `system output stays paused when only volume restoration fails`() {
+        reachDirectActive()
+        direct.deferTakeover = true
+        direct.recoveryPending = true
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        idle()
+        checkNotNull(direct.pendingRelease)(VOLUME_RESTORE_FAILED)
+        idle()
+
+        assertStatus(UsbOutputPhase.SYSTEM, SYSTEM_USB_VOLUME_NOT_RESTORED)
+        assertEquals(UsbOutputMode.SYSTEM, status().mode)
+        assertEquals("JBL Flip 7", status().deviceName)
+        assertNull(status().failure)
+        assertTrue(direct.recoveryPending)
+        assertTrue(playerCalls.contains("prepare"))
+        assertFalse(player.playWhenReady)
+        assertFalse(playerCalls.contains("play"))
+        assertFalse("recover" in direct.calls)
+
+        direct.deferRecovery = true
+        requestStrict()
+        assertNotNull(direct.pendingRecovery)
+    }
+
+    @Test
+    fun `only volume restoration failing still blocks a return to strict output`() {
+        reachDirectActive()
+        direct.deferTakeover = true
+        direct.recoveryPending = true
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        coordinator.requestMode(UsbOutputMode.STRICT_BIT_PERFECT)
+        checkNotNull(direct.pendingRelease)(VOLUME_RESTORE_FAILED)
+        idle()
+
+        assertEquals(UsbOutputPhase.FAILED, status().phase)
+        assertEquals(UsbOutputMode.STRICT_BIT_PERFECT, status().mode)
+        assertFalse(player.playWhenReady)
+        assertFalse(playerCalls.contains("prepare"))
     }
 
     @Test
@@ -1675,9 +1721,17 @@ class UsbOutputCoordinatorTest {
         direct.recoveryPending = true
         coordinator.requestMode(UsbOutputMode.SYSTEM)
         idle()
-        checkNotNull(direct.pendingRelease)(false)
+        direct.lastCleanup = CleanupRecord(listOf(
+            CleanupStep("volume restored", false),
+            CleanupStep("interface 2 released", false),
+            CleanupStep("connection closed", true),
+            CleanupStep("takeover marker cleared", false),
+        ))
+        checkNotNull(direct.pendingRelease)(CLEANUP_FAILED)
         idle()
-        assertFailedAfterActive(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed", UsbOutputFailureOrigin.USER_MODE_CHANGE)
+        assertFailedAfterActive(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.volume_control_failed", UsbOutputFailureOrigin.USER_MODE_CHANGE)
+        assertEquals(UsbOutputMode.STRICT_BIT_PERFECT, status().mode)
+        assertFalse(player.playWhenReady)
         assertFalse(playerCalls.contains("prepare"))
     }
 
@@ -1689,7 +1743,7 @@ class UsbOutputCoordinatorTest {
         val done = checkNotNull(direct.pendingRelease)
         coordinator.close()
         playerCalls.clear()
-        done(true)
+        done(RELEASED)
         idle()
         assertFalse(playerCalls.contains("prepare"))
         assertFalse(playerCalls.contains("play"))
@@ -1801,7 +1855,7 @@ class UsbOutputCoordinatorTest {
         idle()
         assertFalse("takeOver" in direct.calls)
         direct.deferTakeover = false
-        done(true)
+        done(RELEASED)
         idle()
         assertEquals(1, direct.calls.count { it == "takeOver" })
     }
@@ -2052,6 +2106,114 @@ class UsbOutputCoordinatorTest {
         direct.calls.clear()
     }
 
+    private fun requestIntroduction(): UsbOutputStatus {
+        direct.inspection = DirectUsbInspection.IntroductionNeeded("Test DAC", UsbDeviceIdentity(1, 2, 3))
+        connect(dac)
+        start(direct = direct)
+        loadTrack()
+        requestStrict()
+        assertStatus(UsbOutputPhase.SYSTEM, "direct_usb.introduction_pending_play")
+        assertEquals(OutputDeclaration.SYSTEM_MIXED, status().declaration)
+        player.play()
+        idle()
+        assertStatus(UsbOutputPhase.APPLYING, DIRECT_USB_INTRODUCTION)
+        assertEquals(OutputDeclaration.BIT_PERFECT_REQUESTED, status().declaration)
+        assertFalse(player.playWhenReady)
+        assertFalse("takeOver" in direct.calls || "requestPermission" in direct.calls)
+        return status()
+    }
+
+    @Test
+    fun `the exclusive output introduction precedes USB permission and can be cancelled`() {
+        val first = requestIntroduction()
+        assertTrue(answer(first, false))
+        assertEquals(OutputDeclaration.SYSTEM_MIXED, status().declaration)
+        player.play()
+        idle()
+        assertStatus(UsbOutputPhase.APPLYING, DIRECT_USB_INTRODUCTION)
+        assertFalse(answer(first, true))
+        assertTrue(answer(status(), true))
+        idle()
+        assertTrue("introduced" in direct.calls)
+        assertTrue("takeOver" in direct.calls)
+    }
+
+    @Test
+    fun `an introduction for a disconnected DAC cannot start a replacement device`() {
+        val first = requestIntroduction()
+        direct.inspection = DirectUsbInspection.IntroductionNeeded("Other DAC", UsbDeviceIdentity(2, 2, 3))
+        assertFalse(answer(first, true))
+        idle()
+        assertFalse("takeOver" in direct.calls || "introduced" in direct.calls)
+    }
+
+    @Test
+    fun `clearing the queue invalidates a pending introduction`() {
+        val first = requestIntroduction()
+        player.clearMediaItems()
+        idle()
+        assertFalse(answer(first, true))
+        assertFalse("takeOver" in direct.calls || "introduced" in direct.calls)
+    }
+
+    private fun requestFixedVolume(): UsbOutputStatus {
+        direct.inspection = DirectUsbInspection.Ready("Fixed DAC", PLAN_48K_24, UsbDeviceIdentity(1, 2, 3))
+        connect(dac)
+        start(direct = direct)
+        loadTrack()
+        requestStrict()
+        assertStatus(UsbOutputPhase.AVAILABLE, "direct_usb.available")
+        player.play()
+        idle()
+        assertStatus(UsbOutputPhase.AVAILABLE, FIXED_VOLUME_CONFIRMATION)
+        assertNull(status().failure)
+        assertFalse(player.playWhenReady)
+        assertFalse("takeOver" in direct.calls)
+        return status()
+    }
+
+    private fun answer(prompt: UsbOutputStatus, accept: Boolean) =
+        coordinator.answerUsbOutputConsent(prompt.generation, prompt.observedAtElapsedRealtimeMs, accept)
+
+    @Test
+    fun `cancelling consumes only that prompt and retry requires a fresh confirmation`() {
+        val first = requestFixedVolume()
+        assertTrue(answer(first, false))
+        assertStatus(UsbOutputPhase.AVAILABLE, "direct_usb.available")
+        assertFalse(answer(first, true))
+        assertFalse("confirmed" in direct.calls)
+        player.play()
+        idle()
+        val second = status()
+        assertEquals(FIXED_VOLUME_CONFIRMATION, second.decisionCode)
+        assertFalse(answer(first, true))
+        assertTrue(answer(second, true))
+        idle()
+        assertEquals(1, direct.calls.count { it == "confirmed" })
+        assertEquals(1, direct.calls.count { it == "takeOver" })
+        assertTrue(player.playWhenReady)
+        assertFalse(answer(second, true))
+    }
+
+    @Test
+    fun `change of attached device invalidates a visible confirmation even for the same model`() {
+        val first = requestFixedVolume()
+        direct.inspection = DirectUsbInspection.Ready("Fixed DAC", PLAN_48K_24, UsbDeviceIdentity(9, 2, 3))
+        assertFalse(answer(first, true))
+        idle()
+        assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.fixed_volume_confirmation_failed")
+        assertFalse("takeOver" in direct.calls || "confirmed" in direct.calls)
+    }
+
+    @Test
+    fun `clearing the queue with a confirmation open cannot authorize full-scale playback`() {
+        val first = requestFixedVolume()
+        player.clearMediaItems()
+        idle()
+        assertFalse(answer(first, true))
+        assertFalse("takeOver" in direct.calls || "confirmed" in direct.calls)
+    }
+
     @Test
     fun `without a bit-perfect mixer strict mode inspects the own path and takes over only to play`() {
         connect(dac)
@@ -2176,11 +2338,11 @@ class UsbOutputCoordinatorTest {
         connect(dac)
         start(direct = direct)
         loadTrack()
-        direct.inspection = DirectUsbInspection.Refused("uac2_not_supported", deviceName = "Moondrop Echo-A")
+        direct.inspection = DirectUsbInspection.Refused("speed_unsupported", deviceName = "Moondrop Echo-A")
 
         requestStrict()
 
-        assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.uac2_not_supported")
+        assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.speed_unsupported")
         assertEquals("Moondrop Echo-A", status().deviceName)
     }
 
@@ -2251,6 +2413,24 @@ class UsbOutputCoordinatorTest {
         assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.volume_control_failed")
         assertEquals("release", direct.calls.last())
         assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `a rate the clock refused at takeover keeps what the DAC offers`() {
+        connect(dac)
+        start(direct = direct)
+        loadTrack()
+        val failure = DirectUsbFailure(DirectUsbFailure.Reason.SAMPLE_RATE_UNSUPPORTED, "48000 Hz is not among clock 10's rates")
+        val offered = DirectUsbDetails(sourceSampleRateHz = 48_000, deviceSampleRatesHz = listOf(44_100..44_100))
+        direct.takeoverFailure = failure
+        direct.takeoverDetails = failure to offered
+        requestStrict()
+
+        player.play()
+        idle()
+
+        assertFailed(UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED, "direct_usb.rate_unsupported")
+        assertEquals(offered, status().directDetails)
     }
 
     @Test
@@ -2502,7 +2682,7 @@ class UsbOutputCoordinatorTest {
         obsolete(null)
         idle()
         assertFalse(playerCalls.contains("prepare"))
-        release(true)
+        release(RELEASED)
         idle()
         assertTrue(playerCalls.contains("prepare"))
         assertFalse(status().decisionCode.startsWith("direct_usb."))
@@ -2516,7 +2696,7 @@ class UsbOutputCoordinatorTest {
         checkNotNull(direct.pendingTakeover).invoke(null)
         idle()
         direct.recoveryPending = true
-        checkNotNull(direct.pendingRelease).invoke(false)
+        checkNotNull(direct.pendingRelease).invoke(CLEANUP_FAILED)
         idle()
         assertFailed(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed")
         requestStrict()
@@ -2540,8 +2720,10 @@ class UsbOutputCoordinatorTest {
     @Config(shadows = [RevokedDescriptorConnection::class])
     fun `revocation during descriptor inspection closes the connection and fails before takeover`() {
         attachUsbHardware("/dev/bus/usb/001/002", vendorId = 0x1234, productId = 0x5678)
+        val memory = PreferencesDirectUsbVolumeMemory(context)
+        assertTrue(memory.confirmIntroduction())
         val route = AndroidDirectUsbRoute(context, PreferencesTakeoverMarkerStore(context),
-            DirectUsbVolumeControl(), PreferencesDirectUsbVolumeMemory(context))
+            DirectUsbVolumeControl(), memory)
         RevokedDescriptorConnection.closes = 0
         start(direct = route)
         loadTrack()
@@ -2605,13 +2787,27 @@ class UsbOutputCoordinatorTest {
     private class FakeDirectRoute : DirectUsbRoute {
         val calls = mutableListOf<String>()
         var inspection: DirectUsbInspection = DirectUsbInspection.Ready("JBL Flip 7", PLAN_48K_24)
+        override fun confirmIntroduction(expected: UsbDeviceIdentity): Boolean {
+            val current = inspection as? DirectUsbInspection.IntroductionNeeded ?: return false
+            if (current.device != expected) return false
+            calls += "introduced"
+            inspection = DirectUsbInspection.Ready(current.deviceName, PLAN_48K_24)
+            return true
+        }
+        override fun confirmFixedVolume(expected: UsbDeviceIdentity): Boolean {
+            val current = inspection as? DirectUsbInspection.Ready ?: return false
+            if (current.needsFixedVolumeConsent != expected) return false
+            calls += "confirmed"
+            inspection = current.copy(needsFixedVolumeConsent = null)
+            return true
+        }
         var permissionGranted = true
         var beforePermissionResult: (() -> Unit)? = null
         var takeoverFailure: DirectUsbFailure? = null
         override fun readings() = DirectUsbReadings(48000, 24, 3, 2, "uac1", "adaptive", -30.0, 0, 0, 0, 0)
         var deferTakeover = false
         var pendingTakeover: ((DirectUsbFailure?) -> Unit)? = null
-        var pendingRelease: ((Boolean) -> Unit)? = null
+        var pendingRelease: ((DirectUsbReleaseResult) -> Unit)? = null
         var usbAudioDevicePresent = false
         var deferPermission = false
         var pendingPermission: ((Boolean) -> Unit)? = null
@@ -2640,6 +2836,7 @@ class UsbOutputCoordinatorTest {
 
         override var streaming = false
         override var recoveryPending = false
+        override var lastCleanup: CleanupRecord? = null
         override var listener: DirectUsbRoute.Listener? = null
 
         override fun onSinkConfigured(config: AudioSink.AudioSinkConfig) = Unit
@@ -2664,6 +2861,10 @@ class UsbOutputCoordinatorTest {
             onResult(permissionGranted)
         }
 
+        var takeoverDetails: Pair<DirectUsbFailure, DirectUsbDetails>? = null
+
+        override fun detailsFor(failure: DirectUsbFailure): DirectUsbDetails? = takeoverDetails?.takeIf { it.first === failure }?.second
+
         override fun takeOver(onDone: (DirectUsbFailure?) -> Unit) {
             calls += "takeOver"
             if (deferTakeover) {
@@ -2675,10 +2876,10 @@ class UsbOutputCoordinatorTest {
             onDone(failure)
         }
 
-        override fun release(onReleased: ((Boolean) -> Unit)?) {
+        override fun release(onReleased: ((DirectUsbReleaseResult) -> Unit)?) {
             calls += "release"
             streaming = false
-            if (deferTakeover) pendingRelease = onReleased else onReleased?.invoke(true)
+            if (deferTakeover) pendingRelease = onReleased else onReleased?.invoke(RELEASED)
         }
 
         override fun close() = Unit

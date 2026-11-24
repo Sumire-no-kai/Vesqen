@@ -56,11 +56,11 @@ internal fun isMediaButtonStartPlaceholder(
 ): Boolean = !isPackageNameVerified && controllerInfoType == Intent.ACTION_MEDIA_BUTTON
 
 /**
- * A strict output failure that stopped a requested playback. Failures at service start or while a
- * queue is restored paused happen before any Play request and do not end a media button start.
+ * A failure or consent prompt ends the current Play request without audio. Failures at service
+ * start or while a queue is restored paused do not end a media button start.
  */
 internal fun UsbOutputStatus.stopsRequestedPlayback(): Boolean =
-    failure != null &&
+    (failure != null || decisionCode == DIRECT_USB_INTRODUCTION || decisionCode == FIXED_VOLUME_CONFIRMATION) &&
         failureOrigin != UsbOutputFailureOrigin.SERVICE_START &&
         failureOrigin != UsbOutputFailureOrigin.QUEUE_RESTORE
 

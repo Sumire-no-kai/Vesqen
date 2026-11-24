@@ -37,7 +37,7 @@ int UsbfsTransport::submit(IsoUrb& urb) {
     auto* raw = static_cast<usbdevfs_urb*>(urb.transportState);
     std::memset(raw, 0, stateBytes(urb.packetCount));
     raw->type = USBDEVFS_URB_TYPE_ISO;
-    raw->endpoint = endpoint_;
+    raw->endpoint = urb.feedback ? feedbackEndpoint_ : endpoint_;
     raw->flags = USBDEVFS_URB_ISO_ASAP;
     raw->buffer = urb.data;
     raw->number_of_packets = static_cast<int>(urb.packetCount);

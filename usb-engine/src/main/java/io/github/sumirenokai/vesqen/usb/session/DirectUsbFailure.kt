@@ -9,8 +9,14 @@ data class DirectUsbFailure(val reason: Reason, val detail: String) {
         VOLUME_CONTROL_FAILED,
         SAMPLE_RATE_SET_FAILED,
         SAMPLE_RATE_READBACK_MISMATCH,
+        /** UAC2: the rate is not among those the device's clock offered once claimed (#284). */
+        SAMPLE_RATE_UNSUPPORTED,
         USB_ENGINE_UNAVAILABLE,
         USB_TRANSFER_FAILED,
+        /** An asynchronous DAC's feedback endpoint sent no usable value for too long (#284). */
+        FEEDBACK_TIMEOUT,
+        /** As above, and what it did send lay outside the range Linux accepts. */
+        FEEDBACK_OUT_OF_RANGE,
         DEVICE_DISCONNECTED,
         USB_PERMISSION_REVOKED,
         // The format layers (D10), checked before an output is opened, and the samples while it runs.
@@ -28,7 +34,11 @@ data class DirectUsbFailure(val reason: Reason, val detail: String) {
 /** One release step. A failed step is recorded and the rest still run, except past the safety barrier. */
 data class CleanupStep(val name: String, val succeeded: Boolean)
 
-data class CleanupRecord(val steps: List<CleanupStep>) {
+data class CleanupRecord(
+    val steps: List<CleanupStep>,
+    /** All interfaces and the connection are back. The marker was kept to retry volume restoration. */
+    val onlyVolumeRestoreFailed: Boolean = false,
+) {
     val firstFailure: CleanupStep? get() = steps.firstOrNull { !it.succeeded }
 }
 
@@ -140,5 +150,9 @@ fun UsbStreamStats.asFailure(): DirectUsbFailure? = when (failure) {
     UsbStreamStats.Failure.NONE -> null
     UsbStreamStats.Failure.DEVICE_GONE ->
         DirectUsbFailure(DirectUsbFailure.Reason.DEVICE_DISCONNECTED, "the stream lost the device")
+    UsbStreamStats.Failure.FEEDBACK_TIMEOUT ->
+        DirectUsbFailure(DirectUsbFailure.Reason.FEEDBACK_TIMEOUT, "no usable feedback value in time")
+    UsbStreamStats.Failure.FEEDBACK_OUT_OF_RANGE ->
+        DirectUsbFailure(DirectUsbFailure.Reason.FEEDBACK_OUT_OF_RANGE, "feedback values outside the accepted range")
     else -> DirectUsbFailure(DirectUsbFailure.Reason.USB_TRANSFER_FAILED, "$failure, errno $failureErrno")
 }

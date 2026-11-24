@@ -8,6 +8,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -47,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -57,6 +60,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.ui.LocalScreenOffKeepAlive
+import io.github.sumirenokai.vesqen.ui.openBackgroundPowerSettings
 import io.github.sumirenokai.vesqen.library.ArtistSplitSettings
 import io.github.sumirenokai.vesqen.playback.NO_BIT_PERFECT_MIXER_CODE
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
@@ -168,6 +173,11 @@ fun SettingsScreen(
                             modifier = Modifier.testTag("vesqen.settings.output.strict-usb"),
                         )
                     }
+                    if (outputStatus.directUsbAvailable) {
+                        PaperDivider()
+                        DirectUsbInformationRow()
+                    }
+                    if (strictSelected && outputStatus.directUsbAvailable) SettingsScreenOffRows()
                     if (premiumAccess != null) {
                         PaperDivider()
                         SettingsPremiumRow(premiumAccess, onOpenPremium)
@@ -311,6 +321,7 @@ private fun verificationFailureLabel(failure: OutputVerificationImportFailure): 
 
 @Composable
 internal fun strictUsbOutputBody(status: UsbOutputStatus): String {
+    directUsbStateSpec(status)?.let { return stringResource(it.id, *it.args.toTypedArray()) }
     if (status.decisionCode == "direct_usb.interrupted") return stringResource(R.string.usb_output_interrupted)
     if (status.decisionCode == "direct_usb.recovering") return stringResource(R.string.usb_recovery_in_progress)
     if (status.mode != UsbOutputMode.STRICT_BIT_PERFECT) {
@@ -332,8 +343,9 @@ internal fun strictUsbOutputBody(status: UsbOutputStatus): String {
         UsbOutputPhase.AVAILABLE -> stringResource(R.string.settings_strict_usb_available, device)
         UsbOutputPhase.APPLYING -> stringResource(R.string.settings_strict_usb_applying, device)
         UsbOutputPhase.ACTIVE -> if (status.usesDirectUsb) {
+            val fixed = LocalDirectUsbVolume.current?.fixedOutput?.collectAsStateWithLifecycle()?.value == true
             stringResource(
-                R.string.settings_strict_usb_active_direct,
+                if (fixed) R.string.settings_strict_usb_active_direct_fixed else R.string.settings_strict_usb_active_direct,
                 device,
                 directUsbWireFormat(status) ?: stringResource(R.string.settings_format_unknown),
             )
@@ -623,6 +635,31 @@ private fun SettingsRadioRow(
     }
 }
 
+/** D13 (#333): the keep-alive switch and, on vivo-family phones, the system setting that avoids it. */
+@Composable
+private fun SettingsScreenOffRows() {
+    val keepAlive = LocalScreenOffKeepAlive.current ?: return
+    val enabled by keepAlive.enabled.collectAsStateWithLifecycle()
+    PaperDivider()
+    SettingsSwitchRow(
+        title = stringResource(R.string.screen_off_keep_alive_title),
+        description = stringResource(R.string.screen_off_keep_alive_body),
+        checked = enabled,
+        onCheckedChange = keepAlive::setEnabled,
+        modifier = Modifier.testTag("vesqen.settings.screen-off-keep-alive"),
+    )
+    if (keepAlive.vivoFamily) {
+        val context = LocalContext.current
+        PaperDivider()
+        SettingsRow(
+            title = stringResource(R.string.background_power_title),
+            description = stringResource(R.string.background_power_body),
+            onClick = { openBackgroundPowerSettings(context) },
+            modifier = Modifier.testTag("vesqen.settings.background-power"),
+        )
+    }
+}
+
 @Composable
 internal fun SettingsSwitchRow(
     title: String,
@@ -671,4 +708,21 @@ private fun StrictOutputStatusBox(status: UsbOutputStatus) {
         OutputStatusChip(declaration = status.declaration)
         Text(text = strictUsbOutputBody(status), style = MaterialTheme.typography.bodySmall)
     }
+}
+
+/** The first-use facts remain available after the service has remembered the decision. */
+@Composable
+private fun DirectUsbInformationRow() {
+    var show by rememberSaveable { mutableStateOf(false) }
+    SettingsRow(title = stringResource(R.string.usb_direct_intro_title),
+        description = stringResource(R.string.usb_direct_info_summary), onClick = { show = true },
+        modifier = Modifier.testTag("vesqen.settings.direct-usb-info"))
+    if (show) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { show = false },
+        title = { Text(stringResource(R.string.usb_direct_intro_title)) },
+        text = { Text(stringResource(R.string.usb_direct_intro_body),
+            modifier = Modifier.verticalScroll(rememberScrollState())) },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { show = false },
+            modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(android.R.string.ok)) } },
+    )
 }
