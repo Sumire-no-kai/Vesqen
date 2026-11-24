@@ -1,10 +1,10 @@
 # M7 开发清单：Vesqen 自有 USB 输出
 
-2026-10-30，2026-11-16 更新。架构见 [M7 架构设计](M7_USB_ARCHITECTURE.md)，审查及处理结果见[架构审查](M7_USB_ARCHITECTURE_REVIEW.md)和[二次审查](M7_USB_ARCHITECTURE_REVIEW_2.md)。范围以 [PRD 的 M7 章节](PRD.md) 和 [#71](https://github.com/Sumire-no-kai/Vesqen/issues/71) 为准；相关事项为 [#49](https://github.com/Sumire-no-kai/Vesqen/issues/49)（外部验证）、[#53](https://github.com/Sumire-no-kai/Vesqen/issues/53)（2026-10-16 决定双机双 DAC 矩阵随 M7 完成）和 [#65](https://github.com/Sumire-no-kai/Vesqen/issues/65)（16 位补零）。按 [商业模式](MONETIZATION.md)，2.0 开始收费的条件是 M7 在没有官方通道的参考手机（iQOO）上接参考 DAC，实测达到 `BIT-PERFECT ACTIVE`。
+2026-10-30，2026-11-24 更新。架构见 [M7 架构设计](M7_USB_ARCHITECTURE.md)，审查及处理结果见[架构审查](M7_USB_ARCHITECTURE_REVIEW.md)和[二次审查](M7_USB_ARCHITECTURE_REVIEW_2.md)。范围以 [PRD 的 M7 章节](PRD.md) 和 [#71](https://github.com/Sumire-no-kai/Vesqen/issues/71) 为准；相关事项为 [#49](https://github.com/Sumire-no-kai/Vesqen/issues/49)（外部验证）、[#53](https://github.com/Sumire-no-kai/Vesqen/issues/53)（2026-10-16 决定双机双 DAC 矩阵随 M7 完成）和 [#65](https://github.com/Sumire-no-kai/Vesqen/issues/65)（16 位补零）。按 [商业模式](MONETIZATION.md)，2.0 开始收费的条件是 M7 在没有官方通道的参考手机（iQOO）上接参考 DAC，实测达到 `BIT-PERFECT ACTIVE`。
 
 ## 当前状态
 
-**M7-0 至 M7-2 已完成（D1 的设备待定）。自有输出、硬件音量和链路显示已接入产品代码；2026-11-11 合入 `master`（`f78f41bd`）的 #315 至 #321 实现了启动恢复、设备生命周期、焦点和通话交接、USB 授权入口、暂停释放和跨采样率切换，真机验收仍待完成。息屏保活（D13）、UAC2 和异步反馈（#284）已进入当前基线；M7-5 的软件补齐在本地候选分支，参考 DAC 和相应硬件验收仍未完成。** M7-1 和 M7-2 在 `feature/usb-host-output` 上开发，2026-11-06 按 D6 经 [#274](https://github.com/Sumire-no-kai/Vesqen/pull/274) 合入 `master`（`6e34ce18`），同日从 `v1.2.0` 建立 `release/1.x`。M7-3 起的 PR 直接合入 `master`。
+**M7-0 至 M7-2 已完成（D1 的设备待定）。自有输出、硬件音量和链路显示已接入产品代码；2026-11-11 合入 `master`（`f78f41bd`）的 #315 至 #321 实现了启动恢复、设备生命周期、焦点和通话交接、USB 授权入口、暂停释放和跨采样率切换，真机验收仍待完成。息屏保活（D13）、UAC2 和异步反馈（#284）已进入当前基线；M7-5 的软件部分于 2026-11-19 经 [#340](https://github.com/Sumire-no-kai/Vesqen/pull/340) 合入 `master`（`3ee66066`）。参考 DAC 和相应的硬件验收（M7-6）仍未完成。** M7-1 和 M7-2 在 `feature/usb-host-output` 上开发，2026-11-06 按 D6 经 [#274](https://github.com/Sumire-no-kai/Vesqen/pull/274) 合入 `master`（`6e34ce18`），同日从 `v1.2.0` 建立 `release/1.x`。M7-3 起的 PR 直接合入 `master`。
 
 **M7-2：G1 于 2026-11-06 在 iQOO 9 × JBL Flip 7 上判定通过**（调试构建，焦点按模拟触发通过，见[设备验收](M7_DEVICE_ACCEPTANCE.md)）。同日的独立复核及其意见的处理见 [#273](https://github.com/Sumire-no-kai/Vesqen/issues/273)。代码经 [#272](https://github.com/Sumire-no-kai/Vesqen/pull/272) 合入 `feature/usb-host-output`，再随 #274 合入 `master`。
 
@@ -26,7 +26,7 @@ M7 的代码进度已大幅领先于 [#210](https://github.com/Sumire-no-kai/Ves
 
 1. **息屏保活（D13）**，所有者决定提到最近的开发阶段：保活音轨，以及 vivo“允许后台高耗电”的引导。iQOO 9 没有保活时，息屏后最快约 5 至 6 秒就冻结进程。同时由所有者在 iQOO 9 × JBL Flip 7 上验收已合并的各项：无缝切歌、USB 授权、暂停释放、启动恢复、拔出和来电。
 2. **UAC2 和异步同步（[#284](https://github.com/Sumire-no-kai/Vesqen/issues/284)）**：先用模拟设备完成主机测试，参考 DAC 到位后实测。多数 USB 小尾巴 DAC 是 UAC2、高速、异步设备，参考 DAC（D1）因此成为关键路径，应尽快购买，到位后先读描述符。2026-11-14：UAC2 时钟（#335）和异步反馈已按规范实现，这两类设备不再被拒绝，但未经参考 DAC 实测，不对外声明支持。
-3. **M7-5 的其余项**：固定音量确认（#331）、第一次使用的说明、按环节说明失败原因、设备报告是否包含自有输出的读数（先向所有者说明再定）、隐私政策写明本机保存的 USB 记录，以及 [#314](https://github.com/Sumire-no-kai/Vesqen/issues/314) 的 A2 和 A3。
+3. **M7-5 的其余项**：固定音量确认（#331）、第一次使用的说明、按环节说明失败原因、设备报告是否包含自有输出的读数（先向所有者说明再定）、隐私政策写明本机保存的 USB 记录，以及 [#314](https://github.com/Sumire-no-kai/Vesqen/issues/314) 的 A2 和 A3。2026-11-19：软件部分已随 #340 完成；固定音量 DAC 等实物验收见 M7-6。
 4. **随 2.0 发布的功能**：[#270](https://github.com/Sumire-no-kai/Vesqen/issues/270) ALAC 和 [#249](https://github.com/Sumire-no-kai/Vesqen/issues/249) DSD 先评估工作量，再决定放入 2.0.0-beta.1 还是 2.0.0。
 5. **开卖准备**与以上各项并行：#120、#222、#220、#215 和 #277，须先由所有者确定价格、条款和收款商品。
 
