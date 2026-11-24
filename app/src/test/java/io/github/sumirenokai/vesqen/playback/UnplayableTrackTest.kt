@@ -252,6 +252,25 @@ class UnplayableTrackTest {
         assertEquals("only the first track paused", 1, stopped.size)
     }
 
+    /** PR #345 review: only a Play while staying on the paused track moves on. */
+    @Test
+    fun `coming back to a paused unplayable track pauses there again`() {
+        play(listOf(flacFile(), flacFile(), wavFile()))
+        runUntil { interruptions.current.value != null }
+        session!!.seekToDefaultPosition(1)
+        runUntil { player!!.currentTracks.containsType(C.TRACK_TYPE_AUDIO) }
+        session!!.seekToDefaultPosition(0)
+        runUntil { player!!.currentTracks.containsType(C.TRACK_TYPE_AUDIO) && player!!.playbackState == Player.STATE_READY }
+
+        player!!.play()
+        runUntil { interruptions.current.value != null }
+        repeat(5) { settle() }
+
+        assertEquals(0, player!!.currentMediaItemIndex)
+        assertFalse(player!!.playWhenReady)
+        assertEquals(2, stopped.size)
+    }
+
     @Test
     fun `a track the listener picked pauses even with auto-skip on`() {
         skip = true

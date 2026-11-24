@@ -149,8 +149,12 @@ internal class PlaybackProblemGuard(
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+        val entry = mediaItem?.queueEntryId()
         val interruption = interruptions.current.value
-        if (interruption != null && interruption.queueEntryId != mediaItem?.queueEntryId()) interruptions.clear()
+        if (interruption != null && interruption.queueEntryId != entry) interruptions.clear()
+        // A Play moves on only while the listener stays on the track the guard paused; coming back
+        // to it later is a new choice (PR #345 review). An automatic transition holds before this.
+        if (heldEntry != entry) heldEntry = null
         when (reason) {
             Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED -> {
                 arrival = Arrival.PICKED
