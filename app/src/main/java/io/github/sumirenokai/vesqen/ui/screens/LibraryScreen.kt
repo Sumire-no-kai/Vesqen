@@ -1437,19 +1437,23 @@ private fun CollectionTrackList(
         }
         folderScope?.let { continuous ->
             var expanded by remember { mutableStateOf(false) }
+            val scope = stringResource(if (continuous) R.string.folder_scope_continuous else R.string.folder_scope_single)
+            val scopeLabel = stringResource(R.string.folder_scope_label, scope)
             Box(modifier = Modifier.padding(horizontal = VesqenSpacing.md)) {
                 TextButton(
                     onClick = { expanded = true },
                     enabled = !editing,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.folder.scope"),
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.folder.scope")
+                        .semantics { contentDescription = scopeLabel },
                 ) {
-                    Text(stringResource(if (continuous) R.string.folder_scope_continuous else R.string.folder_scope_single))
+                    Text(scope)
                 }
                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                     listOf(false, true).forEach { choice ->
                         DropdownMenuItem(
                             text = { Text(stringResource(if (choice) R.string.folder_scope_continuous else R.string.folder_scope_single)) },
                             onClick = { expanded = false; onFolderScopeChanged(choice) },
+                            trailingIcon = if (choice == continuous) { { Icon(Icons.Filled.Check, null) } } else null,
                             modifier = Modifier.semantics { selected = choice == continuous },
                         )
                     }

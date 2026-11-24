@@ -1096,7 +1096,8 @@
     <string name="usb_fixed_volume_pending">開始播放前，請確認固定音量輸出提示。</string>
     <string name="settings_strict_usb_active_direct_fixed">已在 %1$s 生效，%2$s。依據是 Vesqen 對裝置的設定與讀回，尚未經過外部驗證。Vesqen 不會降低送往 DAC 的音量。請在 DAC 或擴大機上調整音量，手機的音量控制無法調低這條輸出。</string>
     <string name="folder_scope_single">僅此資料夾</string>
-    <string name="folder_scope_continuous">接續播放資料夾</string>
+    <string name="folder_scope_label">播放範圍：%1$s</string>
+    <string name="folder_scope_continuous">連續播放資料夾</string>
     <string name="folder_previous">上一個資料夾</string>
     <string name="folder_next">下一個資料夾</string>
 </resources>

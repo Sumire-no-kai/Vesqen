@@ -2,8 +2,12 @@ package io.github.sumirenokai.vesqen
 
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -44,13 +48,18 @@ class FolderPlaybackUiTest {
             }
         }
         openFolder("B")
+        compose.onNodeWithTag("vesqen.folder.scope").assertContentDescriptionEquals(
+            compose.activity.getString(R.string.folder_scope_label, compose.activity.getString(R.string.folder_scope_single)),
+        )
         compose.onNodeWithTag("vesqen.library.track.4").performClick()
         compose.runOnIdle { assertEquals(listOf(3L, 4L) to 1, queues.single()) }
 
         chooseContinuous()
         compose.runOnIdle { assertEquals(1, queues.size) }
         restoration.emulateSavedInstanceStateRestore()
-        compose.onNodeWithTag("vesqen.folder.scope").assertExists()
+        compose.onNodeWithTag("vesqen.folder.scope").assertContentDescriptionEquals(
+            compose.activity.getString(R.string.folder_scope_label, compose.activity.getString(R.string.folder_scope_continuous)),
+        )
         compose.onNodeWithTag("vesqen.library.track.4").performClick()
         compose.runOnIdle { assertEquals(listOf(1L, 2L, 3L, 4L) to 3, queues.last()) }
         compose.onNodeWithTag("vesqen.library.collection.play").performClick()
@@ -73,11 +82,11 @@ class FolderPlaybackUiTest {
         }
         compose.onNodeWithTag("vesqen.library.mode.folders").performClick()
         compose.onNodeWithTag("vesqen.library.search-toggle").performClick()
-        compose.onNodeWithTag("vesqen.library.search").performTextInput("Track 3")
+        compose.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag("vesqen.library.search"))).performTextInput("Track 3")
         compose.waitUntil(10_000) {
-            compose.onAllNodes(androidx.compose.ui.test.hasTestTag("vesqen.library.collection.${folderKey("B")}"))
+            compose.onAllNodes(hasTestTag("vesqen.library.collection.${folderKey("B")}"))
                 .fetchSemanticsNodes().size == 1 &&
-                compose.onAllNodes(androidx.compose.ui.test.hasTestTag("vesqen.library.collection.${folderKey("A")}"))
+                compose.onAllNodes(hasTestTag("vesqen.library.collection.${folderKey("A")}"))
                     .fetchSemanticsNodes().isEmpty()
         }
         compose.onNodeWithTag("vesqen.library.collection.${folderKey("B")}").performClick()
@@ -121,7 +130,7 @@ class FolderPlaybackUiTest {
     private fun openFolder(name: String) {
         compose.onNodeWithTag("vesqen.library.mode.folders").performClick()
         compose.waitUntil(10_000) {
-            compose.onAllNodes(androidx.compose.ui.test.hasTestTag("vesqen.library.collection.${folderKey(name)}"))
+            compose.onAllNodes(hasTestTag("vesqen.library.collection.${folderKey(name)}"))
                 .fetchSemanticsNodes().size == 1
         }
         compose.onNodeWithTag("vesqen.library.collection.${folderKey(name)}").performClick()
