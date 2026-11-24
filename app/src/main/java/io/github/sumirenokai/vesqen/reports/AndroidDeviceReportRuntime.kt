@@ -124,6 +124,11 @@ internal class AndroidDeviceReportRuntime(
         }
     }
 
+    /** #344: a track no decoder or sink can take is recorded as an unsupported format, like a playback error. */
+    fun recordUnplayableTrack(item: MediaItem) {
+        recordPlaybackError(PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED, item)
+    }
+
     private fun recordPlaybackError(code: Int, item: MediaItem?) {
         val facts = TelemetryMediaItemExtras.read(item?.mediaMetadata?.extras)
         val event = ReportErrorEvent(

@@ -1289,11 +1289,12 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - #151（PR #152，`aa5333d`）：GitHub 版"关于"页加"支持开发"（Buy Me a Coffee），并偶尔询问一次，写明支持用在自研 USB 输出引擎和底层适配；Play 版两者都没有。隐私政策更新到 10 月 20 日版。
 - 渠道：所有者决定 1.0 先在 GitHub 和官网发布，Play 正式版审核通过后再上架同一个版本（PRD 末尾新增一节）。
 
-## 2026-11-24 · 无法解码的曲目改为报错，不再静音播完（#344）
+## 2026-11-24 · 无法播放的曲目在开头暂停并说明，不截断前一首（#344）
 
-- **问题：** 曲目没有可用的解码器时，Media3 的音频渲染器回答 `FORMAT_UNSUPPORTED_SUBTYPE`，`DefaultTrackSelector` 不选这条音轨，播放器按媒体时钟静音走到结束，既不报错，又计入一次收听。单曲循环时会一直静音循环并反复计数。
-- **决策：** `VesqenAudioRenderer` 对已编码音频改答 `FORMAT_EXCEEDS_CAPABILITIES`，音轨照常被选中，解码器初始化失败，产生现有的播放错误 4001，映射到现有的"Android 无法解码或输出这首曲目。"。原始 PCM 不改，那里的答案表示输出端不接受这种编码。调试用的 `GuardedRenderersFactory` 采用同样的回答。收听计数另加一道保护：只有音频轨被选中且正在播放时才计入，覆盖渲染器无法拦下的静音情况。没有新增文案。
-- **已知取舍：** 队列中可播放的曲目后面接一首无法解码的曲目时，Media3 在预读下一首时就报错，会丢掉前一首尚在输出缓冲中的结尾（系统输出约 0.5 秒），界面提前切到出错的曲目。这是 Media3 对预读期间解码失败的标准处理，以前其他解码失败也是这样。
-- **已验证：** JDK 25，`./gradlew :app:testGithubDebugUnitTest --tests '*UnplayableTrackTest'`。Robolectric（API 35）新增 7 项，其中 5 项在去掉改动后失败：渲染器回答 1 而不是 3；无解码器时不报错；单曲循环不报错；可播放曲目后的无法解码曲目不报错；未选中音轨的条目被计入收听。加回改动后 7 项全部通过，连续 3 次。完整检查 `:app:testDebugUnitTest :usb-engine:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:compileGithubDeviceTestAndroidTestKotlin` 通过。
-- **待验证：** "正在播放"页的提示只经由错误到问题类型的映射验证，没有在界面或真机上看过；可播放曲目接无法解码曲目时前一首是否计入收听、结尾被截掉多少，需要真机或模拟器测试。
-- **遗留：** 严格 USB 输出拒绝的原始 PCM 在播放中切换时仍会静音前进（已不计入收听）；终止错误后自有 USB 输出的清理；重新连接后的错误提示；错误记录去重。另记跟进。
+- **问题：** 曲目没有可用的解码器时，Media3 的音频渲染器回答 `FORMAT_UNSUPPORTED_SUBTYPE`，`DefaultTrackSelector` 不选这条音轨，播放器按媒体时钟静音走到结束，既不报错，又计入一次收听。
+- **放弃的第一版：** 起初让渲染器改答 `FORMAT_EXCEEDS_CAPABILITIES`，使解码器初始化失败并报 4001。复查发现，预读下一首时 `replaceStream` 失败，`ExoPlayerImplInternal` 推进到出错的条目并调用 `stopInternal(true, false)`，清掉前一首尚在输出缓冲中的结尾（系统输出约 0.5 秒）。所有者不接受截断（无静音结尾和渐出结尾都会受影响），改为下面的做法。
+- **决策（所有者 2026-11-24）：** 渲染器恢复 Media3 的回答，音轨保持未选中，`RendererHolder.maybeSetOldStreamToFinal` 让前一首完整播完。服务里的 `PlaybackProblemGuard` 在这首成为当前曲目、音轨已知且没有可播放的音频时处理：默认在开头暂停并记录一次中断；“自动跳过无法解码的曲目”开启时按收听方向跳过，用户直接选中的曲目、单曲循环、到头、一轮或连续 20 首时仍暂停。在它暂停的曲目上再按播放会跳到下一首。中断记录在应用进程内，由应用层对话框说明，应用不在前台时由服务发静默通知。播放错误（文件缺失等）也记录为中断，用同一个对话框说明，不随开关跳过（#349）。Now 的问题横幅移除。设备报告把无法播放的曲目记为格式不受支持（4005）。收听计数只在音频轨被选中且正在播放时计入。
+- **时序要点：** 检测只信任随事件送来的音轨（`onTracksChanged`、自动切歌）或 READY 状态下的音轨，因为 `stop()` 之后、下一次准备完成之前，getter 仍返回旧音轨。自动切歌在第一个事件 `onPositionDiscontinuity(AUTO_TRANSITION)` 就处理，系统媒体控件不会短暂显示这首在播放。媒体键启动的前台义务改为在 `onEvents` 里按 getter 判断是否真的在播放，因为同一批事件仍会报告被反转的 Play。官方严格路径会为一次 Play 暂停并重建 AudioTrack，只有 `getAudioOutput` 才恢复；无法播放的条目不会请求输出，所以加了 `holdsPlaybackForOutput` 和 `dropHeldPlayback`，放弃这次等待并重新检查混音器。
+- **已验证：** JDK 25，`./gradlew :app:testGithubDebugUnitTest --tests '*UnplayableTrackTest' --tests '*UsbOutputCoordinatorTest'`。`UnplayableTrackTest`（Robolectric，API 35，真实 ExoPlayer，空解码器列表）共 20 项，连续 3 次通过。放回第一版的映射后 12 项失败，其中“前一首播完”一项显示前一首的输出只收到 `release`，没有 `stop`（新做法先 `stop` 再 `release`）；去掉守卫后 12 项失败；去掉协调器的钩子后其新测试失败。新增设备测试 `PlaybackProblemUiTest`（对话框和设置开关），已编译。
+- **待验证：** 真机上前一首的最后几毫秒是否完整，取决于 Android 对输出延迟的估计，蓝牙和 USB 线路需对比无静音结尾和渐出结尾；对话框、通知和设置开关的界面需在设备上运行；耳机、通知和车机的播放键在暂停的曲目上的表现；官方严格路径没有开放通道的手机可测。
+- **遗留：** 解码器存在但在预读时初始化失败（4001）仍会截断前一首的结尾，播放错误能否不截断并随开关跳过见 #349；没有音频轨的文件仍静音前进（不计入收听）；终止错误后自有 USB 输出的清理；错误记录去重。重新连接后看不到错误提示的问题已由应用层的中断记录解决。

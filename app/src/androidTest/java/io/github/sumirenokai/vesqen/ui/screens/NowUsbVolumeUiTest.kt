@@ -88,7 +88,6 @@ class NowUsbVolumeUiTest {
                             onRemoveQueueItem = {},
                             onMoveQueueItem = { _, _ -> },
                             onClearQueue = {},
-                            onRetryPlayback = {},
                             onToggleOrientation = {},
                             showOrientationToggle = false,
                             isLandscape = width > height,

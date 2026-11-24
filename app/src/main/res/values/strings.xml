@@ -416,6 +416,16 @@
     <string name="playback_problem_format">This file can\'t be played. Its format isn\'t supported, or the file is damaged.</string>
     <string name="playback_problem_decoder">Android could not decode or output this track.</string>
     <string name="playback_problem_unknown">Playback stopped because of an unexpected error.</string>
+    <string name="playback_problem_title">Can\'t play this track</string>
+    <string name="playback_problem_unplayable_body">Android could not decode or output “%1$s”. Playback is paused.</string>
+    <string name="playback_problem_auto_skip_note">To skip tracks like this automatically, turn on “Skip tracks Android can\'t decode” in Settings.</string>
+    <string name="playback_problem_ok">OK</string>
+    <string name="playback_problem_next">Next track</string>
+    <string name="playback_problem_notification_title">Can\'t play “%1$s”</string>
+    <string name="playback_problem_notification_unplayable">Android could not decode or output this track. Playback is paused.</string>
+    <string name="playback_problem_channel">Playback problems</string>
+    <string name="settings_skip_unplayable_title">Skip tracks Android can\'t decode</string>
+    <string name="settings_skip_unplayable_body">When Android can\'t decode or output a track, playback moves on to the next track that can be played. When this is off, playback pauses on that track and the reason is shown.</string>
     <string name="detail_album_artist">Album artist</string>
     <string name="detail_track_number">Track / disc</string>
     <string name="detail_year">Year</string>

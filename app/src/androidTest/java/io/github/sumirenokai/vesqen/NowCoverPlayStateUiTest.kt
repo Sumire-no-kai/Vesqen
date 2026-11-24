@@ -53,7 +53,6 @@ class NowCoverPlayStateUiTest {
                 onRemoveQueueItem = {},
                 onMoveQueueItem = { _, _ -> },
                 onClearQueue = {},
-                onRetryPlayback = {},
                 onToggleOrientation = {},
                 showOrientationToggle = false,
                 isLandscape = false,

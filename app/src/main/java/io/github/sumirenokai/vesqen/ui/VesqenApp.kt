@@ -397,6 +397,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
         onUndoClearQueue = viewModel::undoClearQueue,
         onQueueClearedOfferEnded = viewModel::queueClearedOfferEnded,
         onRetryPlayback = viewModel::retryPlayback,
+        onPlayNextAfterProblem = viewModel::playNextAfterProblem,
         onPrevious = viewModel::skipToPrevious,
         onPlayPause = viewModel::togglePlayback,
         onNext = viewModel::skipToNext,
@@ -481,6 +482,7 @@ fun VesqenAppContent(
     onUndoClearQueue: () -> Unit = {},
     onQueueClearedOfferEnded: (Long) -> Unit = {},
     onRetryPlayback: () -> Unit = {},
+    onPlayNextAfterProblem: () -> Unit = {},
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
@@ -779,6 +781,9 @@ fun VesqenAppContent(
     val screenOffKeepAlive = LocalScreenOffKeepAlive.current
     val screenOffGuidanceDue = screenOffKeepAlive?.guidanceDue?.collectAsStateWithLifecycle()?.value == true
     val ownOutputPlaying = state.playback.usbOutputStatus.let { it.phase == UsbOutputPhase.ACTIVE && it.usesDirectUsb }
+    val playbackInterruptions = LocalPlaybackInterruptions.current
+    val playbackInterruption = playbackInterruptions?.current?.collectAsStateWithLifecycle()?.value
+    val skipUnplayable = LocalUnplayableTrackSettings.current?.skip?.collectAsStateWithLifecycle()?.value
     if (showRebuildNotice) {
         LibraryRebuiltDialog(onDismiss = { showRebuildNotice = false })
     } else if (showCrashPrompt && deviceReporter != null) {
@@ -834,6 +839,26 @@ fun VesqenAppContent(
                 screenOffKeepAlive.finishGuidance()
             },
             onNotNow = screenOffKeepAlive::finishGuidance,
+        )
+    } else if (playbackInterruptions != null && playbackInterruption != null &&
+        // A strict USB failure explains itself below.
+        state.playback.usbOutputStatus.phase != UsbOutputPhase.FAILED
+    ) {
+        val acknowledge = { playbackInterruptions.acknowledge(playbackInterruption.id) }
+        PlaybackProblemDialog(
+            interruption = playbackInterruption,
+            // A one-track queue under repeat all would only come back to the same track.
+            canSkipNext = state.playback.canSkipNext && state.playback.queueSize > 1,
+            showAutoSkipNote = skipUnplayable == false,
+            onRetry = {
+                acknowledge()
+                onRetryPlayback()
+            },
+            onNext = {
+                acknowledge()
+                onPlayNextAfterProblem()
+            },
+            onDismiss = acknowledge,
         )
     } else {
         // A failure waits while any explanation above is open.
@@ -936,7 +961,6 @@ fun VesqenAppContent(
                 onMoveQueueItem = onMoveQueueItem,
                 onClearQueue = onClearQueue,
                 noticeHostState = noticeHostState,
-                onRetryPlayback = onRetryPlayback,
                 onPrevious = onPrevious,
                 onPlayPause = onPlayPause,
                 onNext = onNext,
@@ -1017,7 +1041,6 @@ fun VesqenAppContent(
             onMoveQueueItem = onMoveQueueItem,
             onClearQueue = onClearQueue,
             noticeHostState = noticeHostState,
-            onRetryPlayback = onRetryPlayback,
             onPrevious = onPrevious,
             onPlayPause = onPlayPause,
             onNext = onNext,
@@ -1294,7 +1317,6 @@ private fun VesqenDestinationFrame(
     onMoveQueueItem: (Int, Int) -> Unit,
     onClearQueue: () -> Unit,
     noticeHostState: SnackbarHostState,
-    onRetryPlayback: () -> Unit,
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
@@ -1501,7 +1523,6 @@ private fun VesqenDestinationFrame(
                         onRemoveQueueItem = onRemoveQueueItem,
                         onMoveQueueItem = onMoveQueueItem,
                         onClearQueue = onClearQueue,
-                        onRetryPlayback = onRetryPlayback,
                         onToggleOrientation = onTogglePlayerOrientation,
                         showOrientationToggle = showOrientationToggle,
                         isLandscape = isLandscape,

@@ -418,6 +418,20 @@ class PlaybackController(
         }
     }
 
+    /**
+     * The problem dialog's Next track (#344): moves on and plays. Playback stopped for a problem, not
+     * by the listener's choice, so it does not stay paused as the transport's Next would.
+     */
+    fun playNextAfterProblem() {
+        controller?.let { activeController ->
+            currentProblem = null
+            skipToNext()
+            if (activeController.playbackState == Player.STATE_IDLE) activeController.prepare()
+            activeController.play()
+            publish(activeController)
+        }
+    }
+
     fun skipToNext() {
         controller?.let { activeController ->
             activeController.seekToNeighbor(
