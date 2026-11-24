@@ -471,7 +471,6 @@
     </plurals>
     <string name="retry">Retry</string>
     <string name="reset">Reset</string>
-    <string name="reorder">Reorder</string>
     <string name="chain_advanced_title">Advanced chain</string>
     <string name="chain_summary_action">Summary</string>
     <string name="chain_open_advanced">Open advanced dashboard</string>
@@ -498,7 +497,12 @@
     <string name="chain_dashboard_controls">Dashboard controls</string>
     <string name="chain_customize">Customize</string>
     <string name="chain_customize_title">Customize dashboard</string>
-    <string name="chain_customize_body">Choose which metrics to show, pin them or change their order.</string>
+    <string name="chain_customize_tab_metrics">Metrics</string>
+    <string name="chain_customize_tab_layout">Layout</string>
+    <string name="chain_customize_search">Search metrics</string>
+    <string name="chain_customize_section_shown">%1$s, %2$d of %3$d shown</string>
+    <string name="chain_customize_metric_pinned">%1$s, pinned</string>
+    <string name="chain_customize_no_results">No metric names contain “%1$s”</string>
     <string name="chain_refresh_interval">Refresh</string>
     <string name="chain_refresh_250ms">250 ms</string>
     <string name="chain_refresh_500ms">500 ms</string>
@@ -539,7 +543,6 @@
     <string name="chain_pinned_output_bluetooth">Bluetooth</string>
     <string name="chain_pinned">Pinned</string>
     <string name="chain_pin">Pin metric</string>
-    <string name="chain_unpin">Unpin metric</string>
     <string name="chain_reset_dashboard">Reset dashboard</string>
     <string name="chain_reset_title">Reset dashboard?</string>
     <string name="chain_reset_body">Refresh, power, calculation window, chart history, display units, selection, pins, order and view will return to their defaults.</string>

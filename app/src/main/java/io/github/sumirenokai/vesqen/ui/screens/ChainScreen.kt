@@ -6,7 +6,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -25,7 +24,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -34,7 +32,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DashboardCustomize
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Download
@@ -44,7 +41,6 @@ import androidx.compose.material.icons.filled.Functions
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
@@ -53,13 +49,10 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.HorizontalDivider
@@ -67,7 +60,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -93,12 +85,9 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
@@ -120,14 +109,12 @@ import io.github.sumirenokai.vesqen.telemetry.TelemetryEvent
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEventKind
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEventSeverity
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetric
-import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricId
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricSelection
 import io.github.sumirenokai.vesqen.telemetry.TelemetryObservation
 import io.github.sumirenokai.vesqen.telemetry.TelemetryPowerMode
 import io.github.sumirenokai.vesqen.telemetry.TelemetryReading
 import io.github.sumirenokai.vesqen.telemetry.TelemetryRefreshInterval
-import io.github.sumirenokai.vesqen.telemetry.TelemetrySection
 import io.github.sumirenokai.vesqen.telemetry.TelemetrySnapshot
 import io.github.sumirenokai.vesqen.telemetry.TelemetryUnit
 import io.github.sumirenokai.vesqen.telemetry.UsbInventoryReading
@@ -161,7 +148,6 @@ import io.github.sumirenokai.vesqen.ui.chain.telemetryMetricLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetrySectionLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetrySourceLabelResource
 import io.github.sumirenokai.vesqen.ui.chain.segmentChartHistory
-import io.github.sumirenokai.vesqen.ui.components.SheetWithoutNavigationBand
 import io.github.sumirenokai.vesqen.ui.components.VesqenEmptyState
 import io.github.sumirenokai.vesqen.ui.theme.VesqenDataStyle
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
@@ -823,19 +809,13 @@ private fun ChainMetricsGrid(
         preferences.refreshInterval,
         preferences.powerMode,
     )
+    // The customizer's Layout tab lists these same groups.
     val (pinned, grouped) = remember(
         preferences.selectedMetricIds, preferences.metricOrder, preferences.pinnedMetricIds, preferences.groupOrder,
     ) {
-        val selectedSet = preferences.selectedMetricIds.toSet()
-        val orderedIds = preferences.metricOrder.filter(selectedSet::contains)
-        val pinnedSet = preferences.pinnedMetricIds.toSet()
-        val grouped = preferences.groupOrder.mapNotNull { section ->
-            val ids = orderedIds.filter { id ->
-                id !in pinnedSet && runCatching { TelemetryMetricCatalog.descriptor(id).section == section }.getOrDefault(false)
-            }
-            if (ids.isEmpty()) null else section to ids
-        }
-        orderedIds.filter(pinnedSet::contains) to grouped
+        val groups = preferences.dashboardGroups()
+        groups.firstOrNull { it.section == null }?.metricIds.orEmpty() to
+            groups.mapNotNull { group -> group.section?.let { it to group.metricIds } }
     }
     LazyVerticalGrid(
         columns = columns,
@@ -2012,333 +1992,6 @@ private fun ChainMetricChart(
             }
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ChainCustomizerSheet(
-    preferences: ChainDashboardPreferences,
-    onPreferencesChanged: (ChainDashboardPreferences) -> Unit,
-    onReset: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var confirmReset by remember { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        SheetWithoutNavigationBand()
-        Column(modifier = Modifier.fillMaxWidth().testTag("vesqen.chain.customizer")) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = VesqenSpacing.lg),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = stringResource(R.string.chain_customize_title),
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.weight(1f).semantics { heading() },
-                )
-                IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Filled.Close, stringResource(R.string.close))
-                }
-            }
-            Text(
-                text = stringResource(R.string.chain_customize_body),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
-            )
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f, fill = false),
-                contentPadding = PaddingValues(VesqenSpacing.lg),
-                verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xs),
-            ) {
-                preferences.groupOrder.forEach { section ->
-                    item(key = "custom-section:${section.name}") {
-                        ChainCustomizerSectionRow(
-                            section = section,
-                            canMoveUp = preferences.groupOrder.indexOf(section) > 0,
-                            canMoveDown = preferences.groupOrder.indexOf(section) < preferences.groupOrder.lastIndex,
-                            onMoveUp = {
-                                onPreferencesChanged(
-                                    preferences.copy(groupOrder = preferences.groupOrder.moved(section, -1)),
-                                )
-                            },
-                            onMoveDown = {
-                                onPreferencesChanged(
-                                    preferences.copy(groupOrder = preferences.groupOrder.moved(section, 1)),
-                                )
-                            },
-                        )
-                    }
-                    val sectionIds = preferences.metricOrder.filter { id ->
-                        runCatching { TelemetryMetricCatalog.descriptor(id).section == section }.getOrDefault(false)
-                    }
-                    items(sectionIds, key = { "custom:${it.value}" }) { id ->
-                        val selected = id in preferences.selectedMetricIds
-                        val pinned = id in preferences.pinnedMetricIds
-                        val selectedInSection = sectionIds.filter(preferences.selectedMetricIds.toSet()::contains)
-                        val position = selectedInSection.indexOf(id)
-                        val canMoveUp = selected && position > 0
-                        val canMoveDown = selected && position >= 0 && position < selectedInSection.lastIndex
-                        ChainCustomizerMetricRow(
-                            metricId = id,
-                            selected = selected,
-                            selectionEnabled = !selected || preferences.selectedMetricIds.size > 1,
-                            pinned = pinned,
-                            canMoveUp = canMoveUp,
-                            canMoveDown = canMoveDown,
-                            onSelectedChanged = { shouldSelect ->
-                                val selection = if (shouldSelect) {
-                                    preferences.selectedMetricIds + id
-                                } else {
-                                    preferences.selectedMetricIds - id
-                                }
-                                onPreferencesChanged(
-                                    preferences.copy(
-                                        selectedMetricIds = selection,
-                                        pinnedMetricIds = if (shouldSelect) {
-                                            preferences.pinnedMetricIds
-                                        } else {
-                                            preferences.pinnedMetricIds - id
-                                        },
-                                    ),
-                                )
-                            },
-                            onPinnedChanged = { shouldPin ->
-                                onPreferencesChanged(
-                                    preferences.copy(
-                                        pinnedMetricIds = if (shouldPin) {
-                                            preferences.pinnedMetricIds + id
-                                        } else {
-                                            preferences.pinnedMetricIds - id
-                                        },
-                                    ),
-                                )
-                            },
-                            onMoveUp = {
-                                onPreferencesChanged(
-                                    preferences.copy(metricOrder = preferences.metricOrder.movedWithin(id, selectedInSection, -1)),
-                                )
-                            },
-                            onMoveDown = {
-                                onPreferencesChanged(
-                                    preferences.copy(metricOrder = preferences.metricOrder.movedWithin(id, selectedInSection, 1)),
-                                )
-                            },
-                        )
-                    }
-                }
-                item {
-                    OutlinedButton(
-                        onClick = { confirmReset = true },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("vesqen.chain.reset"),
-                    ) {
-                        Text(stringResource(R.string.chain_reset_dashboard))
-                    }
-                }
-            }
-        }
-    }
-    if (confirmReset) {
-        AlertDialog(
-            onDismissRequest = { confirmReset = false },
-            title = { Text(stringResource(R.string.chain_reset_title)) },
-            text = { Text(stringResource(R.string.chain_reset_body)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirmReset = false
-                        onReset()
-                    },
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.chain.reset-confirm"),
-                ) {
-                    Text(stringResource(R.string.reset))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmReset = false }, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-        )
-    }
-}
-
-@Composable
-private fun ChainCustomizerSectionRow(
-    section: TelemetrySection,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
-) {
-    val label = telemetrySectionLabel(LocalContext.current, section)
-    ChainReorderRow(
-        label = label,
-        canMoveUp = canMoveUp,
-        canMoveDown = canMoveDown,
-        onMoveUp = onMoveUp,
-        onMoveDown = onMoveDown,
-        modifier = Modifier.testTag("vesqen.chain.customizer.section.${section.name.lowercase()}"),
-        leading = {
-            Icon(Icons.Filled.DashboardCustomize, contentDescription = null, modifier = Modifier.size(20.dp))
-        },
-        labelStyle = MaterialTheme.typography.titleMedium,
-    )
-}
-
-@Composable
-private fun ChainCustomizerMetricRow(
-    metricId: TelemetryMetricId,
-    selected: Boolean,
-    selectionEnabled: Boolean,
-    pinned: Boolean,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    onSelectedChanged: (Boolean) -> Unit,
-    onPinnedChanged: (Boolean) -> Unit,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
-) {
-    val label = telemetryMetricLabel(LocalContext.current, metricId)
-    val moveUpLabel = stringResource(R.string.move_up)
-    val moveDownLabel = stringResource(R.string.move_down)
-    var menuExpanded by remember { mutableStateOf(false) }
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("vesqen.chain.customizer.metric.${metricId.value}")
-            .semantics {
-                contentDescription = label
-                customActions = buildList {
-                    if (canMoveUp) add(CustomAccessibilityAction(moveUpLabel) { onMoveUp(); true })
-                    if (canMoveDown) add(CustomAccessibilityAction(moveDownLabel) { onMoveDown(); true })
-                }
-            },
-        shape = RoundedCornerShape(VesqenRadii.control),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
-        Row(
-            modifier = Modifier.padding(VesqenSpacing.xxs),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // #35: the box and its label are one control, so TalkBack names the metric it toggles
-            // and the whole label is a touch target.
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 48.dp)
-                    // Inset 4 dp in a 12 dp box: an 8 dp press shape keeps the corners concentric.
-                    .clip(RoundedCornerShape(VesqenRadii.control - VesqenSpacing.xxs))
-                    .toggleable(
-                        value = selected,
-                        enabled = selectionEnabled,
-                        role = Role.Checkbox,
-                        onValueChange = onSelectedChanged,
-                    )
-                    .testTag("vesqen.chain.customizer.select.${metricId.value}"),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Checkbox(checked = selected, onCheckedChange = null, enabled = selectionEnabled)
-                Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            }
-            IconButton(
-                onClick = { onPinnedChanged(!pinned) },
-                enabled = selected,
-                modifier = Modifier.size(48.dp).testTag("vesqen.chain.customizer.pin.${metricId.value}"),
-            ) {
-                Icon(
-                    if (pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                    contentDescription = stringResource(if (pinned) R.string.chain_unpin else R.string.chain_pin),
-                )
-            }
-            Box {
-                IconButton(
-                    onClick = { menuExpanded = true },
-                    enabled = selected && (canMoveUp || canMoveDown),
-                    modifier = Modifier.size(48.dp),
-                ) {
-                    Icon(Icons.Filled.MoreVert, stringResource(R.string.reorder))
-                }
-                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                    DropdownMenuItem(
-                        text = { Text(moveUpLabel) },
-                        enabled = canMoveUp,
-                        leadingIcon = { Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null) },
-                        onClick = { menuExpanded = false; onMoveUp() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(moveDownLabel) },
-                        enabled = canMoveDown,
-                        leadingIcon = { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null) },
-                        onClick = { menuExpanded = false; onMoveDown() },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ChainReorderRow(
-    label: String,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
-    modifier: Modifier = Modifier,
-    leading: @Composable () -> Unit,
-    labelStyle: androidx.compose.ui.text.TextStyle,
-) {
-    val moveUpLabel = stringResource(R.string.move_up)
-    val moveDownLabel = stringResource(R.string.move_down)
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .semantics {
-                contentDescription = label
-                customActions = buildList {
-                    if (canMoveUp) add(CustomAccessibilityAction(moveUpLabel) { onMoveUp(); true })
-                    if (canMoveDown) add(CustomAccessibilityAction(moveDownLabel) { onMoveDown(); true })
-                }
-            },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        leading()
-        Spacer(Modifier.width(VesqenSpacing.xs))
-        Text(label, style = labelStyle, modifier = Modifier.weight(1f))
-        IconButton(onClick = onMoveUp, enabled = canMoveUp, modifier = Modifier.size(48.dp)) {
-            Icon(Icons.Filled.KeyboardArrowUp, moveUpLabel)
-        }
-        IconButton(onClick = onMoveDown, enabled = canMoveDown, modifier = Modifier.size(48.dp)) {
-            Icon(Icons.Filled.KeyboardArrowDown, moveDownLabel)
-        }
-    }
-}
-
-private fun <T> List<T>.moved(item: T, delta: Int): List<T> {
-    val from = indexOf(item)
-    if (from < 0) return this
-    val to = (from + delta).coerceIn(indices)
-    if (from == to) return this
-    return toMutableList().apply { add(to, removeAt(from)) }
-}
-
-private fun List<TelemetryMetricId>.movedWithin(
-    item: TelemetryMetricId,
-    sectionOrder: List<TelemetryMetricId>,
-    delta: Int,
-): List<TelemetryMetricId> {
-    val position = sectionOrder.indexOf(item)
-    if (position < 0) return this
-    val target = (position + delta).coerceIn(sectionOrder.indices)
-    if (position == target) return this
-    val targetItem = sectionOrder[target]
-    val fromGlobal = indexOf(item)
-    val targetGlobal = indexOf(targetItem)
-    if (fromGlobal < 0 || targetGlobal < 0) return this
-    return toMutableList().apply { add(targetGlobal, removeAt(fromGlobal)) }
 }
 
 internal fun ChainObservationState.lastSnapshot(): TelemetrySnapshot? = when (this) {

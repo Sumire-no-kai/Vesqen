@@ -461,7 +461,6 @@
     </plurals>
     <string name="retry">再試行</string>
     <string name="reset">リセット</string>
-    <string name="reorder">並べ替え</string>
     <string name="chain_advanced_title">経路の詳細</string>
     <string name="chain_summary_action">概要</string>
     <string name="chain_open_advanced">詳細なダッシュボードを開く</string>
@@ -487,7 +486,12 @@
     <string name="chain_dashboard_controls">ダッシュボードの操作</string>
     <string name="chain_customize">カスタマイズ</string>
     <string name="chain_customize_title">ダッシュボードをカスタマイズ</string>
-    <string name="chain_customize_body">表示する指標を選び、固定したり順番を変えたりできます。</string>
+    <string name="chain_customize_tab_metrics">指標</string>
+    <string name="chain_customize_tab_layout">レイアウト</string>
+    <string name="chain_customize_search">指標を検索</string>
+    <string name="chain_customize_section_shown">%1$s、%3$d 項目中 %2$d 項目を表示</string>
+    <string name="chain_customize_metric_pinned">%1$s、固定済み</string>
+    <string name="chain_customize_no_results">「%1$s」を含む指標はありません</string>
     <string name="chain_refresh_interval">更新間隔</string>
     <string name="chain_refresh_250ms">250 ミリ秒</string>
     <string name="chain_refresh_500ms">500 ミリ秒</string>
@@ -528,7 +532,6 @@
     <string name="chain_pinned_output_bluetooth">Bluetooth</string>
     <string name="chain_pinned">固定済み</string>
     <string name="chain_pin">指標を固定</string>
-    <string name="chain_unpin">固定を解除</string>
     <string name="chain_reset_dashboard">ダッシュボードをリセット</string>
     <string name="chain_reset_title">ダッシュボードをリセットしますか？</string>
     <string name="chain_reset_body">更新間隔、電力モード、計算対象の時間幅、グラフの履歴、表示単位、指標の選択・固定・並び順・表示方法を初期設定に戻します。</string>

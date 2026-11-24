@@ -461,7 +461,6 @@
     </plurals>
     <string name="retry">重试</string>
     <string name="reset">重置</string>
-    <string name="reorder">重新排序</string>
     <string name="chain_advanced_title">链路详情</string>
     <string name="chain_summary_action">摘要</string>
     <string name="chain_open_advanced">打开详细仪表盘</string>
@@ -487,7 +486,12 @@
     <string name="chain_dashboard_controls">仪表盘控制</string>
     <string name="chain_customize">自定义</string>
     <string name="chain_customize_title">自定义仪表盘</string>
-    <string name="chain_customize_body">选择要显示的指标，置顶或调整顺序。</string>
+    <string name="chain_customize_tab_metrics">指标</string>
+    <string name="chain_customize_tab_layout">布局</string>
+    <string name="chain_customize_search">搜索指标</string>
+    <string name="chain_customize_section_shown">%1$s，已显示 %2$d 项，共 %3$d 项</string>
+    <string name="chain_customize_metric_pinned">%1$s，已置顶</string>
+    <string name="chain_customize_no_results">没有名称包含“%1$s”的指标</string>
     <string name="chain_refresh_interval">刷新</string>
     <string name="chain_refresh_250ms">250 毫秒</string>
     <string name="chain_refresh_500ms">500 毫秒</string>
@@ -528,7 +532,6 @@
     <string name="chain_pinned_output_bluetooth">蓝牙</string>
     <string name="chain_pinned">已置顶</string>
     <string name="chain_pin">置顶指标</string>
-    <string name="chain_unpin">取消置顶</string>
     <string name="chain_reset_dashboard">重置仪表盘</string>
     <string name="chain_reset_title">重置仪表盘？</string>
     <string name="chain_reset_body">刷新频率、功耗模式、计算窗口、图表历史、显示单位、选择、置顶、顺序与视图都会恢复默认设置。</string>
