@@ -1114,9 +1114,10 @@ internal fun PlaybackException.toPlaybackProblem(): PlaybackProblem {
 
 /**
  * Chooses a transport route that can be both represented by a MediaSession and executed by its
- * controller. Indexed seeking is preferred: it preserves Media3's shuffle-aware neighbour index
- * while avoiding a session that exposes a timeline but declines the dedicated previous/next
- * command.
+ * controller. The dedicated previous/next command is preferred: the session runs it in the
+ * player's own shuffle-aware order, and only that command tells the session it is Next or Previous,
+ * which #344's guard needs to skip an unplayable track in the listener's direction. Indexed seeking
+ * remains for a session that exposes a timeline but declines the dedicated command.
  */
 internal fun selectNeighborSeekRoute(
     hasNeighbor: Boolean,
@@ -1124,8 +1125,8 @@ internal fun selectNeighborSeekRoute(
     canSeekToMediaItem: Boolean,
     canUseDedicatedCommand: Boolean,
 ): NeighborSeekRoute = when {
-    hasNeighbor && neighborIndex != C.INDEX_UNSET && canSeekToMediaItem -> NeighborSeekRoute.BY_INDEX
     hasNeighbor && canUseDedicatedCommand -> NeighborSeekRoute.DEDICATED
+    hasNeighbor && neighborIndex != C.INDEX_UNSET && canSeekToMediaItem -> NeighborSeekRoute.BY_INDEX
     else -> NeighborSeekRoute.UNAVAILABLE
 }
 
