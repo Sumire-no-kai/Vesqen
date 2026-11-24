@@ -29,6 +29,8 @@ import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.source.MediaSource
 import io.github.sumirenokai.vesqen.audio.AudioRouteSource
 import io.github.sumirenokai.vesqen.playback.DirectUsbReadings
+import io.github.sumirenokai.vesqen.playback.SYSTEM_AUDIO_ROUTE
+import io.github.sumirenokai.vesqen.playback.SYSTEM_USB_VOLUME_NOT_RESTORED
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.playback.UsbOutputStateRepository
@@ -1106,7 +1108,9 @@ class AndroidPlaybackTelemetry internal constructor(
         )
         metrics.measuredText(
             TelemetryMetricCatalog.ROUTE_LAST_STRATEGY_DECISION,
-            usbOutputStatus.decisionCode,
+            // This metric is exportable. The volume warning belongs to the local dialog.
+            if (usbOutputStatus.decisionCode == SYSTEM_USB_VOLUME_NOT_RESTORED) SYSTEM_AUDIO_ROUTE
+            else usbOutputStatus.decisionCode,
             usbOutputSource,
             usbOutputInstant,
         )

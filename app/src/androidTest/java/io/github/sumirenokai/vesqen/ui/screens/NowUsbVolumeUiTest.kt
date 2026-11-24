@@ -1,23 +1,43 @@
 package io.github.sumirenokai.vesqen.ui.screens
 
+import android.media.VolumeProvider
+import android.media.session.MediaController
 import androidx.activity.ComponentActivity
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaSession
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Density
+import io.github.sumirenokai.vesqen.playback.DeviceVolumeSessionPlayer
 import io.github.sumirenokai.vesqen.playback.DirectUsbVolume
 import io.github.sumirenokai.vesqen.playback.DirectUsbVolumeControl
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
+import io.github.sumirenokai.vesqen.playback.FIXED_VOLUME_CONFIRMATION
+import io.github.sumirenokai.vesqen.playback.UsbOutputFailureOrigin
+import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
+import io.github.sumirenokai.vesqen.playback.UsbOutputMode
+import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
+import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.ui.StrictUsbFailureDialog
 import io.github.sumirenokai.vesqen.ui.theme.VesqenMotionPolicy
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
 import org.junit.Assert.assertEquals
@@ -35,11 +55,12 @@ class NowUsbVolumeUiTest {
     // The JBL Flip 7's range.
     private val jbl = DirectUsbVolume(current = -7700, minimum = -15400, maximum = 0, resolution = 154)
 
-    private fun setNow(width: Int = 360, height: Int = 720) {
+    private fun setNow(width: Int = 360, height: Int = 720, fontScale: Float = 1f) {
         control.attach { asked += it }
         compose.setContent {
             VesqenTheme(darkTheme = false) {
-                CompositionLocalProvider(LocalDirectUsbVolume provides control) {
+                CompositionLocalProvider(LocalDirectUsbVolume provides control,
+                    LocalDensity provides Density(LocalDensity.current.density, fontScale)) {
                     Box(Modifier.size(width.dp, height.dp)) {
                         NowScreen(
                             snapshot = PlaybackSnapshot(
@@ -70,13 +91,94 @@ class NowUsbVolumeUiTest {
                             onRetryPlayback = {},
                             onToggleOrientation = {},
                             showOrientationToggle = false,
-                            isLandscape = false,
+                            isLandscape = width > height,
                             motionPolicy = VesqenMotionPolicy(reduceMotion = true),
                         )
                     }
                 }
             }
         }
+    }
+
+    @androidx.annotation.OptIn(UnstableApi::class)
+    @Test
+    fun androidMediaSessionReportsRemoteFixedAndRestoresLocalOnRelease() {
+        lateinit var player: ExoPlayer
+        lateinit var wrapper: DeviceVolumeSessionPlayer
+        lateinit var session: MediaSession
+        lateinit var platform: MediaController
+        compose.runOnUiThread {
+            player = ExoPlayer.Builder(compose.activity).build()
+            wrapper = DeviceVolumeSessionPlayer(player, control)
+            session = MediaSession.Builder(compose.activity, wrapper).build()
+            platform = MediaController(compose.activity, session.platformToken)
+        }
+        try {
+            compose.runOnUiThread { control.publish(null, fixed = true) }
+            compose.waitUntil(5_000) {
+                platform.playbackInfo.playbackType == MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE &&
+                    platform.playbackInfo.volumeControl == VolumeProvider.VOLUME_CONTROL_FIXED
+            }
+            compose.runOnUiThread { control.publish(jbl) }
+            compose.waitUntil(5_000) { platform.playbackInfo.volumeControl == VolumeProvider.VOLUME_CONTROL_ABSOLUTE }
+            compose.runOnUiThread { control.publish(null) }
+            compose.waitUntil(5_000) { platform.playbackInfo.playbackType == MediaController.PlaybackInfo.PLAYBACK_TYPE_LOCAL }
+        } finally {
+            compose.runOnUiThread {
+                session.release()
+                wrapper.stopReporting()
+                player.release()
+            }
+        }
+    }
+
+    @Test
+    fun fixedOutputShowsDeviceAdjustmentWithoutASlider() {
+        setNow()
+        compose.runOnUiThread { control.publish(null, fixed = true) }
+        compose.onNodeWithTag("vesqen.usb-volume").assertDoesNotExist()
+        compose.onNodeWithTag("vesqen.usb-volume.fixed").assertIsDisplayed()
+        compose.runOnUiThread { control.publish(jbl) }
+        compose.onNodeWithTag("vesqen.usb-volume.fixed").assertDoesNotExist()
+        compose.onNodeWithTag("vesqen.usb-volume").assertIsDisplayed()
+    }
+
+    @Test
+    fun fixedOutputKeepsItsControlsAtLargeTextInTheCurrentOrientation() {
+        val configuration = compose.activity.resources.configuration
+        setNow(configuration.screenWidthDp, configuration.screenHeightDp, fontScale = 2f)
+        compose.runOnUiThread { control.publish(null, fixed = true) }
+        compose.onNodeWithTag("vesqen.usb-volume.fixed").assertIsDisplayed()
+        compose.onNodeWithTag("vesqen.now.progress").assertIsDisplayed()
+        compose.onNodeWithTag("vesqen.now.transport-dock").assertIsDisplayed()
+        if (androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("m7Capture") == "true") {
+            val directory = java.io.File(compose.activity.filesDir, "m7-review").apply { mkdirs() }
+            java.io.File(directory, "fixed-now-${configuration.orientation}.png").outputStream().use {
+                compose.onRoot().captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+        }
+    }
+
+    @Test
+    fun cancellingAndConfirmingAnswerDifferentAttempts() {
+        val prompt = androidx.compose.runtime.mutableStateOf(UsbOutputStatus(
+            mode = UsbOutputMode.STRICT_BIT_PERFECT, phase = UsbOutputPhase.AVAILABLE,
+            decisionCode = FIXED_VOLUME_CONFIRMATION,
+            failureOrigin = UsbOutputFailureOrigin.USER_PLAYBACK, deviceName = "Test DAC", generation = 1,
+        ))
+        val answers = mutableListOf<Pair<Long, Boolean>>()
+        compose.setContent {
+            StrictUsbFailureDialog(prompt.value, true, {}, onAnswerUsbOutputConsent = { state, accept ->
+                answers += state.generation to accept
+            })
+        }
+        compose.onNodeWithText("Test DAC", substring = true).assertIsDisplayed()
+        compose.onNodeWithText(compose.activity.getString(io.github.sumirenokai.vesqen.R.string.cancel)).performClick()
+        compose.onNodeWithTag("vesqen.output.fixed-volume-dialog").assertDoesNotExist()
+        compose.runOnUiThread { prompt.value = prompt.value.copy(generation = 2) }
+        compose.onNodeWithTag("vesqen.output.fixed-volume-confirm").performClick()
+        compose.onNodeWithTag("vesqen.output.fixed-volume-dialog").assertDoesNotExist()
+        assertEquals(listOf(1L to false, 2L to true), answers)
     }
 
     @Test
@@ -118,8 +220,8 @@ class NowUsbVolumeUiTest {
         setNow()
         compose.runOnUiThread { control.publish(jbl) }
         compose.waitForIdle()
-        val slider = compose.onNodeWithContentDescription("DAC volume").fetchSemanticsNode()
-        assertEquals("-30.1 decibels", slider.config[SemanticsProperties.StateDescription])
+        val slider = compose.onNodeWithContentDescription(compose.activity.getString(R.string.usb_volume_label)).fetchSemanticsNode()
+        assertEquals(compose.activity.getString(R.string.usb_volume_state, "-30.1"), slider.config[SemanticsProperties.StateDescription])
     }
 
     @Test
@@ -127,7 +229,8 @@ class NowUsbVolumeUiTest {
         setNow()
         compose.runOnUiThread { control.publish(jbl) }
         compose.waitForIdle()
-        compose.onNodeWithContentDescription("DAC volume").performTouchInput { click(percentOffset(.95f, .5f)) }
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.usb_volume_label))
+            .performTouchInput { click(percentOffset(.95f, .5f)) }
         compose.waitForIdle()
 
         val request = asked.last()

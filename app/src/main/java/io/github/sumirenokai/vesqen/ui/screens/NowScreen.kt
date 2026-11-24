@@ -341,6 +341,7 @@ fun NowScreen(
 
     // Null unless Vesqen's own USB output holds a DAC (D4).
     val usbVolumeControl = LocalDirectUsbVolume.current
+    val fixedVolume = usbVolumeControl?.fixedOutput?.collectAsStateWithLifecycle()?.value == true
     val usbVolume = usbVolumeControl?.state?.collectAsStateWithLifecycle()?.value
     var showDetails by rememberSaveable { mutableStateOf(false) }
     var showQueue by rememberSaveable { mutableStateOf(false) }
@@ -445,6 +446,7 @@ fun NowScreen(
                     actions = actions,
                     height = maxHeight,
                     usbVolume = usbVolume,
+                    fixedVolume = fixedVolume,
                     onSetUsbVolume = usbVolumeControl?.let { it::set } ?: {},
                 )
             } else {
@@ -458,6 +460,7 @@ fun NowScreen(
                     motionPolicy = motionPolicy,
                     actions = actions,
                     usbVolume = usbVolume,
+                    fixedVolume = fixedVolume,
                     onSetUsbVolume = usbVolumeControl?.let { it::set } ?: {},
                 )
             }
@@ -567,6 +570,16 @@ private class NowActions(
 )
 
 @Composable
+private fun FixedUsbVolumeLabel() {
+    Text(
+        stringResource(R.string.usb_fixed_volume_label),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.testTag("vesqen.usb-volume.fixed"),
+    )
+}
+
+@Composable
 private fun NowPortraitPage(
     snapshot: PlaybackSnapshot,
     currentTrack: AudioTrack?,
@@ -577,6 +590,7 @@ private fun NowPortraitPage(
     motionPolicy: VesqenMotionPolicy,
     actions: NowActions,
     usbVolume: DirectUsbVolume?,
+    fixedVolume: Boolean,
     onSetUsbVolume: (Int) -> Unit,
 ) {
     Column(
@@ -594,7 +608,7 @@ private fun NowPortraitPage(
                 .clipToBounds()
                 .padding(horizontal = VesqenSpacing.lg),
         ) {
-            val layout = nowPortraitLayout(maxHeight, maxWidth, LocalDensity.current.fontScale, volumeBar = usbVolume != null)
+            val layout = nowPortraitLayout(maxHeight, maxWidth, LocalDensity.current.fontScale, volumeBar = usbVolume != null || fixedVolume)
             val artworkSize by animateDpAsState(
                 targetValue = if (notesOpen) layout.notesArtwork else layout.artwork,
                 animationSpec = tween(motionPolicy.notesExpandMillis, easing = PaperEasing),
@@ -671,6 +685,7 @@ private fun NowPortraitPage(
                     modifier = Modifier.padding(top = VesqenSpacing.xs),
                 )
                 if (usbVolume != null) DirectUsbVolumeBar(usbVolume, onSetUsbVolume)
+                else if (fixedVolume) FixedUsbVolumeLabel()
                 NowLinerNotes(
                     snapshot = snapshot,
                     currentTrack = currentTrack,
@@ -700,6 +715,7 @@ private fun NowLandscapePage(
     actions: NowActions,
     height: Dp,
     usbVolume: DirectUsbVolume?,
+    fixedVolume: Boolean,
     onSetUsbVolume: (Int) -> Unit,
 ) {
     val compressed = LocalDensity.current.fontScale >= 1.5f || height < 320.dp
@@ -773,6 +789,7 @@ private fun NowLandscapePage(
                 modifier = Modifier.widthIn(max = 400.dp),
             )
             if (volumeBar != null) DirectUsbVolumeBar(volumeBar, onSetUsbVolume, Modifier.widthIn(max = 400.dp))
+            else if (fixedVolume) FixedUsbVolumeLabel()
             NowLinerNotesHeader(
                 currentTrack = currentTrack,
                 snapshot = snapshot,

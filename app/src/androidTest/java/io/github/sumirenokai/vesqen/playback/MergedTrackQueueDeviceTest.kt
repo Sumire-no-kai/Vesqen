@@ -5,6 +5,8 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -22,17 +24,20 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.Rule
 
 /**
  * #139, #164: when the Library merges a song into a row of the same file, the queue follows. The
  * merge reaches the service through [PlaybackTrackMerges] as it commits (#191 D1, D7, D8).
  */
 class MergedTrackQueueDeviceTest {
+    @get:Rule val activity = ActivityScenarioRule(ComponentActivity::class.java)
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val testPrefix = "merged-track-test-${UUID.randomUUID()}"
@@ -150,19 +155,30 @@ class MergedTrackQueueDeviceTest {
         )
         // Track 2 cannot play now, so the restore holds it back.
         main { controller.syncLibrary(listOf(queued[0], queued[2])) }
-        awaitPlayback { it.trackId == queued[0].id && it.queueSize == 2 }
+        awaitPlayback("restoring two playable entries") { it.trackId == queued[0].id && it.queueSize == 2 }
         main { controller.togglePlayback() }
-        awaitPlayback { it.isPlaying && it.positionMs >= 1_000 }
+        awaitPlayback("playing the restored queue") { it.isPlaying && it.positionMs >= 1_000 }
 
         app.playbackTrackMerges.mergeCommitted(from = queued[1].id, into = record.id)
-        awaitPlayback { it.positionMs >= 3_000 }
+        awaitPlayback("continuing after the held-back merge") { it.positionMs >= 3_000 }
         main { controller.togglePlayback() }
-        awaitPlayback { !it.isPlaying }
-        val paused = playback.get().positionMs
-        // A pause saves the position at once.
-        val saved = withTimeout(15_000) {
-            while (PlaybackStateStore(app).load()?.positionMs?.let { it >= paused - 100 } != true) delay(50)
-            requireNotNull(PlaybackStateStore(app).load())
+        awaitPlayback("pausing the restored queue") { !it.isPlaying }
+        var paused = playback.get().positionMs
+        // MediaController pauses optimistically before the service's position arrives. Compare
+        // the checkpoint with that updated position, keeping the original precision requirement.
+        val saved = try {
+            withTimeout(15_000) {
+                while (PlaybackStateStore(app).load()?.positionMs?.let { it >= paused - 100 } != true) {
+                    main { controller.refreshPosition() }
+                    paused = playback.get().positionMs
+                    delay(50)
+                }
+                requireNotNull(PlaybackStateStore(app).load())
+            }
+        } catch (failure: TimeoutCancellationException) {
+            val stored = PlaybackStateStore(app).load()
+            throw AssertionError("Pause checkpoint did not catch the controller: controller=$paused, " +
+                "stored=${stored?.positionMs}, track=${stored?.currentTrackId}", failure)
         }
         assertEquals(listOf(queued[0].id, record.id, queued[2].id), saved.queueTrackIds)
         assertEquals(queued[0].id, saved.currentTrackId)
@@ -404,11 +420,20 @@ class MergedTrackQueueDeviceTest {
         }
     }
 
-    private suspend fun awaitPlayback(predicate: (PlaybackSnapshot) -> Boolean) = withTimeout(15_000) {
-        while (true) {
-            main { controller.refreshPosition() }
-            if (predicate(playback.get())) break
-            delay(50)
+    private suspend fun awaitPlayback(stage: String = "playback update", predicate: (PlaybackSnapshot) -> Boolean) {
+        try {
+            withTimeout(15_000) {
+                while (true) {
+                    main { controller.refreshPosition() }
+                    if (predicate(playback.get())) break
+                    delay(50)
+                }
+            }
+        } catch (failure: TimeoutCancellationException) {
+            val state = playback.get()
+            throw AssertionError("Timed out $stage: track=${state.trackId}, size=${state.queueSize}, " +
+                "position=${state.positionMs}, playing=${state.isPlaying}, " +
+                "output=${state.usbOutputStatus.decisionCode}", failure)
         }
     }
 

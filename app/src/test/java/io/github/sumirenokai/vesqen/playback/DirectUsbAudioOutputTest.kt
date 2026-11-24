@@ -428,6 +428,19 @@ class DirectUsbAudioOutputTest {
     }
 
     @Test
+    fun `a feedback failure keeps its own reason`() {
+        for ((streamFailure, reason) in listOf(
+            UsbStreamStats.Failure.FEEDBACK_TIMEOUT to Reason.FEEDBACK_TIMEOUT,
+            UsbStreamStats.Failure.FEEDBACK_OUT_OF_RANGE to Reason.FEEDBACK_OUT_OF_RANGE,
+        )) {
+            val failures = mutableListOf<DirectUsbFailure>()
+            val output = output(FakeHandle().apply { this.streamFailure = streamFailure }, onFailure = { failures += it })
+            assertThrows(AudioOutput.WriteException::class.java) { output.write(pcm(1), 1, 0) }
+            assertEquals(listOf(reason), failures.map { it.reason })
+        }
+    }
+
+    @Test
     fun `a session that failed stops the writes and says why`() {
         val failure = DirectUsbFailure(Reason.USB_TRANSFER_FAILED, "the last output's URBs were not back within 1000 ms")
         val handle = FakeHandle().apply { this.failure = failure }

@@ -162,7 +162,15 @@ private fun collectLeadingId3Tags(input: BufferedInputStream, tags: TagCollector
     val tag = BoundedArtworkInputStream(input, ID3_HEADER_BYTES + tagSize.toLong() + if (hasFooter) ID3_HEADER_BYTES else 0)
     collectId3Tags(tag, tags)
     if (!tag.skipRemaining()) return
+    // Some writers leave zero padding outside the declared tag size. Stop at the first
+    // nonzero byte so unknown content is never searched for a coincidental sync word.
+    var padding = 0
     input.mark(4)
+    while (input.read() == 0) {
+        if (++padding > MAX_POST_ID3_PADDING_BYTES) return
+        input.mark(4)
+    }
+    input.reset()
     val magic = input.readArtworkExact(4) ?: return
     input.reset()
     if (magic.hasAsciiPrefix("fLaC")) {
@@ -523,6 +531,7 @@ private fun readMp4Data(atomType: String, name: String?, data: ByteArray, tags: 
     }
 }
 
+private const val MAX_POST_ID3_PADDING_BYTES = 64 * 1024
 private const val MAX_TAG_TEXT_BYTES = 8 * 1024
 private const val CREDIT_SEPARATOR = ", "
 private val COVER_MIME = Regex("(image/)?[a-z0-9.+-]{1,32}")

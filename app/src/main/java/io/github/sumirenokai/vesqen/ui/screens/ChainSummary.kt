@@ -166,6 +166,8 @@ private val ChainPinnedMetricIds = setOf(
     Metrics.USB_DIRECT_PROTOCOL,
     Metrics.USB_DIRECT_SYNC_TYPE,
     Metrics.USB_DIRECT_UNDERRUNS,
+    Metrics.USB_DIRECT_FAILED_PACKETS,
+    Metrics.USB_DIRECT_LOST_FRAMES,
 )
 
 /** The codec Android reports for a Bluetooth route (#73), stated in the system's part. */
@@ -206,7 +208,7 @@ internal fun chainSummaryShownMetricIds(metrics: Map<TelemetryMetricId, Telemetr
             addAll(ChainStationFacts.getValue(ChainStation.SOURCE))
             addAll(ChainStationFacts.getValue(ChainStation.DECODER))
             addAll(DirectHandoffFacts)
-            addAll(listOf(Metrics.USB_DIRECT_PROTOCOL, Metrics.USB_DIRECT_SYNC_TYPE, Metrics.USB_DIRECT_UNDERRUNS))
+            addAll(listOf(Metrics.USB_DIRECT_PROTOCOL, Metrics.USB_DIRECT_SYNC_TYPE, Metrics.USB_DIRECT_UNDERRUNS, Metrics.USB_DIRECT_FAILED_PACKETS, Metrics.USB_DIRECT_LOST_FRAMES))
             ProcessingFlags.mapTo(this) { it.second }
             if (!read(Metrics.SOURCE_BIT_DEPTH)) add(Metrics.SOURCE_AVERAGE_BITRATE)
             return@buildSet
@@ -838,8 +840,10 @@ private fun pinnedContent(
             )
             ChainPinnedReading.UNDERRUNS -> return PinnedContent(
                 value = text(Metrics.USB_DIRECT_UNDERRUNS),
-                detail = null,
-                evidence = listOf(evidence(Metrics.USB_DIRECT_UNDERRUNS)),
+                detail = context.getString(R.string.chain_usb_continuity,
+                    text(Metrics.USB_DIRECT_FAILED_PACKETS) ?: "—", text(Metrics.USB_DIRECT_LOST_FRAMES) ?: "—"),
+                evidence = listOf(Metrics.USB_DIRECT_UNDERRUNS, Metrics.USB_DIRECT_FAILED_PACKETS,
+                    Metrics.USB_DIRECT_LOST_FRAMES).map(::evidence),
             )
             ChainPinnedReading.SOURCE -> Unit
         }

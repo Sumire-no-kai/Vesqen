@@ -10,7 +10,9 @@ namespace vesqen::usb {
  */
 class UsbfsTransport final : public IsoTransport {
 public:
-    UsbfsTransport(int fd, unsigned char endpoint) : fd_(fd), endpoint_(endpoint) {}
+    /** [feedbackEndpoint] is 0 for an endpoint paced by the nominal rate. */
+    UsbfsTransport(int fd, unsigned char endpoint, unsigned char feedbackEndpoint)
+        : fd_(fd), endpoint_(endpoint), feedbackEndpoint_(feedbackEndpoint) {}
 
     size_t stateBytes(uint32_t packetCount) const override;
     int submit(IsoUrb& urb) override;
@@ -24,6 +26,7 @@ public:
 private:
     const int fd_;
     const unsigned char endpoint_;
+    const unsigned char feedbackEndpoint_;
 };
 
 }  // namespace vesqen::usb
