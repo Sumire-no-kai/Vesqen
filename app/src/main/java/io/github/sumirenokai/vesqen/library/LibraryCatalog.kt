@@ -104,8 +104,7 @@ internal class AndroidLibraryCatalog(
      * time must not be marked interrupted.
      */
     suspend fun playableTracks(includeDeviceLibrary: Boolean): List<AudioTrack> = serialized {
-        // The records waiting for a choice are only listed in the Library (#191 D19).
-        snapshotInternal(includeDeviceLibrary, readUnmatchedRecords = false).tracks
+        snapshotInternal(includeDeviceLibrary, includeLibraryDetails = false).tracks
     }
 
     override suspend fun addFolder(treeUri: Uri) {
@@ -460,7 +459,7 @@ internal class AndroidLibraryCatalog(
         return SourceScanOutcome.COMPLETED
     }
 
-    private fun snapshotInternal(includeDeviceLibrary: Boolean, readUnmatchedRecords: Boolean = true): LibraryCatalogSnapshot {
+    private fun snapshotInternal(includeDeviceLibrary: Boolean, includeLibraryDetails: Boolean = true): LibraryCatalogSnapshot {
         val readableTreeUris = readableTreeUris()
         val mountedMediaStoreVolumes = if (includeDeviceLibrary) {
             mediaStore.currentVolumeNames()
@@ -518,8 +517,8 @@ internal class AndroidLibraryCatalog(
                     source
                 }
             },
-            playlists = store.readPlaylists(),
-            unmatchedRecords = if (!readUnmatchedRecords || displacedDeviceTrackIds.isEmpty() && hiddenFolderTrackIds.isEmpty()) {
+            playlists = if (includeLibraryDetails) store.readPlaylists() else emptyList(),
+            unmatchedRecords = if (!includeLibraryDetails || displacedDeviceTrackIds.isEmpty() && hiddenFolderTrackIds.isEmpty()) {
                 emptyList()
             } else {
                 unmatchedRecords(sourceTracks, visibleTracks)
