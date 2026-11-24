@@ -78,8 +78,9 @@ internal fun Tracks.hasUnplayableAudio(): Boolean =
  * pauses at the start of the track, before any sound. With [skipUnplayable] on, it moves on in the
  * direction the listener was going instead, but never for a track the listener picked directly,
  * never under repeat one, and for at most one lap or [SKIP_LIMIT] tracks. A Play pressed on a track
- * the guard paused moves on to the next one (owner, 2026-11-24), so a headset or car button is never
- * dead there.
+ * the guard paused moves on to the next track that plays (owner, 2026-11-24), so a headset or car
+ * button is never dead there. Only a Next or Previous command, marked through [navigating], counts
+ * as moving through the queue; any other seek to another item is a pick.
  *
  * Register it on the service's player after the shuffle listener and before the output coordinator,
  * the state keeper and the session: it acts synchronously inside callbacks, and the listeners after
@@ -103,6 +104,28 @@ internal class PlaybackProblemGuard(
     private var reportedEntry: String? = null
     private var skips = 0
 
+    /** Set around a Next or Previous command ([navigating]). */
+    private var navigationArrival: Arrival? = null
+
+    /** Set by the guard's own seek and taken by the discontinuity it causes. */
+    private var ownSeekArrival: Arrival? = null
+
+    /** A Play on a paused track keeps moving past unplayable tracks until one plays. */
+    private var recovering = false
+
+    /**
+     * Runs a Next or Previous command from any controller, so its seek counts as moving through the
+     * queue. Media3 reports the discontinuity before the command returns.
+     */
+    fun navigating(backward: Boolean, command: () -> Unit) {
+        navigationArrival = if (backward) Arrival.BACKWARD else Arrival.FORWARD
+        try {
+            command()
+        } finally {
+            navigationArrival = null
+        }
+    }
+
     override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
         when (reason) {
             // The first event of an automatic transition, so system controls never see the track as playing.
@@ -111,10 +134,14 @@ internal class PlaybackProblemGuard(
                 check(trusted = true)
             }
             Player.DISCONTINUITY_REASON_SEEK -> if (oldPosition.mediaItemIndex != newPosition.mediaItemIndex) {
-                arrival = when (oldPosition.mediaItemIndex) {
-                    player.previousMediaItemIndex -> Arrival.FORWARD
-                    player.nextMediaItemIndex -> Arrival.BACKWARD
-                    else -> Arrival.PICKED
+                val own = ownSeekArrival
+                ownSeekArrival = null
+                if (own != null) {
+                    arrival = own
+                } else {
+                    // The listener moved: a queue tap next to the current track is still a pick.
+                    recovering = false
+                    arrival = navigationArrival ?: Arrival.PICKED
                 }
             }
             else -> Unit
@@ -128,6 +155,7 @@ internal class PlaybackProblemGuard(
             Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED -> {
                 arrival = Arrival.PICKED
                 skips = 0
+                recovering = false
             }
             Player.MEDIA_ITEM_TRANSITION_REASON_AUTO, Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT -> check(trusted = true)
             // A seek waits for the item's tracks.
@@ -170,6 +198,7 @@ internal class PlaybackProblemGuard(
         if (tracks.isTypeSelected(C.TRACK_TYPE_AUDIO)) {
             heldEntry = null
             skips = 0
+            recovering = false
             return
         }
         val state = player.playbackState
@@ -186,8 +215,11 @@ internal class PlaybackProblemGuard(
         }
         // The guard paused this entry, so a Play is all that can have asked for it again.
         val insist = entry == heldEntry
-        val shouldMoveOn = insist || (skipUnplayable() && arrival != Arrival.PICKED)
-        if (shouldMoveOn && moveOn(backward = !insist && arrival == Arrival.BACKWARD)) return
+        val shouldMoveOn = insist || recovering || (skipUnplayable() && arrival != Arrival.PICKED)
+        if (shouldMoveOn && moveOn(backward = !insist && !recovering && arrival == Arrival.BACKWARD)) {
+            if (insist) recovering = true
+            return
+        }
         hold(entry, item)
     }
 
@@ -198,12 +230,14 @@ internal class PlaybackProblemGuard(
         if (target == C.INDEX_UNSET || target == player.currentMediaItemIndex) return false
         if (skips >= minOf(player.mediaItemCount, SKIP_LIMIT)) return false
         skips++
+        ownSeekArrival = if (backward) Arrival.BACKWARD else Arrival.FORWARD
         player.seekToDefaultPosition(target)
         return true
     }
 
     private fun hold(entry: String, item: MediaItem) {
         skips = 0
+        recovering = false
         heldEntry = entry
         if (player.playWhenReady) player.pause()
         onStopped()

@@ -68,6 +68,9 @@ class UnplayableTrackTest {
     private var player: ExoPlayer? = null
     private var outputs: RecordingOutputs? = null
 
+    /** The service's session player: Next and Previous reach the guard through it. */
+    private var session: PlayOrderSessionPlayer? = null
+
     @After
     fun releasePlayer() {
         player?.release()
@@ -202,11 +205,51 @@ class UnplayableTrackTest {
         play(listOf(wavFile(), flacFile(), wavFile()), startIndex = 2)
         runUntil { everPlaying }
 
-        player!!.seekToPreviousMediaItem()
+        session!!.seekToPreviousMediaItem()
         runUntil { visited.size >= 3 }
 
         assertEquals(listOf(2, 1, 0), visited.take(3))
         assertNull(interruptions.current.value)
+    }
+
+    @Test
+    fun `Next onto an unplayable track with auto-skip on moves past it`() {
+        skip = true
+        play(listOf(wavFile(), flacFile(), wavFile()))
+        runUntil { everPlaying }
+
+        session!!.seekToNextMediaItem()
+        runUntil { visited.size >= 3 }
+
+        assertEquals(listOf(0, 1, 2), visited.take(3))
+        assertNull(interruptions.current.value)
+    }
+
+    /** A queue tap seeks by index, like a jump anywhere else in the queue (PR #345 review). */
+    @Test
+    fun `a track picked next to the current one pauses even with auto-skip on`() {
+        skip = true
+        play(listOf(wavFile(), flacFile(), wavFile()))
+        runUntil { everPlaying }
+
+        session!!.seekToDefaultPosition(1)
+        runUntil { interruptions.current.value != null }
+
+        assertEquals(1, player!!.currentMediaItemIndex)
+        assertEquals("2", interruptions.current.value!!.queueEntryId)
+        assertFalse(player!!.playWhenReady)
+    }
+
+    @Test
+    fun `Play again moves past several unplayable tracks to one that plays`() {
+        play(listOf(flacFile(), flacFile(), wavFile()))
+        runUntil { interruptions.current.value != null }
+
+        player!!.play()
+        runUntil { player!!.currentMediaItemIndex == 2 && everPlaying }
+
+        assertEquals(listOf(0, 1, 2), visited)
+        assertEquals("only the first track paused", 1, stopped.size)
     }
 
     @Test
@@ -368,15 +411,15 @@ class UnplayableTrackTest {
             }
         })
         if (guard) {
-            created.addListener(
-                PlaybackProblemGuard(
-                    player = created,
-                    skipUnplayable = { skip },
-                    interruptions = interruptions,
-                    onStopped = { stopped += created.currentMediaItemIndex },
-                    onUnplayable = { reported += it.mediaId },
-                ),
+            val problemGuard = PlaybackProblemGuard(
+                player = created,
+                skipUnplayable = { skip },
+                interruptions = interruptions,
+                onStopped = { stopped += created.currentMediaItemIndex },
+                onUnplayable = { reported += it.mediaId },
             )
+            created.addListener(problemGuard)
+            session = PlayOrderSessionPlayer(created, navigating = problemGuard::navigating)
         }
         PlaybackStateKeeper(
             player = created,

@@ -111,7 +111,17 @@ internal fun MediaItem.queueEntryId(): String =
 internal class PlayOrderSessionPlayer(
     val exoPlayer: ExoPlayer,
     private val mergedTrackId: (Long) -> Long = { it },
+    /** #344: marks Next and Previous from every controller, so only they count as moving through the queue. */
+    private val navigating: (backward: Boolean, command: () -> Unit) -> Unit = { _, command -> command() },
 ) : ForwardingPlayer(exoPlayer) {
+    override fun seekToNext() = navigating(false) { super.seekToNext() }
+
+    override fun seekToNextMediaItem() = navigating(false) { super.seekToNextMediaItem() }
+
+    override fun seekToPrevious() = navigating(true) { super.seekToPrevious() }
+
+    override fun seekToPreviousMediaItem() = navigating(true) { super.seekToPreviousMediaItem() }
+
     override fun addMediaItems(index: Int, mediaItems: List<MediaItem>) {
         val items = mediaItems.map { it.withMergedTrackId(mergedTrackId) }
         val item = items.singleOrNull()

@@ -369,19 +369,18 @@ class PlaybackService : MediaSessionService() {
         })
         // #344: before the coordinator, the keeper and the session, which read its pause or seek.
         val interruptions = (application as VesqenApplication).playbackInterruptions
-        player.addListener(
-            PlaybackProblemGuard(
-                player = player,
-                skipUnplayable = { (application as VesqenApplication).unplayableTracks.skip.value },
-                interruptions = interruptions,
-                outputHoldsPlay = outputCoordinator::holdsPlaybackForOutput,
-                onStopped = {
-                    outputCoordinator.dropHeldPlayback()
-                    endMediaButtonStartWithoutPlayback()
-                },
-                onUnplayable = (application as VesqenApplication).deviceReportRuntime::recordUnplayableTrack,
-            ).also { problemGuard = it },
-        )
+        val guard = PlaybackProblemGuard(
+            player = player,
+            skipUnplayable = { (application as VesqenApplication).unplayableTracks.skip.value },
+            interruptions = interruptions,
+            outputHoldsPlay = outputCoordinator::holdsPlaybackForOutput,
+            onStopped = {
+                outputCoordinator.dropHeldPlayback()
+                endMediaButtonStartWithoutPlayback()
+            },
+            onUnplayable = (application as VesqenApplication).deviceReportRuntime::recordUnplayableTrack,
+        ).also { problemGuard = it }
+        player.addListener(guard)
         val problemNotification = PlaybackProblemNotification(this)
         serviceScope.launch {
             interruptions.current.collect { interruption ->
@@ -421,7 +420,7 @@ class PlaybackService : MediaSessionService() {
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val trackMerges = (application as VesqenApplication).playbackTrackMerges
-        val orderedPlayer = PlayOrderSessionPlayer(player, trackMerges::mergedTrackId)
+        val orderedPlayer = PlayOrderSessionPlayer(player, trackMerges::mergedTrackId, guard::navigating)
         // With the own USB output, the session also reports the DAC's hardware volume (D4).
         val sessionPlayer = if (directRoute != null) {
             DeviceVolumeSessionPlayer(orderedPlayer, (application as VesqenApplication).directUsbVolume)
