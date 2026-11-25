@@ -1126,4 +1126,9 @@
     <string name="chain_usb_continuity">Failed packets: %1$s · Lost frames: %2$s</string>
     <string name="usb_fixed_volume_pending">Confirm the fixed-volume warning before playback can start.</string>
     <string name="settings_strict_usb_active_direct_fixed">Active on %1$s, %2$s. Based on Vesqen’s configuration and device readback, without external verification. Vesqen does not lower the volume of the audio sent to the DAC. Adjust the volume on the DAC or amplifier; the phone volume controls cannot lower this output.</string>
+    <string name="folder_scope_single">This folder only</string>
+    <string name="folder_scope_label">Playback scope: %1$s</string>
+    <string name="folder_scope_continuous">Continue through folders</string>
+    <string name="folder_previous">Previous folder</string>
+    <string name="folder_next">Next folder</string>
 </resources>

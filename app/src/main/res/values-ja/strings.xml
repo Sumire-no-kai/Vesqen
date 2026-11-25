@@ -1095,4 +1095,9 @@
     <string name="chain_usb_continuity">失敗パケット：%1$s · 欠落フレーム：%2$s</string>
     <string name="usb_fixed_volume_pending">再生する前に固定音量出力の注意事項を確認してください。</string>
     <string name="settings_strict_usb_active_direct_fixed">%1$s で有効：%2$s。Vesqen の設定とデバイスの読み戻しに基づく状態で、外部検証は行っていません。DAC に送る音声の音量は Vesqen では下げません。音量は DAC またはアンプで調整してください。スマートフォンの音量操作ではこの出力を下げられません。</string>
+    <string name="folder_scope_single">このフォルダのみ</string>
+    <string name="folder_scope_label">再生範囲：%1$s</string>
+    <string name="folder_scope_continuous">フォルダを続けて再生</string>
+    <string name="folder_previous">前のフォルダ</string>
+    <string name="folder_next">次のフォルダ</string>
 </resources>
