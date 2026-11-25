@@ -20,6 +20,9 @@ internal class ForegroundTrigger(
 ) {
     private var started = 0
 
+    /** A main activity window is started, so the app can explain things itself. */
+    val visible: Boolean get() = started > 0
+
     fun activityStarted() {
         if (started++ == 0) scope.launch {
             val usageRequestExpected = usage()

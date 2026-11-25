@@ -579,6 +579,60 @@ class UsbOutputCoordinatorTest {
     }
 
     @Test
+    fun `official strict output drops a Play that the rebuilt item cannot use`() {
+        connectDacWithMixer()
+        start()
+        loadTrack()
+        requestStrict()
+        player.play()
+        idle()
+        assertStatus(UsbOutputPhase.APPLYING, "strict_usb.rebuilding_audio_track")
+        // #344: an item no renderer can play never asks for the output that would resume this Play.
+        assertTrue(coordinator.holdsPlaybackForOutput())
+
+        coordinator.dropHeldPlayback()
+        idle()
+
+        assertFalse(coordinator.holdsPlaybackForOutput())
+        assertStatus(UsbOutputPhase.AVAILABLE, "strict_usb.bit_perfect_available")
+        assertFalse(realPlayer.playWhenReady)
+    }
+
+    @Test
+    fun `a Play the official output has resumed is not held`() {
+        connectDacWithMixer()
+        start()
+        loadTrack()
+        requestStrict()
+        player.play()
+        idle()
+
+        strictOutput()
+        idle()
+
+        assertTrue(realPlayer.playWhenReady)
+        assertFalse(coordinator.holdsPlaybackForOutput())
+        coordinator.dropHeldPlayback()
+        idle()
+        assertTrue("dropHeldPlayback must leave a resumed Play alone", realPlayer.playWhenReady)
+    }
+
+    @Test
+    fun `a Play waiting for USB permission is not held as an official rebuild`() {
+        connect(dac)
+        start(direct = direct)
+        loadTrack()
+        direct.inspection = DirectUsbInspection.PermissionNeeded("JBL Flip 7")
+        direct.deferPermission = true
+        requestStrict()
+        player.play()
+        idle()
+
+        assertTrue("requestPermission" in direct.calls)
+        assertFalse(coordinator.holdsPlaybackForOutput())
+    }
+
+    @Test
     fun `the first device with a matching bit perfect mixer is selected`() {
         connect(audioDevice(id = 5))
         connectDacWithMixer()

@@ -73,7 +73,7 @@ class NowNotesDirectUsbUiTest {
                         currentTrack = null, artworkTrack = null, onBackToLibrary = {}, onOpenChain = {},
                         onCyclePlaybackOrder = {}, onPrevious = {}, onPlayPause = {}, onNext = {},
                         onSeek = { _, _ -> }, onPlayQueueIndex = {}, onRemoveQueueItem = {},
-                        onMoveQueueItem = { _, _ -> }, onClearQueue = {}, onRetryPlayback = {},
+                        onMoveQueueItem = { _, _ -> }, onClearQueue = {},
                         onToggleOrientation = {}, showOrientationToggle = false, isLandscape = false,
                         motionPolicy = VesqenMotionPolicy(reduceMotion = true),
                         playbackTelemetry = telemetry,

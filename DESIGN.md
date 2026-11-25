@@ -221,7 +221,7 @@ Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hai
 
 ### Settings
 
-Groups in this order: Playback output (System / Strict USB, radio group), Audio proof (Playback chain), Library (Artist splitting switch; while it is on, Separators and Names kept whole, each edited in a dialog with one text field, #168), Privacy & data (Usage statistics, Export device report), Updates (GitHub builds), Application (About, Privacy policy, Open source licenses), Advanced (Output verification records), then one footer line. Group titles are sans; each group is one paper card. When Strict USB is selected, a status box under the options says what happens next or why it stopped, never the option description again.
+Groups in this order: Playback output (System / Strict USB, radio group; last, the "Skip tracks Android can't decode" switch, #344), Audio proof (Playback chain), Library (Artist splitting switch; while it is on, Separators and Names kept whole, each edited in a dialog with one text field, #168), Privacy & data (Usage statistics, Export device report), Updates (GitHub builds), Application (About, Privacy policy, Open source licenses), Advanced (Output verification records), then one footer line. Group titles are sans; each group is one paper card. When Strict USB is selected, a status box under the options says what happens next or why it stopped, never the option description again.
 
 ### About
 
@@ -234,6 +234,7 @@ Header, mark, one plain sentence about the app, a facts card (version, developer
 - The queue's title shares its line with Clear queue and Close while it fits whole. Otherwise Clear queue moves to the line below, its label under the title, as the count has its own line (#35, #165).
 - Clear queue takes one tap. A snackbar where the mini-player was then offers Undo, which puts back the queue, its current track, position and shuffled order, paused. Owner decision, 2026-10-29 (#165).
 - Dialogs carry one primary action. The strict-output failure dialog appears only after a user action, never on a cold start.
+- A stop the listener did not choose is explained by one app-level dialog on any screen (#344): a track Android can't decode or output, or a playback error. Title "Can't play this track", then the reason, naming the track when Android can't decode it. Next track is the primary action and plays; OK keeps playback stopped; a playback error adds Retry playback. While the auto-skip switch is off, a small note under an undecodable track's reason names it. Once per interruption; moving onto such a track while paused shows nothing until Play. Away from the app, a silent notification says the same and opens the app. Now has no problem banner.
 
 ### Empty, loading and error states
 

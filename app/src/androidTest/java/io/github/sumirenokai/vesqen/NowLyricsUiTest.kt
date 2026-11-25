@@ -557,7 +557,6 @@ class NowLyricsUiTest {
                         onRemoveQueueItem = {},
                         onMoveQueueItem = { _, _ -> },
                         onClearQueue = {},
-                        onRetryPlayback = {},
                         onToggleOrientation = {},
                         showOrientationToggle = false,
                         isLandscape = landscape,

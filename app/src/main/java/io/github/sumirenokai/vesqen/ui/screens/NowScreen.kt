@@ -73,7 +73,6 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -126,7 +125,6 @@ import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
-import io.github.sumirenokai.vesqen.playback.PlaybackProblem
 import io.github.sumirenokai.vesqen.playback.DirectUsbVolume
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
@@ -318,7 +316,6 @@ fun NowScreen(
     onRemoveQueueItem: (Int) -> Unit,
     onMoveQueueItem: (Int, Int) -> Unit,
     onClearQueue: () -> Unit,
-    onRetryPlayback: () -> Unit,
     onToggleOrientation: () -> Unit,
     showOrientationToggle: Boolean,
     isLandscape: Boolean,
@@ -472,16 +469,6 @@ fun NowScreen(
                     .statusBarsPadding()
                     .padding(top = 56.dp),
             )
-            snapshot.problem?.let { problem ->
-                PlaybackProblemBanner(
-                    problem = problem,
-                    onRetry = onRetryPlayback,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .statusBarsPadding()
-                        .padding(top = 104.dp),
-                )
-            }
         }
     }
 
@@ -1591,36 +1578,6 @@ private fun PlaybackOrderFeedback(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-    }
-}
-
-@Composable
-private fun PlaybackProblemBanner(
-    problem: PlaybackProblem,
-    onRetry: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val message = stringResource(
-        when (problem) {
-            PlaybackProblem.SOURCE_UNAVAILABLE -> R.string.playback_problem_source
-            PlaybackProblem.UNSUPPORTED_FORMAT -> R.string.playback_problem_format
-            PlaybackProblem.DECODER_FAILURE -> R.string.playback_problem_decoder
-            PlaybackProblem.UNKNOWN -> R.string.playback_problem_unknown
-        },
-    )
-    Snackbar(
-        modifier = modifier
-            .padding(horizontal = VesqenSpacing.md)
-            .widthIn(max = 420.dp)
-            .semantics { liveRegion = LiveRegionMode.Polite }
-            .testTag("vesqen.now.playback-problem"),
-        action = {
-            TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text(stringResource(R.string.retry_playback))
-            }
-        },
-    ) {
-        Text(message, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 

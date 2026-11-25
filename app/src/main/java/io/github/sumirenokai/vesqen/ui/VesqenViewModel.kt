@@ -467,6 +467,8 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     fun retryPlayback() = playbackController?.retryPlayback()
 
+    fun playNextAfterProblem() = playbackController?.playNextAfterProblem()
+
     fun setFavorite(trackId: Long, favorite: Boolean) {
         mutateCatalog { catalog.setFavorite(trackId, favorite) }
     }

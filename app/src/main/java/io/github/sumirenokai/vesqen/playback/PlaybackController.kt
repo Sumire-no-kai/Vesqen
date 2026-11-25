@@ -434,6 +434,20 @@ class PlaybackController(
         }
     }
 
+    /**
+     * The problem dialog's Next track (#344): moves on and plays. Playback stopped for a problem, not
+     * by the listener's choice, so it does not stay paused as the transport's Next would.
+     */
+    fun playNextAfterProblem() {
+        controller?.let { activeController ->
+            currentProblem = null
+            skipToNext()
+            if (activeController.playbackState == Player.STATE_IDLE) activeController.prepare()
+            activeController.play()
+            publish(activeController)
+        }
+    }
+
     fun skipToNext() {
         controller?.let { activeController ->
             activeController.seekToNeighbor(
@@ -1114,7 +1128,8 @@ private const val RECONNECT_BASE_DELAY_MS = 500L
 private const val RECONNECT_MAX_SHIFT = 5
 private const val RECONNECT_MAX_DELAY_MS = 10_000L
 
-private fun PlaybackException.toPlaybackProblem(): PlaybackProblem {
+/** Internal so tests can pin which existing text each kind of failure shows. */
+internal fun PlaybackException.toPlaybackProblem(): PlaybackProblem {
     val name = errorCodeName.uppercase()
     return when {
         "FILE_NOT_FOUND" in name || "NO_PERMISSION" in name -> PlaybackProblem.SOURCE_UNAVAILABLE
@@ -1126,9 +1141,10 @@ private fun PlaybackException.toPlaybackProblem(): PlaybackProblem {
 
 /**
  * Chooses a transport route that can be both represented by a MediaSession and executed by its
- * controller. Indexed seeking is preferred: it preserves Media3's shuffle-aware neighbour index
- * while avoiding a session that exposes a timeline but declines the dedicated previous/next
- * command.
+ * controller. The dedicated previous/next command is preferred: the session runs it in the
+ * player's own shuffle-aware order, and only that command tells the session it is Next or Previous,
+ * which #344's guard needs to skip an unplayable track in the listener's direction. Indexed seeking
+ * remains for a session that exposes a timeline but declines the dedicated command.
  */
 internal fun selectNeighborSeekRoute(
     hasNeighbor: Boolean,
@@ -1136,8 +1152,8 @@ internal fun selectNeighborSeekRoute(
     canSeekToMediaItem: Boolean,
     canUseDedicatedCommand: Boolean,
 ): NeighborSeekRoute = when {
-    hasNeighbor && neighborIndex != C.INDEX_UNSET && canSeekToMediaItem -> NeighborSeekRoute.BY_INDEX
     hasNeighbor && canUseDedicatedCommand -> NeighborSeekRoute.DEDICATED
+    hasNeighbor && neighborIndex != C.INDEX_UNSET && canSeekToMediaItem -> NeighborSeekRoute.BY_INDEX
     else -> NeighborSeekRoute.UNAVAILABLE
 }
 

@@ -5,10 +5,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class NeighborSeekRouteTest {
+    /** #344: only the dedicated command tells the session that the listener pressed Next or Previous. */
     @Test
-    fun `prefers the shuffle aware indexed route when it is available`() {
+    fun `prefers the dedicated route the session can tell is Next or Previous`() {
         assertEquals(
-            NeighborSeekRoute.BY_INDEX,
+            NeighborSeekRoute.DEDICATED,
             selectNeighborSeekRoute(
                 hasNeighbor = true,
                 neighborIndex = 2,
@@ -19,14 +20,14 @@ class NeighborSeekRouteTest {
     }
 
     @Test
-    fun `falls back to the dedicated route when indexed seeking is unavailable`() {
+    fun `falls back to the shuffle aware index when the session declines the dedicated command`() {
         assertEquals(
-            NeighborSeekRoute.DEDICATED,
+            NeighborSeekRoute.BY_INDEX,
             selectNeighborSeekRoute(
                 hasNeighbor = true,
                 neighborIndex = 2,
-                canSeekToMediaItem = false,
-                canUseDedicatedCommand = true,
+                canSeekToMediaItem = true,
+                canUseDedicatedCommand = false,
             ),
         )
     }

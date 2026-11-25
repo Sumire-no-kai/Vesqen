@@ -14,6 +14,8 @@ enum class PlaybackProblem {
     UNSUPPORTED_FORMAT,
     DECODER_FAILURE,
     UNKNOWN,
+    /** #344: the track's audio is known, but Android can decode or output none of it; paused there, not stopped. */
+    UNPLAYABLE_TRACK,
 }
 
 /** One queue row, listed in play order; [listIndex] is its place in the player's list for edits (#158). */

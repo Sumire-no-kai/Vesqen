@@ -1,6 +1,7 @@
 package io.github.sumirenokai.vesqen.playback
 
 import android.os.Handler
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 
@@ -88,7 +89,8 @@ internal class PlaybackStateKeeper(
         }
         if (mediaItemTransition || playingChanged) {
             playbackStartGate.trackStarted(
-                isPlaying = player.isPlaying,
+                // #344: an item whose audio track was never selected advances in silence; not a listen.
+                isPlaying = player.isPlaying && player.currentTracks.isTypeSelected(C.TRACK_TYPE_AUDIO),
                 trackId = player.currentMediaItem?.mediaId?.toLongOrNull(),
             )?.let(onPlaybackStarted)
         }

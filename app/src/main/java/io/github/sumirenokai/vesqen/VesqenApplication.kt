@@ -18,9 +18,11 @@ import io.github.sumirenokai.vesqen.playback.DirectUsbVolumeControl
 import io.github.sumirenokai.vesqen.playback.PreferencesDirectUsbVolumeMemory
 import io.github.sumirenokai.vesqen.playback.ScreenOffKeepAliveSettings
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryRecorder
+import io.github.sumirenokai.vesqen.playback.PlaybackInterruptions
 import io.github.sumirenokai.vesqen.playback.PlaybackStateStore
 import io.github.sumirenokai.vesqen.playback.PlaybackTrackMerges
 import io.github.sumirenokai.vesqen.playback.PreferencesTakeoverMarkerStore
+import io.github.sumirenokai.vesqen.playback.UnplayableTrackSettings
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStateRepository
 import io.github.sumirenokai.vesqen.premium.ActivationCodes
@@ -83,6 +85,10 @@ class VesqenApplication : Application() {
     val directUsbVolume = DirectUsbVolumeControl()
     internal val directUsbVolumeMemory by lazy { PreferencesDirectUsbVolumeMemory(this) }
     internal val screenOffKeepAlive by lazy { ScreenOffKeepAliveSettings(this) }
+
+    /** #344: the auto-skip switch, and what last interrupted playback (service writes, app explains). */
+    internal val unplayableTracks by lazy { UnplayableTrackSettings(this) }
+    internal val playbackInterruptions = PlaybackInterruptions()
 
     /** #119: the trial and paid-feature state; the betas build it with enforcement off. */
     val premiumAccess: PremiumAccess by lazy {
@@ -220,6 +226,9 @@ class VesqenApplication : Application() {
 
     /** Both builds: the daily usage ping first, then the GitHub build's update check, which its reply may answer. */
     private val foreground = ForegroundTrigger(applicationScope, usage = { usageRuntime.onForeground() }, updates = { updateRuntime })
+
+    /** A main activity window is started. Main thread. */
+    internal val mainActivityVisible: Boolean get() = foreground.visible
     private val foregroundHook = object : ActivityLifecycleCallbacks {
         override fun onActivityStarted(activity: Activity) {
             if (activity is MainActivity) foreground.activityStarted()

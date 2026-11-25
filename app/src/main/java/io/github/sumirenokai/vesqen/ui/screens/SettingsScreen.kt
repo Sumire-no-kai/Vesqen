@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.ui.LocalScreenOffKeepAlive
+import io.github.sumirenokai.vesqen.ui.LocalUnplayableTrackSettings
 import io.github.sumirenokai.vesqen.ui.openBackgroundPowerSettings
 import io.github.sumirenokai.vesqen.library.ArtistSplitSettings
 import io.github.sumirenokai.vesqen.playback.NO_BIT_PERFECT_MIXER_CODE
@@ -182,6 +183,7 @@ fun SettingsScreen(
                         PaperDivider()
                         SettingsPremiumRow(premiumAccess, onOpenPremium)
                     }
+                    SettingsSkipUnplayableRow()
                 }
             }
             item {
@@ -658,6 +660,21 @@ private fun SettingsScreenOffRows() {
             modifier = Modifier.testTag("vesqen.settings.background-power"),
         )
     }
+}
+
+/** #344: off by default, so playback pauses on a track Android cannot decode and the app explains it. */
+@Composable
+private fun SettingsSkipUnplayableRow() {
+    val settings = LocalUnplayableTrackSettings.current ?: return
+    val skip by settings.skip.collectAsStateWithLifecycle()
+    PaperDivider()
+    SettingsSwitchRow(
+        title = stringResource(R.string.settings_skip_unplayable_title),
+        description = stringResource(R.string.settings_skip_unplayable_body),
+        checked = skip,
+        onCheckedChange = settings::setSkip,
+        modifier = Modifier.testTag("vesqen.settings.skip-unplayable"),
+    )
 }
 
 @Composable

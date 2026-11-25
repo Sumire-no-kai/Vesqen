@@ -99,6 +99,8 @@ internal class UsbOutputCoordinator(
     private var currentAudioOutput: StrictGatedAudioOutput? = null
     private var currentRoutingListener: AudioRouting.OnRoutingChangedListener? = null
     private var resumeAfterConfiguration = false
+    /** #344: the official path rebuilt the AudioTrack for a Play that only [getAudioOutput] resumes. */
+    private var playAwaitsAudioOutput = false
     private var internalPauseInProgress = false
     private var reconfigurePosted = false
     private var closed = false
@@ -191,6 +193,25 @@ internal class UsbOutputCoordinator(
                 )
             }
         }
+    }
+
+    /**
+     * #344: the official path paused a Play and rebuilt the AudioTrack, and resumes only when Media3
+     * asks for the output. An item that no renderer can play never asks, so that Play waits for good.
+     * Main thread.
+     */
+    internal fun holdsPlaybackForOutput(): Boolean =
+        !closed && !interrupted && !recoveryInProgress && returnTarget == null &&
+            synchronized(lock) { playAwaitsAudioOutput && resumeAfterConfiguration && !directPath }
+
+    /** Drops that held Play: re-inspects the mixer as for a restored queue, which ends AVAILABLE. Main thread. */
+    internal fun dropHeldPlayback() {
+        if (!holdsPlaybackForOutput()) return
+        synchronized(lock) {
+            playAwaitsAudioOutput = false
+            resumeAfterConfiguration = false
+        }
+        scheduleReconfigure(resume = false, origin = UsbOutputFailureOrigin.QUEUE_RESTORE)
     }
 
     fun attachPlayer(player: ExoPlayer) {
@@ -625,6 +646,7 @@ internal class UsbOutputCoordinator(
         val scheduled = synchronized(lock) {
             if (closed || mode != UsbOutputMode.STRICT_BIT_PERFECT) return@synchronized null
             returnedAfterPause = false
+            playAwaitsAudioOutput = false
             configurationGeneration += 1
             // Coalesced queue callbacks must not erase a Play command already received in this attempt.
             if (!(reconfigurePosted && configurationOrigin == UsbOutputFailureOrigin.USER_PLAYBACK &&
@@ -807,6 +829,7 @@ internal class UsbOutputCoordinator(
                 resumeAfterConfiguration = true
             }
         }
+        synchronized(lock) { playAwaitsAudioOutput = true }
         activePlayer.pause()
         if (!isGenerationCurrent(generation)) return
         activePlayer.setPreferredAudioDevice(device)
@@ -979,6 +1002,7 @@ internal class UsbOutputCoordinator(
             evaluateRoute(track)
             val shouldResume = synchronized(lock) {
                 if (!isPlanCurrentLocked(strictPlan)) return@synchronized false
+                playAwaitsAudioOutput = false
                 val resume = resumeAfterConfiguration
                 resumeAfterConfiguration = false
                 resume
@@ -1349,6 +1373,7 @@ internal class UsbOutputCoordinator(
             selectedMixerFormat = null
             selectedAudioAttributes = null
             resumeAfterConfiguration = false
+            playAwaitsAudioOutput = false
             reconfigurePosted = false
             if (directPath) awaitingReattach = true
             directPath = false
