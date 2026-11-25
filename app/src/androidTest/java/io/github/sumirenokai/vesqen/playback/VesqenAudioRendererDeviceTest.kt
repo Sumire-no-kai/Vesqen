@@ -8,8 +8,12 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
 import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
+import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.video.VideoRendererEventListener
 import androidx.test.platform.app.InstrumentationRegistry
+import java.nio.ByteBuffer
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -28,6 +32,44 @@ class VesqenAudioRendererDeviceTest {
         val withoutRequest = MediaFormat.createAudioFormat("audio/mpeg", 44_100, 2)
         withoutRequest.keepIntegerPcmForOmx("OMX.google.mp3.decoder")
         assertFalse(withoutRequest.containsKey(MediaFormat.KEY_PCM_ENCODING))
+    }
+
+    /** #270: only Qualcomm's ALAC decoders get the little-endian config; others keep Media3's. */
+    @Test
+    fun onlyQualcommAlacDecodersGetTheLittleEndianConfig() {
+        val stored = byteArrayOf(0, 0, 0x10, 0, 0, 0x10, 0x28, 0x0a, 0x0e, 0x02, 0, 0xff.toByte()) +
+            byteArrayOf(0, 0, 0x07, 0x9b.toByte(), 0, 0x02, 0x61, 0x2b, 0, 0, 0xac.toByte(), 0x44)
+        fun csdFor(codecName: String, mimeType: String = "audio/alac"): ByteArray {
+            val format = MediaFormat.createAudioFormat(mimeType, 44_100, 2)
+            format.setByteBuffer("csd-0", ByteBuffer.wrap(stored))
+            format.adaptToDecoder(codecName)
+            val csd = format.getByteBuffer("csd-0")!!
+            return ByteArray(csd.remaining()).also { csd.duplicate().get(it) }
+        }
+        assertArrayEquals(alacLittleEndianCookie(stored, 44_100), csdFor("c2.qti.alac.sw.decoder"))
+        assertArrayEquals(alacLittleEndianCookie(stored, 44_100), csdFor("c2.qti.alac.hw.decoder"))
+        assertArrayEquals(stored, csdFor("c2.vivo.alac.decoder"))
+        assertArrayEquals(stored, csdFor("OMX.vivo.alac.decoder"))
+        assertArrayEquals(stored, csdFor("c2.qti.alac.sw.decoder", mimeType = "audio/flac"))
+    }
+
+    /** #270: Qualcomm's ALAC hardware decoder mislabels its PCM, so Vesqen's renderers never get it. */
+    @Test
+    fun qualcommAlacHardwareDecoderIsNeverOffered() {
+        fun alacDecoder(name: String) = MediaCodecInfo.newInstance(
+            name, "audio/alac", "audio/alac", null,
+            /* hardwareAccelerated= */ name.contains(".hw."), /* softwareOnly= */ !name.contains(".hw."),
+            /* vendor= */ true, /* forceDisableAdaptive= */ false, /* forceSecure= */ false,
+        )
+        val listedFirst = MediaCodecSelector { _, _, _ ->
+            listOf(alacDecoder("c2.qti.alac.hw.decoder"), alacDecoder("c2.qti.alac.sw.decoder"), alacDecoder("c2.vivo.alac.decoder"))
+        }
+        assertEquals(
+            listOf("c2.qti.alac.sw.decoder", "c2.vivo.alac.decoder"),
+            listedFirst.withoutMislabellingDecoders().getDecoderInfos("audio/alac", false, false).map { it.name },
+        )
+        val onThisPhone = MediaCodecSelector.DEFAULT.withoutMislabellingDecoders().getDecoderInfos("audio/alac", false, false)
+        assertFalse(onThisPhone.any { it.name == "c2.qti.alac.hw.decoder" })
     }
 
     @Test

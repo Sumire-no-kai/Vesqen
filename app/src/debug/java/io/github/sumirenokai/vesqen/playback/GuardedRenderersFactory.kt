@@ -14,7 +14,7 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
 import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 
-/** The debug probes' factory with a given sink; the renderer keeps #107's OMX protection. */
+/** The debug probes' factory with a given sink; the renderer applies the same decoder rules as the app's. */
 @androidx.annotation.OptIn(UnstableApi::class)
 internal class GuardedRenderersFactory(
     context: Context,
@@ -38,7 +38,8 @@ internal class GuardedRenderersFactory(
     ) {
         out.add(
             object : MediaCodecAudioRenderer(
-                context, codecAdapterFactory, mediaCodecSelector, enableDecoderFallback,
+                context, EmptyOutputDroppingAdapterFactory(codecAdapterFactory),
+                mediaCodecSelector.withoutMislabellingDecoders(), enableDecoderFallback,
                 eventHandler, eventListener, audioSink,
             ) {
                 override fun getMediaCodecConfiguration(
@@ -48,7 +49,7 @@ internal class GuardedRenderersFactory(
                     codecOperatingRate: Float,
                 ): MediaCodecAdapter.Configuration =
                     super.getMediaCodecConfiguration(codecInfo, format, crypto, codecOperatingRate).also {
-                        it.mediaFormat.keepIntegerPcmForOmx(codecInfo.name)
+                        it.mediaFormat.adaptToDecoder(codecInfo.name)
                     }
             },
         )
