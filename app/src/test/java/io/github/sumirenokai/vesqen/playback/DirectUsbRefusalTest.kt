@@ -16,6 +16,8 @@ import io.github.sumirenokai.vesqen.usb.descriptor.UacVersion
 import io.github.sumirenokai.vesqen.usb.descriptor.UsbAudioTopology
 import io.github.sumirenokai.vesqen.usb.plan.StreamingPlan
 import io.github.sumirenokai.vesqen.usb.plan.StreamingRefusal
+import io.github.sumirenokai.vesqen.usb.session.CleanupRecord
+import io.github.sumirenokai.vesqen.usb.session.CleanupStep
 import io.github.sumirenokai.vesqen.usb.session.DirectUsbFailure
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -45,6 +47,25 @@ class DirectUsbRefusalTest {
             UsbOutputFailure.PLATFORM_ERROR to "direct_usb.sample_rate_set_failed",
             DirectUsbFailure(DirectUsbFailure.Reason.SAMPLE_RATE_SET_FAILED, "48000 Hz").toStrictFailure(),
         )
+    }
+
+    @Test
+    fun `startup recovery reports the first failed step by reason regardless of its description`() {
+        val volume = CleanupStep("restore DAC settings", false, DirectUsbFailure.Reason.VOLUME_CONTROL_FAILED)
+        val transfer = CleanupStep("interface 2 released", false)
+        val volumeFirst = CleanupRecord(listOf(volume, transfer))
+        val transferFirst = CleanupRecord(listOf(transfer, volume))
+        val success = CleanupRecord(listOf(volume.copy(succeeded = true)))
+
+        assertEquals(
+            DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.volume_control_failed", volumeFirst),
+            volumeFirst.toRecoveryResult(),
+        )
+        assertEquals(
+            DirectUsbRecoveryResult(UsbOutputFailure.PLATFORM_ERROR, "direct_usb.usb_transfer_failed", transferFirst),
+            transferFirst.toRecoveryResult(),
+        )
+        assertEquals(DirectUsbRecoveryResult(cleanup = success), success.toRecoveryResult())
     }
 
     @Test

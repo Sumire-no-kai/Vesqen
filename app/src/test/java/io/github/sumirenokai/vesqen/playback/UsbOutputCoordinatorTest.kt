@@ -1722,7 +1722,7 @@ class UsbOutputCoordinatorTest {
         coordinator.requestMode(UsbOutputMode.SYSTEM)
         idle()
         direct.lastCleanup = CleanupRecord(listOf(
-            CleanupStep("volume restored", false),
+            CleanupStep("restore DAC settings", false, DirectUsbFailure.Reason.VOLUME_CONTROL_FAILED),
             CleanupStep("interface 2 released", false),
             CleanupStep("connection closed", true),
             CleanupStep("takeover marker cleared", false),
