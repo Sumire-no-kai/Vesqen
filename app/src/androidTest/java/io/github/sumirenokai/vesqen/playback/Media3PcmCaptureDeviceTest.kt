@@ -86,7 +86,11 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
      */
     @Test
     fun alacWholeFile() {
-        assumeTrue("This device has no ALAC decoder", hasDecoder(MimeTypes.AUDIO_ALAC))
+        // Vesqen's filtered list, not Android's: a phone whose only ALAC decoder is excluded cannot pass here.
+        assumeTrue(
+            "Vesqen has no usable ALAC decoder on this device",
+            MediaCodecSelector.DEFAULT.withoutMislabellingDecoders().getDecoderInfos(MimeTypes.AUDIO_ALAC, false, false).isNotEmpty(),
+        )
         for (fixture in alacFixtures()) {
             // Only an OMX decoder, which Vesqen asks for 16-bit PCM, may drop a 24-bit file's low bits.
             assertWholeFile(fixture, precisionMayDrop = { decoders -> decoders.none { it.startsWith("c2.") } })
@@ -95,8 +99,8 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
 
     /**
      * #270: Qualcomm's ALAC hardware decoder mislabels its PCM: asked for float it wrote 16-bit
-     * samples, asked for 16-bit it wrote a 24-bit file's 24-bit samples. Even when the platform lists
-     * it first, the software decoder must decode every file exactly.
+     * samples, asked for 16-bit it wrote a 24-bit file's 24-bit samples. When the platform offers it
+     * first and Qualcomm's software decoder second, the software decoder must decode every file exactly.
      */
     @Test
     fun alacWithQualcommHardwareDecoderListedFirst() {
@@ -105,7 +109,8 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
             hasDecoderNamed(QUALCOMM_ALAC_HARDWARE) && hasDecoderNamed(QUALCOMM_ALAC_SOFTWARE),
         )
         for (fixture in alacFixtures()) {
-            assertWholeFile(fixture, listedFirst = QUALCOMM_ALAC_HARDWARE, precisionMayDrop = { false }) { decoders ->
+            val hardwareFirst = listOf(QUALCOMM_ALAC_HARDWARE, QUALCOMM_ALAC_SOFTWARE)
+            assertWholeFile(fixture, candidates = hardwareFirst, precisionMayDrop = { false }) { decoders ->
                 assertEquals("decoders for ${fixture.name}", listOf(QUALCOMM_ALAC_SOFTWARE), decoders)
             }
         }
@@ -114,14 +119,14 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
     /**
      * When the decoder delivers fewer bits than the file holds, no sample comparison can succeed,
      * but the output must still be whole and [precisionMayDrop] must allow it for the decoders that
-     * ran. [listedFirst] moves that decoder to the front of the platform's list.
+     * ran. [candidates] stands in for the platform's decoder list.
      */
     private fun assertWholeFile(
         fixture: PcmFixture,
-        listedFirst: String? = null,
+        candidates: List<String>? = null,
         precisionMayDrop: (List<String>) -> Boolean = { true },
         checkDecoders: (List<String>) -> Unit = {},
-    ) = capture(listedFirst = listedFirst) { session ->
+    ) = capture(candidates = candidates) { session ->
         session.play(fixture.write(directory))
         session.awaitEnded()
         val label = "whole ${fixture.name}"
@@ -144,10 +149,6 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
     }
 
     private fun decoders() = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filterNot { it.isEncoder }
-
-    private fun hasDecoder(mimeType: String) = decoders().any { codec ->
-        codec.supportedTypes.any { it.equals(mimeType, ignoreCase = true) }
-    }
 
     private fun hasDecoderNamed(name: String) = decoders().any { it.name == name }
 
@@ -543,8 +544,8 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
         }
     }
 
-    /** [listedFirst] moves that decoder to the front of the platform's list; the renderer still filters it. */
-    private fun capture(options: CaptureOptions = CaptureOptions(), listedFirst: String? = null, block: (CaptureSession) -> Unit) {
+    /** [candidates] make the platform offer exactly those decoders, in that order; the renderer still filters them. */
+    private fun capture(options: CaptureOptions = CaptureOptions(), candidates: List<String>? = null, block: (CaptureSession) -> Unit) {
         val provider = CapturingAudioOutputProvider(
             context,
             options.copy(answersFormats = guard == PcmGuard.STRICT_SINK),
@@ -555,9 +556,10 @@ internal class Media3PcmCaptureDeviceTest(private val guard: PcmGuard) {
         } else {
             GuardedRenderersFactory(context, probe)
         }
-        listedFirst?.let { name ->
+        candidates?.let { names ->
             factory.setMediaCodecSelector { mimeType, secure, tunneling ->
-                MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, secure, tunneling).sortedBy { it.name != name }
+                val available = MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, secure, tunneling)
+                names.mapNotNull { name -> available.firstOrNull { it.name == name } }
             }
         }
         CaptureSession(context, factory, provider, probe).use(block)
