@@ -501,7 +501,7 @@
     <string name="chain_customize_search">搜索指标</string>
     <string name="chain_customize_section_shown">%1$s，已显示 %2$d 项，共 %3$d 项</string>
     <string name="chain_customize_metric_pinned">%1$s，已置顶</string>
-    <string name="chain_customize_no_results">没有名称包含“%1$s”的指标</string>
+    <string name="chain_customize_no_results">没有与“%1$s”匹配的指标</string>
     <string name="chain_refresh_interval">刷新</string>
     <string name="chain_refresh_250ms">250 毫秒</string>
     <string name="chain_refresh_500ms">500 毫秒</string>

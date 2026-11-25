@@ -501,7 +501,7 @@
     <string name="chain_customize_search">搜尋指標</string>
     <string name="chain_customize_section_shown">%1$s，已顯示 %2$d 項，共 %3$d 項</string>
     <string name="chain_customize_metric_pinned">%1$s，已置頂</string>
-    <string name="chain_customize_no_results">沒有名稱包含「%1$s」的指標</string>
+    <string name="chain_customize_no_results">沒有與「%1$s」相符的指標</string>
     <string name="chain_refresh_interval">重新整理</string>
     <string name="chain_refresh_250ms">250 毫秒</string>
     <string name="chain_refresh_500ms">500 毫秒</string>

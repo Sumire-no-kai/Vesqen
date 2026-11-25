@@ -501,7 +501,7 @@
     <string name="chain_customize_search">指標を検索</string>
     <string name="chain_customize_section_shown">%1$s、%3$d 項目中 %2$d 項目を表示</string>
     <string name="chain_customize_metric_pinned">%1$s、固定済み</string>
-    <string name="chain_customize_no_results">「%1$s」を含む指標はありません</string>
+    <string name="chain_customize_no_results">「%1$s」に一致する指標はありません</string>
     <string name="chain_refresh_interval">更新間隔</string>
     <string name="chain_refresh_250ms">250 ミリ秒</string>
     <string name="chain_refresh_500ms">500 ミリ秒</string>
