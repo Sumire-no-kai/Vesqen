@@ -110,7 +110,7 @@ class FolderPlaybackUiTest {
                     onPrevious = {}, onPlayPause = {}, onNext = {},
                     onPreviousFolder = { previous++ }, onNextFolder = { next++ },
                     onSeek = { _, _ -> }, onPlayQueueIndex = {}, onRemoveQueueItem = {},
-                    onMoveQueueItem = { _, _ -> }, onClearQueue = {}, onRetryPlayback = {},
+                    onMoveQueueItem = { _, _ -> }, onClearQueue = {},
                     onToggleOrientation = {}, showOrientationToggle = false, isLandscape = false,
                     motionPolicy = VesqenMotionPolicy(reduceMotion = true),
                 )
