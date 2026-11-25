@@ -57,6 +57,31 @@ class SharedLibraryCatalogStoreTest {
     }
 
     @Test
+    fun playbackReadsTheSameTracksWithoutQueryingPlaylists() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val databaseName = "library-catalog-resumption-${System.nanoTime()}.db"
+        val store = LibraryCatalogStore(context, databaseName)
+        try {
+            AndroidLibraryCatalog(context, store, folderGrants = { emptyList() }).use { catalog ->
+                val trackId = store.addDeviceTrack()
+                val playlistId = requireNotNull(catalog.createPlaylist("Mix"))
+                catalog.addTrackToPlaylist(playlistId, trackId)
+                val library = catalog.snapshot(includeDeviceLibrary = true)
+                assertEquals(listOf(trackId), library.tracks.map(AudioTrack::id))
+                assertEquals(listOf(trackId), library.playlists.single().trackIds)
+
+                // Make any read of either playlist table fail in this test's private database.
+                store.writableDatabase.execSQL("ALTER TABLE library_playlist_items RENAME TO unused_items")
+                store.writableDatabase.execSQL("ALTER TABLE library_playlists RENAME TO unused_playlists")
+                assertEquals(library.tracks, catalog.playableTracks(includeDeviceLibrary = true))
+            }
+        } finally {
+            store.close()
+            context.deleteDatabase(databaseName)
+        }
+    }
+
+    @Test
     fun aSecondCatalogLeavesAScanStartedInThisProcessRunning() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val databaseName = "library-catalog-shared-${System.nanoTime()}.db"
