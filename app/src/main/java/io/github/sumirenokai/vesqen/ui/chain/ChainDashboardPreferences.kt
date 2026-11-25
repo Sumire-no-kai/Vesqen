@@ -89,6 +89,72 @@ data class ChainDashboardPreferences(
         )
     }
 
+    /**
+     * The advanced dashboard's cards as it lays them out: the pinned metrics first, then each
+     * section in [groupOrder] with its shown metrics that are not pinned. Sections with nothing
+     * shown are left out. The customizer's Layout tab lists the same groups, so the two agree.
+     */
+    fun dashboardGroups(): List<ChainDashboardGroup> {
+        val selected = selectedMetricIds.toSet()
+        val pinned = pinnedMetricIds.toSet()
+        val ordered = metricOrder.filter(selected::contains)
+        val pinnedGroup = ordered.filter(pinned::contains)
+            .takeIf { it.isNotEmpty() }
+            ?.let { ChainDashboardGroup(section = null, metricIds = it) }
+        val sections = groupOrder.mapNotNull { section ->
+            val ids = ordered.filter { it !in pinned && sectionOf(it) == section }
+            if (ids.isEmpty()) null else ChainDashboardGroup(section, ids)
+        }
+        return listOfNotNull(pinnedGroup) + sections
+    }
+
+    /** Shows or hides [id]. Hiding also unpins it. The last shown metric stays: the dashboard is never empty. */
+    fun withMetricShown(id: TelemetryMetricId, shown: Boolean): ChainDashboardPreferences = when {
+        shown -> if (id in selectedMetricIds) this else copy(selectedMetricIds = selectedMetricIds + id)
+        id !in selectedMetricIds || selectedMetricIds.size <= 1 -> this
+        else -> copy(selectedMetricIds = selectedMetricIds - id, pinnedMetricIds = pinnedMetricIds - id)
+    }
+
+    /** Pins or unpins [id]. Only a shown metric can be pinned. */
+    fun withMetricPinned(id: TelemetryMetricId, pinned: Boolean): ChainDashboardPreferences = when {
+        !pinned -> if (id in pinnedMetricIds) copy(pinnedMetricIds = pinnedMetricIds - id) else this
+        id !in selectedMetricIds || id in pinnedMetricIds -> this
+        else -> copy(pinnedMetricIds = pinnedMetricIds + id)
+    }
+
+    /** Moves [id] to [targetIndex] within its own [dashboardGroups] entry; other metrics keep their order. */
+    fun withMetricMoved(id: TelemetryMetricId, targetIndex: Int): ChainDashboardPreferences {
+        val group = dashboardGroups().firstOrNull { id in it.metricIds } ?: return this
+        return copy(metricOrder = metricOrder.movedAmong(id, group.metricIds, targetIndex))
+    }
+
+    /** Moves [section] to [targetIndex] among the sections the dashboard shows; hidden sections keep their places. */
+    fun withSectionMoved(section: TelemetrySection, targetIndex: Int): ChainDashboardPreferences {
+        val shown = dashboardGroups().mapNotNull(ChainDashboardGroup::section)
+        return copy(groupOrder = groupOrder.movedAmong(section, shown, targetIndex))
+    }
+}
+
+/** One run of dashboard cards: the pinned metrics ([section] null) or one section's shown metrics. */
+data class ChainDashboardGroup(
+    val section: TelemetrySection?,
+    val metricIds: List<TelemetryMetricId>,
+)
+
+private fun sectionOf(id: TelemetryMetricId): TelemetrySection? =
+    if (id in TelemetryMetricCatalog.allIds) TelemetryMetricCatalog.descriptor(id).section else null
+
+/**
+ * Moves [item] to the place of the [targetIndex]th of [members], a subsequence of this list, so the
+ * members end up in the new order while the elements between them stay where they were.
+ */
+internal fun <T> List<T>.movedAmong(item: T, members: List<T>, targetIndex: Int): List<T> {
+    val from = members.indexOf(item)
+    if (from < 0 || targetIndex !in members.indices || from == targetIndex) return this
+    val fromGlobal = indexOf(item)
+    val targetGlobal = indexOf(members[targetIndex])
+    if (fromGlobal < 0 || targetGlobal < 0) return this
+    return toMutableList().apply { add(targetGlobal, removeAt(fromGlobal)) }
 }
 
 interface ChainDashboardPreferencesRepository {

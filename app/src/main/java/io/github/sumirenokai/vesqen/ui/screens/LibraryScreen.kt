@@ -35,9 +35,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Search
@@ -47,8 +44,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.semantics.Role
 import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -66,10 +61,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
@@ -83,7 +76,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
@@ -153,6 +145,8 @@ import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.ui.LibraryUiState
 import io.github.sumirenokai.vesqen.ui.MusicAccess
 import io.github.sumirenokai.vesqen.ui.components.TrackDetailsSheet
+import io.github.sumirenokai.vesqen.ui.components.SearchPill
+import io.github.sumirenokai.vesqen.ui.components.TextTab
 import io.github.sumirenokai.vesqen.ui.components.TrackRow
 import io.github.sumirenokai.vesqen.ui.components.VesqenEmptyState
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
@@ -921,47 +915,13 @@ private fun LibraryBrowseTabs(
         horizontalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         LibraryBrowseMode.entries.forEach { mode ->
-            LibraryBrowseTab(
+            TextTab(
                 label = stringResource(mode.labelResource()),
                 selected = mode == browseMode,
                 onClick = { onBrowseModeChanged(mode) },
                 modifier = Modifier.testTag("vesqen.library.mode.${mode.name.lowercase()}"),
             )
         }
-    }
-}
-
-@Composable
-private fun LibraryBrowseTab(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val requester = remember { BringIntoViewRequester() }
-    LaunchedEffect(selected) {
-        if (selected) requester.bringIntoView()
-    }
-    val ink = MaterialTheme.colorScheme.onSurface
-    Box(
-        modifier = modifier
-            .bringIntoViewRequester(requester)
-            .heightIn(min = 48.dp)
-            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
-            .drawBehind {
-                if (selected) {
-                    val rule = 2.dp.toPx()
-                    drawRect(ink, topLeft = Offset(0f, size.height - rule), size = Size(size.width, rule))
-                }
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-            color = if (selected) ink else MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-        )
     }
 }
 
@@ -2168,80 +2128,15 @@ private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit, r
     LaunchedEffect(Unit) {
         if (requestFocus) focusRequester.requestFocus()
     }
-    Box(
+    SearchPill(
+        query = query,
+        onQueryChange = onQueryChange,
+        label = searchLabel,
         modifier = Modifier
-            .fillMaxWidth()
             .padding(horizontal = VesqenSpacing.md)
-    ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .testTag("vesqen.library.search"),
-            // A pill, so the 48 dp clear button on the right sits on the end's centre and its
-            // press circle follows the field's curve.
-            shape = androidx.compose.foundation.shape.CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        ) {
-            BasicTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .focusRequester(focusRequester)
-                    .semantics { contentDescription = searchLabel },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyLarge.copy(
-                    color = MaterialTheme.colorScheme.onSurface,
-                ),
-                decorationBox = { innerTextField ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            // Puts the 20 dp icon's centre 24 dp in, on the left end's centre.
-                            .padding(start = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Search,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.width(VesqenSpacing.xs))
-                        Box(
-                            modifier = Modifier.weight(1f),
-                            contentAlignment = Alignment.CenterStart,
-                        ) {
-                            if (query.isBlank()) {
-                                Text(
-                                    text = searchLabel,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            innerTextField()
-                        }
-                        if (query.isNotBlank()) {
-                            IconButton(
-                                onClick = { onQueryChange("") },
-                                modifier = Modifier.size(48.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Clear,
-                                    contentDescription = stringResource(R.string.clear_search),
-                                )
-                            }
-                        }
-                    }
-                }
-            )
-        }
-    }
+            .testTag("vesqen.library.search"),
+        fieldModifier = Modifier.focusRequester(focusRequester),
+    )
 }
 
 @Composable
