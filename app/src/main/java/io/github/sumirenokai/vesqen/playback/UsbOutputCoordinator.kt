@@ -443,7 +443,8 @@ internal class UsbOutputCoordinator(
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
         if (playWhenReady) {
             pauseReleaseMonitor?.setPaused(false)
-        } else if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST && !internalPauseInProgress &&
+        } else if ((reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST ||
+                reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) && !internalPauseInProgress &&
             !interrupted && directPath && directRoute?.streaming == true) {
             pauseReleaseMonitor?.setPaused(true)
         }

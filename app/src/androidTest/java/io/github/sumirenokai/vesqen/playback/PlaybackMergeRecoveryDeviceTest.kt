@@ -76,6 +76,24 @@ class PlaybackMergeRecoveryDeviceTest {
     }
 
     @Test
+    fun aFollowerThatFailsDuringPreparationReceivesRollbackForThatPair() {
+        var rolledBack: Pair<Long, Long>? = null
+        val interrupted = object : TrackMergeFollower by TrackMergeFollower.None {
+            override fun prepareMerge(from: Long, into: Long) = throw InterruptedCommit()
+            override fun mergeRolledBack(from: Long, into: Long) { rolledBack = from to into }
+        }
+        LibraryCatalogStore(context, databaseName, mergeFollower = interrupted).use { store ->
+            val pair = seedUnmatched(store)
+            try {
+                store.assignUnmatchedRecord(pair.second, pair.first)
+                fail("Preparation must abort the transaction")
+            } catch (_: InterruptedCommit) { }
+            assertEquals(pair, rolledBack)
+            assertTrue(pair.first in store.readTrackIdsForSweep().trackIds)
+        }
+    }
+
+    @Test
     fun intentPersistedBeforeAnAbortedCommitDoesNotChangeTheQueue() {
         val follower = PlaybackTrackMerges(isolated)
         val interrupted = object : TrackMergeFollower by follower {

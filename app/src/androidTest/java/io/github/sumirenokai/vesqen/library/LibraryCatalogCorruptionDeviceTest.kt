@@ -13,6 +13,7 @@ import android.provider.MediaStore
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.playback.writeSilentWav
 import io.github.sumirenokai.vesqen.testing.FakeDocumentsProvider
+import io.github.sumirenokai.vesqen.telemetry.isolatedPlaybackTestApplication
 import java.io.File
 import java.io.RandomAccessFile
 import kotlinx.coroutines.runBlocking
@@ -202,9 +203,9 @@ class LibraryCatalogCorruptionDeviceTest {
 
     @Test
     fun aScanStopsWhenAnotherCallerFindsTheCatalogCorrupt() = runBlocking {
-        // Without the music permission, Android 10 and later list this app's own audio only, which
-        // this test adds to MediaStore and removes again.
         assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+        val app = isolatedPlaybackTestApplication()
+        InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(app.packageName, musicLibraryPermission)
         val handler = LibraryCatalogCorruptionHandler(beforeRebuild = {})
         val store = LibraryCatalogStore(context, databaseName, handler)
         val catalog = AndroidLibraryCatalog(context, store, folderGrants = { emptyList() })

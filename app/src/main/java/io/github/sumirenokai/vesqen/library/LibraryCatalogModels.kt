@@ -1,5 +1,7 @@
 package io.github.sumirenokai.vesqen.library
 
+import java.security.MessageDigest
+
 /** A durable source that contributes tracks to the local catalog. */
 enum class LibrarySourceKind {
     DEVICE,
@@ -31,10 +33,16 @@ data class LibrarySource(
 
 /** UI-safe scan feedback. Total work is intentionally omitted because providers do not expose it. */
 data class LibraryScanProgress(
+    /** An opaque source identifier shared with [LibrarySourceScanResult]. */
     val sourceId: String,
     val sourceName: String,
     val scannedTrackCount: Int,
     val isPaused: Boolean = false,
+    val stage: LibraryScanStage = LibraryScanStage.READING,
+    /** Only known unsupported audio actually encountered in this source during this invocation. */
+    val skippedUnsupportedAudio: Map<UnsupportedAudioFormat, Int> = emptyMap(),
+    /** A control request, not confirmation that the provider cursor has stopped. */
+    val pauseRequested: Boolean = false,
 )
 
 data class LibraryCatalogSnapshot(
@@ -69,7 +77,64 @@ data class LibraryRefreshResult(
     val hadFailure: Boolean,
     /** The scan stopped at its next row for a folder removal or a record choice; it should run again (#191 D17). */
     val yieldedToEdit: Boolean = false,
+    /** Per-source observations from this invocation; never a whole-device or unique-song count. */
+    val sourceResults: List<LibrarySourceScanResult> = emptyList(),
 )
+
+/** A reported stage corresponds to work that the catalog is really performing. */
+enum class LibraryScanStage {
+    READING,
+    RECONCILING,
+}
+
+/** Reasons safe for a future UI; provider messages, paths and exception text stay private. */
+enum class LibraryScanFailureReason {
+    PERMISSION_REQUIRED,
+    PROVIDER_NOT_READY,
+    SOURCE_CHANGED,
+    READ_FAILED,
+}
+
+enum class LibrarySourceScanStatus {
+    COMPLETED,
+    /** The generation was unchanged; this invocation did not inspect the cached songs. */
+    UNCHANGED,
+    PAUSED,
+    INTERRUPTED,
+    FAILED,
+    UNAVAILABLE,
+    /** The catalog was replaced during this scan; its old session cannot commit. */
+    REBUILT,
+    /** The scan stopped for an edit waiting on the scan gate, rather than a user pause. */
+    YIELDED,
+}
+
+/** Conservative types recognized as audio but not accepted by the current discovery policy. */
+enum class UnsupportedAudioFormat {
+    DSD,
+    APE,
+    WAVPACK,
+}
+
+data class LibrarySourceScanResult(
+    /** An opaque source identifier shared with [LibraryScanProgress]. */
+    val sourceId: String,
+    val sourceName: String,
+    val status: LibrarySourceScanStatus,
+    val scannedTrackCount: Int = 0,
+    val skippedUnsupportedAudio: Map<UnsupportedAudioFormat, Int> = emptyMap(),
+    val failureReason: LibraryScanFailureReason? = null,
+) {
+    val skippedUnsupportedAudioCount: Int get() = skippedUnsupportedAudio.values.sum()
+}
+
+enum class FolderGrantRenewalResult {
+    RENEWED,
+    SOURCE_NOT_FOUND,
+    WRONG_FOLDER,
+    PERMISSION_DENIED,
+    UNSUPPORTED,
+}
 
 /** Persisted values returned after one atomic listening-history increment. */
 internal data class TrackPlaybackHistory(
@@ -119,6 +184,11 @@ internal object LibrarySourceId {
     const val DEVICE = "media:external"
 
     fun forTree(treeUri: String): String = "tree:$treeUri"
+
+    /** A durable folder ID embeds its tree URI. Scan feedback only needs a stable match. */
+    fun forScan(sourceId: String): String = MessageDigest.getInstance("SHA-256")
+        .digest(sourceId.encodeToByteArray())
+        .toHexString()
 }
 
 /** Bump when provider/container enrichment semantics change, invalidating scan cache keys. */

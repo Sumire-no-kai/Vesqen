@@ -18,11 +18,19 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 
 /** What Now shows for a track (#169). */
 sealed interface TrackLyrics {
-    data class Found(val source: LyricsSource, val lyrics: Lyrics) : TrackLyrics
+    data class Found(
+        val source: LyricsSource,
+        val lyrics: Lyrics,
+        val trackId: Long? = null,
+        val contentRevision: String = "",
+        val userAdvanceMs: Long = 0,
+        internal val storeGeneration: Long = 0,
+    ) : TrackLyrics
 
     /**
      * No source has lyrics. [folderHint]: the track is known only through MediaStore and no added
@@ -79,11 +87,50 @@ internal class LocalLyricsResolver(
 
     suspend fun load(track: AudioTrack): TrackLyrics = withContext(dispatcher) {
         val key = track.lyricsKey(store.importedLyrics.value.revision)
-        results[key] ?: resolve(track).let { resolved ->
+        results[key] ?: resolve(track, store.generation()).let { resolved ->
             // A source that failed for now is read again on the next load (#191 D13, B2).
             if (resolved.complete) results.put(key, resolved.lyrics)
             resolved.lyrics
         }
+    }
+
+    /**
+     * Re-reads the source before committing, so an action for replaced/old displayed lyrics cannot
+     * calibrate the new content. The caller's guard may hold the catalog's track/merge gate only
+     * around the short save, after all provider reads have finished.
+     */
+    suspend fun adjust(
+        track: AudioTrack,
+        expected: TrackLyrics.Found,
+        action: LyricsAdjustmentAction,
+        commit: suspend (save: () -> LyricsAdjustmentResult) -> LyricsAdjustmentResult = { save -> save() },
+    ): LyricsAdjustmentResult = withContext(dispatcher) {
+        val generation = store.generation()
+        if (expected.trackId != track.id || expected.storeGeneration != generation) {
+            return@withContext LyricsAdjustmentResult.TRACK_CHANGED
+        }
+        if (expected.lyrics !is Lyrics.Synced || expected.contentRevision.isEmpty()) {
+            return@withContext LyricsAdjustmentResult.UNAVAILABLE
+        }
+        val contentEpoch = store.contentEpoch(track.id)
+        // An explicit action must check the current sidecar, not a retained folder listing.
+        folderLyricsFiles.evictAll()
+        val current = resolve(track, generation)
+        val found = current.lyrics as? TrackLyrics.Found
+        val result = when {
+            found == null || !current.complete -> LyricsAdjustmentResult.UNAVAILABLE
+            found.contentRevision != expected.contentRevision || found.source != expected.source ->
+                LyricsAdjustmentResult.LYRICS_CHANGED
+            else -> commit { store.adjust(track.id, found.contentRevision, action, generation, contentEpoch) }
+        }
+        when (result) {
+            LyricsAdjustmentResult.APPLIED -> results.evictAll()
+            LyricsAdjustmentResult.LYRICS_CHANGED, LyricsAdjustmentResult.UNAVAILABLE ->
+                results.remove(track.lyricsKey(store.importedLyrics.value.revision))
+            else -> return@withContext result
+        }
+        forgottenListings.update { it + 1 }
+        result
     }
 
     fun clearCache() {
@@ -99,10 +146,10 @@ internal class LocalLyricsResolver(
     fun forgetFolderListings() {
         folderLyricsFiles.evictAll()
         results.snapshot().forEach { (key, lyrics) -> if (lyrics is TrackLyrics.None) results.remove(key) }
-        forgottenListings.value++
+        forgottenListings.update { it + 1 }
     }
 
-    private fun resolve(track: AudioTrack): ResolvedLyrics {
+    private fun resolve(track: AudioTrack, generation: Long): ResolvedLyrics {
         val uri = track.contentUri.toUri()
         // A source that should be there but failed for now leaves the result uncached. Kept, the
         // result of a lower-priority source would hide that source until the next completed refresh.
@@ -124,7 +171,23 @@ internal class LocalLyricsResolver(
             read
         }
         val lyrics = when (picked) {
-            is PickedLyrics.Found -> TrackLyrics.Found(picked.source, picked.lyrics)
+            is PickedLyrics.Found -> {
+                val synced = picked.lyrics as? Lyrics.Synced
+                val contentRevision = synced?.contentRevision(picked.source).orEmpty()
+                val advance = try {
+                    if (synced == null) 0L else store.userAdvance(track.id, contentRevision)
+                } catch (_: IOException) {
+                    return ResolvedLyrics(TrackLyrics.Unreadable(UnreadableReason.ReadFailed), complete = false)
+                }
+                TrackLyrics.Found(
+                    source = picked.source,
+                    lyrics = synced?.withUserAdvance(advance) ?: picked.lyrics,
+                    trackId = track.id,
+                    contentRevision = contentRevision,
+                    userAdvanceMs = advance,
+                    storeGeneration = generation,
+                )
+            }
             PickedLyrics.Absent -> TrackLyrics.None(folderHint = folderUri == null)
             is PickedLyrics.Unreadable -> TrackLyrics.Unreadable(picked.reason)
         }

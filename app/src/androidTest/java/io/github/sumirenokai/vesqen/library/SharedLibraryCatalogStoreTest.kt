@@ -2,6 +2,7 @@ package io.github.sumirenokai.vesqen.library
 
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryRecorder
+import io.github.sumirenokai.vesqen.telemetry.isolatedPlaybackTestApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.SupervisorJob
@@ -21,7 +22,8 @@ import org.junit.Test
 class SharedLibraryCatalogStoreTest {
     @Test
     fun writesThroughOneUserReachTheOthersAndClosingACatalogKeepsTheStoreOpen() = runBlocking {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val context = isolatedPlaybackTestApplication()
+        InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(context.packageName, musicLibraryPermission)
         val databaseName = "library-catalog-shared-${System.nanoTime()}.db"
         val store = LibraryCatalogStore(context, databaseName)
         val historyJob = SupervisorJob()

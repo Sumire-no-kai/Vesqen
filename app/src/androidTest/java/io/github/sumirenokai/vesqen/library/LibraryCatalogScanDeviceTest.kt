@@ -1,7 +1,13 @@
 package io.github.sumirenokai.vesqen.library
 
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.DocumentsContract
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.sumirenokai.vesqen.telemetry.isolatedPlaybackTestApplication
+import io.github.sumirenokai.vesqen.testing.FakeDocumentsProvider
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -12,6 +18,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Test
 
 /**
@@ -19,22 +26,128 @@ import org.junit.Test
  * removal and the #139 choices still need the scan lock, so a running scan stops for them.
  */
 class LibraryCatalogScanDeviceTest {
+    @Before
+    fun grantDeviceMusicPermission() {
+        val app = isolatedPlaybackTestApplication()
+        InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(app.packageName, musicLibraryPermission)
+    }
+
     @Test
-    fun favoritesPlaylistEditsAndReadsDoNotWaitForARunningScan() = runBlocking {
-        // Without the music permission, Android 10 and later list only this app's own audio, so the
-        // device scan runs on any emulator; Android 9 refuses the query instead.
+    fun aMissingInitialGrantCannotUseAnUnchangedGenerationOrPruneRows() = runBlocking {
+        verifyPermissionLoss(deniedInitially = true)
+    }
+
+    @Test
+    fun revokingDevicePermissionDuringReconciliationCannotPruneRows() = runBlocking {
+        verifyPermissionLoss(deniedInitially = false)
+    }
+
+    private suspend fun verifyPermissionLoss(deniedInitially: Boolean) {
+        val base = InstrumentationRegistry.getInstrumentation().targetContext
+        var granted = !deniedInitially
+        val context = object : ContextWrapper(base) {
+            override fun getApplicationContext(): Context = this
+            override fun checkPermission(permission: String, pid: Int, uid: Int): Int =
+                if (permission == musicLibraryPermission) {
+                    if (granted) PackageManager.PERMISSION_GRANTED else PackageManager.PERMISSION_DENIED
+                } else super.checkPermission(permission, pid, uid)
+        }
+        val databaseName = "library-catalog-permission-${System.nanoTime()}.db"
+        val store = LibraryCatalogStore(base, databaseName)
+        val catalog = AndroidLibraryCatalog(context, store, folderGrants = { emptyList() })
+        try {
+            store.ensureDeviceSource()
+            store.scan(aira.at(9_001))
+            val before = store.readTracks(listOf(LibrarySourceId.DEVICE)).single()
+            store.setFavorite(before.id, true)
+            store.recordPlayback(before.id, 123L)
+            val playlist = requireNotNull(store.createPlaylist("Retained"))
+            store.addTrackToPlaylist(playlist, before.id)
+            if (deniedInitially) {
+                // The missing-grant guard must precede even the unchanged-generation shortcut.
+                val scope = MediaStoreAudioRepository(base, base.contentResolver).currentScanScope()
+                store.finishSourceScan(LibrarySourceId.DEVICE, scope.generation)
+            }
+            val progress = mutableListOf<LibraryScanProgress>()
+            val result = catalog.refresh(includeDeviceLibrary = true) {
+                progress += it
+                if (it.stage == LibraryScanStage.RECONCILING) granted = false
+            }
+            val sourceResult = result.sourceResults.single()
+            assertEquals(LibrarySourceScanStatus.UNAVAILABLE, sourceResult.status)
+            assertEquals(LibraryScanFailureReason.PERMISSION_REQUIRED, sourceResult.failureReason)
+            for (snapshot in listOf(result.snapshot, catalog.snapshot(includeDeviceLibrary = true))) {
+                assertFalse(snapshot.sources.single { it.id == LibrarySourceId.DEVICE }.isAvailable)
+                assertTrue(snapshot.tracks.none { it.id == before.id })
+            }
+            assertTrue(catalog.playableTracks(includeDeviceLibrary = true).none { it.id == before.id })
+            val retained = store.readTracks(listOf(LibrarySourceId.DEVICE)).single { it.id == before.id }
+            assertTrue(retained.isFavorite)
+            assertEquals(1, retained.playCount)
+            assertEquals(listOf(before.id), store.readPlaylists().single().trackIds)
+            if (deniedInitially) {
+                assertTrue(progress.isEmpty())
+                assertEquals(0, sourceResult.scannedTrackCount)
+                assertEquals(LibraryScanState.IDLE, store.readSources().single().scanState)
+            } else {
+                assertEquals(LibraryScanStage.RECONCILING, progress.last().stage)
+                assertEquals(LibraryScanState.INTERRUPTED, store.readSources().single().scanState)
+            }
+        } finally {
+            catalog.close()
+            store.close()
+            base.deleteDatabase(databaseName)
+        }
+    }
+
+    @Test
+    fun aDevicePauseDuringReconciliationCannotPruneUnseenRows() = runBlocking {
         assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val databaseName = "library-catalog-scan-${System.nanoTime()}.db"
+        val databaseName = "library-catalog-reconciling-${System.nanoTime()}.db"
         val store = LibraryCatalogStore(context, databaseName)
         val catalog = AndroidLibraryCatalog(context, store, folderGrants = { emptyList() })
         try {
-            val trackId = store.addFixtureTrack()
+            store.ensureDeviceSource()
+            store.scan(aira.at(9_001))
+            val before = store.readTracks(listOf(LibrarySourceId.DEVICE)).single()
+            store.setFavorite(before.id, true)
+            val progress = mutableListOf<LibraryScanProgress>()
+            val result = catalog.refresh(includeDeviceLibrary = true) {
+                progress += it
+                if (it.stage == LibraryScanStage.RECONCILING && !it.isPaused) catalog.pause()
+            }
+            assertEquals(LibrarySourceScanStatus.PAUSED, result.sourceResults.single().status)
+            assertTrue(progress.last().isPaused)
+            assertEquals(LibraryScanStage.RECONCILING, progress.last().stage)
+            val retained = store.readTracks(listOf(LibrarySourceId.DEVICE)).single { it.id == before.id }
+            assertTrue(retained.isFavorite)
+            assertEquals(LibraryScanState.PAUSED, store.readSources().single().scanState)
+        } finally {
+            catalog.close()
+            store.close()
+            context.deleteDatabase(databaseName)
+        }
+    }
+
+    @Test
+    fun favoritesPlaylistEditsAndReadsDoNotWaitForARunningScan() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val databaseName = "library-catalog-scan-${System.nanoTime()}.db"
+        val store = LibraryCatalogStore(context, databaseName)
+        val tree = DocumentsContract.buildTreeDocumentUri(FakeDocumentsProvider.authority(context.packageName), FakeDocumentsProvider.FOLDER)
+        val sourceId = LibrarySourceId.forTree(tree.toString())
+        val catalog = AndroidLibraryCatalog(context, store, folderGrants = { listOf(tree) })
+        try {
+            // This verifies edits during a scan. Keep its completion independent of the device's music collection.
+            store.upsertFolderSource(tree.toString(), "Music")
+            FakeDocumentsProvider.files["music/signal.flac"] = byteArrayOf()
+            val trackId = catalog.refresh(includeDeviceLibrary = false) {}.snapshot.tracks.single().id
             val scanRunning = CompletableDeferred<Unit>()
             val finishScan = CompletableDeferred<Unit>()
             // The scan reports its start, then waits there with the catalog's scan under way.
             val scan = async(Dispatchers.IO) {
-                catalog.refresh(includeDeviceLibrary = true) {
+                catalog.refresh(includeDeviceLibrary = false) {
                     if (scanRunning.complete(Unit)) finishScan.await()
                 }
             }
@@ -44,10 +157,10 @@ class LibraryCatalogScanDeviceTest {
                 catalog.setFavorite(trackId, true)
                 val playlistId = requireNotNull(catalog.createPlaylist("Mix"))
                 catalog.addTrackToPlaylist(playlistId, trackId)
-                val snapshot = catalog.snapshot(includeDeviceLibrary = true)
+                val snapshot = catalog.snapshot(includeDeviceLibrary = false)
                 assertTrue(snapshot.tracks.single { it.id == trackId }.isFavorite)
                 assertEquals(listOf(trackId), snapshot.playlists.single().trackIds)
-                assertEquals(LibraryScanState.SCANNING, snapshot.sources.single { it.id == LibrarySourceId.DEVICE }.scanState)
+                assertEquals(LibraryScanState.SCANNING, snapshot.sources.single { it.id == sourceId }.scanState)
             }
 
             finishScan.complete(Unit)
@@ -56,6 +169,7 @@ class LibraryCatalogScanDeviceTest {
             assertTrue(track.isFavorite)
             assertEquals(listOf(trackId), result.snapshot.playlists.single().trackIds)
         } finally {
+            FakeDocumentsProvider.reset()
             catalog.close()
             store.close()
             context.deleteDatabase(databaseName)
@@ -64,17 +178,19 @@ class LibraryCatalogScanDeviceTest {
 
     @Test
     fun aRemovalOrAChoiceStopsARunningScanAtItsNextRow() = runBlocking {
-        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val databaseName = "library-catalog-yield-${System.nanoTime()}.db"
         val store = LibraryCatalogStore(context, databaseName)
-        val catalog = AndroidLibraryCatalog(context, store, folderGrants = { emptyList() })
+        val tree = DocumentsContract.buildTreeDocumentUri(FakeDocumentsProvider.authority(context.packageName), FakeDocumentsProvider.FOLDER)
+        val sourceId = LibrarySourceId.forTree(tree.toString())
+        val catalog = AndroidLibraryCatalog(context, store, folderGrants = { listOf(tree) })
         try {
-            store.addFixtureTrack()
+            store.upsertFolderSource(tree.toString(), "Music")
+            FakeDocumentsProvider.files["music/signal.flac"] = byteArrayOf()
             val scanRunning = CompletableDeferred<Unit>()
             val finishScan = CompletableDeferred<Unit>()
             val scan = async(Dispatchers.IO) {
-                catalog.refresh(includeDeviceLibrary = true) {
+                catalog.refresh(includeDeviceLibrary = false) {
                     if (scanRunning.complete(Unit)) finishScan.await()
                 }
             }
@@ -88,14 +204,15 @@ class LibraryCatalogScanDeviceTest {
             assertTrue("The scan stops for the waiting edit", result.yieldedToEdit)
             assertFalse(result.hadFailure)
             // #191 A1: as a resumed pause leaves it, so the edit sees the records the last scans left.
-            assertEquals(LibraryScanState.IDLE, store.readSources().single { it.id == LibrarySourceId.DEVICE }.scanState)
+            assertEquals(LibraryScanState.IDLE, store.readSources().single { it.id == sourceId }.scanState)
             withTimeout(5_000) { discard.await() }
 
             // The Library scans again, and with no edit waiting that scan completes.
-            val rescan = withTimeout(30_000) { catalog.refresh(includeDeviceLibrary = true) {} }
+            val rescan = withTimeout(30_000) { catalog.refresh(includeDeviceLibrary = false) {} }
             assertFalse(rescan.yieldedToEdit)
-            assertEquals(LibraryScanState.IDLE, rescan.snapshot.sources.single { it.id == LibrarySourceId.DEVICE }.scanState)
+            assertEquals(LibraryScanState.IDLE, rescan.snapshot.sources.single { it.id == sourceId }.scanState)
         } finally {
+            FakeDocumentsProvider.reset()
             catalog.close()
             store.close()
             context.deleteDatabase(databaseName)
@@ -181,24 +298,5 @@ class LibraryCatalogScanDeviceTest {
             if (scan.firstOffer(candidate) && !markSeenIfUnchanged(scan, candidate)) upsertMediaStoreTrack(scan, candidate)
         }
         completeMediaStoreScan(scan.session, generation = null, scannedVolumeNames = listOf("external_primary"))
-    }
-
-    /** A device row outside MediaStore's volumes, which a device scan neither lists nor prunes. */
-    private fun LibraryCatalogStore.addFixtureTrack(): Long {
-        val session = beginSourceScan(ensureDeviceSource().id)
-        upsertTrack(
-            session,
-            LibraryTrackCandidate(
-                remoteId = "fixture-1",
-                contentUri = "content://fixture/1",
-                title = "Signal",
-                artist = "Mori",
-                album = "Quiet",
-                durationMs = 60_000,
-                fingerprint = "fixture",
-            ),
-        )
-        completeSourceScan(session)
-        return readTracks(listOf(LibrarySourceId.DEVICE)).single().id
     }
 }

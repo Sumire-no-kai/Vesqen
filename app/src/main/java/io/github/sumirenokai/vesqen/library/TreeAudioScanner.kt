@@ -40,7 +40,8 @@ internal class TreeAudioScanner(
     suspend fun scan(
         treeUri: Uri,
         shouldPause: () -> Boolean,
-        onAudioDocument: (TreeAudioDocument) -> Unit,
+        onSkippedAudio: suspend (UnsupportedAudioFormat) -> Unit = {},
+        onAudioDocument: suspend (TreeAudioDocument) -> Unit,
     ): ScanIterationResult {
         val scanContext = currentCoroutineContext()
         scanContext.ensureActive()
@@ -69,7 +70,7 @@ internal class TreeAudioScanner(
                 null,
                 null,
                 null,
-            ) ?: throw IllegalStateException("Documents provider returned no cursor")
+            ) ?: throw IncompleteLibraryProviderException()
             val entries = cursor.use { cursor ->
                 val providerExtras = cursor.extras
                 val providerIsLoading = providerExtras.getBoolean(
@@ -83,7 +84,7 @@ internal class TreeAudioScanner(
                         providerHasError = providerHasError,
                     )
                 ) {
-                    throw IllegalStateException("Documents provider returned an incomplete or failed directory cursor")
+                    throw IncompleteLibraryProviderException()
                 }
                 val documentIdIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
                 val displayNameIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
@@ -160,6 +161,8 @@ internal class TreeAudioScanner(
                         ),
                     )
                     processedTrackCount++
+                } else {
+                    knownUnsupportedAudioFormat(entry.mimeType, entry.displayName)?.let { onSkippedAudio(it) }
                 }
             }
         }
@@ -232,6 +235,22 @@ internal fun isSupportedAudioDocument(mimeType: String?, displayName: String): B
         .let(M1_AUDIO_EXTENSIONS::contains)
 }
 
+/** A known extension is insufficient when the provider explicitly calls the file an image/text. */
+internal fun knownUnsupportedAudioFormat(mimeType: String?, displayName: String): UnsupportedAudioFormat? {
+    if (isSupportedAudioDocument(mimeType, displayName)) return null
+    val mime = mimeType.orEmpty().lowercase()
+    if (mime.isNotBlank() && mime !in GENERIC_BINARY_MIME_TYPES) return null
+    return when (displayName.substringAfterLast('.', "").lowercase()) {
+        "dsf", "dff" -> UnsupportedAudioFormat.DSD
+        "ape" -> UnsupportedAudioFormat.APE
+        "wv" -> UnsupportedAudioFormat.WAVPACK
+        else -> null
+    }
+}
+
+/** A provider explicitly returned no complete snapshot; it is not evidence that a folder is empty. */
+internal class IncompleteLibraryProviderException : IllegalStateException("Incomplete provider snapshot")
+
 private fun String.toTrackTitleFallback(): String = substringBeforeLast('.', missingDelimiterValue = this)
     .ifBlank { this }
 
@@ -266,3 +285,5 @@ private val COVER_FILE_NAMES = setOf(
     "albumart",
     "albumartsmall",
 )
+
+private val GENERIC_BINARY_MIME_TYPES = setOf("application/octet-stream", "binary/octet-stream")

@@ -95,6 +95,16 @@ class MediaStoreAudioRepositoryTest {
     }
 
     @Test
+    fun `a permission change cannot prune a differently scoped scan`() {
+        val scope = MediaStoreScanScope(listOf("external_primary"), generation = "1", hasMusicLibraryPermission = true)
+        val completed = ScanIterationResult(completed = true, processedTrackCount = 1)
+        val appOwnedOnly = scope.copy(hasMusicLibraryPermission = false)
+        assertFalse(mediaStoreScanCanCommit(completed, scope, appOwnedOnly))
+        assertFalse(mediaStoreScanCanCommit(completed, appOwnedOnly, scope))
+        assertFalse(mediaStoreScanCanCommit(completed, appOwnedOnly, appOwnedOnly))
+    }
+
+    @Test
     fun `completed scan can commit only while volumes and their databases remain`() {
         val initialScope = MediaStoreScanScope(
             volumeNames = listOf("external_primary"),

@@ -10,6 +10,7 @@ import java.io.FileNotFoundException
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 /**
@@ -22,7 +23,8 @@ import org.junit.Test
 class LyricsFolderListingDeviceTest {
     private val app = isolatedPlaybackTestApplication()
     private val lyricsDirectory = File(app.cacheDir, "folder-listing-lyrics-${System.nanoTime()}")
-    private val resolver = LocalLyricsResolver(app.contentResolver, LyricsStore(lyricsDirectory))
+    private val store = LyricsStore(lyricsDirectory)
+    private val resolver = LocalLyricsResolver(app.contentResolver, store)
     private val tree = DocumentsContract.buildTreeDocumentUri(
         FakeDocumentsProvider.authority(app.packageName),
         FakeDocumentsProvider.FOLDER,
@@ -58,6 +60,64 @@ class LyricsFolderListingDeviceTest {
         FakeDocumentsProvider.files["music/song.lrc"] = "[00:01.00]Beside the song".toByteArray()
         assertEquals(TrackLyrics.None(folderHint = false), resolver.load(track))
         assertEquals(1, FakeDocumentsProvider.childQueries)
+    }
+
+    @Test
+    fun removingImportedLyricsKeepsTheSameNameFilesAdjustment() = runBlocking {
+        FakeDocumentsProvider.files["music/song.flac"] = ByteArray(0)
+        FakeDocumentsProvider.files["music/song.lrc"] = "[00:02.00]Beside the song".toByteArray()
+        val sidecar = resolver.load(track) as TrackLyrics.Found
+        assertEquals(LyricsSource.SameNameFile, sidecar.source)
+        assertEquals(LyricsAdjustmentResult.APPLIED, resolver.adjust(track, sidecar, LyricsAdjustmentAction.ADVANCE))
+        assertEquals(500L, (resolver.load(track) as TrackLyrics.Found).userAdvanceMs)
+
+        val imported = "[00:02.00]Imported".toByteArray()
+        assertEquals(LyricsImportResult.IMPORTED, store.import(track.id, imported, store.generation()))
+        val importedLyrics = resolver.load(track) as TrackLyrics.Found
+        assertEquals(LyricsSource.Imported, importedLyrics.source)
+        assertEquals(LyricsAdjustmentResult.APPLIED, resolver.adjust(track, importedLyrics, LyricsAdjustmentAction.DELAY))
+        assertEquals(-500L, store.userAdvance(track.id, importedLyrics.contentRevision))
+
+        store.remove(track.id)
+
+        val restored = resolver.load(track) as TrackLyrics.Found
+        assertEquals(LyricsSource.SameNameFile, restored.source)
+        assertEquals(sidecar.contentRevision, restored.contentRevision)
+        assertEquals(500L, restored.userAdvanceMs)
+        assertEquals(0L, store.userAdvance(track.id, importedLyrics.contentRevision))
+    }
+
+    @Test
+    fun rejectingAnAdjustmentForOldLyricsRefreshesTheCachedLyrics() = runBlocking {
+        FakeDocumentsProvider.files["music/song.flac"] = ByteArray(0)
+        FakeDocumentsProvider.files["music/song.lrc"] = "[00:02.00]Before".toByteArray()
+        val before = resolver.load(track) as TrackLyrics.Found
+        val revision = resolver.sourcesRevision.value
+        FakeDocumentsProvider.files["music/song.lrc"] = "[00:02.00]After".toByteArray()
+
+        assertEquals(LyricsAdjustmentResult.LYRICS_CHANGED, resolver.adjust(track, before, LyricsAdjustmentAction.ADVANCE))
+        val after = resolver.load(track) as TrackLyrics.Found
+        assertEquals("After", (after.lyrics as Lyrics.Synced).lines.single().text)
+        assertEquals(0L, after.userAdvanceMs)
+        assertNotEquals(revision, resolver.sourcesRevision.value)
+        assertEquals(LyricsAdjustmentResult.APPLIED, resolver.adjust(track, after, LyricsAdjustmentAction.ADVANCE))
+    }
+
+    @Test
+    fun aTemporaryFallbackAfterAnUnavailableAdjustmentIsRetried() = runBlocking {
+        FakeDocumentsProvider.files["music/song.flac"] = withEmbeddedLyrics("[00:01.00]Embedded in the song")
+        FakeDocumentsProvider.files["music/song.lrc"] = "[00:02.00]Before".toByteArray()
+        val before = resolver.load(track) as TrackLyrics.Found
+        FakeDocumentsProvider.files["music/song.lrc"] = "[00:02.00]After".toByteArray()
+        FakeDocumentsProvider.listing = Listing.LOADING
+
+        assertEquals(LyricsAdjustmentResult.UNAVAILABLE, resolver.adjust(track, before, LyricsAdjustmentAction.ADVANCE))
+        assertEquals(LyricsSource.Embedded, (resolver.load(track) as TrackLyrics.Found).source)
+
+        FakeDocumentsProvider.listing = Listing.COMPLETE
+        val after = resolver.load(track) as TrackLyrics.Found
+        assertEquals(LyricsSource.SameNameFile, after.source)
+        assertEquals("After", (after.lyrics as Lyrics.Synced).lines.single().text)
     }
 
     @Test
