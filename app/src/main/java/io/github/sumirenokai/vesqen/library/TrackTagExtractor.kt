@@ -60,9 +60,33 @@ internal fun extractBoundedTrackTags(input: InputStream, declaredLength: Long?):
                 collectMp4Tags(buffered, length, depth = 0, Mp4AtomBudget(), tags)
             }
         }
+        startsLikeDsd(header) -> {
+            tags.container = if (header.hasAsciiPrefix("DSD ")) "DSF" else "DSDIFF"
+            if (buffered.skipToDsdId3(declaredLength)) collectId3Tags(buffered, tags)
+        }
         else -> tags.container = frameSyncContainer(header)
     }
     return tags.result()
+}
+
+/** The tags the catalog itself keeps, from a DSD file's ID3 tag (#249). Null where the file has none. */
+internal data class BasicTrackTags(
+    val title: String? = null,
+    val artist: String? = null,
+    val album: String? = null,
+    val albumArtist: String? = null,
+    val trackNumber: Int? = null,
+    val discNumber: Int? = null,
+    val year: Int? = null,
+    val genre: String? = null,
+)
+
+/** Android's own metadata reader cannot open DSF or DFF, so the catalog reads their ID3 tag here. */
+internal fun extractDsdBasicTags(input: InputStream, declaredLength: Long?): BasicTrackTags {
+    val buffered = if (input is BufferedInputStream) input else BufferedInputStream(input, ARTWORK_BUFFER_BYTES)
+    val tags = TagCollector()
+    if (buffered.skipToDsdId3(declaredLength)) collectId3Tags(buffered, tags)
+    return tags.basic
 }
 
 private fun frameSyncContainer(header: ByteArray): String? {
@@ -75,6 +99,7 @@ private fun frameSyncContainer(header: ByteArray): String? {
 
 private class TagCollector {
     var container: String? = null
+    var basic = BasicTrackTags()
     val composers = Credits()
     val lyricists = Credits()
     var encoder: String? = null
@@ -253,10 +278,31 @@ private fun readId3Text(frameId: String, frame: ByteArray, tags: TagCollector) {
         "TEXT", "TXT" -> values.forEach(tags.lyricists::add)
         "TSSE", "TSS" -> tags.encoder = tags.encoder ?: values.first()
         "TSRC", "TRC" -> tags.isrc = tags.isrc ?: values.first()
-        "TRCK", "TRK" -> tags.trackTotal = tags.trackTotal ?: values.first().totalAfterSlash()
-        "TPOS", "TPA" -> tags.discTotal = tags.discTotal ?: values.first().totalAfterSlash()
+        "TRCK", "TRK" -> {
+            tags.trackTotal = tags.trackTotal ?: values.first().totalAfterSlash()
+            tags.basic = tags.basic.copy(trackNumber = tags.basic.trackNumber ?: values.first().leadingNumber())
+        }
+        "TPOS", "TPA" -> {
+            tags.discTotal = tags.discTotal ?: values.first().totalAfterSlash()
+            tags.basic = tags.basic.copy(discNumber = tags.basic.discNumber ?: values.first().leadingNumber())
+        }
+        "TIT2", "TT2" -> tags.basic = tags.basic.copy(title = tags.basic.title ?: values.first())
+        "TPE1", "TP1" -> tags.basic = tags.basic.copy(artist = tags.basic.artist ?: values.joinToString(CREDIT_SEPARATOR))
+        "TALB", "TAL" -> tags.basic = tags.basic.copy(album = tags.basic.album ?: values.first())
+        "TPE2", "TP2" -> tags.basic = tags.basic.copy(albumArtist = tags.basic.albumArtist ?: values.first())
+        // An ID3v1 genre number names no genre a listener would recognise: ID3v2.3 may put one in
+        // brackets before the name, as in "(17)Rock", and ID3v2.4 writes it bare as its own value.
+        "TCON", "TCO" -> tags.basic = tags.basic.copy(
+            genre = tags.basic.genre ?: values.map { it.replace(ID3V1_GENRE_REFERENCES, "").trim() }
+                .firstOrNull { it.isNotEmpty() && !it.all(Char::isDigit) },
+        )
+        "TYER", "TYE", "TDRC" -> tags.basic = tags.basic.copy(year = tags.basic.year ?: values.first().take(4).toIntOrNull()?.takeIf { it > 0 })
     }
 }
+
+private fun String.leadingNumber(): Int? = substringBefore('/').positiveNumber()
+
+private val ID3V1_GENRE_REFERENCES = Regex("^(\\(\\d+\\))+")
 
 /**
  * A text frame's values: v2.4 and TXXX separate them with a terminator of the encoding's width.
@@ -549,7 +595,10 @@ private const val MP4_TYPE_UTF16 = 2L
 private const val MP4_TYPE_JPEG = 13L
 private const val MP4_TYPE_PNG = 14L
 private val ID3_PICTURE_FRAMES = setOf("APIC", "PIC")
-private val ID3_TEXT_FRAMES = setOf("TXXX", "TXX", "TCOM", "TCM", "TEXT", "TXT", "TSSE", "TSS", "TSRC", "TRC", "TRCK", "TRK", "TPOS", "TPA")
+private val ID3_TEXT_FRAMES = setOf(
+    "TXXX", "TXX", "TCOM", "TCM", "TEXT", "TXT", "TSSE", "TSS", "TSRC", "TRC", "TRCK", "TRK", "TPOS", "TPA",
+    "TIT2", "TT2", "TPE1", "TP1", "TALB", "TAL", "TPE2", "TP2", "TCON", "TCO", "TYER", "TYE", "TDRC",
+)
 private val VORBIS_TEXT_COMMENTS = setOf(
     "COMPOSER", "LYRICIST", "ENCODER", "ENCODED-BY", "ENCODEDBY", "ISRC", "TRACKTOTAL", "TOTALTRACKS", "DISCTOTAL",
     "TOTALDISCS", "TRACKNUMBER", "DISCNUMBER", "REPLAYGAIN_TRACK_GAIN", "REPLAYGAIN_TRACK_PEAK", "REPLAYGAIN_ALBUM_GAIN",

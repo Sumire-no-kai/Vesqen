@@ -15,6 +15,8 @@ val M1_AUDIO_FORMAT_MATRIX: List<M1AudioFormat> = listOf(
     M1AudioFormat("alac", "ALAC", setOf("alac", "m4a"), setOf("audio/alac"), true, setOf(16, 24, 32)),
     M1AudioFormat("wav", "WAV", setOf("wav"), setOf("audio/wav", "audio/x-wav"), true, setOf(16, 24, 32)),
     M1AudioFormat("aiff", "AIFF", setOf("aif", "aiff"), setOf("audio/aiff", "audio/x-aiff"), true, setOf(16, 24, 32)),
+    // #249: converted to PCM by Vesqen; lossless as a source, but its playback is never bit-perfect.
+    M1AudioFormat("dsd", "DSD", setOf("dsf", "dff"), setOf("audio/x-dsf", "audio/dsf", "audio/x-dff", "audio/dff"), true),
     M1AudioFormat("mp3", "MP3", setOf("mp3"), setOf("audio/mpeg"), false),
     M1AudioFormat("aac", "AAC", setOf("aac", "m4a"), setOf("audio/aac", "audio/mp4a-latm"), false),
     M1AudioFormat("vorbis", "Ogg Vorbis", setOf("ogg"), setOf("audio/ogg", "audio/vorbis"), false),

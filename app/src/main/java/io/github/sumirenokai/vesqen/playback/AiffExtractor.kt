@@ -26,18 +26,22 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Media3's extractors with AIFF added (#268). AIFF goes first: its check is exact, while sniffing
- * the others over PCM data could mistake audio for a compressed stream.
+ * Media3's extractors with AIFF (#268) and DSD (#249) added. Those go first: their checks are
+ * exact, while sniffing the others over PCM or DSD data could mistake audio for a compressed stream.
+ * [dsdConversion] is read when a DSD stream starts.
  */
 @androidx.annotation.OptIn(UnstableApi::class)
-internal class VesqenExtractorsFactory : ExtractorsFactory {
+internal class VesqenExtractorsFactory(
+    private val dsdConversion: () -> DsdConversion = { DsdConversion() },
+) : ExtractorsFactory {
     private val defaults = DefaultExtractorsFactory()
 
-    override fun createExtractors(): Array<Extractor> =
-        arrayOf<Extractor>(AiffExtractor()) + defaults.createExtractors()
+    override fun createExtractors(): Array<Extractor> = own() + defaults.createExtractors()
 
     override fun createExtractors(uri: Uri, responseHeaders: Map<String, List<String>>): Array<Extractor> =
-        arrayOf<Extractor>(AiffExtractor()) + defaults.createExtractors(uri, responseHeaders)
+        own() + defaults.createExtractors(uri, responseHeaders)
+
+    private fun own(): Array<Extractor> = arrayOf(AiffExtractor(), DsdExtractor(dsdConversion))
 }
 
 /**

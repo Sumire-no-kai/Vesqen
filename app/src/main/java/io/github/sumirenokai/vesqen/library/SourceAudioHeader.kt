@@ -11,8 +11,12 @@ internal data class SourceAudioHeader(
     val durationMs: Long? = null,
 )
 
-/** Fixed-size reads and a 1 MiB traversal limit; no audio or artwork payload is allocated. */
-internal fun readSourceAudioHeader(input: InputStream): SourceAudioHeader? {
+/**
+ * Fixed-size reads and a 1 MiB traversal limit; no audio or artwork payload is allocated. A DSD
+ * header skips, without reading, whatever chunks come before the audio, such as a tag with its
+ * cover; [fileLength], when known, refuses a chunk that claims more than the file.
+ */
+internal fun readSourceAudioHeader(input: InputStream, fileLength: Long? = null): SourceAudioHeader? {
     fun exact(size: Int): ByteArray? {
         val bytes = ByteArray(size)
         var offset = 0
@@ -38,7 +42,14 @@ internal fun readSourceAudioHeader(input: InputStream): SourceAudioHeader? {
         }
         return true
     }
-    val signature = exact(4)?.toString(Charsets.US_ASCII) ?: return null
+    val signatureBytes = exact(4) ?: return null
+    val signature = signatureBytes.toString(Charsets.US_ASCII)
+    if (signature == "DSD " || signature == "FRM8") {
+        // #249: the DSD rate and 1-bit samples, which the PCM checks below would refuse.
+        val file = InputStreamDsdHeaderSource(input, consumed = signatureBytes)
+        val info = (readDsdHeader(file, fileLength) as? DsdHeaderResult.Stream)?.info ?: return null
+        return SourceAudioHeader(info.sampleRate, info.channels, bitDepth = 1, durationMs = info.durationUs / 1_000)
+    }
     if (signature == "fLaC") {
         val block = exact(4) ?: return null
         if ((block[0].toInt() and 127) != 0 || block[1] != 0.toByte() || block[2] != 0.toByte() || block[3] != 34.toByte()) return null

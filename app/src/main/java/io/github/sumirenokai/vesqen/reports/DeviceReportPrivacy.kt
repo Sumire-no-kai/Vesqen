@@ -81,11 +81,14 @@ internal object DeviceReportVocabulary {
     fun platformEncoding(value: String) = value in platformEncodings || value.matches(platformEncodingPattern)
 }
 
+/** PCM up to 1,536 kHz and DSD up to DSD512 of the 48 kHz family (#249); the report server checks the same. */
+private const val MAX_SOURCE_SAMPLE_RATE_HZ = 24_576_000
+
 /** The single privacy boundary for persistence and export. Never export raw diagnostic strings. */
 internal object DeviceReportPrivacy {
     private val vocabulary = DeviceReportVocabulary
     private val mac = Regex("(?i)(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}")
-    private val fileSuffix = Regex("(?i)\\.(flac|alac|wav|wave|aiff?|mp3|mp4|m4a|aac|opus|ogg|wma|mkv|txt|json|log|db|sqlite|jpg|png|pdf|zip|apk)(?:\\b|$)")
+    private val fileSuffix = Regex("(?i)\\.(flac|alac|wav|wave|aiff?|dsf|dff|mp3|mp4|m4a|aac|opus|ogg|wma|mkv|txt|json|log|db|sqlite|jpg|png|pdf|zip|apk)(?:\\b|$)")
 
     fun fileName(raw: String?): String? = raw?.substringAfterLast('/')?.substringAfterLast('\\')?.takeIf {
         it.isNotBlank() && it.length <= 255 && it !in setOf(".", "..") &&
@@ -97,7 +100,7 @@ internal object DeviceReportPrivacy {
         val mime = raw.codecMime?.takeIf(vocabulary.mimes::contains)
         val sanitized = raw.copy(
             container = container, codecMime = mime, codecLabel = raw.codecLabel?.takeIf(vocabulary.codecLabels::contains),
-            sampleRateHz = raw.sampleRateHz?.takeIf { it in 1..1_536_000 },
+            sampleRateHz = raw.sampleRateHz?.takeIf { it in 1..MAX_SOURCE_SAMPLE_RATE_HZ },
             bitDepth = raw.bitDepth?.takeIf { it in 1..64 },
             channelCount = raw.channelCount?.takeIf { it in 1..64 },
         )

@@ -17,7 +17,7 @@ const availability = oneOf(enums.errorHistoryAvailability);
 const finite = v => typeof v === 'number' && Number.isFinite(v);
 const count = maximum => v => integer(v) && v <= maximum;
 const array = (v, maximum, predicate) => Array.isArray(v) && v.length <= maximum && v.every(predicate);
-const pathlessLabel = v => label(v) && !/\.(?:flac|alac|wav|wave|aiff?|mp3|mp4|m4a|aac|opus|ogg|wma|mkv|txt|json|log|db|sqlite|jpg|png|pdf|zip|apk)(?:\b|$)/i.test(v);
+const pathlessLabel = v => label(v) && !/\.(?:flac|alac|wav|wave|aiff?|dsf|dff|mp3|mp4|m4a|aac|opus|ogg|wma|mkv|txt|json|log|db|sqlite|jpg|png|pdf|zip|apk)(?:\b|$)/i.test(v);
 const filename = v => typeof v === 'string' && v.length > 0 && v.length <= 255 && !/[\x00-\x1f\x7f-\x9f/\\:%]/.test(v) && !mac.test(v) && !['.','..'].includes(v);
 const classNamePattern = matchesPattern(text.classNamePattern);
 const methodNamePattern = matchesPattern(text.methodNamePattern);
@@ -184,7 +184,8 @@ export function validateReport(v) {
       check((track.source === 'LIBRARY_METADATA' && track.confidence === 'ESTIMATED') ||
         (track.source === 'STRICT_OUTPUT_REQUEST' && track.confidence === 'MEASURED'));
       check(nullable(track.container,oneOf(containers)) && nullable(track.codecMime,oneOf(mimes)) && nullable(track.codecLabel,oneOf(codecs)));
-      check(nullable(track.sampleRateHz,count(1536000)) && nullable(track.bitDepth,count(64)) && nullable(track.channelCount,count(64)));
+      // PCM up to 1,536 kHz and DSD up to DSD512 of the 48 kHz family (#249), as the app filters.
+      check(nullable(track.sampleRateHz,count(24576000)) && nullable(track.bitDepth,count(64)) && nullable(track.channelCount,count(64)));
       check(boolean(track.privacyFiltered) && ['SOURCE_DID_NOT_REPORT','SOURCE_DID_NOT_REPORT_OR_PRIVACY_FILTERED'].includes(track.missingFieldReason));
       if (Object.hasOwn(track,'fileName')) check(nullable(track.fileName,filename));
       if (Object.hasOwn(track,'fileNameUnavailableReason')) check(track.fileName === null && ['NOT_RECORDED_OR_PRIVACY_FILTERED','PRIVACY_FILTERED'].includes(track.fileNameUnavailableReason));

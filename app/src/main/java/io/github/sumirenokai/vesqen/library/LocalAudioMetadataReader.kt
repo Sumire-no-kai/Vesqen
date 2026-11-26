@@ -22,7 +22,7 @@ internal class LocalAudioMetadataReader(private val context: Context) {
         val tagMetadata = readTags(uri)
         val streamMetadata = readStream(uri)
         val sourceHeader = try {
-            context.contentResolver.openInputStream(uri)?.use(::readSourceAudioHeader)
+            context.contentResolver.openInputStream(uri)?.use { readSourceAudioHeader(it, candidate.sizeBytes.takeIf { size -> size > 0 }) }
         } catch (_: IOException) {
             null
         } catch (_: SecurityException) {
@@ -31,21 +31,21 @@ internal class LocalAudioMetadataReader(private val context: Context) {
         val resolvedMime = streamMetadata.mimeType.ifBlank {
             tagMetadata.mimeType.ifBlank { candidate.mimeType }
         }
+        val codec = codecLabel(mimeType = resolvedMime, fileName = candidate.fileName)
+        // #249: Android cannot read DSD files, so their ID3 tag fills in what it left blank.
+        val dsd = if (codec == DSD_CODEC_LABEL) readDsdTags(uri, candidate.sizeBytes) else BasicTrackTags()
         return candidate.copy(
-            title = tagMetadata.title.ifBlank { candidate.title },
-            artist = tagMetadata.artist.ifBlank { candidate.artist },
-            album = tagMetadata.album.ifBlank { candidate.album },
+            title = tagMetadata.title.ifBlank { dsd.title ?: candidate.title },
+            artist = tagMetadata.artist.ifBlank { dsd.artist ?: candidate.artist },
+            album = tagMetadata.album.ifBlank { dsd.album ?: candidate.album },
             durationMs = tagMetadata.durationMs.takeIf { it > 0 } ?: sourceHeader?.durationMs ?: candidate.durationMs,
             mimeType = resolvedMime,
-            albumArtist = tagMetadata.albumArtist.ifBlank { candidate.albumArtist },
-            trackNumber = tagMetadata.trackNumber ?: candidate.trackNumber,
-            discNumber = tagMetadata.discNumber ?: candidate.discNumber,
-            year = tagMetadata.year ?: candidate.year,
-            genre = tagMetadata.genre.ifBlank { candidate.genre },
-            codec = codecLabel(
-                mimeType = resolvedMime,
-                fileName = candidate.fileName,
-            ),
+            albumArtist = tagMetadata.albumArtist.ifBlank { dsd.albumArtist ?: candidate.albumArtist },
+            trackNumber = tagMetadata.trackNumber ?: dsd.trackNumber ?: candidate.trackNumber,
+            discNumber = tagMetadata.discNumber ?: dsd.discNumber ?: candidate.discNumber,
+            year = tagMetadata.year ?: dsd.year ?: candidate.year,
+            genre = tagMetadata.genre.ifBlank { dsd.genre ?: candidate.genre },
+            codec = codec,
             channelCount = sourceHeader?.channels ?: streamMetadata.channelCount ?: candidate.channelCount,
             bitDepth = sourceHeader?.bitDepth ?: streamMetadata.bitDepth,
             sampleRateHz = sourceHeader?.sampleRate ?: streamMetadata.sampleRateHz ?: candidate.sampleRateHz,
@@ -84,6 +84,15 @@ internal class LocalAudioMetadataReader(private val context: Context) {
         } finally {
             runCatching { retriever.release() }
         }
+    }
+
+    private fun readDsdTags(uri: Uri, sizeBytes: Long): BasicTrackTags = try {
+        context.contentResolver.openInputStream(uri)?.use { extractDsdBasicTags(it, sizeBytes.takeIf { size -> size > 0 }) }
+            ?: BasicTrackTags()
+    } catch (_: IOException) {
+        BasicTrackTags()
+    } catch (_: SecurityException) {
+        BasicTrackTags()
     }
 
     private fun readStream(uri: Uri): StreamMetadata {
@@ -189,3 +198,6 @@ internal fun codecLabel(mimeType: String, fileName: String): String {
 }
 
 private const val BITS_PER_SAMPLE_KEY = "bits-per-sample"
+
+/** The format table's name for DSF and DFF. */
+internal const val DSD_CODEC_LABEL = "DSD"
