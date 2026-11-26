@@ -1,0 +1,179 @@
+package io.github.sumirenokai.vesqen.playback
+
+import android.content.Context
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.library.DSD_CODEC_LABEL
+import io.github.sumirenokai.vesqen.telemetry.TelemetryMediaItemExtras
+import java.io.File
+import java.time.Duration
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+
+/** #249: the Audio output page's DSD settings, as stored and as playback picks them up. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
+@androidx.annotation.OptIn(UnstableApi::class)
+class DsdConversionSettingsTest {
+    @get:Rule
+    val folder = TemporaryFolder()
+
+    private val context = RuntimeEnvironment.getApplication()
+    private var player: ExoPlayer? = null
+
+    @After
+    fun releasePlayer() {
+        player?.release()
+    }
+
+    @Test
+    fun `the gain is off at first, turns on at 3 dB, stays on the 0_5 dB grid and comes back when turned on again`() {
+        val settings = DsdConversionSettings(context)
+        assertEquals(DsdConversionValues(), settings.values.value)
+        assertEquals(DsdConversion(), settings.conversion())
+        settings.setGainEnabled(true)
+        assertEquals(DsdConversion(gainDb = 3f), settings.conversion())
+        settings.setGainDb(4.3f)
+        assertEquals(4.5f, settings.values.value.gainDb)
+        settings.setGainDb(9f)
+        assertEquals(6f, settings.values.value.gainDb)
+        settings.setGainDb(0f)
+        assertEquals(0.5f, settings.values.value.gainDb)
+        settings.setGainEnabled(false)
+        assertEquals(0f, settings.conversion().gainDb)
+        settings.setGainEnabled(true)
+        assertEquals(0.5f, settings.conversion().gainDb)
+        settings.setRateMode(DsdOutputRateMode.MULTIPLE)
+        assertEquals(settings.values.value, DsdConversionSettings(context).values.value)
+        assertEquals(DsdConversion(DsdOutputRateMode.MULTIPLE, 0.5f), DsdConversionSettings(context).conversion())
+    }
+
+    @Test
+    fun `stored values that cannot be read are the defaults`() {
+        context.getSharedPreferences("dsd_conversion", Context.MODE_PRIVATE).edit()
+            .putFloat("gain_db", Float.NaN)
+            .putString("rate_mode", "MULTIPLE")
+            .commit()
+        assertEquals(DsdConversionValues(), DsdConversionSettings(context).values.value)
+    }
+
+    /**
+     * Media3 opens the next track before it plays, so the track next in line already holds the old
+     * settings when they change. It is opened again; the playing track is not, and the queue keeps
+     * its entries in their order.
+     */
+    @Test
+    fun `a change reaches the DSD track next in line even when Media3 has opened it`() {
+        val opened = CopyOnWriteArrayList<DsdConversion>()
+        // Read on Media3's loading thread.
+        val current = AtomicReference(DsdConversion())
+        val created = ExoPlayer.Builder(context, VesqenAudioRenderersFactory(context, AudioTrackAudioOutputProvider.Builder(context).build()))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(context, VesqenExtractorsFactory { current.get().also(opened::add) }))
+            .build()
+        player = created
+        created.setMediaItems(listOf(dsdItem("1"), dsdItem("2")))
+        created.prepare()
+        created.play()
+        runUntil { opened.size == 2 }
+        assertEquals("the second track opened while the first plays", 0, created.currentMediaItemIndex)
+
+        current.set(DsdConversion(DsdOutputRateMode.MULTIPLE))
+        created.reopenNextDsdItem(DsdConversionValues(rateMode = DsdOutputRateMode.MULTIPLE))
+        runUntil { opened.size == 3 }
+        assertEquals(DsdOutputRateMode.MULTIPLE, opened.last().rateMode)
+        assertEquals(0, created.currentMediaItemIndex)
+        assertEquals(listOf("1", "2"), List(created.mediaItemCount) { created.getMediaItemAt(it).mediaId })
+
+        // Asked again with the same settings, nothing opens again.
+        created.reopenNextDsdItem(DsdConversionValues(rateMode = DsdOutputRateMode.MULTIPLE))
+        runUntil { created.currentMediaItemIndex == 1 && created.audioFormat?.sampleRate == 176_400 }
+        assertEquals("only the next track opened again", 3, opened.size)
+    }
+
+    @Test
+    fun `only a DSD track next in line is opened again, and never the one playing`() {
+        val created = ExoPlayer.Builder(context, VesqenAudioRenderersFactory(context, AudioTrackAudioOutputProvider.Builder(context).build()))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(context, VesqenExtractorsFactory()))
+            .build()
+        player = created
+        val flac = MediaItem.Builder().setUri(Uri.fromFile(dsdFile())).setMediaId("2")
+            .setMediaMetadata(MediaMetadata.Builder().setExtras(TelemetryMediaItemExtras.from(track("FLAC"))).build()).build()
+        created.setMediaItems(listOf(dsdItem("1"), flac))
+        created.reopenNextDsdItem(DsdConversionValues(gainEnabled = true))
+        assertEquals(null, created.getMediaItemAt(1).localConfiguration?.customCacheKey)
+        // Repeat one: the next track is the playing one.
+        created.setMediaItems(listOf(dsdItem("1"), dsdItem("2")))
+        created.repeatMode = ExoPlayer.REPEAT_MODE_ONE
+        created.reopenNextDsdItem(DsdConversionValues(gainEnabled = true))
+        assertEquals(null, created.getMediaItemAt(0).localConfiguration?.customCacheKey)
+        created.repeatMode = ExoPlayer.REPEAT_MODE_OFF
+        created.reopenNextDsdItem(DsdConversionValues(gainEnabled = true))
+        assertTrue(created.getMediaItemAt(1).localConfiguration?.customCacheKey != null)
+    }
+
+    private fun dsdItem(id: String) = MediaItem.Builder()
+        .setUri(Uri.fromFile(dsdFile()))
+        .setMediaId(id)
+        .setMediaMetadata(MediaMetadata.Builder().setExtras(TelemetryMediaItemExtras.from(track(DSD_CODEC_LABEL))).build())
+        .build()
+
+    private var fileNumber = 0
+
+    /** A quarter of a second of DSD128, so the two rate modes give different output rates. */
+    private fun dsdFile(): File {
+        val bytes = (DsdExtractorTest.DSD64 * 2 / 4 / 8)
+        val file = DsdExtractorTest.dsf(left = DsdExtractorTest.idle(bytes), right = DsdExtractorTest.idle(bytes), rate = DsdExtractorTest.DSD64 * 2)
+        return File(folder.root, "track-${fileNumber++}.dsf").apply { writeBytes(file) }
+    }
+
+    private fun track(codec: String) = AudioTrack(
+        id = 1,
+        contentUri = "content://media/1",
+        title = "Title",
+        artist = "Artist",
+        album = "Album",
+        durationMs = 250,
+        codec = codec,
+    )
+
+    /** Lets the playback thread and the main looper run, advancing the clock a little. */
+    private fun settle() {
+        val done = CountDownLatch(1)
+        Handler(player!!.playbackLooper).post { done.countDown() }
+        assertTrue(done.await(2, TimeUnit.SECONDS))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(10))
+    }
+
+    /** Bounded by real time: files are read on Media3's own loader thread. */
+    private fun runUntil(seconds: Long = 20, condition: () -> Boolean) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(seconds)
+        while (System.nanoTime() < deadline) {
+            if (condition()) return
+            settle()
+            Thread.sleep(2)
+        }
+        fail("the player did not reach the expected state within $seconds s")
+    }
+}

@@ -227,6 +227,31 @@ class VesqenNavigationStateTest {
         assertEquals(VesqenDestination.SETTINGS, now.back().destination)
     }
 
+    /** #249: Audio output opens from the Settings row and from Now's output-mode dialog. */
+    @Test
+    fun `audio output returns to settings or to the player`() {
+        val fromSettings = VesqenNavigationState().selectTopLevel(VesqenDestination.SETTINGS).openAudioOutput()
+        assertEquals(VesqenDestination.AUDIO_OUTPUT, fromSettings.destination)
+        assertTrue(fromSettings.settingsUnderneath)
+        assertEquals(VesqenDestination.SETTINGS, fromSettings.back().destination)
+
+        val fromNow = VesqenNavigationState().selectTopLevel(VesqenDestination.NOW).openAudioOutput()
+        assertEquals(VesqenDestination.AUDIO_OUTPUT, fromNow.destination)
+        assertEquals(VesqenDestination.NOW, fromNow.back().destination)
+    }
+
+    /** Pro features open above Audio output, so Back returns there and then to where it opened. */
+    @Test
+    fun `pro features opened from audio output return to it`() {
+        for (origin in listOf(VesqenDestination.SETTINGS, VesqenDestination.NOW)) {
+            val premium = VesqenNavigationState().selectTopLevel(origin).openAudioOutput().openPremium()
+            assertEquals(VesqenDestination.PREMIUM, premium.destination)
+            val audioOutput = premium.back()
+            assertEquals(VesqenDestination.AUDIO_OUTPUT, audioOutput.destination)
+            assertEquals(origin, audioOutput.back().destination)
+        }
+    }
+
     @Test
     fun `pro features opened over a nested detail open from settings`() {
         val premium = VesqenNavigationState()

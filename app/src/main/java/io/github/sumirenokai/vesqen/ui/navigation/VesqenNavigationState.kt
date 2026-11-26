@@ -101,8 +101,18 @@ data class VesqenNavigationState(
     /** Opens from Settings and from the crash question (#113), which can appear over any surface. */
     fun openDeviceReport(): VesqenNavigationState = openSettingsDetailFromAnywhere(VesqenDestination.DEVICE_REPORT)
 
-    /** Opens from Settings and from strict output dialogs, which can appear over any surface. */
-    fun openPremium(): VesqenNavigationState = openSettingsDetailFromAnywhere(VesqenDestination.PREMIUM)
+    /** Opens from the Settings row and from Now's output-mode dialog (#249); Back returns to either. */
+    fun openAudioOutput(): VesqenNavigationState = openDetail(VesqenDestination.AUDIO_OUTPUT)
+
+    /**
+     * Opens from Settings, from Audio output's strict status (#249) and from strict output dialogs,
+     * which can appear over any surface.
+     */
+    fun openPremium(): VesqenNavigationState = if (destination == VesqenDestination.AUDIO_OUTPUT) {
+        openDetail(VesqenDestination.PREMIUM)
+    } else {
+        openSettingsDetailFromAnywhere(VesqenDestination.PREMIUM)
+    }
 
     /** Over another detail, a Settings detail opens from Settings, so details never nest past two levels. */
     private fun openSettingsDetailFromAnywhere(detail: VesqenDestination): VesqenNavigationState = when {

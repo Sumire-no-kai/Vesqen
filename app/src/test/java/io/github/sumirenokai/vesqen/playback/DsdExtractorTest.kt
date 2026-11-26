@@ -517,7 +517,7 @@ class DsdExtractorTest {
         }
     }
 
-    private companion object {
+    internal companion object {
         const val DSD64 = 2_822_400
         /** Three DSF blocks less a little: 12,000 bytes per channel. */
         const val SAMPLES = 12_000L * 8

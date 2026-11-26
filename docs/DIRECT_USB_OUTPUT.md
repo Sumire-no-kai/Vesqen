@@ -4,7 +4,7 @@ This guide describes the M7 development builds. Direct USB output remains disabl
 
 ## Starting playback
 
-Choose Strict USB output in Settings. On a phone without Android's official bit-perfect channel, an enabled build can use Vesqen's own USB output. Before its first playback, Vesqen explains exclusive access, volume control and USB permission. Cancelling keeps playback stopped. The explanation remains available under Settings → Playback output → Direct USB output.
+Choose Strict USB output in Settings → Audio output. On a phone without Android's official bit-perfect channel, an enabled build can use Vesqen's own USB output. Before its first playback, Vesqen explains exclusive access, volume control and USB permission. Cancelling keeps playback stopped. The explanation remains available under Settings → Audio output → Direct USB output.
 
 While Vesqen holds the DAC, other apps and notification sounds may be inaudible. Where ringtones and alarms play depends on the phone. Pausing eventually releases the DAC according to the pause policy; choosing System output requests its release immediately. A failed release keeps playback stopped and requires recovery before another takeover.
 

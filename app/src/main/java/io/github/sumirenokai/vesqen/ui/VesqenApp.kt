@@ -138,6 +138,7 @@ import io.github.sumirenokai.vesqen.ui.navigation.detailDepth
 import io.github.sumirenokai.vesqen.ui.navigation.isSecondaryDetail
 import io.github.sumirenokai.vesqen.ui.navigation.navigationOrder
 import io.github.sumirenokai.vesqen.ui.screens.AboutScreen
+import io.github.sumirenokai.vesqen.ui.screens.AudioOutputScreen
 import io.github.sumirenokai.vesqen.ui.screens.ChainScreen
 import io.github.sumirenokai.vesqen.ui.screens.CrashPromptDialog
 import io.github.sumirenokai.vesqen.ui.screens.DeviceReportScreen
@@ -733,6 +734,10 @@ fun VesqenAppContent(
         applyNavigation(currentNavigation().openPremium())
     }
 
+    fun openAudioOutput() {
+        applyNavigation(currentNavigation().openAudioOutput())
+    }
+
     LaunchedEffect(openPremiumRequest) {
         if (openPremiumRequest > 0 && premiumAccess != null) openPremium()
     }
@@ -933,6 +938,7 @@ fun VesqenAppContent(
                 appUpdater = appUpdater,
                 onOpenUsageStatistics = ::openUsageStatistics,
                 onOpenDeviceReport = ::openDeviceReport,
+                onOpenAudioOutput = ::openAudioOutput,
                 usageStatistics = usageStatistics,
                 deviceReporter = deviceReporter,
                 reportUploadAvailable = reportUploadAvailable,
@@ -1015,6 +1021,7 @@ fun VesqenAppContent(
             appUpdater = appUpdater,
             onOpenUsageStatistics = ::openUsageStatistics,
             onOpenDeviceReport = ::openDeviceReport,
+            onOpenAudioOutput = ::openAudioOutput,
             usageStatistics = usageStatistics,
             deviceReporter = deviceReporter,
             reportUploadAvailable = reportUploadAvailable,
@@ -1293,6 +1300,7 @@ private fun VesqenDestinationFrame(
     appUpdater: AppUpdater?,
     onOpenUsageStatistics: () -> Unit,
     onOpenDeviceReport: () -> Unit,
+    onOpenAudioOutput: () -> Unit,
     usageStatistics: UsageStatistics?,
     deviceReporter: DeviceReporter?,
     reportUploadAvailable: Boolean,
@@ -1518,6 +1526,7 @@ private fun VesqenDestinationFrame(
                         playbackTelemetry = playbackTelemetry,
                         onSetUsbOutputMode = onSetUsbOutputMode,
                         onExplainStrictUsbUnavailable = onExplainStrictUsbUnavailable,
+                        onOpenAudioOutput = onOpenAudioOutput,
                         onToggleFavorite = onToggleFavorite,
                         snapshot = state.playback,
                         currentTrack = currentTrack,
@@ -1558,8 +1567,7 @@ private fun VesqenDestinationFrame(
                             outputVerification = state.playback.outputVerification,
                             verificationRegistryState = verificationRegistryState,
                             verificationImportResult = verificationImportResult,
-                            onSetUsbOutputMode = onSetUsbOutputMode,
-                            onExplainStrictUsbUnavailable = onExplainStrictUsbUnavailable,
+                            onOpenAudioOutput = onOpenAudioOutput,
                             onOpenPlaybackChain = onOpenChain,
                             onImportVerificationRegistry = onImportVerificationRegistry,
                             onOpenAbout = onOpenAbout,
@@ -1623,6 +1631,16 @@ private fun VesqenDestinationFrame(
                             modifier = destinationModifier,
                         )
                     }
+
+                    VesqenDestination.AUDIO_OUTPUT -> AudioOutputScreen(
+                        outputStatus = state.playback.usbOutputStatus,
+                        onSetUsbOutputMode = onSetUsbOutputMode,
+                        onBack = onNavigateBack,
+                        modifier = destinationModifier,
+                        outputModeSelectionEnabled = state.playback.canSetUsbOutputMode,
+                        onExplainStrictUsbUnavailable = onExplainStrictUsbUnavailable,
+                        onOpenPremium = onOpenPremium.takeIf { premiumAccess != null },
+                    )
 
                     VesqenDestination.PREMIUM -> premiumAccess?.let {
                         PremiumScreen(

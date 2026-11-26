@@ -109,8 +109,7 @@ class DirectUsbPresentationUiTest(private val language: String, private val larg
 
     @Test fun settingsRetainsTheFirstUseInformation() {
         content {
-            SettingsScreen(outputStatus = prompt.copy(directUsbAvailable = true), onSetUsbOutputMode = {},
-                onOpenPlaybackChain = {}, onImportVerificationRegistry = {}, onOpenAbout = {}, versionName = "Test")
+            AudioOutputScreen(outputStatus = prompt.copy(directUsbAvailable = true), onSetUsbOutputMode = {}, onBack = {})
         }
         compose.onNodeWithTag("vesqen.settings.direct-usb-info").performScrollTo().performClick()
         compose.onNodeWithText(context.getString(R.string.usb_direct_intro_body)).assertIsDisplayed()

@@ -1,15 +1,6 @@
 package io.github.sumirenokai.vesqen.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -26,18 +17,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,8 +34,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -60,9 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
-import io.github.sumirenokai.vesqen.ui.LocalScreenOffKeepAlive
 import io.github.sumirenokai.vesqen.ui.LocalUnplayableTrackSettings
-import io.github.sumirenokai.vesqen.ui.openBackgroundPowerSettings
 import io.github.sumirenokai.vesqen.library.ArtistSplitSettings
 import io.github.sumirenokai.vesqen.playback.NO_BIT_PERFECT_MIXER_CODE
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
@@ -71,15 +55,11 @@ import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.premium.PremiumAccess
 import io.github.sumirenokai.vesqen.service.ServiceState
-import io.github.sumirenokai.vesqen.ui.components.OutputStatusChip
 import io.github.sumirenokai.vesqen.ui.components.PaperCard
 import io.github.sumirenokai.vesqen.ui.components.PaperDivider
-import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
-import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.TopLevelTitleAutoSize
 import io.github.sumirenokai.vesqen.ui.theme.pageTitle
-import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 import io.github.sumirenokai.vesqen.updates.AppUpdater
 import io.github.sumirenokai.vesqen.usage.UsageStatistics
 import io.github.sumirenokai.vesqen.verification.OutputVerificationImportFailure
@@ -88,14 +68,13 @@ import io.github.sumirenokai.vesqen.verification.OutputVerificationMatch
 import io.github.sumirenokai.vesqen.verification.OutputVerificationRegistryState
 
 /**
- * B · Paper & Sound settings (#35): serif group titles over paper-raised cards with hairline rows,
+ * B · Paper & Sound settings (#35): sans group titles over paper-raised cards with hairline rows,
  * without slogans, per-group subtitles or icon tiles. The group order follows PRD F14; Library (#168)
  * follows Audio proof.
  */
 @Composable
 fun SettingsScreen(
     outputStatus: UsbOutputStatus,
-    onSetUsbOutputMode: (UsbOutputMode) -> Unit,
     onOpenPlaybackChain: () -> Unit,
     onImportVerificationRegistry: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -112,15 +91,12 @@ fun SettingsScreen(
     outputVerification: OutputVerificationMatch? = null,
     verificationRegistryState: OutputVerificationRegistryState = OutputVerificationRegistryState.Empty,
     verificationImportResult: OutputVerificationImportResult? = null,
-    onExplainStrictUsbUnavailable: () -> Unit = {},
+    onOpenAudioOutput: () -> Unit = {},
     premiumAccess: PremiumAccess? = null,
     onOpenPremium: () -> Unit = {},
     artistSplit: ArtistSplitSettings = ArtistSplitSettings(),
     onArtistSplitChange: (ArtistSplitSettings) -> Unit = {},
 ) {
-    val unsupportedPlatform = outputStatus.strictUnavailablePlatform
-    val strictSelected = outputStatus.mode == UsbOutputMode.STRICT_BIT_PERFECT
-    val motionMillis = rememberVesqenMotionPolicy().stateChangeMillis
     var editingArtistListName by rememberSaveable { mutableStateOf<String?>(null) }
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
@@ -132,53 +108,12 @@ fun SettingsScreen(
         ) {
             item { SettingsTitle() }
             item {
+                // #249: the output settings live on Audio output; Settings keeps the way in.
                 SettingsGroup(
                     title = stringResource(R.string.settings_playback_output),
                     modifier = Modifier.testTag("vesqen.settings.section.playback-output"),
-                    footer = {
-                        if (!outputModeSelectionEnabled) SettingsNote(stringResource(R.string.playback_controls_connecting))
-                        AnimatedVisibility(
-                            visible = strictSelected,
-                            enter = fadeIn(tween(motionMillis)) + expandVertically(tween(motionMillis)),
-                            exit = fadeOut(tween(motionMillis)) + shrinkVertically(tween(motionMillis)),
-                        ) { StrictOutputStatusBox(outputStatus) }
-                    },
                 ) {
-                    Column(Modifier.selectableGroup().testTag("vesqen.settings.output-modes")) {
-                        SettingsRadioRow(
-                            title = stringResource(R.string.settings_system_output),
-                            description = stringResource(R.string.settings_system_output_body),
-                            selected = outputStatus.mode == UsbOutputMode.SYSTEM,
-                            enabled = outputModeSelectionEnabled,
-                            onClick = { onSetUsbOutputMode(UsbOutputMode.SYSTEM) },
-                            modifier = Modifier.testTag("vesqen.settings.output.system"),
-                        )
-                        PaperDivider()
-                        SettingsRadioRow(
-                            title = stringResource(R.string.settings_strict_usb_output),
-                            description = unsupportedPlatform?.let {
-                                stringResource(R.string.settings_strict_usb_platform_unavailable, it.androidRelease, it.apiLevel)
-                            } ?: stringResource(
-                                if (outputStatus.directUsbAvailable) {
-                                    R.string.settings_strict_usb_output_body_direct
-                                } else {
-                                    R.string.settings_strict_usb_output_body
-                                },
-                            ),
-                            selected = strictSelected,
-                            enabled = outputModeSelectionEnabled && unsupportedPlatform == null,
-                            onClick = { onSetUsbOutputMode(UsbOutputMode.STRICT_BIT_PERFECT) },
-                            onUnavailableClick = onExplainStrictUsbUnavailable.takeIf {
-                                outputModeSelectionEnabled && unsupportedPlatform != null
-                            },
-                            modifier = Modifier.testTag("vesqen.settings.output.strict-usb"),
-                        )
-                    }
-                    if (outputStatus.directUsbAvailable) {
-                        PaperDivider()
-                        DirectUsbInformationRow()
-                    }
-                    if (strictSelected && outputStatus.directUsbAvailable) SettingsScreenOffRows()
+                    SettingsAudioOutputRow(outputStatus, outputModeSelectionEnabled, onOpenAudioOutput)
                     if (premiumAccess != null) {
                         PaperDivider()
                         SettingsPremiumRow(premiumAccess, onOpenPremium)
@@ -391,7 +326,33 @@ internal fun strictUsbFailureLabel(failure: UsbOutputFailure, decisionCode: Stri
 )
 
 
-/** #119: strict USB output is the paid feature today, so its status sits under the output modes. */
+/**
+ * The way into Audio output (#249). It names the chosen mode and, before the controls are ready or
+ * after strict output stopped, says so in words, so a stop is still visible from Settings.
+ */
+@Composable
+private fun SettingsAudioOutputRow(outputStatus: UsbOutputStatus, controlsReady: Boolean, onOpen: () -> Unit) {
+    val strict = outputStatus.mode == UsbOutputMode.STRICT_BIT_PERFECT
+    val stopped = strict && outputStatus.phase == UsbOutputPhase.FAILED
+    SettingsRow(
+        title = stringResource(R.string.settings_audio_output),
+        description = when {
+            !controlsReady -> stringResource(R.string.playback_controls_connecting)
+            stopped -> stringResource(R.string.chain_strict_failed_title)
+            else -> null
+        },
+        descriptionColor = if (controlsReady && stopped) MaterialTheme.colorScheme.error else Color.Unspecified,
+        value = if (controlsReady) {
+            stringResource(if (strict) R.string.settings_strict_usb_output else R.string.settings_system_output)
+        } else {
+            null
+        },
+        onClick = onOpen,
+        modifier = Modifier.testTag("vesqen.settings.audio-output"),
+    )
+}
+
+/** #119: strict USB output is the paid feature today, so its status sits next to the way into Audio output. */
 @Composable
 private fun SettingsPremiumRow(premiumAccess: PremiumAccess, onOpenPremium: () -> Unit) {
     LaunchedEffect(premiumAccess) { premiumAccess.refresh() }
@@ -533,6 +494,7 @@ internal fun SettingsRow(
     onClick: (() -> Unit)? = null,
     showChevron: Boolean = onClick != null,
     descriptionMaxLines: Int = Int.MAX_VALUE,
+    descriptionColor: Color = Color.Unspecified,
 ) {
     Row(
         modifier = modifier
@@ -547,7 +509,7 @@ internal fun SettingsRow(
         // #35: above 130 % text a value beside the title squeezed the title into one letter per
         // line ("Ver/sio/n"), so the value moves under it.
         val valueBelow = value != null && LocalDensity.current.fontScale > 1.3f
-        SettingsRowText(title, description, Modifier.weight(1f), value.takeIf { valueBelow }, descriptionMaxLines)
+        SettingsRowText(title, description, Modifier.weight(1f), value.takeIf { valueBelow }, descriptionMaxLines, descriptionColor)
         if (value != null && !valueBelow) {
             Text(
                 text = value,
@@ -570,12 +532,13 @@ internal fun SettingsRow(
 }
 
 @Composable
-private fun SettingsRowText(
+internal fun SettingsRowText(
     title: String,
     description: String?,
     modifier: Modifier = Modifier,
     value: String? = null,
     descriptionMaxLines: Int = Int.MAX_VALUE,
+    descriptionColor: Color = Color.Unspecified,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(text = title, style = MaterialTheme.typography.bodyLarge)
@@ -583,7 +546,7 @@ private fun SettingsRowText(
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = descriptionColor.takeOrElse { MaterialTheme.colorScheme.onSurfaceVariant },
                 maxLines = descriptionMaxLines,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -595,70 +558,6 @@ private fun SettingsRowText(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-    }
-}
-
-@Composable
-private fun SettingsRadioRow(
-    title: String,
-    description: String,
-    selected: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    onUnavailableClick: (() -> Unit)? = null,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .then(
-                when {
-                    enabled -> Modifier.selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
-                    onUnavailableClick != null -> Modifier.clickable(onClick = onUnavailableClick, role = Role.Button)
-                    else -> Modifier.selectable(selected = selected, enabled = false, onClick = onClick, role = Role.RadioButton)
-                },
-            )
-            .heightIn(min = 64.dp)
-            .padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.sm)
-            .alpha(if (enabled) 1f else .56f),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(
-            selected = selected,
-            onClick = null,
-            enabled = enabled,
-            colors = RadioButtonDefaults.colors(
-                selectedColor = MaterialTheme.colorScheme.primary,
-                unselectedColor = LocalVesqenColors.current.radioIdle,
-            ),
-        )
-        Spacer(Modifier.width(VesqenSpacing.sm))
-        SettingsRowText(title, description, Modifier.weight(1f))
-    }
-}
-
-/** D13 (#333): the keep-alive switch and, on vivo-family phones, the system setting that avoids it. */
-@Composable
-private fun SettingsScreenOffRows() {
-    val keepAlive = LocalScreenOffKeepAlive.current ?: return
-    val enabled by keepAlive.enabled.collectAsStateWithLifecycle()
-    PaperDivider()
-    SettingsSwitchRow(
-        title = stringResource(R.string.screen_off_keep_alive_title),
-        description = stringResource(R.string.screen_off_keep_alive_body),
-        checked = enabled,
-        onCheckedChange = keepAlive::setEnabled,
-        modifier = Modifier.testTag("vesqen.settings.screen-off-keep-alive"),
-    )
-    if (keepAlive.vivoFamily) {
-        val context = LocalContext.current
-        PaperDivider()
-        SettingsRow(
-            title = stringResource(R.string.background_power_title),
-            description = stringResource(R.string.background_power_body),
-            onClick = { openBackgroundPowerSettings(context) },
-            modifier = Modifier.testTag("vesqen.settings.background-power"),
-        )
     }
 }
 
@@ -700,46 +599,4 @@ internal fun SettingsSwitchRow(
     }
 }
 
-@Composable
-private fun SettingsNote(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = VesqenSpacing.xxs, top = 10.dp),
-    )
-}
 
-/** B §5: appears under the output choices while strict USB is selected. */
-@Composable
-private fun StrictOutputStatusBox(status: UsbOutputStatus) {
-    Column(
-        modifier = Modifier
-            .padding(top = 10.dp)
-            .fillMaxWidth()
-            .border(1.dp, LocalVesqenColors.current.hairline, RoundedCornerShape(VesqenRadii.control))
-            .padding(14.dp)
-            .testTag("vesqen.settings.output.strict-status"),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        OutputStatusChip(declaration = status.declaration)
-        Text(text = strictUsbOutputBody(status), style = MaterialTheme.typography.bodySmall)
-    }
-}
-
-/** The first-use facts remain available after the service has remembered the decision. */
-@Composable
-private fun DirectUsbInformationRow() {
-    var show by rememberSaveable { mutableStateOf(false) }
-    SettingsRow(title = stringResource(R.string.usb_direct_intro_title),
-        description = stringResource(R.string.usb_direct_info_summary), onClick = { show = true },
-        modifier = Modifier.testTag("vesqen.settings.direct-usb-info"))
-    if (show) androidx.compose.material3.AlertDialog(
-        onDismissRequest = { show = false },
-        title = { Text(stringResource(R.string.usb_direct_intro_title)) },
-        text = { Text(stringResource(R.string.usb_direct_intro_body),
-            modifier = Modifier.verticalScroll(rememberScrollState())) },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = { show = false },
-            modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(android.R.string.ok)) } },
-    )
-}

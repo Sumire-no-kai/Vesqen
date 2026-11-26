@@ -330,6 +330,7 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
         composeRule.onNodeWithTag("vesqen.settings.premium")
             .assertTextContains(context.getString(R.string.settings_premium_not_charging))
+        composeRule.onNodeWithTag("vesqen.settings.audio-output").performClick()
         composeRule.onNodeWithTag("vesqen.settings.output.strict-usb").performClick()
         composeRule.onNodeWithTag("vesqen.premium.strict-intro").assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.premium_strict_intro_body_not_charging)).assertIsDisplayed()
@@ -343,6 +344,7 @@ class VesqenAppTest {
             assertEquals(listOf(UsbOutputMode.STRICT_BIT_PERFECT), modes)
             assertTrue(premium.strictIntroductionShown.value)
         }
+        // Pro features opened above Audio output, so Back returns to it (#249).
         composeRule.onNodeWithTag("vesqen.premium.back").performClick()
         composeRule.onNodeWithTag("vesqen.settings.output.strict-usb").performClick()
         composeRule.onNodeWithTag("vesqen.premium.strict-intro").assertDoesNotExist()
@@ -484,11 +486,25 @@ class VesqenAppTest {
             onSetUsbOutputMode = modes::add,
         )
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
-        // 4d: Settings describes both paths instead of asking for Android 14.
+        composeRule.onNodeWithTag("vesqen.settings.audio-output").performClick()
+        // 4d: Audio output describes both paths instead of asking for Android 14.
         composeRule.onNodeWithText(context.getString(R.string.settings_strict_usb_output_body_direct)).assertIsDisplayed()
         composeRule.onNodeWithTag("vesqen.settings.output.strict-usb").assertIsEnabled().performClick()
         composeRule.onNodeWithTag("vesqen.output.unavailable-dialog").assertDoesNotExist()
         composeRule.runOnIdle { assertEquals(listOf(UsbOutputMode.STRICT_BIT_PERFECT), modes) }
+    }
+
+    /** #249: Now's output-mode dialog opens Audio output, and Back returns to Now. */
+    @Test
+    fun player_output_dialog_opens_audio_output_and_back_returns_to_now() {
+        render(activePlaybackState())
+        composeRule.onNodeWithTag("vesqen.nav.now").performClick()
+        openLinerNotes()
+        composeRule.onNodeWithTag("vesqen.now.output-mode").performScrollTo().performClick()
+        composeRule.onNodeWithTag("vesqen.now.audio-output-settings").performClick()
+        composeRule.onNodeWithTag("vesqen.audio-output").assertIsDisplayed()
+        composeRule.onNodeWithTag("vesqen.audio-output.back").performClick()
+        composeRule.onNodeWithTag("vesqen.now.output-mode").assertExists()
     }
 
     @Test
@@ -1720,17 +1736,9 @@ class VesqenAppTest {
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
         composeRule.onNodeWithTag("vesqen.settings.section.playback-output").assertIsDisplayed()
-        // The two radio rows, and only they, form the selectable group.
-        composeRule.onNodeWithTag("vesqen.settings.output-modes")
-            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.SelectableGroup))
-        composeRule.onNodeWithTag("vesqen.settings.output.system").assertIsSelected()
-        composeRule.onNodeWithTag("vesqen.settings.output.system").assertIsNotEnabled()
-        composeRule.onNodeWithTag("vesqen.settings.output.strict-usb").assertIsNotEnabled()
-        val systemOutput = composeRule.onNodeWithTag("vesqen.settings.output.system")
-            .fetchSemanticsNode().boundsInRoot
-        val strictUsb = composeRule.onNodeWithTag("vesqen.settings.output.strict-usb")
-            .fetchSemanticsNode().boundsInRoot
-        assertTrue("Strict USB must follow System output", strictUsb.top >= systemOutput.bottom)
+        // #249: the output settings are on Audio output; before the controls are ready its row says so.
+        composeRule.onNodeWithTag("vesqen.settings.audio-output")
+            .assertTextContains(context.getString(R.string.playback_controls_connecting))
 
         // Scroll to each row itself: a section heading at the screen edge leaves its rows below.
         composeRule.onNodeWithTag("vesqen.settings")
@@ -1746,6 +1754,21 @@ class VesqenAppTest {
         val about = composeRule.onNodeWithTag("vesqen.settings.about").fetchSemanticsNode().positionInRoot
         val registry = composeRule.onNodeWithTag("vesqen.settings.verification-registry").fetchSemanticsNode().positionInRoot
         assertTrue("Advanced must follow the application group", registry.y > about.y)
+
+        composeRule.onNodeWithTag("vesqen.settings")
+            .performScrollToNode(hasTestTag("vesqen.settings.audio-output"))
+        composeRule.onNodeWithTag("vesqen.settings.audio-output").performClick()
+        // The two radio rows, and only they, form the selectable group.
+        composeRule.onNodeWithTag("vesqen.settings.output-modes")
+            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.SelectableGroup))
+        composeRule.onNodeWithTag("vesqen.settings.output.system").assertIsSelected()
+        composeRule.onNodeWithTag("vesqen.settings.output.system").assertIsNotEnabled()
+        composeRule.onNodeWithTag("vesqen.settings.output.strict-usb").assertIsNotEnabled()
+        val systemOutput = composeRule.onNodeWithTag("vesqen.settings.output.system")
+            .fetchSemanticsNode().boundsInRoot
+        val strictUsb = composeRule.onNodeWithTag("vesqen.settings.output.strict-usb")
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue("Strict USB must follow System output", strictUsb.top >= systemOutput.bottom)
     }
 
     @Test
@@ -1778,6 +1801,7 @@ class VesqenAppTest {
         )
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.audio-output").performClick()
         composeRule.onNodeWithTag("vesqen.settings.output.system").assertIsEnabled()
         composeRule.onNodeWithTag("vesqen.settings.output.strict-usb").assertIsEnabled()
     }
@@ -1802,6 +1826,7 @@ class VesqenAppTest {
         )
 
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.audio-output").performClick()
         composeRule.onNodeWithTag("vesqen.settings.output.strict-usb").performClick()
         composeRule.onNodeWithTag("vesqen.output.unavailable-dialog").assertIsDisplayed()
         composeRule.onNodeWithText(
@@ -1809,6 +1834,8 @@ class VesqenAppTest {
         ).assertIsDisplayed()
         composeRule.runOnIdle { assertTrue(modes.isEmpty()) }
         composeRule.onNodeWithTag("vesqen.output.unavailable-dismiss").performClick()
+        // A detail page hides the navigation bar.
+        composeRule.onNodeWithTag("vesqen.audio-output.back").performClick()
 
         composeRule.onNodeWithTag("vesqen.nav.now").performClick()
         openLinerNotes()

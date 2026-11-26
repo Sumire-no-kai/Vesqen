@@ -15,6 +15,7 @@ import io.github.sumirenokai.vesqen.lyrics.mediaStoreCoveringDocumentUri
 import io.github.sumirenokai.vesqen.lyrics.LyricsStore
 import io.github.sumirenokai.vesqen.playback.DirectUsbReadingsSource
 import io.github.sumirenokai.vesqen.playback.DirectUsbVolumeControl
+import io.github.sumirenokai.vesqen.playback.DsdConversionSettings
 import io.github.sumirenokai.vesqen.playback.PreferencesDirectUsbVolumeMemory
 import io.github.sumirenokai.vesqen.playback.ScreenOffKeepAliveSettings
 import io.github.sumirenokai.vesqen.playback.PlaybackHistoryRecorder
@@ -88,6 +89,7 @@ class VesqenApplication : Application() {
 
     /** #344: the auto-skip switch, and what last interrupted playback (service writes, app explains). */
     internal val unplayableTracks by lazy { UnplayableTrackSettings(this) }
+    internal val dsdConversion by lazy { DsdConversionSettings(this) }
     internal val playbackInterruptions = PlaybackInterruptions()
 
     /** #119: the trial and paid-feature state; the betas build it with enforcement off. */

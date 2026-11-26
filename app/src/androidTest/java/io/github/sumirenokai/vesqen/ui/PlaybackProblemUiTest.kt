@@ -97,7 +97,6 @@ class PlaybackProblemUiTest {
                 CompositionLocalProvider(LocalUnplayableTrackSettings provides settings) {
                     SettingsScreen(
                         outputStatus = UsbOutputStatus(mode = UsbOutputMode.SYSTEM, phase = UsbOutputPhase.SYSTEM),
-                        onSetUsbOutputMode = {},
                         onOpenPlaybackChain = {},
                         onImportVerificationRegistry = {},
                         onOpenAbout = {},

@@ -18,6 +18,7 @@ enum class VesqenDestination(
     USAGE_STATISTICS(R.string.usage_title, "vesqen.nav.usage-detail"),
     DEVICE_REPORT(R.string.report_title, "vesqen.nav.report-detail"),
     PREMIUM(R.string.settings_premium, "vesqen.nav.premium-detail"),
+    AUDIO_OUTPUT(R.string.settings_audio_output, "vesqen.nav.audio-output-detail"),
 }
 
 // Bottom-bar order from the B artboard (owner decision 2026-10-03: Chain is a top-level tab).
@@ -32,8 +33,9 @@ internal val TopLevelDestinations = listOf(
 internal val VesqenDestination.detailDepth: Int
     get() = when (this) {
         VesqenDestination.ABOUT, VesqenDestination.LICENSES, VesqenDestination.USAGE_STATISTICS,
-        VesqenDestination.DEVICE_REPORT, VesqenDestination.PREMIUM -> 1
-        VesqenDestination.PRIVACY_POLICY -> 2
+        VesqenDestination.DEVICE_REPORT, VesqenDestination.AUDIO_OUTPUT -> 1
+        // These also open from a detail (About, Audio output), so they slide in further right.
+        VesqenDestination.PRIVACY_POLICY, VesqenDestination.PREMIUM -> 2
         else -> 0
     }
 
