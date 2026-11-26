@@ -9,14 +9,13 @@ import org.junit.Test
 
 class LibraryScanDiagnosticsTest {
     @Test fun `only rejected known audio under generic MIME contributes to skip diagnostics`() {
-        assertEquals(UnsupportedAudioFormat.DSD, knownUnsupportedAudioFormat("application/octet-stream", "album.DSF"))
-        assertEquals(UnsupportedAudioFormat.DSD, knownUnsupportedAudioFormat(null, "album.dff"))
         assertEquals(UnsupportedAudioFormat.APE, knownUnsupportedAudioFormat("", "album.ape"))
+        assertEquals(UnsupportedAudioFormat.APE, knownUnsupportedAudioFormat(null, "album.APE"))
         assertEquals(UnsupportedAudioFormat.WAVPACK, knownUnsupportedAudioFormat("binary/octet-stream", "album.wv"))
         listOf("cover.jpg", "song.lrc", "album.cue", "notes.txt", "unknown.bin").forEach { name ->
             assertNull(name, knownUnsupportedAudioFormat("application/octet-stream", name))
         }
-        assertNull(knownUnsupportedAudioFormat("image/jpeg", "album.dsf"))
+        assertNull(knownUnsupportedAudioFormat("image/jpeg", "album.wv"))
         assertNull(knownUnsupportedAudioFormat("text/plain", "album.ape"))
         assertNull(knownUnsupportedAudioFormat("application/x-unidentified", "album.wv"))
     }
@@ -33,11 +32,11 @@ class LibraryScanDiagnosticsTest {
         assertFalse(report.shouldPublish())
         repeat(31) { report.checkedTrack() }
         assertFalse(report.shouldPublish())
-        report.skippedAudio(UnsupportedAudioFormat.DSD)
+        report.skippedAudio(UnsupportedAudioFormat.APE)
         assertTrue(report.shouldPublish())
         val reading = report.progress()
         assertEquals(31, reading.scannedTrackCount)
-        assertEquals(mapOf(UnsupportedAudioFormat.DSD to 1), reading.skippedUnsupportedAudio)
+        assertEquals(mapOf(UnsupportedAudioFormat.APE to 1), reading.skippedUnsupportedAudio)
         assertEquals(LibraryScanStage.READING, reading.stage)
         assertFalse(reading.isPaused)
         report.checkedTrack()

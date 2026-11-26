@@ -203,6 +203,7 @@ internal data class TreeAudioDocument(
         sizeBytes,
         albumArtworkUri,
         albumArtworkFingerprint,
+        *dsdFingerprintFields(displayName, mimeType),
     )
 }
 
@@ -241,7 +242,6 @@ internal fun knownUnsupportedAudioFormat(mimeType: String?, displayName: String)
     val mime = mimeType.orEmpty().lowercase()
     if (mime.isNotBlank() && mime !in GENERIC_BINARY_MIME_TYPES) return null
     return when (displayName.substringAfterLast('.', "").lowercase()) {
-        "dsf", "dff" -> UnsupportedAudioFormat.DSD
         "ape" -> UnsupportedAudioFormat.APE
         "wv" -> UnsupportedAudioFormat.WAVPACK
         else -> null

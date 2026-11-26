@@ -111,7 +111,6 @@ enum class LibrarySourceScanStatus {
 
 /** Conservative types recognized as audio but not accepted by the current discovery policy. */
 enum class UnsupportedAudioFormat {
-    DSD,
     APE,
     WAVPACK,
 }
@@ -194,15 +193,30 @@ internal object LibrarySourceId {
 /** Bump when provider/container enrichment semantics change, invalidating scan cache keys. */
 internal const val LIBRARY_METADATA_REVISION = 6
 
+/**
+ * Bump when only DSD enrichment changes. #249 began reading DSF and DFF headers and tags; rows a
+ * provider had already listed as audio were stored without them and are read again, while every
+ * other track keeps its key and is not re-read.
+ */
+internal const val DSD_METADATA_REVISION = 1
+
+/** The extra scan cache key fields of a DSD file; none for any other file, whose key is unchanged. */
+internal fun dsdFingerprintFields(fileName: String, mimeType: String?): Array<Any?> =
+    if (m1FormatFor(mimeType.orEmpty(), fileName)?.id == "dsd") arrayOf("dsd", DSD_METADATA_REVISION) else emptyArray()
+
 internal data class MediaStoreVolumeVersion(
     val volumeName: String,
     val databaseVersion: String,
     val generation: Long,
 )
 
-/** The merged external library changes when any volume is changed, rebuilt, mounted or removed. */
+/**
+ * The merged external library changes when any volume is changed, rebuilt, mounted or removed. An
+ * unchanged generation ends a scan before any track key is compared, so the first field holds
+ * every metadata revision, the DSD one included.
+ */
 internal fun libraryScanGeneration(volumes: List<MediaStoreVolumeVersion>): String = libraryFingerprint(
-    LIBRARY_METADATA_REVISION,
+    "$LIBRARY_METADATA_REVISION.$DSD_METADATA_REVISION",
     *volumes.sortedBy(MediaStoreVolumeVersion::volumeName).map { volume ->
         libraryFingerprint(volume.volumeName, volume.databaseVersion, volume.generation)
     }.toTypedArray(),
@@ -211,7 +225,7 @@ internal fun libraryScanGeneration(volumes: List<MediaStoreVolumeVersion>): Stri
 /** Each volume's database version in a [libraryScanGeneration], or null when [generation] is not one. */
 internal fun libraryScanDatabaseVersions(generation: String): Map<String, String>? {
     val fields = libraryFingerprintFields(generation) ?: return null
-    // The first field is the metadata revision, which does not change MediaStore's `_ID`s.
+    // The first field holds the metadata revisions, which do not change MediaStore's `_ID`s.
     return fields.drop(1).associate { volume ->
         val (volumeName, databaseVersion) = libraryFingerprintFields(volume)
             ?.takeIf { it.size == 3 }

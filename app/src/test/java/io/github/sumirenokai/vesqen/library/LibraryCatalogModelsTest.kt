@@ -34,10 +34,11 @@ class LibraryCatalogModelsTest {
     }
 
     @Test
-    fun `provider generations include the app metadata revision`() {
+    fun `provider generations include the app metadata revisions`() {
         val volume = MediaStoreVolumeVersion("external_primary", "db-v1", 42)
+        // #249: the DSD revision shares the first field, which libraryScanDatabaseVersions skips.
         assertEquals(
-            libraryFingerprint(LIBRARY_METADATA_REVISION, libraryFingerprint("external_primary", "db-v1", 42)),
+            libraryFingerprint("$LIBRARY_METADATA_REVISION.$DSD_METADATA_REVISION", libraryFingerprint("external_primary", "db-v1", 42)),
             libraryScanGeneration(listOf(volume)),
         )
     }

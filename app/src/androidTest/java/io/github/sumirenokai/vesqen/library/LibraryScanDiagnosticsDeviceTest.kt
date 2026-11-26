@@ -23,7 +23,7 @@ class LibraryScanDiagnosticsDeviceTest {
     @Test fun completedScanReportsOnlyObservedAudioAndRealStages() = runBlocking {
         withCatalog { store, catalog ->
             FakeDocumentsProvider.files["music/short.flac"] = ByteArray(0)
-            FakeDocumentsProvider.files["music/album.dsf"] = ByteArray(0)
+            FakeDocumentsProvider.files["music/album.ape"] = ByteArray(0)
             FakeDocumentsProvider.files["music/album.wv"] = ByteArray(0)
             FakeDocumentsProvider.files["music/cover.jpg"] = ByteArray(0)
             FakeDocumentsProvider.files["music/short.lrc"] = ByteArray(0)
@@ -34,7 +34,7 @@ class LibraryScanDiagnosticsDeviceTest {
             assertFalse(result.hadFailure)
             assertEquals(LibrarySourceScanStatus.COMPLETED, sourceResult.status)
             assertEquals(1, sourceResult.scannedTrackCount)
-            assertEquals(mapOf(UnsupportedAudioFormat.DSD to 1, UnsupportedAudioFormat.WAVPACK to 1), sourceResult.skippedUnsupportedAudio)
+            assertEquals(mapOf(UnsupportedAudioFormat.APE to 1, UnsupportedAudioFormat.WAVPACK to 1), sourceResult.skippedUnsupportedAudio)
             assertEquals(listOf(LibraryScanStage.READING, LibraryScanStage.RECONCILING), progress.map { it.stage })
             assertEquals(1, progress.last().scannedTrackCount)
             assertEquals(1, store.readTracks(listOf(LibrarySourceId.forTree(tree.toString()))).size)

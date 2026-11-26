@@ -8,12 +8,14 @@ class M1FormatMatrixTest {
     @Test
     fun `matrix contains every M1 family and PCM depth contract`() {
         assertEquals(
-            setOf("flac", "alac", "wav", "aiff", "mp3", "aac", "vorbis", "opus"),
+            setOf("flac", "alac", "wav", "aiff", "dsd", "mp3", "aac", "vorbis", "opus"),
             M1_AUDIO_FORMAT_MATRIX.map(M1AudioFormat::id).toSet(),
         )
-        M1_AUDIO_FORMAT_MATRIX.filter(M1AudioFormat::lossless).forEach { format ->
+        M1_AUDIO_FORMAT_MATRIX.filter { it.lossless && it.id != "dsd" }.forEach { format ->
             assertTrue("${format.id} must cover the M1 integer PCM depths", format.requiredPcmBitDepths.containsAll(setOf(16, 24, 32)))
         }
+        // #249: DSD is 1-bit and Vesqen converts it, so it promises no PCM depth of its own.
+        assertEquals(emptySet<Int>(), M1_AUDIO_FORMAT_MATRIX.single { it.id == "dsd" }.requiredPcmBitDepths)
     }
 
     @Test

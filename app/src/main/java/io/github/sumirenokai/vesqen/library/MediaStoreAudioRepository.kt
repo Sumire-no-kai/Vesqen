@@ -297,6 +297,7 @@ internal class MediaStoreAudioRepository(
                                 mimeType,
                                 fileName,
                                 folderName,
+                                *dsdFingerprintFields(fileName, mimeType),
                             ),
                         ),
                     )
