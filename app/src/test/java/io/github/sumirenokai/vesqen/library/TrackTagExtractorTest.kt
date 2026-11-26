@@ -384,6 +384,16 @@ class TrackTagExtractorTest {
     }
 
     @Test
+    fun aDsdFileIsLosslessAndNamesTheLayoutItsChannelCountMeans() {
+        assertEquals(TrackFullInfo(channelLayout = "L R", lossless = true), dsdFullInfo(2))
+        assertEquals("C", dsdFullInfo(1).channelLayout)
+        assertEquals("5.1", dsdFullInfo(6).channelLayout)
+        // Five channels have no common name; an unknown count shows no layout row.
+        assertEquals(TrackFullInfo(lossless = true), dsdFullInfo(5))
+        assertEquals(TrackFullInfo(lossless = true), dsdFullInfo(null))
+    }
+
+    @Test
     fun channelLayoutsWithoutACommonNameStayHidden() {
         assertEquals("L R", channelLayoutLabel(12))
         assertEquals("5.1", channelLayoutLabel(252))

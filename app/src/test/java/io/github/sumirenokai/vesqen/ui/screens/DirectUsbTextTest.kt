@@ -90,6 +90,11 @@ class DirectUsbTextTest {
     }
 
     @Test
+    fun `a DSD source has its own sentence`() {
+        assertEquals(StringSpec(R.string.usb_failure_dsd), spec(failed("direct_usb.source_dsd", UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED)))
+    }
+
+    @Test
     fun `the source's own layer names the codec or depth when known`() {
         val mp3 = failed(
             "direct_usb.source_not_lossless",

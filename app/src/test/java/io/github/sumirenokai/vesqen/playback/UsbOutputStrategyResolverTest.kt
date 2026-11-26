@@ -175,6 +175,17 @@ class UsbOutputStrategyResolverTest {
         assertEquals(listOf(0L, 2L), observed)
     }
 
+    /** #249: strict output never converts DSD, so the reason does not wait for a DAC. */
+    @Test
+    fun `a DSD source is refused with its own reason, with or without a DAC`() {
+        val dsd = SourcePcmFormat(sampleRateHz = 2_822_400, bitDepth = 1, channelCount = 2)
+        for (devices in listOf(listOf(device), emptyList())) {
+            val decision = resolve(devices = devices, source = dsd)
+            assertRejected(UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED, decision)
+            assertEquals(DSD_SOURCE_CODE, (decision as UsbOutputDecision.Rejected).code)
+        }
+    }
+
     private fun resolve(
         usbHostSupported: Boolean = true,
         modifyAudioSettingsGranted: Boolean = true,

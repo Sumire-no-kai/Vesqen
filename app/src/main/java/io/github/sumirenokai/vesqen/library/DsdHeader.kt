@@ -102,6 +102,13 @@ internal fun isSupportedDsdRate(rate: Int): Boolean =
 
 internal const val DSD_MAX_CHANNELS = 6
 
+/** "DSD64" and so on: the rate as a multiple of 44.1 kHz, or of 48 kHz for that family; "DSD" without one. */
+internal fun dsdRateLabel(sampleRate: Long?): String {
+    val rate = sampleRate?.takeIf { it > 0 } ?: return "DSD"
+    val base = if (rate % 3_072_000 == 0L) 48_000 else 44_100
+    return "DSD${rate / base}"
+}
+
 private val DSD_FAMILY_RATES = listOf(2_822_400, 3_072_000)
 
 /** DSF channel type 5: front left, front right, centre and LFE. Android's four channels are front and back pairs. */

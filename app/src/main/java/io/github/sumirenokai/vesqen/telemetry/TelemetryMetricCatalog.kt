@@ -81,6 +81,9 @@ object TelemetryMetricCatalog {
     val PROCESSING_SAMPLE_RATE_CONVERSION = id("processing.sample_rate_conversion_detected")
     val PROCESSING_APP_DSP_ACTIVE = id("processing.app_dsp_active")
 
+    /** #249: Vesqen's own extractor is converting a DSD file to PCM. */
+    val PROCESSING_DSD_CONVERSION_ACTIVE = id("processing.dsd_conversion_active")
+
     val PLAYBACK_STATE = id("playback.state")
     val PLAYBACK_IS_PLAYING = id("playback.is_playing")
     val PLAYBACK_LAST_EVENT_POSITION = id("playback.last_event_position")
@@ -211,6 +214,7 @@ object TelemetryMetricCatalog {
         flag(PROCESSING_LOUDNESS_ACTIVE, TelemetrySection.PROCESSING),
         flag(PROCESSING_SAMPLE_RATE_CONVERSION, TelemetrySection.PROCESSING),
         flag(PROCESSING_APP_DSP_ACTIVE, TelemetrySection.PROCESSING, defaultVisible = true),
+        flag(PROCESSING_DSD_CONVERSION_ACTIVE, TelemetrySection.PROCESSING),
         safeText(PLAYBACK_STATE, TelemetrySection.PLAYBACK),
         flag(PLAYBACK_IS_PLAYING, TelemetrySection.PLAYBACK),
         integer(PLAYBACK_LAST_EVENT_POSITION, TelemetrySection.PLAYBACK, TelemetryUnit.MILLISECONDS, 0.0),

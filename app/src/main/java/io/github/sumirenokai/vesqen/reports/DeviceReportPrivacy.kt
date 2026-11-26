@@ -35,7 +35,7 @@ internal object DeviceReportVocabulary {
         "bluetoothSegmentStatus" to BluetoothSegmentStatus.entries.map { it.name },
     )
     /** playbackContainerFromFileName in PlaybackController. */
-    val containers = setOf("flac", "wave", "wav", "aiff", "mpeg_audio", "mp4", "adts", "ogg")
+    val containers = setOf("flac", "wave", "wav", "aiff", "mpeg_audio", "mp4", "adts", "ogg", "dsf", "dsdiff")
     /** Library MIME hints plus the MIME types Media3 reports for decoder input. */
     val mimes = M1_AUDIO_FORMAT_MATRIX.flatMapTo(sortedSetOf()) { it.mimeHints } + setOf(
         "audio/mp4", "audio/raw", "audio/mpeg-L1", "audio/mpeg-L2", "audio/true-hd",

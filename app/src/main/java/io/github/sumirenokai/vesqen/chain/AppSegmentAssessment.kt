@@ -15,6 +15,8 @@ internal enum class SourceCompression { LOSSLESS, LOSSY, UNKNOWN }
 internal enum class AppSegmentCondition {
     SPEED, PITCH, PLAYER_VOLUME, SKIP_SILENCE, REPLAY_GAIN, EQUALIZER, LOUDNESS,
     CROSSFADE, APP_DSP, SAMPLE_RATE, CHANNELS, PCM_PRECISION, TRACK_TRANSITION,
+    /** #249: Vesqen converted a DSD file to PCM, so nothing after it is the file's own samples. */
+    DSD_CONVERSION,
 }
 internal enum class SegmentReason {
     VALUE_CHANGED, PRECISION_LOSS, MISSING, UNAVAILABLE, INSUFFICIENT_CONFIDENCE,
@@ -71,6 +73,7 @@ internal val AppSegmentMetricIds: List<TelemetryMetricId> = listOf(
     Metrics.PROCESSING_SPEED, Metrics.PROCESSING_PITCH, Metrics.PROCESSING_PLAYER_VOLUME,
     Metrics.PROCESSING_SKIP_SILENCE, Metrics.PROCESSING_REPLAY_GAIN_ACTIVE, Metrics.PROCESSING_EQUALIZER_ACTIVE,
     Metrics.PROCESSING_LOUDNESS_ACTIVE, Metrics.PROCESSING_CROSSFADE_ACTIVE, Metrics.PROCESSING_APP_DSP_ACTIVE,
+    Metrics.PROCESSING_DSD_CONVERSION_ACTIVE,
     Metrics.DECODER_INPUT_MIME, Metrics.DECODER_INPUT_SAMPLE_RATE, Metrics.DECODER_INPUT_CHANNEL_COUNT,
     Metrics.DECODER_INPUT_PCM_ENCODING, Metrics.DECODER_OUTPUT_ENCODING, Metrics.DECODER_OUTPUT_SAMPLE_RATE,
     Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE,
@@ -164,6 +167,7 @@ internal fun assessAppSegment(
         AppSegmentCondition.LOUDNESS to Metrics.PROCESSING_LOUDNESS_ACTIVE,
         AppSegmentCondition.CROSSFADE to Metrics.PROCESSING_CROSSFADE_ACTIVE,
         AppSegmentCondition.APP_DSP to Metrics.PROCESSING_APP_DSP_ACTIVE,
+        AppSegmentCondition.DSD_CONVERSION to Metrics.PROCESSING_DSD_CONVERSION_ACTIVE,
     ).forEach { (condition, id) ->
         check(condition, listOf(id)) { Verdict.of(!(it.single() as TelemetryReading.Flag).value) }
     }

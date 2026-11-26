@@ -15,5 +15,8 @@ class DsdDeviceReportTest {
             assertFalse(reported.privacyFiltered)
         }
         assertEquals(null, DeviceReportPrivacy.format(FailedTrackFormat(sampleRateHz = 24_576_001)).sampleRateHz)
+        for (container in listOf("dsf", "dsdiff")) {
+            assertEquals(container, DeviceReportPrivacy.format(FailedTrackFormat(container = container)).container)
+        }
     }
 }

@@ -123,6 +123,8 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.library.DSD_CODEC_LABEL
+import io.github.sumirenokai.vesqen.library.dsdRateLabel
 import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.playback.PlaybackOrderMode
 import io.github.sumirenokai.vesqen.playback.DirectUsbVolume
@@ -286,6 +288,8 @@ internal fun nowPortraitLayout(height: Dp, width: Dp, fontScale: Float, volumeBa
 /** "FLAC 24/96" style file summary from catalog metadata; null when the file reports nothing. */
 internal fun nowFormatSummary(track: AudioTrack?): String? {
     val codec = track?.codec?.takeIf(String::isNotBlank) ?: return null
+    // #249: DSD is named by its rate multiple (DSD64), as releases label it, not by its 1-bit depth and MHz rate.
+    if (codec == DSD_CODEC_LABEL) return dsdRateLabel(track.sampleRateHz?.toLong())
     val depth = track.bitDepth?.takeIf { it > 0 }
     val rate = track.sampleRateHz?.takeIf { it > 0 }?.let { hz ->
         if (hz % 1_000 == 0) "${hz / 1_000}" else String.format(Locale.ROOT, "%.1f", hz / 1_000.0)

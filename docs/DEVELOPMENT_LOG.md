@@ -1327,3 +1327,13 @@ M1/M2 均未整体关闭：真实外设按用户要求暂缓；旧系统/其他�
 - **导航：** 新增 `VesqenDestination.AUDIO_OUTPUT`（深度 1）。试用结束时状态框内的“查看高级功能”在新页面之上打开高级功能，返回依次回到音频输出和原页面；高级功能页因此与隐私政策一样设为深度 2，滑动方向和层次才正确。
 - **设置与播放：** `DsdConversionSettings` 用 SharedPreferences 保存开关、增益和采样率方式（采样率方式存固定键，增益落在 0.5 dB 格上，读不出的值按默认处理），服务的 Extractor 在每条 DSD 流打开时读取。Media3 会提前打开下一首，所以设置变化后，服务会重建播放队列中下一首 DSD 曲目（改变其缓存键，`PlayOrder` 保持它的播放位置），使“从下一首开始生效”成立；正在播放的曲目和单曲循环时的当前曲目不受影响。滑块只在拖动或 TalkBack 调整结束时保存，避免每一格都重建下一首。缓存键按每次更改递增编号，不从设置值推出：PR 自动审查指出，循环播放时一首曲目会在之后的更改下重新打开，而队列项仍保留早先更改的键，按设置推出的键会与它重新打开时并未使用的设置相同，导致跳过重建。回归测试按这一顺序复现了问题（第二首以 88.2 kHz 而非 176.4 kHz 播放），改为递增编号后通过。
 - **标题字体：** 新页面标题和原本缺字的“高级功能”页标题加入 `tools/title_font_strings.txt`，按所有者同意下载 noto-cjk 固定提交的三个源字体（哈希与工具中的值一致），重新生成三个标题字体子集并更新 `third-party-licenses/catalog.json` 中的哈希。此前“高级功能”页标题在三种语言中均以后备字体显示。
+
+## 2026-11-26 · 链路页的 DSD 转换标注和严格 USB 的拒绝（#249 第二部分之二）
+
+- **范围：** 草案第 2 版中留到本 PR 的部分：链路页如实标出 DSD 转换，严格 USB 输出拒绝 DSD 文件并说明原因，以及格式显示和设备报告中的 DSD。两句新文案（`usb_failure_dsd`、`chain_dsd_converted`）为所有者审定的版本。
+- **链路页：** 新增实测标志 `processing.dsd_conversion_active`，取自播放器当前输入格式的容器类型（Vesqen 的 DSD Extractor 输出的 PCM 流仍标为 DSF 或 DSDIFF 容器）。段落判定新增 `AppSegmentCondition.DSD_CONVERSION`，标志为真时 Vesqen 这一段判为“有改动”，处理一栏写“有改动：DSD 转换为 PCM”。此前 DSD 曲目会因为转换后的 PCM 一路未变而判为“未改动且无损”，与事实不符。来源一栏在格式下方加一行“DSD64 已转换为 PCM”，倍数由来源采样率算出。没有正在播放的内容时这一标志不可用，处理一栏因此显示无法判断，与其他依赖输入格式的检查一致。
+- **严格 USB：** 两条严格路径都在其他检查之前识别 DSD。官方路径（`UsbOutputStrategyResolver`）按来源位深为 1 拒绝，决定代码 `strict_usb.source_dsd`；USB 直接输出（`DirectUsbFormatGate`）按编码标签拒绝，新增 `DirectUsbFailure.Reason.SOURCE_DSD`，对外仍归入 `SOURCE_FORMAT_UNSUPPORTED`，决定代码 `direct_usb.source_dsd`。两处都显示“严格输出不支持 DSD 文件。”，有无 DAC 时相同。
+- **格式显示：** 正在播放和专辑页的格式摘要对 DSD 写作 DSD64、DSD128 等（44.1 kHz 和 48 kHz 两个系列各自按倍数），不再写成“DSD 1/2822.4”。曲目详情的“完整信息”此前对 DSD 文件不显示压缩和声道布局，因为 Android 的 MediaExtractor 打不开 DSF 和 DSDIFF；现在直接写“无损”，声道布局按曲库中的声道数给出（解析器只接受与 Android 布局一致的扬声器组合）。
+- **设备报告：** 容器词表加入 `dsf` 和 `dsdiff`（`TelemetryMediaItemExtras` 与 `PlaybackController` 中的两份对照表同步修改），`contracts/device-report/vocabulary.json` 和示例报告已重新生成。新的指标、判定条件和容器名都要求服务器先更新词表：旧版服务器会拒收包含它们的报告，而每份新报告都带有这一指标，所以服务器必须在发布前部署（部署前与所有者确认）。
+- **测试：** 新增和修改的单元测试在撤销对应改动后均失败（段落判定、格式摘要、倍数命名、容器对照、报告隐私过滤）。链路页的标注和处理一栏另有仪器测试，已编译，留待最后的设备测试一并运行。服务器测试中 `runtime.test.js` 需要本机未安装的 wrangler，其余 54 项通过。
+

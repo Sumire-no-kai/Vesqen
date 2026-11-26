@@ -125,7 +125,8 @@
       "SAMPLE_RATE",
       "CHANNELS",
       "PCM_PRECISION",
-      "TRACK_TRANSITION"
+      "TRACK_TRANSITION",
+      "DSD_CONVERSION"
     ],
     "segmentReason": [
       "VALUE_CHANGED",
@@ -153,6 +154,8 @@
     "containers": [
       "adts",
       "aiff",
+      "dsdiff",
+      "dsf",
       "flac",
       "mp4",
       "mpeg_audio",
@@ -732,6 +735,12 @@
     },
     {
       "id": "processing.crossfade_active",
+      "section": "PROCESSING",
+      "valueKind": "FLAG",
+      "unit": null
+    },
+    {
+      "id": "processing.dsd_conversion_active",
       "section": "PROCESSING",
       "valueKind": "FLAG",
       "unit": null

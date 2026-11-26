@@ -113,7 +113,8 @@ class DeviceReportAppSegmentTest {
             readings[it] = TelemetryReading.Decimal(100.0, TelemetryUnit.PERCENT)
         }
         listOf(Metrics.PROCESSING_SKIP_SILENCE, Metrics.PROCESSING_REPLAY_GAIN_ACTIVE, Metrics.PROCESSING_EQUALIZER_ACTIVE,
-            Metrics.PROCESSING_LOUDNESS_ACTIVE, Metrics.PROCESSING_CROSSFADE_ACTIVE, Metrics.PROCESSING_APP_DSP_ACTIVE).forEach {
+            Metrics.PROCESSING_LOUDNESS_ACTIVE, Metrics.PROCESSING_CROSSFADE_ACTIVE, Metrics.PROCESSING_APP_DSP_ACTIVE,
+            Metrics.PROCESSING_DSD_CONVERSION_ACTIVE).forEach {
             readings[it] = TelemetryReading.Flag(false)
         }
         return TelemetrySnapshot(60_000, metrics = readings.map { (id, reading) -> metric(id, reading) })

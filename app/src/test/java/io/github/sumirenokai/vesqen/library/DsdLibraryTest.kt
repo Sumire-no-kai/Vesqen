@@ -24,6 +24,16 @@ class DsdLibraryTest {
     }
 
     @Test
+    fun `a DSD rate is named by its multiple of either base rate`() {
+        assertEquals("DSD64", dsdRateLabel(2_822_400))
+        assertEquals("DSD256", dsdRateLabel(11_289_600))
+        assertEquals("DSD64", dsdRateLabel(3_072_000))
+        assertEquals("DSD512", dsdRateLabel(24_576_000))
+        assertEquals("DSD", dsdRateLabel(null))
+        assertEquals("DSD", dsdRateLabel(0))
+    }
+
+    @Test
     fun `the source header gives the DSD rate, one bit and the duration`() {
         // 0.5 s of DSD64 in both containers.
         val expected = SourceAudioHeader(sampleRate = 2_822_400, channels = 2, bitDepth = 1, durationMs = 500)

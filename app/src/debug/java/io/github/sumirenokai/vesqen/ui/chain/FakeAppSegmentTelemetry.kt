@@ -47,6 +47,7 @@ internal object FakeAppSegmentTelemetry {
             Metrics.PROCESSING_SKIP_SILENCE, Metrics.PROCESSING_REPLAY_GAIN_ACTIVE,
             Metrics.PROCESSING_EQUALIZER_ACTIVE, Metrics.PROCESSING_LOUDNESS_ACTIVE,
             Metrics.PROCESSING_CROSSFADE_ACTIVE, Metrics.PROCESSING_APP_DSP_ACTIVE,
+            Metrics.PROCESSING_DSD_CONVERSION_ACTIVE,
         ).forEach { evidence[it] = measured(TelemetryReading.Flag(false)) }
         evidence.putAll(overrides)
         return TelemetrySnapshot(
