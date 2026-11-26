@@ -419,7 +419,10 @@ class PlaybackService : MediaSessionService() {
         ).also { problemGuard = it }
         player.addListener(guard)
         // A change reaches the next DSD track even when Media3 has already opened it.
-        serviceScope.launch { dsdConversion.values.drop(1).collect(player::reopenNextDsdItem) }
+        serviceScope.launch {
+            var generation = 0L
+            dsdConversion.values.drop(1).collect { player.reopenNextDsdItem(++generation) }
+        }
         val problemNotification = PlaybackProblemNotification(this)
         serviceScope.launch {
             interruptions.current.collect { interruption ->

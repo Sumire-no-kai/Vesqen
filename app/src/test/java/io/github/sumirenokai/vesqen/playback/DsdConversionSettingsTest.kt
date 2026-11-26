@@ -100,16 +100,60 @@ class DsdConversionSettingsTest {
         assertEquals("the second track opened while the first plays", 0, created.currentMediaItemIndex)
 
         current.set(DsdConversion(DsdOutputRateMode.MULTIPLE))
-        created.reopenNextDsdItem(DsdConversionValues(rateMode = DsdOutputRateMode.MULTIPLE))
+        created.reopenNextDsdItem(generation = 1)
         runUntil { opened.size == 3 }
         assertEquals(DsdOutputRateMode.MULTIPLE, opened.last().rateMode)
         assertEquals(0, created.currentMediaItemIndex)
         assertEquals(listOf("1", "2"), List(created.mediaItemCount) { created.getMediaItemAt(it).mediaId })
 
-        // Asked again with the same settings, nothing opens again.
-        created.reopenNextDsdItem(DsdConversionValues(rateMode = DsdOutputRateMode.MULTIPLE))
+        // The same change asked again opens nothing again.
+        created.reopenNextDsdItem(generation = 1)
         runUntil { created.currentMediaItemIndex == 1 && created.audioFormat?.sampleRate == 176_400 }
         assertEquals("only the next track opened again", 3, opened.size)
+    }
+
+    /**
+     * #356 review: on repeat, a track opens again after earlier changes while its queue item still
+     * carries the key of the change that once re-created it. A later change back to those settings
+     * must still re-create it. Paused, with seeks between the tracks: Media3 reuses a track it has
+     * opened, so each opens exactly when counted here.
+     */
+    @Test
+    fun `a change reaches the next track even when its item kept the key of an earlier change`() {
+        val opened = CopyOnWriteArrayList<DsdConversion>()
+        val current = AtomicReference(DsdConversion())
+        val created = ExoPlayer.Builder(context, VesqenAudioRenderersFactory(context, AudioTrackAudioOutputProvider.Builder(context).build()))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(context, VesqenExtractorsFactory { current.get().also(opened::add) }))
+            .build()
+        player = created
+        created.setMediaItems(listOf(dsdItem("1"), dsdItem("2")))
+        created.repeatMode = ExoPlayer.REPEAT_MODE_ALL
+        created.prepare()
+        val multiple = DsdConversion(DsdOutputRateMode.MULTIPLE)
+        // A is current and B open next. Changing the rate re-creates B, which keeps that change's key.
+        runUntil("A and B open") { opened.size == 2 }
+        current.set(multiple)
+        created.reopenNextDsdItem(generation = 1)
+        runUntil("B open again") { opened.size == 3 }
+        // B is current and A opens for the next pass; changing back re-creates A.
+        created.seekTo(1, 0)
+        runUntil("A open after B") { opened.size == 4 }
+        current.set(DsdConversion())
+        created.reopenNextDsdItem(generation = 2)
+        runUntil("A open again") { opened.size == 5 }
+        // A is current again and B opens with the defaults, its item still keyed for the earlier change.
+        created.seekTo(0, 0)
+        runUntil("B open after A") { opened.size == 6 }
+        assertEquals(DsdConversion(), opened.last())
+        // Changing to the settings of that old key must still re-create B.
+        current.set(multiple)
+        created.reopenNextDsdItem(generation = 3)
+        created.seekTo(1, 0)
+        // B's own tracks, once it is the current item and ready; the renderer's format can still be A's.
+        runUntil("B ready") {
+            created.currentMediaItemIndex == 1 && created.playbackState == ExoPlayer.STATE_READY && !created.currentTracks.isEmpty
+        }
+        assertEquals(176_400, created.currentTracks.groups.single().getTrackFormat(0).sampleRate)
     }
 
     @Test
@@ -121,29 +165,29 @@ class DsdConversionSettingsTest {
         val flac = MediaItem.Builder().setUri(Uri.fromFile(dsdFile())).setMediaId("2")
             .setMediaMetadata(MediaMetadata.Builder().setExtras(TelemetryMediaItemExtras.from(track("FLAC"))).build()).build()
         created.setMediaItems(listOf(dsdItem("1"), flac))
-        created.reopenNextDsdItem(DsdConversionValues(gainEnabled = true))
+        created.reopenNextDsdItem(generation = 1)
         assertEquals(null, created.getMediaItemAt(1).localConfiguration?.customCacheKey)
         // Repeat one: the next track is the playing one.
         created.setMediaItems(listOf(dsdItem("1"), dsdItem("2")))
         created.repeatMode = ExoPlayer.REPEAT_MODE_ONE
-        created.reopenNextDsdItem(DsdConversionValues(gainEnabled = true))
+        created.reopenNextDsdItem(generation = 2)
         assertEquals(null, created.getMediaItemAt(0).localConfiguration?.customCacheKey)
         created.repeatMode = ExoPlayer.REPEAT_MODE_OFF
-        created.reopenNextDsdItem(DsdConversionValues(gainEnabled = true))
+        created.reopenNextDsdItem(generation = 3)
         assertTrue(created.getMediaItemAt(1).localConfiguration?.customCacheKey != null)
     }
 
-    private fun dsdItem(id: String) = MediaItem.Builder()
-        .setUri(Uri.fromFile(dsdFile()))
+    private fun dsdItem(id: String, seconds: Int = 0) = MediaItem.Builder()
+        .setUri(Uri.fromFile(dsdFile(seconds)))
         .setMediaId(id)
         .setMediaMetadata(MediaMetadata.Builder().setExtras(TelemetryMediaItemExtras.from(track(DSD_CODEC_LABEL))).build())
         .build()
 
     private var fileNumber = 0
 
-    /** A quarter of a second of DSD128, so the two rate modes give different output rates. */
-    private fun dsdFile(): File {
-        val bytes = (DsdExtractorTest.DSD64 * 2 / 4 / 8)
+    /** [seconds] of DSD128, or a quarter of a second for 0; the two rate modes give different output rates. */
+    private fun dsdFile(seconds: Int = 0): File {
+        val bytes = if (seconds == 0) DsdExtractorTest.DSD64 * 2 / 4 / 8 else DsdExtractorTest.DSD64 * 2 / 8 * seconds
         val file = DsdExtractorTest.dsf(left = DsdExtractorTest.idle(bytes), right = DsdExtractorTest.idle(bytes), rate = DsdExtractorTest.DSD64 * 2)
         return File(folder.root, "track-${fileNumber++}.dsf").apply { writeBytes(file) }
     }
@@ -167,13 +211,14 @@ class DsdConversionSettingsTest {
     }
 
     /** Bounded by real time: files are read on Media3's own loader thread. */
-    private fun runUntil(seconds: Long = 20, condition: () -> Boolean) {
+    private fun runUntil(what: String = "the expected state", seconds: Long = 20, condition: () -> Boolean) {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(seconds)
         while (System.nanoTime() < deadline) {
             if (condition()) return
             settle()
             Thread.sleep(2)
         }
-        fail("the player did not reach the expected state within $seconds s")
+        val state = player?.let { "item ${it.currentMediaItemIndex} at ${it.currentPosition} ms, state ${it.playbackState}, playing ${it.isPlaying}" }
+        fail("the player did not reach $what within $seconds s ($state)")
     }
 }

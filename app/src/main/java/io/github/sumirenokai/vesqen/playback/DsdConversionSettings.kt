@@ -78,20 +78,21 @@ internal fun dsdGainStep(gainDb: Float): Float {
 
 /**
  * Media3 opens the next track up to about 50 seconds before it plays, so a DSD track next in line may
- * already hold the old settings. Re-creating it makes it open again with [values]; the playing track
- * is left alone, and the replacement keeps its place in the play order (PlayOrder). Media3 only
- * re-creates an item whose cache key changed, so the key names the settings it opens with.
+ * already hold the old settings. Re-creating it makes it open again with the current ones; the
+ * playing track is left alone, and the replacement keeps its place in the play order (PlayOrder).
+ *
+ * Media3 only re-creates an item whose cache key changed, so each settings change brings a new
+ * [generation] for the key. The key records which change re-created the item, never which settings
+ * it opened with: on repeat a track opens again later with whatever applies then, so a key derived
+ * from the settings could match a change the track never saw (#356 review).
  */
 @androidx.annotation.OptIn(UnstableApi::class)
-internal fun ExoPlayer.reopenNextDsdItem(values: DsdConversionValues) {
+internal fun ExoPlayer.reopenNextDsdItem(generation: Long) {
     val next = nextMediaItemIndex
     if (next == C.INDEX_UNSET || next == currentMediaItemIndex) return
     val item = getMediaItemAt(next)
     if (TelemetryMediaItemExtras.read(item.mediaMetadata.extras).codecLabel != DSD_CODEC_LABEL) return
-    val key = values.cacheKey()
+    val key = "vesqen-dsd:$generation"
     if (item.localConfiguration?.customCacheKey == key) return
     replaceMediaItem(next, item.buildUpon().setCustomCacheKey(key).build())
 }
-
-private fun DsdConversionValues.cacheKey(): String =
-    "vesqen-dsd:${conversion().rateMode.key}:${conversion().gainDb}"
