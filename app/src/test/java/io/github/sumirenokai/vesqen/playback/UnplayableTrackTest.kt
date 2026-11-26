@@ -12,6 +12,10 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackGroup
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.RendererCapabilities
 import androidx.media3.exoplayer.audio.AudioOutput
@@ -64,7 +68,15 @@ class UnplayableTrackTest {
     private val reported = mutableListOf<String>()
     private val interruptions = PlaybackInterruptions()
     private var skip = false
+
+    /** Whether the player was playing at the end of any batch of its events. */
     private var everPlaying = false
+
+    /** Whether the batch that first showed the item's audio tracks also showed the player ready. */
+    private var tracksFirstSeenReady: Boolean? = null
+
+    /** Opens when Media3's loader thread has read the first file to its end. */
+    private val firstFileRead = CountDownLatch(1)
     private var player: ExoPlayer? = null
     private var outputs: RecordingOutputs? = null
 
@@ -119,6 +131,28 @@ class UnplayableTrackTest {
         assertEquals(1, stopped.size)
     }
 
+    /**
+     * The order a loaded machine can produce: the playback thread prepares the track and becomes ready
+     * before it handles the Play. The update that acknowledges the Play is then the first the app
+     * applies, so Media3 reports the tracks, READY and the Play in one batch, and that batch's
+     * isPlaying argument still announces the Play the guard reverses inside it.
+     */
+    @Test
+    fun `a track that is ready before the Play reaches the player never plays`() {
+        play(listOf(flacFile()), playWhenReady = false)
+        // The main looper stays paused here, so the app applies none of the player's updates yet.
+        assertTrue(firstFileRead.await(10, TimeUnit.SECONDS))
+        shadowOf(player!!.playbackLooper).idle()
+        player!!.play()
+        runUntil { interruptions.current.value != null }
+
+        assertEquals("the tracks first arrived with READY", true, tracksFirstSeenReady)
+        assertFalse(player!!.playWhenReady)
+        assertFalse("the track never played", everPlaying)
+        assertEquals(emptyList<Long>(), counted)
+        assertEquals(1, stopped.size)
+    }
+
     @Test
     fun `the song before an unplayable track plays to its end`() {
         play(listOf(wavFile(), flacFile()))
@@ -159,6 +193,7 @@ class UnplayableTrackTest {
         runUntil { interruptions.current.value != null }
         assertEquals(1, player!!.currentMediaItemIndex)
         assertFalse(player!!.playWhenReady)
+        assertFalse("the track never played", everPlaying)
 
         player!!.play()
         runUntil { player!!.currentMediaItemIndex == 2 && everPlaying }
@@ -429,13 +464,25 @@ class UnplayableTrackTest {
         guard: Boolean = true,
         configure: (ExoPlayer) -> Unit = {},
     ) {
+        val dataSources = DefaultDataSource.Factory(context).setTransferListener(object : TransferListener {
+            override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
+            override fun onTransferStart(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
+            override fun onBytesTransferred(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean, bytesTransferred: Int) = Unit
+            override fun onTransferEnd(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = firstFileRead.countDown()
+        })
         val created = ExoPlayer.Builder(context, withoutDecoders())
-            .setMediaSourceFactory(DefaultMediaSourceFactory(context, VesqenExtractorsFactory()))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources, VesqenExtractorsFactory()))
             .build()
         player = created
         created.addListener(object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (isPlaying) everPlaying = true
+            // Read after each batch, as the service's listeners and Media3's session do. The guard
+            // pauses inside a batch, and when the item was ready before the Play reached it, that
+            // batch's isPlaying argument still announces the Play it reversed.
+            override fun onEvents(player: Player, events: Player.Events) {
+                if (player.isPlaying) everPlaying = true
+                if (tracksFirstSeenReady == null && player.currentTracks.containsType(C.TRACK_TYPE_AUDIO)) {
+                    tracksFirstSeenReady = player.playbackState == Player.STATE_READY
+                }
             }
 
             override fun onPlayerError(error: PlaybackException) {
