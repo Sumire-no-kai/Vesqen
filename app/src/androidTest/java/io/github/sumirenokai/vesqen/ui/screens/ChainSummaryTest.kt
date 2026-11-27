@@ -121,6 +121,28 @@ class ChainSummaryTest {
     }
 
     @Test
+    fun a_converted_dsd_file_is_a_change_and_the_source_station_names_its_rate() {
+        show(
+            snapshot(
+                Metrics.SOURCE_SAMPLE_RATE to TelemetryReading.Integer(2_822_400, TelemetryUnit.HERTZ),
+                Metrics.PROCESSING_DSD_CONVERSION_ACTIVE to TelemetryReading.Flag(true),
+            ),
+        )
+        val conversion = string(R.string.chain_condition_dsd_conversion)
+
+        segment(AppSegment).assertTextContains(context.getString(R.string.chain_segment_modified, conversion), substring = true)
+        processing().assertTextContains(context.getString(R.string.chain_processing_changed, conversion), substring = true)
+        segment(DsdNote).assertTextEquals(context.getString(R.string.chain_dsd_converted, "DSD64"))
+    }
+
+    @Test
+    fun a_pcm_file_has_no_dsd_note() {
+        show(FakeAppSegmentTelemetry.snapshot())
+        scrollTo("vesqen.chain.path.source")
+        composeRule.onAllNodesWithTag(DsdNote).assertCountEquals(0)
+    }
+
+    @Test
     fun bluetooth_is_lossy_or_unknown_in_the_systems_part_without_changing_vesqens() {
         show(snapshot(Metrics.ROUTE_SELECTED_SYSTEM_TYPE to TelemetryReading.Text("bluetooth_a2dp")))
 
@@ -449,6 +471,7 @@ class ChainSummaryTest {
             Metrics.PROCESSING_SPEED, Metrics.PROCESSING_PITCH, Metrics.PROCESSING_PLAYER_VOLUME,
             Metrics.PROCESSING_SKIP_SILENCE, Metrics.PROCESSING_REPLAY_GAIN_ACTIVE, Metrics.PROCESSING_EQUALIZER_ACTIVE,
             Metrics.PROCESSING_LOUDNESS_ACTIVE, Metrics.PROCESSING_CROSSFADE_ACTIVE, Metrics.PROCESSING_APP_DSP_ACTIVE,
+            Metrics.PROCESSING_DSD_CONVERSION_ACTIVE,
         )
         val source = telemetryEvidenceSource(context, measured(TelemetryReading.Text("fixture")))
         val audioTrackRate = "vesqen.chain.core.${Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE.value}"
@@ -539,5 +562,6 @@ class ChainSummaryTest {
     private companion object {
         const val AppSegment = "vesqen.chain.segment.app"
         const val SystemSegment = "vesqen.chain.segment.system"
+        const val DsdNote = "vesqen.chain.source.dsd-converted"
     }
 }

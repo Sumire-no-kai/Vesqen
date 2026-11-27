@@ -95,6 +95,7 @@
     <string name="usb_failure_no_device">No USB audio device is connected.</string>
     <string name="usb_failure_source_unknown">The track’s sample rate, bit depth or channel count is unknown.</string>
     <string name="usb_failure_source_unsupported">Strict output does not support this track’s format.</string>
+    <string name="usb_failure_dsd">Strict output does not support DSD files.</string>
     <string name="usb_failure_query">Android could not read which formats the DAC supports.</string>
     <string name="usb_failure_no_profile">The DAC’s bit-perfect output does not support this track’s format.</string>
     <string name="usb_failure_no_bit_perfect">This phone, like many others, does not offer bit-perfect output to USB DACs.</string>
@@ -869,6 +870,7 @@
     <string name="chain_metric_processing_player_volume">Player volume</string>
     <string name="chain_metric_processing_skip_silence">Skip silence</string>
     <string name="chain_metric_processing_app_dsp_active">App DSP active</string>
+    <string name="chain_metric_processing_dsd_conversion_active">DSD converted to PCM</string>
     <string name="chain_metric_processing_replay_gain_active">ReplayGain active</string>
     <string name="chain_metric_processing_equalizer_active">Equalizer active</string>
     <string name="chain_metric_processing_crossfade_active">Crossfade active</string>
@@ -987,6 +989,7 @@
     <string name="chain_segment_zero_padded">The file is %1$d-bit. On the way to the DAC each sample is padded with zeros in its low bits to %2$d bits, which keeps the level it represents. Tracks of different bit depths can then share one DAC setting, so the DAC does not need to be set again when the track changes.</string>
     <string name="chain_segment_with_note">%1$s %2$s</string>
     <string name="chain_segment_modified">Audio changed: %1$s.</string>
+    <string name="chain_dsd_converted">%1$s converted to PCM</string>
     <string name="chain_segment_unknown">Not yet determined: %1$s.</string>
     <string name="chain_segment_reason_transition">a track change or output restart is in progress</string>
     <string name="chain_segment_reason_decoder">the AAC decoder may change the sample rate or channels</string>
@@ -1020,6 +1023,7 @@
     <string name="chain_condition_loudness">loudness</string>
     <string name="chain_condition_crossfade">crossfade</string>
     <string name="chain_condition_app_dsp">app effects</string>
+    <string name="chain_condition_dsd_conversion">DSD to PCM conversion</string>
     <string name="chain_condition_sample_rate">sample rate</string>
     <string name="chain_condition_channels">channels</string>
     <string name="chain_condition_pcm_precision">precision</string>

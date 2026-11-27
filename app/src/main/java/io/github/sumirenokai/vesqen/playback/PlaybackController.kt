@@ -1088,6 +1088,8 @@ private fun playbackContainerFromFileName(fileName: String): String? = when (
     "m4a", "mp4" -> "mp4"
     "aac" -> "adts"
     "ogg", "opus" -> "ogg"
+    "dsf" -> "dsf"
+    "dff" -> "dsdiff"
     else -> null
 }
 

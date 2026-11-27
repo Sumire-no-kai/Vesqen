@@ -46,6 +46,13 @@ internal sealed interface UsbOutputDecision {
  */
 internal const val NO_BIT_PERFECT_MIXER_CODE = "strict_usb.no_bit_perfect_mixer"
 
+/**
+ * #249: strict output stops on a DSD file and never converts it, whatever DAC is connected. Only
+ * the DSD header reader stores a 1-bit depth, so that depth names a DSD source here.
+ */
+internal const val DSD_SOURCE_CODE = "strict_usb.source_dsd"
+private const val DSD_BIT_DEPTH = 1
+
 internal class UsbOutputStrategyResolver {
     fun resolve(
         mode: UsbOutputMode,
@@ -70,6 +77,7 @@ internal class UsbOutputStrategyResolver {
             UsbOutputFailure.MODIFY_AUDIO_SETTINGS_DENIED,
             "strict_usb.modify_audio_settings_denied",
         )
+        if (source?.bitDepth == DSD_BIT_DEPTH) return rejected(UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED, DSD_SOURCE_CODE)
         val device = devices.firstOrNull() ?: return rejected(
             UsbOutputFailure.NO_USB_AUDIO_DEVICE,
             "strict_usb.no_usb_audio_device",

@@ -93,6 +93,7 @@
     <string name="usb_failure_no_device">沒有連接 USB 音訊裝置。</string>
     <string name="usb_failure_source_unknown">無法取得這首曲目的取樣率、位元深度或聲道數。</string>
     <string name="usb_failure_source_unsupported">嚴格輸出不支援這首曲目的格式。</string>
+    <string name="usb_failure_dsd">嚴格輸出不支援 DSD 檔案。</string>
     <string name="usb_failure_query">Android 無法讀取這個 DAC 支援的格式。</string>
     <string name="usb_failure_no_profile">這個 DAC 的 bit-perfect 輸出不支援這首曲目的格式。</string>
     <string name="usb_failure_no_bit_perfect">與許多手機一樣，這支手機沒有為 USB DAC 開放 bit-perfect 輸出。</string>
@@ -845,6 +846,7 @@
     <string name="chain_metric_processing_player_volume">播放器音量</string>
     <string name="chain_metric_processing_skip_silence">略過靜音</string>
     <string name="chain_metric_processing_app_dsp_active">應用程式 DSP 已啟用</string>
+    <string name="chain_metric_processing_dsd_conversion_active">DSD 已轉換為 PCM</string>
     <string name="chain_metric_processing_replay_gain_active">ReplayGain 已啟用</string>
     <string name="chain_metric_processing_equalizer_active">等化器已啟用</string>
     <string name="chain_metric_processing_crossfade_active">交叉淡化已啟用</string>
@@ -962,6 +964,7 @@
     <string name="chain_segment_zero_padded">來源檔案為 %1$d 位元，送往 DAC 時每個樣本在低位補零，擴展為 %2$d 位元，樣本所代表的電平不變。這樣不同位元深度的曲目可以共用 DAC 的同一設定，切換曲目時不必重新設定 DAC。</string>
     <string name="chain_segment_with_note">%1$s%2$s</string>
     <string name="chain_segment_modified">改動了音訊：%1$s。</string>
+    <string name="chain_dsd_converted">%1$s 已轉換為 PCM</string>
     <string name="chain_segment_unknown">暫時無法判斷：%1$s。</string>
     <string name="chain_segment_reason_transition">正在切換曲目或重新開啟輸出</string>
     <string name="chain_segment_reason_decoder">AAC 解碼器可能改變取樣率或聲道</string>
@@ -995,6 +998,7 @@
     <string name="chain_condition_loudness">響度均衡</string>
     <string name="chain_condition_crossfade">交叉淡化</string>
     <string name="chain_condition_app_dsp">應用程式音效</string>
+    <string name="chain_condition_dsd_conversion">DSD 轉換為 PCM</string>
     <string name="chain_condition_sample_rate">取樣率</string>
     <string name="chain_condition_channels">聲道</string>
     <string name="chain_condition_pcm_precision">精確度</string>

@@ -63,6 +63,9 @@ class NowLayoutTest {
         assertEquals("ALAC 16/44.1", nowFormatSummary(track(codec = "ALAC", bitDepth = 16, sampleRateHz = 44_100)))
         assertEquals("MP3 44.1 kHz", nowFormatSummary(track(codec = "MP3", sampleRateHz = 44_100)))
         assertEquals("Opus", nowFormatSummary(track(codec = "Opus")))
+        assertEquals("DSD64", nowFormatSummary(track(codec = "DSD", bitDepth = 1, sampleRateHz = 2_822_400)))
+        assertEquals("DSD128", nowFormatSummary(track(codec = "DSD", bitDepth = 1, sampleRateHz = 6_144_000)))
+        assertEquals("DSD", nowFormatSummary(track(codec = "DSD", bitDepth = 1)))
         assertNull(nowFormatSummary(track(codec = "")))
         assertNull(nowFormatSummary(null))
     }

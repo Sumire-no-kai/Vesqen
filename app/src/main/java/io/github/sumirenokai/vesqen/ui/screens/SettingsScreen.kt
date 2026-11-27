@@ -48,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.ui.LocalUnplayableTrackSettings
 import io.github.sumirenokai.vesqen.library.ArtistSplitSettings
+import io.github.sumirenokai.vesqen.playback.DSD_SOURCE_CODE
 import io.github.sumirenokai.vesqen.playback.NO_BIT_PERFECT_MIXER_CODE
 import io.github.sumirenokai.vesqen.playback.UsbOutputFailure
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
@@ -306,7 +307,8 @@ internal fun strictUsbFailureLabel(failure: UsbOutputFailure, decisionCode: Stri
         UsbOutputFailure.MODIFY_AUDIO_SETTINGS_DENIED -> R.string.usb_failure_permission
         UsbOutputFailure.NO_USB_AUDIO_DEVICE -> R.string.usb_failure_no_device
         UsbOutputFailure.SOURCE_FORMAT_UNKNOWN -> R.string.usb_failure_source_unknown
-        UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED -> R.string.usb_failure_source_unsupported
+        UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED ->
+            if (decisionCode == DSD_SOURCE_CODE) R.string.usb_failure_dsd else R.string.usb_failure_source_unsupported
         UsbOutputFailure.MIXER_QUERY_FAILED -> R.string.usb_failure_query
         UsbOutputFailure.NO_MATCHING_MIXER_ATTRIBUTE ->
             if (decisionCode == NO_BIT_PERFECT_MIXER_CODE) R.string.usb_failure_no_bit_perfect else R.string.usb_failure_no_profile

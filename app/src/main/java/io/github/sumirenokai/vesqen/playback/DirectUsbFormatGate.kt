@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.playback
 
+import io.github.sumirenokai.vesqen.library.DSD_CODEC_LABEL
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.util.UnstableApi
@@ -68,6 +69,8 @@ internal object DirectUsbFormatGate {
      * takes the DAC over. A known lossy codec is named even when the library has no bit depth for it.
      */
     fun sourceRefusal(source: TelemetrySourceFacts?): DirectUsbFailure? {
+        // #249: named before the lossless check, which would only say the format is unsupported.
+        if (source?.codecLabel == DSD_CODEC_LABEL) return DirectUsbFailure(Reason.SOURCE_DSD, "a DSD file")
         val mime = source?.codecMime
         if (mime != null && !isLossless(mime)) return DirectUsbFailure(Reason.SOURCE_NOT_LOSSLESS, "$mime is not a lossless codec")
         val bits = source?.bitDepth

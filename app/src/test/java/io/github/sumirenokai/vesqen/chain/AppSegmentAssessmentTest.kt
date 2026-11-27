@@ -45,6 +45,7 @@ class AppSegmentAssessmentTest {
             Metrics.PROCESSING_LOUDNESS_ACTIVE to TelemetryReading.Flag(true),
             Metrics.PROCESSING_CROSSFADE_ACTIVE to TelemetryReading.Flag(true),
             Metrics.PROCESSING_APP_DSP_ACTIVE to TelemetryReading.Flag(true),
+            Metrics.PROCESSING_DSD_CONVERSION_ACTIVE to TelemetryReading.Flag(true),
             Metrics.PLAYBACK_AUDIO_TRACK_SAMPLE_RATE to TelemetryReading.Integer(48_000, TelemetryUnit.HERTZ),
             Metrics.PLAYBACK_AUDIO_TRACK_CHANNEL_MASK to TelemetryReading.Text("0x4"),
             Metrics.PLAYBACK_AUDIO_TRACK_ENCODING to TelemetryReading.Text("pcm-8"),

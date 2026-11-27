@@ -781,6 +781,7 @@ private val METRIC_LABEL_RESOURCES: Map<String, Int> = mapOf(
     "processing.player_volume" to R.string.chain_metric_processing_player_volume,
     "processing.skip_silence" to R.string.chain_metric_processing_skip_silence,
     "processing.app_dsp_active" to R.string.chain_metric_processing_app_dsp_active,
+    "processing.dsd_conversion_active" to R.string.chain_metric_processing_dsd_conversion_active,
     "processing.replay_gain_active" to R.string.chain_metric_processing_replay_gain_active,
     "processing.equalizer_active" to R.string.chain_metric_processing_equalizer_active,
     "processing.crossfade_active" to R.string.chain_metric_processing_crossfade_active,

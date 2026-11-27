@@ -24,7 +24,8 @@ internal class TrackInfoReader(context: Context) {
     private val appContext = context.applicationContext
 
     suspend fun read(track: AudioTrack): TrackFullInfo = withContext(Dispatchers.IO) {
-        readAudioFormat(track).copy(tags = readTags(track))
+        val format = if (track.codec == DSD_CODEC_LABEL) dsdFullInfo(track.channelCount) else readAudioFormat(track)
+        format.copy(tags = readTags(track))
     }
 
     private fun readTags(track: AudioTrack): TrackTags = try {
@@ -76,6 +77,21 @@ internal fun codecIsLossless(mimeType: String?): Boolean? = when (mimeType?.lowe
     -> false
     else -> null
 }
+
+/**
+ * #249: MediaExtractor cannot open DSF or DSDIFF files, so the catalog's channel count stands in. A DSD
+ * stream is lossless, and the parser accepts only the speakers of Android's layout for each count.
+ */
+internal fun dsdFullInfo(channelCount: Int?): TrackFullInfo = TrackFullInfo(
+    channelLayout = when (channelCount) {
+        1 -> AudioFormat.CHANNEL_OUT_MONO
+        2 -> AudioFormat.CHANNEL_OUT_STEREO
+        4 -> AudioFormat.CHANNEL_OUT_QUAD
+        6 -> AudioFormat.CHANNEL_OUT_5POINT1
+        else -> null
+    }?.let(::channelLayoutLabel),
+    lossless = true,
+)
 
 /** Null for a mask without a common name: the row stays hidden rather than guessing. */
 internal fun channelLayoutLabel(mask: Int): String? = when (mask) {

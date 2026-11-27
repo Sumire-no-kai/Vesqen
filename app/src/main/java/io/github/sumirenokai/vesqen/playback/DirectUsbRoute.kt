@@ -866,6 +866,7 @@ internal class PreferencesTakeoverMarkerStore(context: Context) : TakeoverMarker
  */
 internal fun DirectUsbFailure.toStrictFailure(): Pair<UsbOutputFailure, String> = when (reason) {
     DirectUsbFailure.Reason.SOURCE_FORMAT_UNKNOWN -> UsbOutputFailure.SOURCE_FORMAT_UNKNOWN
+    DirectUsbFailure.Reason.SOURCE_DSD,
     DirectUsbFailure.Reason.SOURCE_NOT_LOSSLESS,
     DirectUsbFailure.Reason.SOURCE_BIT_DEPTH_UNSUPPORTED,
     DirectUsbFailure.Reason.SOURCE_FORMAT_UNSUPPORTED,

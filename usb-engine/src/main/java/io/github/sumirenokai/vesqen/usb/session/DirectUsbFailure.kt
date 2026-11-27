@@ -21,6 +21,8 @@ data class DirectUsbFailure(val reason: Reason, val detail: String) {
         USB_PERMISSION_REVOKED,
         // The format layers (D10), checked before an output is opened, and the samples while it runs.
         SOURCE_FORMAT_UNKNOWN,
+        /** A DSD file (#249): strict output never converts it, and DoP does not exist yet. */
+        SOURCE_DSD,
         SOURCE_NOT_LOSSLESS,
         SOURCE_BIT_DEPTH_UNSUPPORTED,
         /** A lossless source that still needs samples trimmed (encoder delay or padding). */

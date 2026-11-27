@@ -74,11 +74,13 @@ import io.github.sumirenokai.vesqen.chain.AppSegmentStatus
 import io.github.sumirenokai.vesqen.chain.SegmentReason
 import io.github.sumirenokai.vesqen.chain.SourceCompression
 import io.github.sumirenokai.vesqen.chain.assessAppSegment
+import io.github.sumirenokai.vesqen.library.dsdRateLabel
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.telemetry.TelemetryEvidence
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetric
+import io.github.sumirenokai.vesqen.telemetry.TelemetryReading
 import io.github.sumirenokai.vesqen.telemetry.TelemetryUnavailableReason
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricCatalog as Metrics
 import io.github.sumirenokai.vesqen.telemetry.TelemetryMetricId
@@ -193,6 +195,7 @@ private val ProcessingFlags = listOf(
     AppSegmentCondition.LOUDNESS to Metrics.PROCESSING_LOUDNESS_ACTIVE,
     AppSegmentCondition.CROSSFADE to Metrics.PROCESSING_CROSSFADE_ACTIVE,
     AppSegmentCondition.APP_DSP to Metrics.PROCESSING_APP_DSP_ACTIVE,
+    AppSegmentCondition.DSD_CONVERSION to Metrics.PROCESSING_DSD_CONVERSION_ACTIVE,
 )
 
 /**
@@ -540,9 +543,27 @@ private fun ChainStationRow(
                 facts.forEach { id ->
                     ChainFact(id, metrics, unitDisplayMode, expanded, onToggle, prominent = id == facts.first())
                 }
+                if (station == ChainStation.SOURCE) DsdConversionNote(metrics)
             }
         }
     }
+}
+
+/**
+ * #249: beside a DSD file's format, the source station says Vesqen converted it, while the
+ * processing station counts the conversion as a change. Shown only while the conversion is measured.
+ */
+@Composable
+private fun DsdConversionNote(metrics: Map<TelemetryMetricId, TelemetryMetric>) {
+    val converted = (metrics[Metrics.PROCESSING_DSD_CONVERSION_ACTIVE]?.evidence?.reading as? TelemetryReading.Flag)?.value
+    if (converted != true) return
+    val rate = (metrics[Metrics.SOURCE_SAMPLE_RATE]?.evidence?.reading as? TelemetryReading.Integer)?.value
+    Text(
+        text = stringResource(R.string.chain_dsd_converted, dsdRateLabel(rate)),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.testTag("vesqen.chain.source.dsd-converted"),
+    )
 }
 
 /** One measured fact: label, value and confidence; tapping shows its source and method. */
@@ -623,7 +644,8 @@ private fun ChainProcessingFact(
         checks.all { it.status == AppSegmentStatus.UNCHANGED } -> stringResource(R.string.chain_processing_none)
         else -> stringResource(R.string.chain_segment_unknown, segmentReasonText(checks))
     }
-    // The flags come from one player state, so one confidence and age stand for all of them.
+    // The flags come from one player state, so one confidence and age stand for all of them. The DSD
+    // flag reads the input format instead; its own source shows in the full metric list.
     val evidence = ProcessingFlags.firstNotNullOfOrNull { metrics[it.second]?.evidence }
     val toggleState = evidenceToggleState(expanded)
     Column(
@@ -759,6 +781,7 @@ internal fun conditionLabel(condition: AppSegmentCondition): Int = when (conditi
     AppSegmentCondition.CHANNELS -> R.string.chain_condition_channels
     AppSegmentCondition.PCM_PRECISION -> R.string.chain_condition_pcm_precision
     AppSegmentCondition.TRACK_TRANSITION -> R.string.chain_condition_track_transition
+    AppSegmentCondition.DSD_CONVERSION -> R.string.chain_condition_dsd_conversion
 }
 
 /** B §5 pinned metrics, refreshed only while Chain is visible (the observation follows it). */

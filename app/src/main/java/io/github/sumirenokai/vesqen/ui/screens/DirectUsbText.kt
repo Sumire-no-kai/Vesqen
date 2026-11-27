@@ -56,6 +56,7 @@ internal fun directUsbFailureSpec(status: UsbOutputStatus, device: String, rateS
         // Prefer a known source mismatch; otherwise name the negotiation that found no plan.
         "no_matching_direct_format", "no_matching_format" -> rateSpec ?: depthSpec ?: channelSpec
             ?: StringSpec(R.string.usb_failure_direct_interface, listOf(device))
+        "source_dsd" -> StringSpec(R.string.usb_failure_dsd)
         "source_not_lossless" -> details?.sourceCodec
             ?.let { StringSpec(R.string.usb_failure_direct_lossless_codec, listOf(it)) }
             ?: StringSpec(R.string.usb_failure_direct_lossless)

@@ -1,5 +1,7 @@
 package io.github.sumirenokai.vesqen.playback
 
+import io.github.sumirenokai.vesqen.usb.session.DirectUsbFailure
+import io.github.sumirenokai.vesqen.library.DSD_CODEC_LABEL
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
@@ -101,6 +103,15 @@ class DirectUsbFormatGateTest {
         listOf(MimeTypes.AUDIO_MPEG, MimeTypes.AUDIO_AAC, MimeTypes.AUDIO_OPUS, "audio/x-made-up").forEach { mime ->
             assertEquals(mime, Reason.SOURCE_NOT_LOSSLESS, reason(DirectUsbFormatGate.check(source(mime = mime), decoded(), plan(16))))
         }
+    }
+
+    /** #249: a DSD file is named as such, not as a codec the own output does not take. */
+    @Test
+    fun `a DSD file is refused as DSD`() {
+        val dsd = TelemetrySourceFacts(codecMime = "audio/x-dsf", codecLabel = DSD_CODEC_LABEL, bitDepth = 1, sampleRateHz = 2_822_400, channelCount = 2)
+        assertEquals(Reason.SOURCE_DSD, DirectUsbFormatGate.sourceRefusal(dsd)?.reason)
+        assertEquals("direct_usb.source_dsd", Reason.SOURCE_DSD.decisionCode())
+        assertEquals(UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED, DirectUsbFailure(Reason.SOURCE_DSD, "").toStrictFailure().first)
     }
 
     @Test

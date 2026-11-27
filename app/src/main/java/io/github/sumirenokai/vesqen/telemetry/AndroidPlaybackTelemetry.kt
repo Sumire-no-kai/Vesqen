@@ -1,5 +1,7 @@
 package io.github.sumirenokai.vesqen.telemetry
 
+import io.github.sumirenokai.vesqen.playback.DSF_MIME_TYPE
+import io.github.sumirenokai.vesqen.playback.DFF_MIME_TYPE
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -715,6 +717,14 @@ class AndroidPlaybackTelemetry internal constructor(
             false,
             APP_CONFIGURATION,
             raw.instant,
+        )
+        // #249: the stream Vesqen's DSD extractor hands the player is PCM in a DSD container.
+        metrics.measuredFlagOrUnavailable(
+            TelemetryMetricCatalog.PROCESSING_DSD_CONVERSION_ACTIVE,
+            activeInputFormat?.let { it.containerMimeType == DSF_MIME_TYPE || it.containerMimeType == DFF_MIME_TYPE },
+            MEDIA3_ANALYTICS,
+            formatInstant,
+            activeReason,
         )
         val decoderSampleRate = activeInputFormat?.sampleRate?.takeIf { it != Format.NO_VALUE && it > 0 }
         val audioTrackSampleRate = activeSink?.sampleRate?.takeIf { it > 0 }

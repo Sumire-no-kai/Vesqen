@@ -158,7 +158,9 @@ test('mutated sample enums provenance text and confidence are rejected',()=>{
 
 test('#249 a failed DSD track keeps its DSD rate, up to DSD512 of the 48 kHz family',()=>{
   const dsd=fullReport();
-  Object.assign(dsd.failedTrackFormats.tracks[0],{container:null,codecMime:'audio/x-dsf',codecLabel:'DSD',sampleRateHz:2822400,bitDepth:1});
+  Object.assign(dsd.failedTrackFormats.tracks[0],{container:'dsf',codecMime:'audio/x-dsf',codecLabel:'DSD',sampleRateHz:2822400,bitDepth:1});
+  assert.equal(validateReport(dsd),dsd);
+  dsd.failedTrackFormats.tracks[0].container='dsdiff';
   assert.equal(validateReport(dsd),dsd);
   dsd.failedTrackFormats.tracks[0].sampleRateHz=24576000;
   assert.equal(validateReport(dsd),dsd);
