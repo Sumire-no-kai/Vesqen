@@ -6,6 +6,8 @@ import java.security.MessageDigest
 enum class LibrarySourceKind {
     DEVICE,
     FOLDER,
+    /** #249: the whole-storage scan of the GitHub build; one source for every volume. */
+    STORAGE,
 }
 
 /**
@@ -183,6 +185,7 @@ internal data class LibraryTrackCandidate(
 
 internal object LibrarySourceId {
     const val DEVICE = "media:external"
+    const val STORAGE = "storage:all"
 
     fun forTree(treeUri: String): String = "tree:$treeUri"
 
@@ -190,6 +193,17 @@ internal object LibrarySourceId {
     fun forScan(sourceId: String): String = MessageDigest.getInstance("SHA-256")
         .digest(sourceId.encodeToByteArray())
         .toHexString()
+}
+
+/**
+ * Which source holds a file that several can read (#359, #249): an added folder holds the files in
+ * it, the device library the rest it lists, and the whole-storage scan only the files no other source
+ * has. A source takes a file over from one that ranks below it, and from any that cannot play it now.
+ */
+internal fun sourceRank(sourceId: String): Int = when (sourceId) {
+    LibrarySourceId.DEVICE -> 1
+    LibrarySourceId.STORAGE -> 2
+    else -> 0
 }
 
 /** Bump when provider/container enrichment semantics change, invalidating scan cache keys. */

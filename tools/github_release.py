@@ -27,6 +27,8 @@ GITHUB_PERMISSIONS = frozenset({
     "android.permission.ACCESS_NETWORK_STATE",
     "android.permission.INTERNET",
     "android.permission.REQUEST_INSTALL_PACKAGES",
+    # #249: the whole-storage scan, off until the user turns it on and allows it in system settings.
+    "android.permission.MANAGE_EXTERNAL_STORAGE",
     f"{APP_ID}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
 })
 KEY_ALIAS = "vesqen-app-signing-v1"

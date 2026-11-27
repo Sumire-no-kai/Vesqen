@@ -24,11 +24,18 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.sumirenokai.vesqen.library.LibraryScanProgress
+import io.github.sumirenokai.vesqen.library.LibrarySourceId
+import io.github.sumirenokai.vesqen.library.StorageScanAccess
+import io.github.sumirenokai.vesqen.ui.LocalStorageScan
+import io.github.sumirenokai.vesqen.ui.StorageScanDialogs
 import io.github.sumirenokai.vesqen.ui.components.underSheetHandle
 import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
 import io.github.sumirenokai.vesqen.ui.components.folderStorageLabel
 import io.github.sumirenokai.vesqen.ui.components.rememberAlbumBackground
 import io.github.sumirenokai.vesqen.ui.formatDuration
+import io.github.sumirenokai.vesqen.ui.rememberStorageScanFlow
 import io.github.sumirenokai.vesqen.ui.theme.VesqenDataStyle
 import java.util.Locale
 import androidx.compose.foundation.clickable
@@ -226,6 +233,7 @@ fun LibraryScreen(
     onSaveTrackOrder: suspend (Long?, List<Long>) -> Boolean = { _, _ -> false },
     onAddLibraryFolder: () -> Unit = {},
     onRemoveLibraryFolder: (String) -> Unit = {},
+    onRemoveStorageSource: () -> Unit = {},
     onPauseLibraryScan: () -> Unit = {},
     onResumeLibraryScan: () -> Unit = {},
     onAssignUnmatchedRecord: (Long, Long) -> Unit = { _, _ -> },
@@ -365,6 +373,19 @@ fun LibraryScreen(
 
     val folderSources = state.sources.filter { it.kind == LibrarySourceKind.FOLDER }
     var showSourceManager by rememberSaveable { mutableStateOf(false) }
+    // #249: the GitHub build's whole-storage scan; in the Play build only rows an earlier GitHub install found.
+    val storageScan = LocalStorageScan.current?.let { rememberStorageScanFlow(it, onRescan) }
+    val storageEnabled = storageScan?.let { it.scan.enabled.collectAsStateWithLifecycle().value } == true
+    val storageSource = state.sources.firstOrNull { it.kind == LibrarySourceKind.STORAGE }
+    val storageRow = when {
+        storageScan != null -> if (storageEnabled) {
+            StorageSourceRow.Scan(storageSource, needsPermission = storageScan.access != StorageScanAccess.GRANTED)
+        } else {
+            null
+        }
+        storageSource != null && storageSource.trackCount > 0 -> StorageSourceRow.OtherBuild(storageSource.trackCount)
+        else -> null
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         AnimatedContent(
@@ -425,7 +446,7 @@ fun LibraryScreen(
                     }
                 },
                 onAddLibraryFolder = onAddLibraryFolder,
-                onManageSources = if (folderSources.isEmpty()) null else ({ showSourceManager = true }),
+                onManageSources = if (folderSources.isEmpty() && storageRow == null) null else ({ showSourceManager = true }),
                 onRescan = onRescan,
                 sourceActionsEnabled = !state.isLoading && orderTarget == null,
             )
@@ -464,6 +485,12 @@ fun LibraryScreen(
         if (showSourceManager) {
             LibrarySourcesSheet(
                 folders = folderSources,
+                storage = storageRow,
+                onTurnOffStorage = { storageScan?.turnOff() },
+                onRemoveStorage = {
+                    onRemoveStorageSource()
+                    if (folderSources.isEmpty()) showSourceManager = false
+                },
                 scanInProgress = state.isLoading,
                 onDismiss = { showSourceManager = false },
                 onAddLibraryFolder = {
@@ -476,6 +503,7 @@ fun LibraryScreen(
                 },
             )
         }
+        storageScan?.let { StorageScanDialogs(it) }
         // Kept outside the card: the sheet lists every record, and it stays open while the user works
         // through them, even once the card has nothing else to show.
         if (showUnmatchedRecords && state.unmatchedRecords.isNotEmpty()) {
@@ -620,6 +648,12 @@ fun LibraryScreen(
                         body = stringResource(R.string.no_local_music_body),
                         actionLabel = stringResource(R.string.add_music_folder),
                         onAction = onAddLibraryFolder,
+                        // #249: the GitHub build's second way in, while the scan is off and can run here.
+                        secondaryActionLabel = stringResource(R.string.settings_full_scan).takeIf {
+                            storageScan != null && !storageEnabled && storageScan.access != StorageScanAccess.UNAVAILABLE
+                        },
+                        onSecondaryAction = { storageScan?.turnOn() },
+                        secondaryActionTestTag = "vesqen.library.empty.storage-scan",
                         modifier = Modifier.padding(horizontal = VesqenSpacing.lg),
                     )
 
@@ -1791,13 +1825,13 @@ private fun LibrarySourcesCard(
                             pluralStringResource(
                                 R.plurals.library_scan_paused,
                                 progress.scannedTrackCount,
-                                progress.sourceName,
+                                scanSourceName(progress),
                                 progress.scannedTrackCount,
                             )
                         } else {
                             stringResource(
                                 R.string.library_scanning_source,
-                                progress.sourceName,
+                                scanSourceName(progress),
                             )
                         },
                         style = MaterialTheme.typography.bodySmall,
@@ -1886,12 +1920,29 @@ private fun LibrarySourcesCard(
 @Composable
 private fun LibrarySourcesSheet(
     folders: List<LibrarySource>,
+    storage: StorageSourceRow?,
+    onTurnOffStorage: () -> Unit,
+    onRemoveStorage: () -> Unit,
     scanInProgress: Boolean,
     onDismiss: () -> Unit,
     onAddLibraryFolder: () -> Unit,
     onRemove: (String) -> Unit,
 ) {
     var pendingRemoval by remember { mutableStateOf<LibrarySource?>(null) }
+    var pendingStorageRemoval by remember { mutableStateOf(false) }
+    if (pendingStorageRemoval) {
+        ConfirmDestructiveDialog(
+            title = stringResource(R.string.library_full_scan_remove_title),
+            body = stringResource(R.string.library_full_scan_remove_body),
+            confirmLabel = stringResource(R.string.remove_music_folder),
+            onConfirm = {
+                pendingStorageRemoval = false
+                onRemoveStorage()
+            },
+            onDismiss = { pendingStorageRemoval = false },
+            tag = "vesqen.library.source.storage.remove-confirm",
+        )
+    }
     pendingRemoval?.let { source ->
         ConfirmDestructiveDialog(
             title = stringResource(R.string.remove_folder_confirm_title),
@@ -1932,6 +1983,14 @@ private fun LibrarySourcesSheet(
             }
             Spacer(Modifier.height(VesqenSpacing.sm))
             LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                if (storage != null) item(key = LibrarySourceId.STORAGE) {
+                    StorageSourceSheetRow(
+                        row = storage,
+                        enabled = !scanInProgress,
+                        onTurnOff = onTurnOffStorage,
+                        onRemove = { pendingStorageRemoval = true },
+                    )
+                }
                 items(items = folders, key = LibrarySource::id) { source ->
                     Row(
                         modifier = Modifier
@@ -2111,6 +2170,58 @@ private fun UnmatchedRecordItem(
 /** Artist, album and duration: the files share a name and size, so these tell the songs apart. */
 private fun unmatchedTrackDetails(track: AudioTrack): String =
     listOf(track.displaySubtitle(), formatDuration(track.durationMs)).filter(String::isNotBlank).joinToString(" · ")
+
+/** #249: the whole-storage scan's row in the music sources sheet. */
+internal sealed interface StorageSourceRow {
+    /** The GitHub build, with the scan on; [source] exists once it first ran. */
+    data class Scan(val source: LibrarySource?, val needsPermission: Boolean) : StorageSourceRow
+
+    /** Rows an earlier GitHub install's scan found, which this build cannot open. */
+    data class OtherBuild(val trackCount: Int) : StorageSourceRow
+}
+
+@Composable
+private fun StorageSourceSheetRow(row: StorageSourceRow, enabled: Boolean, onTurnOff: () -> Unit, onRemove: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = VesqenSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(stringResource(R.string.library_full_scan_source), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = when (row) {
+                    is StorageSourceRow.Scan -> when {
+                        row.needsPermission -> stringResource(R.string.library_full_scan_needs_permission)
+                        row.source == null -> pluralStringResource(R.plurals.library_source_track_count, 0, 0)
+                        else -> sourceStatusText(row.source)
+                    }
+                    is StorageSourceRow.OtherBuild ->
+                        pluralStringResource(R.plurals.library_full_scan_play_unavailable, row.trackCount, row.trackCount)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        // Turning the scan off keeps its rows; only where it cannot run are they removed.
+        val turnsOff = row is StorageSourceRow.Scan
+        TextButton(
+            enabled = enabled,
+            onClick = if (turnsOff) onTurnOff else onRemove,
+            modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.library.source.storage.${if (turnsOff) "turn-off" else "remove"}"),
+        ) {
+            Text(stringResource(if (turnsOff) R.string.full_scan_turn_off else R.string.remove_music_folder))
+        }
+    }
+}
+
+/** The whole-storage scan's name in the scan progress, in the user's language (#249). */
+@Composable
+private fun scanSourceName(progress: LibraryScanProgress): String =
+    if (progress.sourceId == LibrarySourceId.forScan(LibrarySourceId.STORAGE)) {
+        stringResource(R.string.library_full_scan_source)
+    } else {
+        progress.sourceName
+    }
 
 @Composable
 private fun sourceStatusText(source: LibrarySource): String = when {

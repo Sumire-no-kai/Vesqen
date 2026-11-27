@@ -10,6 +10,7 @@ import android.os.Build
 import android.provider.DocumentsContract
 import androidx.core.database.sqlite.transaction
 import java.io.Closeable
+import java.io.File
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -208,6 +209,22 @@ internal class LibraryCatalogStore internal constructor(
         return requireNotNull(findSource(LibrarySourceId.DEVICE))
     }
 
+    /** #249: the whole-storage scan's one source, created when the scan is first turned on. */
+    fun ensureStorageSource(): StoredLibrarySource {
+        findSource(LibrarySourceId.STORAGE)?.let { return it }
+        writableDatabase.insertOrThrow(
+            SOURCES_TABLE,
+            null,
+            ContentValues().apply {
+                put(SOURCE_ID, LibrarySourceId.STORAGE)
+                put(SOURCE_KIND, LibrarySourceKind.STORAGE.name)
+                put(SOURCE_DISPLAY_NAME, STORAGE_SOURCE_NAME)
+                put(SOURCE_SCAN_STATE, LibraryScanState.IDLE.name)
+            },
+        )
+        return requireNotNull(findSource(LibrarySourceId.STORAGE))
+    }
+
     fun upsertFolderSource(treeUri: String, displayName: String) {
         val sourceId = LibrarySourceId.forTree(treeUri)
         val values = ContentValues().apply {
@@ -237,13 +254,15 @@ internal class LibraryCatalogStore internal constructor(
     /**
      * Removes a folder and its rows. Since one file is one row (#359), no other source holds a row of
      * its own for this folder's files: a row whose file lies inside another folder of
-     * [readableTreeUris] moves to that folder, and one whose file MediaStore lists
-     * ([listedDeviceFiles]) to the device library, each with its ID and data.
+     * [readableTreeUris] moves to that folder, one whose file MediaStore lists ([listedDeviceFiles])
+     * to the device library, and, while the whole-storage scan runs ([storageRoots], #249), any other
+     * file still on its volume to that scan, each with its ID and data.
      */
     fun removeFolderSource(
         sourceId: String,
         readableTreeUris: Set<String> = emptySet(),
         listedDeviceFiles: Collection<ListedMediaStoreFile> = emptyList(),
+        storageRoots: Map<String, File> = emptyMap(),
     ): String? {
         val source = findSource(sourceId) ?: return null
         if (source.kind != LibrarySourceKind.FOLDER) return null
@@ -258,10 +277,97 @@ internal class LibraryCatalogStore internal constructor(
             if (listedByKey.isNotEmpty() && findSource(LibrarySourceId.DEVICE) != null) {
                 handOverToDeviceLibrary(this, sourceId, listedByKey, merges)
             }
+            if (storageRoots.isNotEmpty() && findSource(LibrarySourceId.STORAGE) != null) {
+                handOverToStorageScan(this, sourceId, storageRoots, merges)
+            }
             delete(TRACKS_TABLE, "$TRACK_SOURCE_ID = ?", arrayOf(sourceId))
             delete(SOURCES_TABLE, "$SOURCE_ID = ?", arrayOf(sourceId))
         }
         return source.treeUri
+    }
+
+    /**
+     * #249: removes the whole-storage scan's rows where the GitHub build's scan cannot run, such as in
+     * the Play build. A file MediaStore lists ([listedDeviceFiles]) stays as the device library's row,
+     * with its ID and data; the others go. Returns whether there was such a source.
+     */
+    fun removeStorageSource(listedDeviceFiles: Collection<ListedMediaStoreFile> = emptyList()): Boolean {
+        findSource(LibrarySourceId.STORAGE) ?: return false
+        val listedByKey = listedDeviceFiles.filter { it.locationKey != null }.associateBy { it.locationKey }
+        withTrackMerges { merges ->
+            if (listedByKey.isNotEmpty() && findSource(LibrarySourceId.DEVICE) != null) {
+                handOverToDeviceLibrary(this, LibrarySourceId.STORAGE, listedByKey, merges)
+            }
+            delete(TRACKS_TABLE, "$TRACK_SOURCE_ID = ?", arrayOf(LibrarySourceId.STORAGE))
+            delete(SOURCES_TABLE, "$SOURCE_ID = ?", arrayOf(LibrarySourceId.STORAGE))
+        }
+        return true
+    }
+
+    /**
+     * A removed folder's row moves to the whole-storage scan while its file is still on its volume.
+     * The document ID of Android's storage provider names the volume and the path, in their case.
+     */
+    private fun handOverToStorageScan(
+        database: SQLiteDatabase,
+        sourceId: String,
+        storageRoots: Map<String, File>,
+        merges: TrackMerges,
+    ) {
+        val rows = database.query(
+            TRACKS_TABLE,
+            arrayOf(TRACK_ID, TRACK_REMOTE_ID, TRACK_ALBUM_ARTWORK_URI),
+            "$TRACK_SOURCE_ID = ? AND $TRACK_LOCATION_KEY IS NOT NULL AND $NOT_HIDDEN",
+            arrayOf(sourceId),
+            null,
+            null,
+            null,
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add(Triple(cursor.getLong(0), cursor.getString(1), cursor.getStringOrNull(TRACK_ALBUM_ARTWORK_URI)))
+            }
+        }
+        rows.forEach { (trackId, documentId, artworkUri) ->
+            val file = storageFile(documentId, storageRoots)?.takeIf(File::isFile) ?: return@forEach
+            val storageTrackId = database.query(
+                TRACKS_TABLE,
+                arrayOf(TRACK_ID),
+                "$TRACK_SOURCE_ID = ? AND $TRACK_REMOTE_ID = ?",
+                arrayOf(LibrarySourceId.STORAGE, file.path),
+                null,
+                null,
+                null,
+            ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else null }
+            if (storageTrackId != null) {
+                merges.merge(from = trackId, into = storageTrackId)
+                foldUserState(database, into = readTrackState(database, storageTrackId), from = readTrackState(database, trackId))
+                check(database.delete(TRACKS_TABLE, "$TRACK_ID = ?", arrayOf(trackId.toString())) == 1)
+            } else {
+                // The next scan finds the file under this path and reads it again.
+                val cover = artworkUri?.let { uri ->
+                    runCatching { DocumentsContract.getDocumentId(Uri.parse(uri)) }.getOrNull()?.let { storageFile(it, storageRoots) }
+                }
+                database.update(
+                    TRACKS_TABLE,
+                    ContentValues().apply {
+                        put(TRACK_SOURCE_ID, LibrarySourceId.STORAGE)
+                        put(TRACK_REMOTE_ID, file.path)
+                        put(TRACK_CONTENT_URI, Uri.fromFile(file).toString())
+                        putNullableString(TRACK_ALBUM_ARTWORK_URI, cover?.let { Uri.fromFile(it).toString() })
+                    },
+                    "$TRACK_ID = ?",
+                    arrayOf(trackId.toString()),
+                )
+            }
+        }
+    }
+
+    /** The file a document of Android's storage provider names, on one of [storageRoots]. */
+    private fun storageFile(documentId: String, storageRoots: Map<String, File>): File? {
+        val volume = documentId.substringBefore(':', missingDelimiterValue = "").lowercase()
+        val root = storageRoots[volume] ?: return null
+        val path = documentId.substringAfter(':').trim('/').takeIf(String::isNotEmpty) ?: return null
+        return File(root, path)
     }
 
     private fun handOverToDeviceLibrary(
@@ -935,8 +1041,9 @@ internal class LibraryCatalogStore internal constructor(
         enriched: () -> LibraryTrackCandidate,
     ) {
         val key = candidate.locationKey
+        val owner = key?.let(owners::get)
         if (
-            key != null && owners[key]?.playable == true &&
+            owner != null && owner.playable && sourceRank(owner.sourceId) <= sourceRank(LibrarySourceId.DEVICE) &&
             key !in scan.deviceLocationKeys && !scan.identities.hasRowFor(candidate)
         ) {
             return
@@ -950,10 +1057,12 @@ internal class LibraryCatalogStore internal constructor(
         owners: Map<String, LocationOwner> = emptyMap(),
     ) {
         val plan = scan.identities.plan(candidate)
-        // #359: a file whose row another source cannot play now keeps that row, its ID and the
-        // user's data, and MediaStore becomes its source.
+        // #359, #249: a file whose row another source cannot play now, or the whole-storage scan holds,
+        // keeps that row, its ID and the user's data, and MediaStore becomes its source.
         val takenOverTrackId = if (plan.targetTrackId == null) {
-            candidate.locationKey?.let(owners::get)?.takeUnless(LocationOwner::playable)?.trackId
+            candidate.locationKey?.let(owners::get)
+                ?.takeIf { !it.playable || sourceRank(it.sourceId) > sourceRank(LibrarySourceId.DEVICE) }
+                ?.trackId
         } else {
             null
         }
@@ -1046,23 +1155,24 @@ internal class LibraryCatalogStore internal constructor(
     }
 
     /**
-     * A folder scan's file that has no unchanged row (#359). An added folder holds its own files, so
-     * it takes over MediaStore's row for one, with its ID and the user's data: its covers and same-name
-     * lyrics are read the folder's way, on every Android version. Another added folder that plays the
-     * file keeps it, and the file is not read: [candidate], which reads it, runs only for a write; one
-     * that cannot play it now gives its row up. A file the folder already has a row for keeps it, even
-     * beside another source's, until [mergeDuplicateLocations] makes them one.
+     * A folder's or the whole-storage scan's file that has no unchanged row (#359, #249). A source
+     * takes over the row of one that ranks below it ([sourceRank]), with its ID and the user's data: an
+     * added folder takes MediaStore's, so its covers and same-name lyrics are read the folder's way on
+     * every Android version. A file that a source of the same or a higher rank plays stays its row and
+     * is not read: [candidate], which reads it, runs only for a write. A row whose source cannot play
+     * it now is given up to any source. A file the source already has a row for keeps it, even beside
+     * another source's, until [mergeDuplicateLocations] makes them one.
      */
-    fun writeFolderTrack(
+    fun writeSourceTrack(
         session: SourceScanSession,
-        documentId: String,
+        remoteId: String,
         locationKey: String?,
         owners: Map<String, LocationOwner>,
         candidate: () -> LibraryTrackCandidate,
     ) {
         val owner = locationKey?.let(owners::get)
-        if (owner != null && !hasTrack(session.sourceId, documentId)) {
-            if (owner.sourceId == LibrarySourceId.DEVICE || !owner.playable) {
+        if (owner != null && !hasTrack(session.sourceId, remoteId)) {
+            if (sourceRank(session.sourceId) < sourceRank(owner.sourceId) || !owner.playable) {
                 upsertTrack(session, candidate(), takeOverTrackId = owner.trackId)
             }
             return
@@ -1143,16 +1253,16 @@ internal class LibraryCatalogStore internal constructor(
     /**
      * #359: rows of different sources that play the same file now become one, as catalogs before
      * #359 stored the songs of an added folder that MediaStore lists as well. The row of the first
-     * source keeps its ID: folders before the device library, as a folder holds its own files
-     * ([writeFolderTrack]), and older folders before newer ones;
+     * source keeps its ID, in the order of [sourceRank] (folders, the device library, the
+     * whole-storage scan; [writeSourceTrack]) and older folders before newer ones;
      * the others' favorites, plays and playlist places fold into it ([foldUserState]) and they go,
      * which [mergeFollower] passes on to the saved queue, listening history and imported lyrics.
      * Rows their source cannot play now stay as they are. Returns how many rows went.
      */
     fun mergeDuplicateLocations(isPlayable: (sourceId: String, contentUri: String) -> Boolean): Int = withTrackMerges { merges ->
         val precedence = rawQuery(
-            "SELECT $SOURCE_ID FROM $SOURCES_TABLE ORDER BY $SOURCE_ID = ?, rowid",
-            arrayOf(LibrarySourceId.DEVICE),
+            "SELECT $SOURCE_ID FROM $SOURCES_TABLE ORDER BY CASE $SOURCE_ID WHEN ? THEN 1 WHEN ? THEN 2 ELSE 0 END, rowid",
+            arrayOf(LibrarySourceId.DEVICE, LibrarySourceId.STORAGE),
         ).use { cursor ->
             buildMap { while (cursor.moveToNext()) put(cursor.getString(0), size) }
         }
@@ -1219,23 +1329,40 @@ internal class LibraryCatalogStore internal constructor(
         )
     }
 
+    /**
+     * #249: completes the whole-storage scan like a folder's, but only on the volumes it walked
+     * ([scannedVolumeIds]): the rows of a card or USB drive that is not mounted stay, hidden, until
+     * it is back.
+     */
+    fun completeStorageScan(session: SourceScanSession, scannedVolumeIds: Collection<String>) {
+        require(session.sourceId == LibrarySourceId.STORAGE)
+        require(scannedVolumeIds.isNotEmpty())
+        completeSourceScan(
+            session = session,
+            generation = null,
+            prunableMediaStoreVolumes = null,
+            prunableStorageVolumes = scannedVolumeIds.toSet(),
+        )
+    }
+
     private fun completeSourceScan(
         session: SourceScanSession,
         generation: String?,
         prunableMediaStoreVolumes: Set<String>?,
+        prunableStorageVolumes: Set<String>? = null,
     ) {
         withTrackMerges { merges ->
             val database = this
-            val prunePatterns = prunableMediaStoreVolumes?.map { volumeName ->
-                "content://media/$volumeName/*"
-            }
+            val prunePatterns = prunableMediaStoreVolumes?.map { volumeName -> "content://media/$volumeName/*" }
+                ?: prunableStorageVolumes?.map { volumeId -> "$volumeId:*" }
+            val prunedColumn = if (prunableMediaStoreVolumes != null) TRACK_CONTENT_URI else TRACK_LOCATION_KEY
             val pruneSelection = buildString {
                 append("$TRACK_SOURCE_ID = ? AND $TRACK_SEEN_EPOCH != ?")
                 if (prunePatterns != null) {
                     append(" AND (")
                     append(
                         prunePatterns.joinToString(separator = " OR ") {
-                            "$TRACK_CONTENT_URI GLOB ?"
+                            "$prunedColumn GLOB ?"
                         },
                     )
                     append(")")
@@ -1246,7 +1373,7 @@ internal class LibraryCatalogStore internal constructor(
                 add(session.epoch.toString())
                 if (prunePatterns != null) addAll(prunePatterns)
             }.toTypedArray()
-            if (prunePatterns != null) {
+            if (prunableMediaStoreVolumes != null) {
                 // A cleared or half-rebuilt MediaStore lists nothing yet for files it still holds,
                 // and a completed scan cannot tell. Rows with favorites, plays or playlist places are
                 // therefore hidden like displaced rows instead of deleted, and their file reattaches
@@ -1258,8 +1385,8 @@ internal class LibraryCatalogStore internal constructor(
                     pruneArguments,
                 )
             }
-            val keepsUserState = prunePatterns != null || session.sourceId != LibrarySourceId.DEVICE
-            if (prunePatterns == null && session.sourceId != LibrarySourceId.DEVICE) {
+            val keepsUserState = prunableMediaStoreVolumes != null || session.sourceId != LibrarySourceId.DEVICE
+            if (prunableMediaStoreVolumes == null && session.sourceId != LibrarySourceId.DEVICE) {
                 // A file renamed or moved inside an added folder comes back under a new document
                 // ID, so a scan wrote it as a new row. Its old row, with the user's data, takes that
                 // file over; rows still unmatched are hidden until their file is listed again, like
@@ -1930,6 +2057,7 @@ internal class LibraryCatalogStore internal constructor(
         private const val DATABASE_NAME = "library-catalog.db"
         private const val DATABASE_VERSION = 5
         private const val DEVICE_SOURCE_NAME = "Device music"
+        private const val STORAGE_SOURCE_NAME = "All storage"
 
         private const val SOURCES_TABLE = "library_sources"
         private const val SOURCE_ID = "source_id"

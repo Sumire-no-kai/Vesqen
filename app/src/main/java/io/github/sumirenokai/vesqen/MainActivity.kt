@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import io.github.sumirenokai.vesqen.ui.LocalStorageScan
 import io.github.sumirenokai.vesqen.ui.theme.VesqenTheme
 import io.github.sumirenokai.vesqen.ui.VesqenApp
 import io.github.sumirenokai.vesqen.ui.screens.DirectUsbVolumeKeyOverlay
@@ -45,6 +46,7 @@ class MainActivity : ComponentActivity() {
                     LocalPlaybackInterruptions provides (application as VesqenApplication).playbackInterruptions,
                     LocalUnplayableTrackSettings provides (application as VesqenApplication).unplayableTracks,
                     LocalDsdConversionSettings provides (application as VesqenApplication).dsdConversion,
+                    LocalStorageScan provides (application as VesqenApplication).storageScan,
                 ) {
                     Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
                         VesqenApp(openPremiumRequest = premiumRequests.intValue)

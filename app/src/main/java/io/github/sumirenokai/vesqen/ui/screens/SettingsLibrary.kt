@@ -1,5 +1,6 @@
 package io.github.sumirenokai.vesqen.ui.screens
 
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -14,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -23,15 +25,22 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.library.ArtistSplitSettings
 import io.github.sumirenokai.vesqen.library.DefaultArtistSeparators
 import io.github.sumirenokai.vesqen.library.DefaultKeptArtistNames
+import io.github.sumirenokai.vesqen.library.LibraryScanState
+import io.github.sumirenokai.vesqen.library.LibrarySource
+import io.github.sumirenokai.vesqen.library.StorageScanAccess
 import io.github.sumirenokai.vesqen.library.parseArtistSeparators
 import io.github.sumirenokai.vesqen.library.parseKeptArtistNames
+import io.github.sumirenokai.vesqen.ui.StorageScanFlow
 import io.github.sumirenokai.vesqen.ui.components.PaperDivider
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
@@ -47,6 +56,9 @@ internal fun SettingsLibraryGroup(
     artistSplit: ArtistSplitSettings,
     onArtistSplitChange: (ArtistSplitSettings) -> Unit,
     onEditList: (ArtistSplitList) -> Unit,
+    storageScan: StorageScanFlow? = null,
+    storageSource: LibrarySource? = null,
+    storageScanning: Boolean = false,
 ) {
     val motionMillis = rememberVesqenMotionPolicy().stateChangeMillis
     val none = stringResource(R.string.settings_artist_list_empty)
@@ -54,6 +66,10 @@ internal fun SettingsLibraryGroup(
         title = stringResource(R.string.settings_library),
         modifier = Modifier.testTag("vesqen.settings.section.library"),
     ) {
+        if (storageScan != null) {
+            StorageScanRows(storageScan, storageSource, storageScanning)
+            PaperDivider()
+        }
         SettingsSwitchRow(
             title = stringResource(R.string.settings_artist_split),
             description = stringResource(R.string.settings_artist_split_body),
@@ -84,6 +100,54 @@ internal fun SettingsLibraryGroup(
                 )
             }
         }
+    }
+}
+
+/**
+ * #249: the GitHub build's whole-storage scan, the Library group's first row. The switch keeps the
+ * user's choice while Android withdraws the permission; the text under it says what holds it back, and
+ * a second row leads to the system page that changes it.
+ */
+@Composable
+private fun StorageScanRows(flow: StorageScanFlow, source: LibrarySource?, scanning: Boolean) {
+    val enabled by flow.scan.enabled.collectAsStateWithLifecycle()
+    val access = flow.access
+    val unavailable = access == StorageScanAccess.UNAVAILABLE
+    val permissionOff = enabled && access == StorageScanAccess.NEEDS_PERMISSION
+    val description = when {
+        unavailable -> stringResource(R.string.settings_full_scan_unavailable)
+        permissionOff -> stringResource(R.string.settings_full_scan_permission_off)
+        enabled && scanning -> stringResource(R.string.settings_full_scan_scanning)
+        enabled && source?.scanState == LibraryScanState.PAUSED -> stringResource(R.string.library_source_paused)
+        enabled && source != null -> pluralStringResource(R.plurals.library_source_track_count, source.trackCount, source.trackCount)
+        enabled -> stringResource(R.string.settings_full_scan_body)
+        else -> flow.note?.let { stringResource(it) } ?: stringResource(R.string.settings_full_scan_body)
+    }
+    SettingsSwitchRow(
+        title = stringResource(R.string.settings_full_scan),
+        description = description,
+        descriptionColor = if (permissionOff) MaterialTheme.colorScheme.error else Color.Unspecified,
+        checked = enabled && !unavailable,
+        enabled = !unavailable,
+        onCheckedChange = { on -> if (on) flow.turnOn() else flow.turnOff() },
+        modifier = Modifier.testTag("vesqen.settings.storage-scan"),
+    )
+    val secondRow = when {
+        unavailable -> null
+        permissionOff -> R.string.settings_full_scan_allow_again
+        // Android 11 and later: the permission stays allowed after the switch goes off, until removed there.
+        !enabled && access == StorageScanAccess.GRANTED && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ->
+            R.string.settings_full_scan_revoke
+        !enabled && flow.storageRefused -> R.string.allow_music_access_in_settings
+        else -> null
+    }
+    secondRow?.let { title ->
+        PaperDivider()
+        SettingsRow(
+            title = stringResource(title),
+            onClick = flow::openPermissionPage,
+            modifier = Modifier.testTag("vesqen.settings.storage-scan.permission"),
+        )
     }
 }
 
