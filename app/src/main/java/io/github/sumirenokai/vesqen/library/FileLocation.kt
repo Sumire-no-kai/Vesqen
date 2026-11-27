@@ -25,7 +25,7 @@ internal fun fileLocationKey(volume: String, path: String): String? {
  */
 internal fun mediaStoreLocationKey(volumeName: String, relativePath: String, displayName: String): String? {
     val volume = when (volumeName) {
-        MEDIA_STORE_PRIMARY_VOLUME -> PRIMARY_VOLUME
+        MEDIA_STORE_PRIMARY_VOLUME -> PRIMARY_STORAGE_VOLUME
         MEDIA_STORE_ALL_VOLUMES -> return null
         else -> volumeName
     }
@@ -36,8 +36,8 @@ internal fun mediaStoreLocationKey(volumeName: String, relativePath: String, dis
 /** A MediaStore row on Android 9, whose `DATA` column holds the file's path. */
 internal fun legacyDataLocationKey(dataPath: String): String? {
     val path = dataPath.replace('\\', '/')
-    EMULATED_PATH.matchEntire(path)?.let { return fileLocationKey(PRIMARY_VOLUME, it.groupValues[1]) }
-    LEGACY_SDCARD_PATH.matchEntire(path)?.let { return fileLocationKey(PRIMARY_VOLUME, it.groupValues[1]) }
+    EMULATED_PATH.matchEntire(path)?.let { return fileLocationKey(PRIMARY_STORAGE_VOLUME, it.groupValues[1]) }
+    LEGACY_SDCARD_PATH.matchEntire(path)?.let { return fileLocationKey(PRIMARY_STORAGE_VOLUME, it.groupValues[1]) }
     VOLUME_PATH.matchEntire(path)?.let { match ->
         val volume = match.groupValues[1]
         if (volume == "emulated" || volume == "self") return null
@@ -76,7 +76,8 @@ internal fun documentTreeLocationPrefix(treeUri: Uri): String? {
 }
 
 internal const val EXTERNAL_STORAGE_AUTHORITY = "com.android.externalstorage.documents"
-private const val PRIMARY_VOLUME = "primary"
+/** The phone's own shared storage, as Android's storage provider names it. */
+internal const val PRIMARY_STORAGE_VOLUME = "primary"
 private const val HOME_ROOT = "home"
 private const val MEDIA_STORE_PRIMARY_VOLUME = "external_primary"
 private const val MEDIA_STORE_ALL_VOLUMES = "external"

@@ -1,8 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- The GitHub build installs its own updates; the Play build must not hold this permission. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <application>
+    <!-- #249: the whole-storage scan, off until the user turns it on and allows it in system settings.
+         Vesqen only reads supported audio, covers and same-name lyrics with it. Play's policy does not
+         allow this permission for media access, so the Play build must not hold it: the Play release's
+         merged manifest is checked against an allowlist (checkPlayReleasePermissions). -->
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+    <!-- #249: on Android 10 the same scan reads shared storage with the storage permission, where
+         Android honours this flag; Vesqen checks Environment.isExternalStorageLegacy() before it scans. -->
+    <application android:requestLegacyExternalStorage="true">
         <activity
             android:name="io.github.sumirenokai.vesqen.updates.UpdateInstallActivity"
             android:exported="false"

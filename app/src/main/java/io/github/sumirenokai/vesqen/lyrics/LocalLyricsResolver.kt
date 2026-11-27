@@ -10,6 +10,8 @@ import android.util.LruCache
 import androidx.core.net.toUri
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.library.extractBoundedEmbeddedLyrics
+import java.io.File
+import java.io.FileInputStream
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.InputStream
@@ -155,15 +157,18 @@ internal class LocalLyricsResolver(
         // result of a lower-priority source would hide that source until the next completed refresh.
         var complete = true
         // Asked only when the sources before it had nothing, so imported lyrics need no lookup.
+        // #249: a file the whole-storage scan found has its folder at hand.
+        val localFile = uri.takeIf { it.scheme == ContentResolver.SCHEME_FILE }?.path?.let(::File)
         val folderUri by lazy(LazyThreadSafetyMode.NONE) {
-            if (DocumentsContract.isTreeUri(uri)) uri else coveringFolderUri(uri, onFailure = { complete = false })
+            if (localFile != null || DocumentsContract.isTreeUri(uri)) uri else coveringFolderUri(uri, onFailure = { complete = false })
         }
         val picked = pickLyrics { source ->
             val read = when (source) {
                 LyricsSource.Imported -> readImported(track.id) ?: SourceLyrics.Unreadable(UnreadableReason.ReadFailed)
                 LyricsSource.SameNameFile -> when (val folder = folderUri) {
                     null -> SourceLyrics.Absent
-                    else -> readSameNameFile(folder, track.fileName) ?: SourceLyrics.Absent.also { complete = false }
+                    else -> (localFile?.let(::readSameNameLocalFile) ?: readSameNameFile(folder, track.fileName))
+                        ?: SourceLyrics.Absent.also { complete = false }
                 }
                 LyricsSource.Embedded -> readEmbedded(uri, track.fileSizeBytes)
             }
@@ -247,6 +252,23 @@ internal class LocalLyricsResolver(
         val documentUri = DocumentsContract.buildDocumentUriUsingTree(trackUri, documentId)
         val bytes = readProviderLyrics { contentResolver.openInputStream(documentUri) }
             ?: return SourceLyrics.Unreadable(UnreadableReason.ReadFailed)
+        return if (bytes.size > MAX_LYRICS_TEXT_BYTES) SourceLyrics.Unreadable(UnreadableReason.TooLarge) else readLyricsFile(bytes)
+    }
+
+    /**
+     * #249: the same-name `.lrc` beside a file the whole-storage scan found, matched as in a folder.
+     * Null when the folder could not be listed now.
+     */
+    private fun readSameNameLocalFile(audio: File): SourceLyrics? {
+        val folder = audio.parentFile ?: return SourceLyrics.Absent
+        val candidates = folderLyricsFiles[folder.path] ?: (
+            folder.listFiles()
+                ?.filter { it.isFile && it.name.endsWith(LRC_EXTENSION, ignoreCase = true) }
+                ?.map { LyricsFileCandidate(it.path, it.name) }
+                ?: return null
+            ).also { folderLyricsFiles.put(folder.path, it) }
+        val path = sameNameLyricsDocumentId(audio.name, candidates) ?: return SourceLyrics.Absent
+        val bytes = readProviderLyrics { FileInputStream(path) } ?: return SourceLyrics.Unreadable(UnreadableReason.ReadFailed)
         return if (bytes.size > MAX_LYRICS_TEXT_BYTES) SourceLyrics.Unreadable(UnreadableReason.TooLarge) else readLyricsFile(bytes)
     }
 

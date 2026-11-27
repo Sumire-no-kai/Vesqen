@@ -34,6 +34,14 @@
         <item quantity="one">%1$d track</item>
         <item quantity="other">%1$d tracks</item>
     </plurals>
+    <string name="library_full_scan_source">All storage</string>
+    <string name="library_full_scan_needs_permission">All files access needs to be allowed again.</string>
+    <string name="library_full_scan_remove_title">Remove these songs?</string>
+    <string name="library_full_scan_remove_body">Vesqen will remove the songs found by the GitHub version\'s scan from its library, along with their favorites, play counts, places in playlists and imported lyrics. Songs the system media library still lists stay. The files remain on your phone.</string>
+    <plurals name="library_full_scan_play_unavailable">
+        <item quantity="one">The track found by the GitHub version\'s scan cannot be opened in this version. Adding its folder restores it.</item>
+        <item quantity="other">The %1$d tracks found by the GitHub version\'s scan cannot be opened in this version. Adding their folders restores them.</item>
+    </plurals>
     <string name="no_local_music">No music found</string>
     <string name="no_local_music_body">No music files were found on this phone. Add a music folder, or copy music to the phone and scan again.</string>
     <string name="library_no_access_title">No music yet</string>
@@ -166,6 +174,22 @@
     <string name="settings_usage_paused">Paused</string>
     <string name="settings_device_report">Export device report</string>
     <string name="settings_library">Library</string>
+    <string name="settings_full_scan">Scan all storage</string>
+    <string name="settings_full_scan_body">Finds music in phone storage, on memory cards and on USB drives, without adding folders one by one.</string>
+    <string name="settings_full_scan_scanning">Scanning all storage…</string>
+    <string name="settings_full_scan_permission_off">All files access is off. Songs found by this scan stay hidden until it is allowed again.</string>
+    <string name="settings_full_scan_allow_again">Allow again</string>
+    <string name="settings_full_scan_unavailable">Android on this phone does not let Vesqen scan all storage. Use Add music folder instead.</string>
+    <string name="settings_full_scan_not_allowed">All files access was not allowed, so this stays off.</string>
+    <string name="settings_full_scan_storage_not_allowed">Storage access was not allowed, so this stays off.</string>
+    <string name="settings_full_scan_revoke">Remove the permission in system settings</string>
+    <string name="full_scan_intro_body">When this is on, Vesqen looks for music in phone storage, on memory cards and on USB drives, so you do not need to add folders one by one.\n\nThis needs All files access for Vesqen in system settings. The permission lets an app read and change every file in storage. Vesqen reads only supported audio files, plus cover images and same-name lyrics files (.lrc) in the same folder, and it does not change, move or delete any file. It skips the Android folder, hidden folders and folders that contain a .nomedia file. What the scan finds stays on this phone.\n\nYou can turn this off here at any time, or remove the permission in system settings.</string>
+    <string name="full_scan_intro_body_legacy">When this is on, Vesqen looks for music in phone storage, on memory cards and on USB drives, so you do not need to add folders one by one.\n\nThis uses Android\'s storage permission; if it has not been allowed yet, Android asks when you turn this on. Vesqen reads only supported audio files, plus cover images and same-name lyrics files (.lrc) in the same folder, and it does not change, move or delete any file. It skips the Android folder, hidden folders and folders that contain a .nomedia file. What the scan finds stays on this phone.\n\nYou can turn this off here at any time.</string>
+    <string name="full_scan_turn_on">Turn on</string>
+    <string name="full_scan_off_title">Turn off storage scanning</string>
+    <string name="full_scan_off_body">Songs found only by this scan will be hidden from the library. Their favorites, play counts and playlist places are kept, and they return when you turn this on again. All files access stays allowed; you can remove it in system settings if you no longer need it.</string>
+    <string name="full_scan_turn_off">Turn off</string>
+    <string name="full_scan_settings_unavailable">System settings could not be opened.</string>
     <string name="settings_artist_split">Artist splitting</string>
     <string name="settings_artist_split_body">The Artists page lists each artist of a shared artist tag separately. The tags in your music files are not changed.</string>
     <string name="settings_artist_separators">Separators</string>

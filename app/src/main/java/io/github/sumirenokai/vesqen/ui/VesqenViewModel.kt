@@ -101,7 +101,9 @@ data class LyricsImportNotice(val id: Long, val trackId: Long, val result: Lyric
 
 class VesqenViewModel(application: Application) : AndroidViewModel(application) {
     private val catalog: LibraryCatalog =
-        AndroidLibraryCatalog(application, (application as VesqenApplication).libraryCatalogStore)
+        (application as VesqenApplication).let { app ->
+            AndroidLibraryCatalog(app, app.libraryCatalogStore, storageScan = app.storageScan)
+        }
     private val catalogRebuilds = (application as VesqenApplication).libraryCatalogStore.rebuilds
     private val cachedLibraryReader = LibrarySnapshotReader()
     private var libraryRefreshEpoch = 0L
@@ -461,6 +463,11 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
 
     fun removeLibraryFolder(sourceId: String) {
         mutateCatalog { catalog.removeFolder(sourceId) }
+    }
+
+    /** #249: drops the songs an earlier GitHub install's whole-storage scan found, where it cannot run. */
+    fun removeStorageSource() {
+        mutateCatalog { catalog.removeStorageSource() }
     }
 
     /** Renews the selected source in place; successful authorization starts an ordinary refresh. */

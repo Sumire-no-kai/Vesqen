@@ -46,6 +46,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.library.LibrarySource
+import io.github.sumirenokai.vesqen.ui.LocalStorageScan
 import io.github.sumirenokai.vesqen.ui.LocalUnplayableTrackSettings
 import io.github.sumirenokai.vesqen.library.ArtistSplitSettings
 import io.github.sumirenokai.vesqen.playback.DSD_SOURCE_CODE
@@ -56,8 +58,10 @@ import io.github.sumirenokai.vesqen.playback.UsbOutputPhase
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.premium.PremiumAccess
 import io.github.sumirenokai.vesqen.service.ServiceState
+import io.github.sumirenokai.vesqen.ui.StorageScanDialogs
 import io.github.sumirenokai.vesqen.ui.components.PaperCard
 import io.github.sumirenokai.vesqen.ui.components.PaperDivider
+import io.github.sumirenokai.vesqen.ui.rememberStorageScanFlow
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.TopLevelTitleAutoSize
 import io.github.sumirenokai.vesqen.ui.theme.pageTitle
@@ -97,8 +101,13 @@ fun SettingsScreen(
     onOpenPremium: () -> Unit = {},
     artistSplit: ArtistSplitSettings = ArtistSplitSettings(),
     onArtistSplitChange: (ArtistSplitSettings) -> Unit = {},
+    /** #249: the whole-storage scan's source, while one exists, and whether it is being read now. */
+    storageSource: LibrarySource? = null,
+    storageScanning: Boolean = false,
+    onRefreshLibrary: () -> Unit = {},
 ) {
     var editingArtistListName by rememberSaveable { mutableStateOf<String?>(null) }
+    val storageScan = LocalStorageScan.current?.let { rememberStorageScanFlow(it, onRefreshLibrary) }
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             modifier = Modifier
@@ -135,7 +144,16 @@ fun SettingsScreen(
                     )
                 }
             }
-            item { SettingsLibraryGroup(artistSplit, onArtistSplitChange, onEditList = { editingArtistListName = it.name }) }
+            item {
+                SettingsLibraryGroup(
+                    artistSplit = artistSplit,
+                    onArtistSplitChange = onArtistSplitChange,
+                    onEditList = { editingArtistListName = it.name },
+                    storageScan = storageScan,
+                    storageSource = storageSource,
+                    storageScanning = storageScanning,
+                )
+            }
             item { SettingsPrivacyGroup(usageStatistics, onOpenUsageStatistics, deviceReportAvailable, onOpenDeviceReport) }
             if (appUpdater != null) item { SettingsUpdatesGroup(appUpdater) }
             item {
@@ -193,6 +211,7 @@ fun SettingsScreen(
             }
         }
     }
+    storageScan?.let { StorageScanDialogs(it) }
     editingArtistListName?.let { name ->
         ArtistSplitListDialog(
             list = ArtistSplitList.valueOf(name),
@@ -586,6 +605,7 @@ internal fun SettingsSwitchRow(
     modifier: Modifier = Modifier,
     description: String? = null,
     enabled: Boolean = true,
+    descriptionColor: Color = Color.Unspecified,
 ) {
     Row(
         modifier = modifier
@@ -595,7 +615,7 @@ internal fun SettingsSwitchRow(
             .padding(horizontal = VesqenSpacing.md, vertical = VesqenSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SettingsRowText(title, description, Modifier.weight(1f))
+        SettingsRowText(title, description, Modifier.weight(1f), descriptionColor = descriptionColor)
         Spacer(Modifier.width(VesqenSpacing.sm))
         Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }

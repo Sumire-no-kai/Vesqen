@@ -9,7 +9,9 @@ import io.github.sumirenokai.vesqen.diagnostics.AndroidDiagnosticRecordingStore
 import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
 import io.github.sumirenokai.vesqen.library.AndroidLibraryRebuildNotice
 import io.github.sumirenokai.vesqen.library.LibraryCatalogStore
+import io.github.sumirenokai.vesqen.library.StorageScan
 import io.github.sumirenokai.vesqen.library.TrackMergeFollowers
+import io.github.sumirenokai.vesqen.library.createStorageScan
 import io.github.sumirenokai.vesqen.lyrics.LocalLyricsResolver
 import io.github.sumirenokai.vesqen.lyrics.mediaStoreCoveringDocumentUri
 import io.github.sumirenokai.vesqen.lyrics.LyricsStore
@@ -126,6 +128,9 @@ class VesqenApplication : Application() {
      * support question's play count share it, so each sees the others' writes; it stays open for
      * the life of the process, and nothing else may construct or close one.
      */
+    /** #249: the GitHub build's whole-storage scan, shared by every catalog; null in the Play build. */
+    internal val storageScan: StorageScan? by lazy { createStorageScan(this) }
+
     internal val libraryCatalogStore by lazy {
         // The saved queue names its songs by catalog ID, and a rebuilt catalog gives those IDs to
         // other songs (#165). The service and the Library drop what they hold when it is rebuilt.
