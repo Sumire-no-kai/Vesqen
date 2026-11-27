@@ -13,12 +13,13 @@ internal data class DsdConversion(
     val gainDb: Float = 0f,
 )
 
-internal enum class DsdOutputRateMode {
+/** [key] is what the Audio output page stores; it never changes. */
+internal enum class DsdOutputRateMode(val key: String) {
     /** 88.2 kHz from any DSD rate, 96 kHz from the 48 kHz family. */
-    UNIFORM,
+    UNIFORM("uniform"),
 
     /** DSD64 to 88.2 kHz, DSD128 and above to 176.4 kHz (192 kHz for the 48 kHz family). */
-    MULTIPLE,
+    MULTIPLE("multiple"),
 }
 
 internal const val DSD_MAX_GAIN_DB = 6f

@@ -325,6 +325,7 @@ fun NowScreen(
     onToggleFavorite: (Long, Boolean) -> Unit = { _, _ -> },
     onSetUsbOutputMode: (UsbOutputMode) -> Unit = {},
     onExplainStrictUsbUnavailable: () -> Unit = {},
+    onOpenAudioOutput: () -> Unit = {},
     lyrics: NowLyricsState = NowLyricsState(),
     loadLyrics: suspend (AudioTrack) -> TrackLyrics = { TrackLyrics.None(folderHint = false) },
     onToggleLyrics: () -> Unit = {},
@@ -478,6 +479,10 @@ fun NowScreen(
             onSetUsbOutputMode = onSetUsbOutputMode,
             onExplainStrictUsbUnavailable = onExplainStrictUsbUnavailable,
             onDismiss = { showOutputMode = false },
+            onOpenAudioOutput = {
+                showOutputMode = false
+                onOpenAudioOutput()
+            },
         )
     }
     if (showDetails && currentTrack != null) {
@@ -1594,6 +1599,7 @@ private fun OutputModeDialog(
     onSetUsbOutputMode: (UsbOutputMode) -> Unit,
     onExplainStrictUsbUnavailable: () -> Unit,
     onDismiss: () -> Unit,
+    onOpenAudioOutput: () -> Unit,
 ) {
     val strictUsbPlatformUnavailable = snapshot.usbOutputStatus.strictUnavailablePlatform != null
     val strictOn = snapshot.usbOutputStatus.mode == UsbOutputMode.STRICT_BIT_PERFECT
@@ -1648,6 +1654,13 @@ private fun OutputModeDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.player_output_done)) }
+        },
+        // #249: every output setting, the DSD ones included, is on Audio output; Back returns to Now.
+        dismissButton = {
+            TextButton(
+                onClick = onOpenAudioOutput,
+                modifier = Modifier.heightIn(min = 48.dp).testTag("vesqen.now.audio-output-settings"),
+            ) { Text(stringResource(R.string.player_output_settings)) }
         },
     )
 }

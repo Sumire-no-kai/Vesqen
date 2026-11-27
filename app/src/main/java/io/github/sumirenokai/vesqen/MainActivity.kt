@@ -24,6 +24,7 @@ import io.github.sumirenokai.vesqen.ui.screens.LocalDirectUsbVolume
 import io.github.sumirenokai.vesqen.ui.LocalPlaybackInterruptions
 import io.github.sumirenokai.vesqen.ui.LocalScreenOffKeepAlive
 import io.github.sumirenokai.vesqen.ui.LocalUnplayableTrackSettings
+import io.github.sumirenokai.vesqen.ui.screens.LocalDsdConversionSettings
 
 class MainActivity : ComponentActivity() {
     /** Counts requests to show the Pro features page, such as after an activation link (#120). */
@@ -43,6 +44,7 @@ class MainActivity : ComponentActivity() {
                     LocalScreenOffKeepAlive provides keepAlive,
                     LocalPlaybackInterruptions provides (application as VesqenApplication).playbackInterruptions,
                     LocalUnplayableTrackSettings provides (application as VesqenApplication).unplayableTracks,
+                    LocalDsdConversionSettings provides (application as VesqenApplication).dsdConversion,
                 ) {
                     Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
                         VesqenApp(openPremiumRequest = premiumRequests.intValue)

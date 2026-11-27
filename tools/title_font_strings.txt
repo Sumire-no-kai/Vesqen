@@ -16,3 +16,5 @@ report_title
 chain_pinned_output_speaker
 chain_pinned_output_wired
 chain_pinned_output_bluetooth
+settings_audio_output
+settings_premium

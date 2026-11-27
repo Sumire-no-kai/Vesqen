@@ -222,7 +222,7 @@ Flat paper by default. Grouping comes from one paper-raised card with a 1 dp hai
 
 ### Settings
 
-Groups in this order: Playback output (System / Strict USB, radio group; last, the "Skip tracks Android can't decode" switch, #344), Audio proof (Playback chain), Library (Artist splitting switch; while it is on, Separators and Names kept whole, each edited in a dialog with one text field, #168), Privacy & data (Usage statistics, Export device report), Updates (GitHub builds), Application (About, Privacy policy, Open source licenses), Advanced (Output verification records), then one footer line. Group titles are sans; each group is one paper card. When Strict USB is selected, a status box under the options says what happens next or why it stopped, never the option description again.
+Groups in this order: Playback output (Audio output row, which names the mode and says when the controls are not ready or strict output stopped; Pro features; last, the "Skip tracks Android can't decode" switch, #344), Audio proof (Playback chain), Library (Artist splitting switch; while it is on, Separators and Names kept whole, each edited in a dialog with one text field, #168), Privacy & data (Usage statistics, Export device report), Updates (GitHub builds), Application (About, Privacy policy, Open source licenses), Advanced (Output verification records), then one footer line. Group titles are sans; each group is one paper card. Audio output (#249), a page opened from that row and from Now's output-mode dialog, holds every output setting: Output mode (System / Strict USB, radio group; Direct USB output; Keep playing with the screen off), DSD gain (a switch, off by default, that shows a slider from +0.5 to +6.0 dB in 0.5 dB steps, drawn like the DAC volume bar) and DSD output sample rate (Fixed rate / Scale with DSD rate). When Strict USB is selected, a status box under the options says what happens next or why it stopped, never the option description again; after a trial ends it offers Pro features. The DSD groups stay adjustable in every mode, since they apply only to System output.
 
 ### About
 
@@ -286,6 +286,7 @@ Vesqen's voice is plain, concrete and calm. It tells people what happened and wh
 | Queue | 队列 |
 | System output | 系统输出 |
 | Strict USB output | 严格 USB 输出 |
+| Audio output | 音频输出 |
 | Usage statistics | 使用统计 |
 | Device report | 设备报告 |
 | Open source licenses | 开源许可 |

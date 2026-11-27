@@ -37,13 +37,10 @@ class ScreenOffKeepAliveUiTest {
         compose.setContent {
             VesqenTheme(darkTheme = false) {
                 CompositionLocalProvider(LocalScreenOffKeepAlive provides settings) {
-                    SettingsScreen(
+                    AudioOutputScreen(
                         outputStatus = UsbOutputStatus(mode = mode, phase = UsbOutputPhase.SYSTEM, directUsbAvailable = directUsbAvailable),
                         onSetUsbOutputMode = {},
-                        onOpenPlaybackChain = {},
-                        onImportVerificationRegistry = {},
-                        onOpenAbout = {},
-                        versionName = "2.0.0",
+                        onBack = {},
                     )
                 }
             }

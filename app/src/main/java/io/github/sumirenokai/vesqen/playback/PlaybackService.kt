@@ -356,7 +356,9 @@ class PlaybackService : MediaSessionService() {
         val telemetry = (application as VesqenApplication).telemetryRuntime
         val dataSourceFactory = DefaultDataSource.Factory(this)
             .setTransferListener(telemetry.transferListener)
-        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory, VesqenExtractorsFactory())
+        // #249: every DSD stream reads the Audio output page's settings when its file opens.
+        val dsdConversion = (application as VesqenApplication).dsdConversion
+        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory, VesqenExtractorsFactory(dsdConversion::conversion))
         val outputStateRepository = (application as VesqenApplication).usbOutputStateRepository
         // M7-4: off in release builds until 2.0.0-beta.1 (`vesqen.directUsb`).
         val directRoute = if (BuildConfig.DIRECT_USB_ENABLED) {
@@ -416,6 +418,11 @@ class PlaybackService : MediaSessionService() {
             onUnplayable = (application as VesqenApplication).deviceReportRuntime::recordUnplayableTrack,
         ).also { problemGuard = it }
         player.addListener(guard)
+        // A change reaches the next DSD track even when Media3 has already opened it.
+        serviceScope.launch {
+            var generation = 0L
+            dsdConversion.values.drop(1).collect { player.reopenNextDsdItem(++generation) }
+        }
         val problemNotification = PlaybackProblemNotification(this)
         serviceScope.launch {
             interruptions.current.collect { interruption ->
