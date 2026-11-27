@@ -17,6 +17,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
 import io.github.sumirenokai.vesqen.playback.DIRECT_USB_INTRODUCTION
+import io.github.sumirenokai.vesqen.playback.DSD_SOURCE_CODE
 import io.github.sumirenokai.vesqen.playback.FIXED_VOLUME_CONFIRMATION
 import io.github.sumirenokai.vesqen.playback.SYSTEM_USB_VOLUME_NOT_RESTORED
 import io.github.sumirenokai.vesqen.playback.OfficialMixerApiSupport
@@ -83,6 +84,15 @@ internal fun UsbOutputFailure.dialogAddsGenericAdvice(): Boolean = this != UsbOu
 /** A confirmation that lapsed or could not be saved is no fault of the DAC; its reason asks for playback again. */
 internal fun UsbOutputStatus.dialogAddsGenericAdvice(): Boolean =
     failure?.dialogAddsGenericAdvice() == true && decisionCode !in CONFIRMATION_FAILURES
+
+/**
+ * #249: a DSD file stops either strict path whatever DAC is connected, until DoP exists, so its advice
+ * names System output only and suggests no other DAC.
+ */
+internal val UsbOutputStatus.stoppedForDsd: Boolean
+    get() = decisionCode == DSD_SOURCE_CODE || decisionCode == DIRECT_DSD_CODE
+
+private const val DIRECT_DSD_CODE = "direct_usb.source_dsd"
 
 private val CONFIRMATION_FAILURES = setOf(
     "direct_usb.introduction_confirmation_failed",
@@ -161,6 +171,7 @@ internal fun StrictUsbFailureDialog(
             Text(
                 when {
                     openPremium != null -> stringResource(R.string.player_trial_ended_body, reason)
+                    status.stoppedForDsd -> stringResource(R.string.player_strict_failure_dsd_body, reason)
                     status.dialogAddsGenericAdvice() -> stringResource(R.string.player_strict_failure_body, reason)
                     else -> reason
                 },

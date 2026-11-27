@@ -290,6 +290,23 @@ class VesqenAppTest {
         composeRule.onNodeWithText(context.getString(R.string.player_strict_failure_body, reason)).assertIsDisplayed()
     }
 
+    /** #249: no DAC plays a DSD file in strict mode, so the dialog suggests System output only. */
+    @Test
+    fun a_dsd_stop_suggests_system_output_and_no_other_dac() {
+        val failure = UsbOutputStatus(
+            mode = UsbOutputMode.STRICT_BIT_PERFECT,
+            phase = UsbOutputPhase.FAILED,
+            failure = UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED,
+            decisionCode = "strict_usb.source_dsd",
+            generation = 1,
+            failureOrigin = UsbOutputFailureOrigin.USER_PLAYBACK,
+        )
+        render(activePlaybackState().let { it.copy(playback = it.playback.copy(usbOutputStatus = failure)) })
+        val reason = context.getString(R.string.usb_failure_dsd)
+        composeRule.onNodeWithText(context.getString(R.string.player_strict_failure_dsd_body, reason)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.player_strict_failure_body, reason)).assertDoesNotExist()
+    }
+
     @Test
     fun a_failed_undo_of_the_mixer_setting_says_how_to_retry_and_reappears() {
         val failure = UsbOutputStatus(

@@ -50,6 +50,19 @@ class StrictUsbFailurePolicyTest {
         assertFalse(failed(UsbOutputFailure.MIXER_CLEAR_FAILED, "mixer_clear_failed").dialogAddsGenericAdvice())
     }
 
+    @Test fun `a DSD stop on either strict path suggests no other DAC`() {
+        fun failed(code: String) = UsbOutputStatus(
+            mode = UsbOutputMode.STRICT_BIT_PERFECT,
+            phase = UsbOutputPhase.FAILED,
+            failure = UsbOutputFailure.SOURCE_FORMAT_UNSUPPORTED,
+            decisionCode = code,
+        )
+        assertTrue(failed("strict_usb.source_dsd").stoppedForDsd)
+        assertTrue(failed("direct_usb.source_dsd").stoppedForDsd)
+        assertFalse(failed("direct_usb.source_not_lossless").stoppedForDsd)
+        assertFalse(failed("strict_usb.source_format_unsupported").stoppedForDsd)
+    }
+
     @Test fun `a saved strict mode turns off even where it can never turn on`() {
         assertTrue(strictUsbSwitchEnabled(canSetMode = true, platformUnavailable = true, strictOn = true))
         assertFalse(strictUsbSwitchEnabled(canSetMode = true, platformUnavailable = true, strictOn = false))

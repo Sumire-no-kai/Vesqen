@@ -347,6 +347,7 @@
     <string name="player_output_mode_body">オフにすると Android のシステム出力を使います。オンにすると USB の bit-perfect 出力を必須とし、条件を満たさない場合は再生を停止します。オンにしただけでは、bit-perfect 出力の動作や外部検証が確認されたことにはなりません。</string>
     <string name="player_output_done">完了</string>
     <string name="player_strict_failure_body">%1$s\n\n厳格 USB 出力は自動でシステム出力に切り替わりません。対応する DAC を試すか、「システム出力」に切り替えてもう一度再生してください。</string>
+    <string name="player_strict_failure_dsd_body">%1$s\n\n厳格 USB 出力は自動でシステム出力に切り替わりません。「システム出力」に切り替えてもう一度再生してください。</string>
     <string name="player_use_system_output">システム出力を使う</string>
     <string name="player_keep_strict_output">厳格モードのままにする</string>
     <string name="chain_core_source">01 · ソースファイル</string>

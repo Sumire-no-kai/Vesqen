@@ -347,6 +347,7 @@
     <string name="player_output_mode_body">關閉：使用 Android 系統輸出。開啟：要求 USB bit-perfect 輸出；條件不符時停止播放。開啟開關並不代表 bit-perfect 已生效或已通過外部驗證。</string>
     <string name="player_output_done">完成</string>
     <string name="player_strict_failure_body">%1$s\n\n嚴格 USB 輸出不會自動切換為系統輸出。可以使用相容的 DAC 再試一次，或改用系統輸出後重新播放。</string>
+    <string name="player_strict_failure_dsd_body">%1$s\n\n嚴格 USB 輸出不會自動切換為系統輸出。請改用系統輸出後重新播放。</string>
     <string name="player_use_system_output">切換為系統輸出</string>
     <string name="player_keep_strict_output">保留嚴格模式</string>
     <string name="chain_core_source">01 · 來源檔案</string>
