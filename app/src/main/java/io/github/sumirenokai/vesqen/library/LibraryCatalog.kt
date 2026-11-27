@@ -167,7 +167,8 @@ internal class AndroidLibraryCatalog(
     // A scan of the folder must not run into its removal, so removal waits for any scan.
     override suspend fun removeFolder(sourceId: String): Unit = betweenScans {
         serialized {
-            val treeUri = store.removeFolderSource(sourceId) ?: return@serialized Unit
+            val treeUri = store.removeFolderSource(sourceId, readableTreeUris(), deviceFilesForFolderRemoval())
+                ?: return@serialized Unit
             try {
                 contentResolver.releasePersistableUriPermission(
                     treeUri.toUri(),
@@ -179,6 +180,22 @@ internal class AndroidLibraryCatalog(
                 // The provider may already have revoked or rejected the grant; the local source is
                 // still removed and no provider failure is allowed to resurrect it.
             }
+        }
+    }
+
+    /**
+     * #359: the folder's files MediaStore lists stay in the library as the device library's rows, with
+     * their data. Without the music permission or a mounted volume there are none. A MediaStore that
+     * should list them and cannot be read stops the removal, which would otherwise delete that data.
+     */
+    private suspend fun deviceFilesForFolderRemoval(): List<ListedMediaStoreFile> {
+        if (!mediaStore.hasMusicLibraryPermission() || mediaStore.currentVolumeNames().isEmpty()) return emptyList()
+        return try {
+            mediaStore.listFiles(mediaStore.currentScanScope())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: RuntimeException) {
+            throw FolderRemovalUnavailableException(failure)
         }
     }
 
@@ -287,7 +304,7 @@ internal class AndroidLibraryCatalog(
         if (includeDeviceLibrary) {
             val source = store.ensureDeviceSource()
             val report = SourceScanReport(source)
-            val outcome = scanDeviceLibrary(source, report, onProgress)
+            val outcome = scanDeviceLibrary(source, report, onProgress, playableSources(includeDeviceLibrary))
             sourceResults += report.result(outcome)
             when (outcome) {
                 LibrarySourceScanStatus.FAILED,
@@ -320,7 +337,7 @@ internal class AndroidLibraryCatalog(
                         sourceResults += report.result(LibrarySourceScanStatus.PAUSED)
                         return@forEach
                     }
-                    val outcome = scanTreeSource(source, report, onProgress)
+                    val outcome = scanTreeSource(source, report, onProgress, playableSources(includeDeviceLibrary))
                     sourceResults += report.result(outcome)
                     when (outcome) {
                         LibrarySourceScanStatus.FAILED,
@@ -337,6 +354,9 @@ internal class AndroidLibraryCatalog(
                     }
                 }
         }
+
+        // #359: rows two sources still hold for one file, as catalogs before #359 have them, become one.
+        if (!scanGate.catalogRebuilt()) store.mergeDuplicateLocations(playableSources(includeDeviceLibrary))
 
         return LibraryRefreshResult(
             snapshot = serialized { snapshotInternal(includeDeviceLibrary) },
@@ -364,10 +384,32 @@ internal class AndroidLibraryCatalog(
         store.folderRestore.restored(due)
     }
 
+    /**
+     * Whether a row's source can play it now (#359): the device library while its permission holds
+     * and the row's volume is mounted, a folder while Android still grants it. Another source that
+     * reads the same file takes over a row its own source cannot play.
+     */
+    private fun playableSources(includeDeviceLibrary: Boolean): (sourceId: String, contentUri: String) -> Boolean {
+        val deviceAvailable = includeDeviceLibrary && mediaStore.hasMusicLibraryPermission()
+        val mountedVolumes = if (deviceAvailable) mediaStore.currentVolumeNames() else emptyList()
+        val readableTrees = readableTreeUris()
+        val readableFolders = store.readSources()
+            .filter { it.kind == LibrarySourceKind.FOLDER && it.treeUri in readableTrees }
+            .mapTo(HashSet(), StoredLibrarySource::id)
+        return { sourceId, contentUri ->
+            if (sourceId == LibrarySourceId.DEVICE) {
+                deviceAvailable && mediaStoreTrackIsMounted(contentUri, mountedVolumes)
+            } else {
+                sourceId in readableFolders
+            }
+        }
+    }
+
     private suspend fun scanDeviceLibrary(
         source: StoredLibrarySource,
         report: SourceScanReport,
         onProgress: suspend (LibraryScanProgress) -> Unit,
+        isPlayable: (sourceId: String, contentUri: String) -> Boolean,
     ): LibrarySourceScanStatus = try {
         if (source.scanState == LibraryScanState.PAUSED) return LibrarySourceScanStatus.PAUSED
         val scanScope = mediaStore.currentScanScope()
@@ -377,7 +419,11 @@ internal class AndroidLibraryCatalog(
             report.failureReason = LibraryScanFailureReason.PERMISSION_REQUIRED
             return LibrarySourceScanStatus.UNAVAILABLE
         }
-        if (scanScope.generation != null && source.generation == scanScope.generation) {
+        val owners = store.readLocationOwners(LibrarySourceId.DEVICE, isPlayable)
+        if (
+            scanScope.generation != null && source.generation == scanScope.generation &&
+            !mediaStoreListsUnplayableRow(owners) { mediaStore.listFiles(scanScope) }
+        ) {
             store.finishSourceScan(source.id, generation = scanScope.generation)
             return LibrarySourceScanStatus.UNCHANGED
         }
@@ -398,7 +444,7 @@ internal class AndroidLibraryCatalog(
             shouldPause = scanGate::isPaused,
         ) { candidate ->
             if (scan.firstOffer(candidate) && !store.markSeenIfUnchanged(scan, candidate)) {
-                store.upsertMediaStoreTrack(scan, metadataReader.enrich(candidate))
+                store.writeMediaStoreTrack(scan, candidate, owners) { metadataReader.enrich(candidate) }
             }
             report.checkedTrack()
             if (report.shouldPublish()) onProgress(report.progress())
@@ -426,6 +472,7 @@ internal class AndroidLibraryCatalog(
         source: StoredLibrarySource,
         report: SourceScanReport,
         onProgress: suspend (LibraryScanProgress) -> Unit,
+        isPlayable: (sourceId: String, contentUri: String) -> Boolean,
     ): LibrarySourceScanStatus = try {
         val treeUri = source.treeUri?.let(Uri::parse) ?: return LibrarySourceScanStatus.FAILED
         // A folder added back while its provider could not be read has a stand-in name (#191 D20).
@@ -433,6 +480,7 @@ internal class AndroidLibraryCatalog(
             ?.also { name -> if (name != source.displayName) store.renameFolderSource(source.id, name) }
             ?: source.displayName
         val session = store.beginSourceScan(source.id)
+        val owners = store.readLocationOwners(source.id, isPlayable)
         report.sourceName = displayName
         onProgress(report.progress())
         val iteration = treeScanner.scan(
@@ -444,7 +492,9 @@ internal class AndroidLibraryCatalog(
             },
         ) { document ->
             if (!store.markSeenIfFingerprintMatches(session, document.documentId, document.fingerprint)) {
-                store.upsertTrack(session, metadataReader.enrich(document.toTrackCandidate()))
+                store.writeFolderTrack(session, document.documentId, document.locationKey, owners) {
+                    metadataReader.enrich(document.toTrackCandidate())
+                }
             }
             report.checkedTrack()
             if (report.shouldPublish()) onProgress(report.progress())
@@ -596,10 +646,10 @@ internal class AndroidLibraryCatalog(
         return LibraryCatalogSnapshot(
             tracks = visibleTracks,
             sources = sources.map { source ->
-                if (source.kind == LibrarySourceKind.DEVICE && source.isAvailable) {
-                    source.copy(trackCount = visibleDeviceTrackCount)
-                } else {
-                    source
+                when {
+                    !source.isAvailable -> source
+                    source.kind == LibrarySourceKind.DEVICE -> source.copy(trackCount = visibleDeviceTrackCount)
+                    else -> source.copy(trackCount = folderTrackCount(source.treeUri, visibleTracks) ?: source.trackCount)
                 }
             },
             playlists = if (includeLibraryDetails) store.readPlaylists() else emptyList(),
@@ -770,3 +820,31 @@ private class LibraryScanGate(
 
     fun isPaused(): Boolean = paused || catalogRebuilt() || editWaiting()
 }
+
+/**
+ * #359: whether a row its own source cannot play now lies where MediaStore lists a file. A folder
+ * whose grant went leaves such rows; an unchanged MediaStore generation would end the device scan
+ * before it takes them over. MediaStore's files are listed only while there are such rows.
+ */
+internal suspend fun mediaStoreListsUnplayableRow(
+    owners: Map<String, LocationOwner>,
+    listFiles: suspend () -> List<ListedMediaStoreFile>,
+): Boolean {
+    val waiting = owners.filterValues { !it.playable }.keys
+    if (waiting.isEmpty()) return false
+    return listFiles().any { it.locationKey in waiting }
+}
+
+/**
+ * The songs inside an added folder, whichever source plays each (#359): a file MediaStore lists as
+ * well, or another added folder holds too, is that source's row. Null for another provider's folder,
+ * whose files are only its own rows.
+ */
+internal fun folderTrackCount(treeUri: String?, visibleTracks: List<AudioTrack>): Int? {
+    val prefix = treeUri?.toUri()?.let(::documentTreeLocationPrefix) ?: return null
+    return visibleTracks.count { track -> track.locationKey?.startsWith(prefix) == true }
+}
+
+/** #359: a folder was not removed because MediaStore, which lists some of its songs, could not be read. */
+class FolderRemovalUnavailableException(cause: Throwable) :
+    Exception("MediaStore could not be read to keep the removed folder's songs", cause)

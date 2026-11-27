@@ -148,6 +148,11 @@ internal class MediaStoreAudioRepository(
                                 folderName = if (pathIdentifiesFile) path.trimEnd('/') else legacyMediaFolderName(path),
                                 fileName = cursor.getString(2).orEmpty(),
                                 sizeBytes = cursor.getLong(1),
+                                locationKey = if (pathIdentifiesFile) {
+                                    mediaStoreLocationKey(volumeName, path, cursor.getString(2).orEmpty())
+                                } else {
+                                    legacyDataLocationKey(path)
+                                },
                             ),
                         )
                     }
@@ -282,6 +287,15 @@ internal class MediaStoreAudioRepository(
                             mimeType = mimeType,
                             fileName = fileName,
                             folderName = folderName,
+                            locationKey = when {
+                                relativePathIndex >= 0 -> mediaStoreLocationKey(
+                                    volumeName,
+                                    cursor.getString(relativePathIndex).orEmpty(),
+                                    fileName,
+                                )
+                                legacyDataIndex >= 0 -> legacyDataLocationKey(cursor.getString(legacyDataIndex).orEmpty())
+                                else -> null
+                            },
                             fingerprint = libraryFingerprint(
                                 "media",
                                 LIBRARY_METADATA_REVISION,

@@ -10,8 +10,8 @@ import org.junit.Test
  * process. A second helper would open another connection to the same file, which the next schema
  * change must not run under; a closed shared helper fails the other users' work in progress.
  *
- * CI runs no device tests and the project has no JVM SQLite, so these checks read the production
- * sources. `SharedLibraryCatalogStoreTest` checks the behavior on a device.
+ * These checks read the production sources, for every place that could construct or close the
+ * helper. `SharedLibraryCatalogStoreTest` checks the behavior on a device.
  */
 class LibraryCatalogStoreOwnerTest {
     private val sources: Map<String, String> = PRODUCTION_SOURCE_SETS.map { File("src/$it") }

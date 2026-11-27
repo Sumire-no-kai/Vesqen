@@ -32,6 +32,8 @@ internal data class ListedMediaStoreFile(
     val folderName: String,
     val fileName: String,
     val sizeBytes: Long,
+    /** See [fileLocationKey]; a removed folder's rows find their MediaStore row by it (#359). */
+    val locationKey: String? = null,
 )
 
 /**
@@ -80,6 +82,13 @@ internal class MediaStoreIdentityIndex(
         markSeen(row)
         return row.trackId
     }
+
+    /**
+     * Whether a device row may be this candidate's file: one stored under its `_ID`, or one not yet
+     * seen with its folder, name and size. Asks without marking anything seen (#359).
+     */
+    fun hasRowFor(candidate: LibraryTrackCandidate): Boolean =
+        candidate.remoteId in rowsByRemoteId || candidate.fileKey() in unseenRowsByFile
 
     fun plan(candidate: LibraryTrackCandidate): MediaStoreTrackPlan {
         val current = rowsByRemoteId[candidate.remoteId]

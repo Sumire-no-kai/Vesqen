@@ -14,6 +14,7 @@ import io.github.sumirenokai.vesqen.VesqenApplication
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.library.AlbumArtworkLoader
 import io.github.sumirenokai.vesqen.library.AndroidLibraryCatalog
+import io.github.sumirenokai.vesqen.library.FolderRemovalUnavailableException
 import io.github.sumirenokai.vesqen.library.LibraryCatalog
 import io.github.sumirenokai.vesqen.library.LibraryCatalogSnapshot
 import io.github.sumirenokai.vesqen.library.LibraryScanProgress
@@ -745,6 +746,10 @@ class VesqenViewModel(application: Application) : AndroidViewModel(application) 
                 withContext(Dispatchers.IO) { action() }
             } catch (failure: SQLiteException) {
                 if (!catalogRebuiltSince(rebuildsBefore)) updateLibrary { it.copy(catalogMutationFailed = true) }
+                return@launch
+            } catch (_: FolderRemovalUnavailableException) {
+                // Nothing changed; the folder stays until MediaStore can be read again.
+                updateLibrary { it.copy(catalogMutationFailed = true) }
                 return@launch
             } catch (failure: IllegalStateException) {
                 failure.rethrowUnlessCatalogRebuiltSince(rebuildsBefore)
