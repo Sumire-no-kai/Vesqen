@@ -97,6 +97,7 @@ fun TrackDetailsSheet(
         SheetWithoutNavigationBand()
         Column(
             modifier = Modifier
+                .underSheetHandle()
                 .fillMaxWidth()
                 .testTag("vesqen.track-details.layout"),
         ) {

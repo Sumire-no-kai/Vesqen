@@ -110,6 +110,7 @@ import io.github.sumirenokai.vesqen.ui.chain.chainMetricMatchRanges
 import io.github.sumirenokai.vesqen.ui.chain.chainMetricMatches
 import io.github.sumirenokai.vesqen.ui.chain.telemetryMetricLabel
 import io.github.sumirenokai.vesqen.ui.chain.telemetrySectionLabel
+import io.github.sumirenokai.vesqen.ui.components.underSheetHandle
 import io.github.sumirenokai.vesqen.ui.components.SearchPill
 import io.github.sumirenokai.vesqen.ui.components.SheetWithoutNavigationBand
 import io.github.sumirenokai.vesqen.ui.components.TextTab
@@ -158,7 +159,7 @@ internal fun ChainCustomizerSheet(
             onPreferencesChanged = onPreferencesChanged,
             onResetRequest = { confirmReset = true },
             onDismiss = onDismiss,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.underSheetHandle().fillMaxSize(),
         )
     }
     if (confirmReset) {

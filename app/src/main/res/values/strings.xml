@@ -377,6 +377,7 @@
     <string name="player_output_mode_body">Off: Android system output. On: require USB bit-perfect output; playback stops when the conditions are not met. Enabling this switch is not proof of bit-perfect output or external verification.</string>
     <string name="player_output_done">Done</string>
     <string name="player_strict_failure_body">%1$s\n\nStrict USB output does not switch to system output on its own. Try a compatible DAC, or switch to System output and play again.</string>
+    <string name="player_strict_failure_dsd_body">%1$s\n\nStrict USB output does not switch to system output on its own. Switch to System output and play again.</string>
     <string name="player_use_system_output">Use System output</string>
     <string name="player_keep_strict_output">Keep strict output</string>
     <string name="chain_core_source">01 · Source file</string>

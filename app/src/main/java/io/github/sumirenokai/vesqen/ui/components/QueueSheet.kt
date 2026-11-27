@@ -102,6 +102,7 @@ fun QueueSheet(
         SheetWithoutNavigationBand()
         Column(
             modifier = Modifier
+                .underSheetHandle()
                 .fillMaxWidth()
                 .padding(horizontal = VesqenSpacing.lg)
                 .padding(bottom = VesqenSpacing.md),
