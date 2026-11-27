@@ -335,6 +335,20 @@ internal class LibraryCatalogStore internal constructor(
         }
     }
 
+    private data class FolderRow(val trackId: Long, val documentId: String, val locationKey: String, val artworkUri: String?)
+
+    /** A folder cover's URI under [tree], or null when the cover is not a document inside it. */
+    private fun coverInTree(artworkUri: String, tree: Uri, prefix: String): String? {
+        val cover = Uri.parse(artworkUri)
+        val coverId = try {
+            DocumentsContract.getDocumentId(cover)
+        } catch (_: IllegalArgumentException) {
+            return null
+        }
+        if (documentLocationKey(cover.authority, coverId)?.startsWith(prefix) != true) return null
+        return DocumentsContract.buildDocumentUriUsingTree(tree, coverId).toString()
+    }
+
     private fun handOverFolderTracks(
         database: SQLiteDatabase,
         sourceId: String,
@@ -343,17 +357,21 @@ internal class LibraryCatalogStore internal constructor(
     ) {
         val rows = database.query(
             TRACKS_TABLE,
-            arrayOf(TRACK_ID, TRACK_REMOTE_ID, TRACK_LOCATION_KEY),
+            arrayOf(TRACK_ID, TRACK_REMOTE_ID, TRACK_LOCATION_KEY, TRACK_ALBUM_ARTWORK_URI),
             "$TRACK_SOURCE_ID = ? AND $TRACK_LOCATION_KEY IS NOT NULL AND $NOT_HIDDEN",
             arrayOf(sourceId),
             null,
             null,
             null,
         ).use { cursor ->
-            buildList { while (cursor.moveToNext()) add(Triple(cursor.getLong(0), cursor.getString(1), cursor.getString(2))) }
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(FolderRow(cursor.getLong(0), cursor.getString(1), cursor.getString(2), cursor.getStringOrNull(TRACK_ALBUM_ARTWORK_URI)))
+                }
+            }
         }
-        rows.forEach { (trackId, documentId, key) ->
-            val (receiverId, tree) = receivers.firstOrNull { key.startsWith(it.third) } ?: return@forEach
+        rows.forEach { (trackId, documentId, key, artworkUri) ->
+            val (receiverId, tree, prefix) = receivers.firstOrNull { key.startsWith(it.third) } ?: return@forEach
             val receiverTrackId = database.query(
                 TRACKS_TABLE,
                 arrayOf(TRACK_ID),
@@ -369,11 +387,13 @@ internal class LibraryCatalogStore internal constructor(
                 check(database.delete(TRACKS_TABLE, "$TRACK_ID = ?", arrayOf(trackId.toString())) == 1)
             } else {
                 // The receiving folder's next scan finds the file under the same document ID and reads it again.
+                // Its cover, which lies beside it, is opened through the receiving folder's grant too.
                 database.update(
                     TRACKS_TABLE,
                     ContentValues().apply {
                         put(TRACK_SOURCE_ID, receiverId)
                         put(TRACK_CONTENT_URI, DocumentsContract.buildDocumentUriUsingTree(tree, documentId).toString())
+                        putNullableString(TRACK_ALBUM_ARTWORK_URI, artworkUri?.let { coverInTree(it, tree, prefix) })
                     },
                     "$TRACK_ID = ?",
                     arrayOf(trackId.toString()),

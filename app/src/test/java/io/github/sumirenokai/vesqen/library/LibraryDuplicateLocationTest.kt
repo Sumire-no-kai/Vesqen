@@ -314,7 +314,12 @@ class LibraryDuplicateLocationTest {
         val music = addFolder(store, "primary:Music")
         val jazz = addFolder(store, "primary:Music/Jazz")
         val session = store.beginSourceScan(music)
-        store.upsertTrack(session, folderSong(music, "primary:Music/Jazz/Blue.flac", "Blue"))
+        val cover = "primary:Music/Jazz/cover.jpg"
+        store.upsertTrack(
+            session,
+            folderSong(music, "primary:Music/Jazz/Blue.flac", "Blue")
+                .copy(albumArtworkUri = DocumentsContract.buildDocumentUriUsingTree(tree("primary:Music"), cover).toString()),
+        )
         store.upsertTrack(session, folderSong(music, "primary:Music/Pop.flac", "Pop"))
         store.completeSourceScan(session)
         val blue = store.allTracks().single { it.title == "Blue" }
@@ -326,6 +331,8 @@ class LibraryDuplicateLocationTest {
         assertEquals(blue.id, kept.id)
         assertTrue(kept.isFavorite)
         assertEquals(DocumentsContract.buildDocumentUriUsingTree(tree("primary:Music/Jazz"), "primary:Music/Jazz/Blue.flac").toString(), kept.contentUri)
+        // The cover beside it opens through the folder that still has a grant.
+        assertEquals(DocumentsContract.buildDocumentUriUsingTree(tree("primary:Music/Jazz"), cover).toString(), kept.albumArtworkUri)
         assertEquals(listOf("Blue"), store.allTracks().map(AudioTrack::title))
     }
 
