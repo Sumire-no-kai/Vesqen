@@ -1522,39 +1522,46 @@ private fun VesqenDestinationFrame(
                         )
                     }
 
-                    VesqenDestination.NOW -> NowScreen(
-                        playbackTelemetry = playbackTelemetry,
-                        onSetUsbOutputMode = onSetUsbOutputMode,
-                        onExplainStrictUsbUnavailable = onExplainStrictUsbUnavailable,
-                        onOpenAudioOutput = onOpenAudioOutput,
-                        onToggleFavorite = onToggleFavorite,
-                        snapshot = state.playback,
-                        currentTrack = currentTrack,
-                        artworkTrack = artworkTrack,
-                        onBackToLibrary = onNavigateBack,
-                        onOpenChain = onOpenChain,
-                        onCyclePlaybackOrder = onCyclePlaybackOrder,
-                        onPrevious = onPrevious,
-                        onPlayPause = onPlayPause,
-                        onNext = onNext,
-                        onPreviousFolder = onPreviousFolder,
-                        onNextFolder = onNextFolder,
-                        onSeek = onSeek,
-                        onPlayQueueIndex = onPlayQueueIndex,
-                        onRemoveQueueItem = onRemoveQueueItem,
-                        onMoveQueueItem = onMoveQueueItem,
-                        onClearQueue = onClearQueue,
-                        onToggleOrientation = onTogglePlayerOrientation,
-                        showOrientationToggle = showOrientationToggle,
-                        isLandscape = isLandscape,
-                        motionPolicy = motionPolicy,
-                        lyrics = lyricsHooks.state,
-                        loadLyrics = lyricsHooks.load,
-                        onToggleLyrics = lyricsHooks.onToggle,
-                        onImportLyrics = lyricsHooks.onImport,
-                        onRemoveLyrics = lyricsHooks.onRemove,
-                        modifier = destinationModifier,
-                    )
+                    // Like Library and Settings, Now keeps its open notes and panels while another page
+                    // covers it, such as Audio output opened from its output-mode dialog or Chain, so Back
+                    // returns to Now as it was (#249).
+                    VesqenDestination.NOW -> destinationStateHolder.SaveableStateProvider(
+                        key = VesqenDestination.NOW.name,
+                    ) {
+                        NowScreen(
+                            playbackTelemetry = playbackTelemetry,
+                            onSetUsbOutputMode = onSetUsbOutputMode,
+                            onExplainStrictUsbUnavailable = onExplainStrictUsbUnavailable,
+                            onOpenAudioOutput = onOpenAudioOutput,
+                            onToggleFavorite = onToggleFavorite,
+                            snapshot = state.playback,
+                            currentTrack = currentTrack,
+                            artworkTrack = artworkTrack,
+                            onBackToLibrary = onNavigateBack,
+                            onOpenChain = onOpenChain,
+                            onCyclePlaybackOrder = onCyclePlaybackOrder,
+                            onPrevious = onPrevious,
+                            onPlayPause = onPlayPause,
+                            onNext = onNext,
+                            onPreviousFolder = onPreviousFolder,
+                            onNextFolder = onNextFolder,
+                            onSeek = onSeek,
+                            onPlayQueueIndex = onPlayQueueIndex,
+                            onRemoveQueueItem = onRemoveQueueItem,
+                            onMoveQueueItem = onMoveQueueItem,
+                            onClearQueue = onClearQueue,
+                            onToggleOrientation = onTogglePlayerOrientation,
+                            showOrientationToggle = showOrientationToggle,
+                            isLandscape = isLandscape,
+                            motionPolicy = motionPolicy,
+                            lyrics = lyricsHooks.state,
+                            loadLyrics = lyricsHooks.load,
+                            onToggleLyrics = lyricsHooks.onToggle,
+                            onImportLyrics = lyricsHooks.onImport,
+                            onRemoveLyrics = lyricsHooks.onRemove,
+                            modifier = destinationModifier,
+                        )
+                    }
 
                     // Like Library, Settings keeps its list position while About, the policy or the
                     // licenses are open, so Back lands on the row that opened them.

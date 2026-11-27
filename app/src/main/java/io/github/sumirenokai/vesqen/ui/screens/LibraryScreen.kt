@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.unit.sp
+import io.github.sumirenokai.vesqen.ui.components.underSheetHandle
 import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
 import io.github.sumirenokai.vesqen.ui.components.folderStorageLabel
 import io.github.sumirenokai.vesqen.ui.components.rememberAlbumBackground
@@ -1911,8 +1912,9 @@ private fun LibrarySourcesSheet(
         SheetWithoutNavigationBand()
         Column(
             modifier = Modifier
+                .underSheetHandle()
                 .fillMaxWidth()
-                .padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.sm),
+                .padding(start = VesqenSpacing.lg, end = VesqenSpacing.lg, bottom = VesqenSpacing.sm),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -1992,7 +1994,9 @@ private fun UnmatchedRecordsSheet(
         modifier = Modifier.testTag("vesqen.library.unmatched-records"),
     ) {
         SheetWithoutNavigationBand()
-        UnmatchedRecordsList(records, playlists, onAssign, onDiscard = { pendingDiscard = it })
+        Box(Modifier.underSheetHandle()) {
+            UnmatchedRecordsList(records, playlists, onAssign, onDiscard = { pendingDiscard = it })
+        }
     }
 }
 

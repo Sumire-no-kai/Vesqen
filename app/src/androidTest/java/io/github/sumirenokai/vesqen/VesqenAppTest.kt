@@ -36,6 +36,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -435,10 +436,14 @@ class VesqenAppTest {
                 }
                 composeRule.onNodeWithTag("vesqen.output.failure-dialog").assertDoesNotExist()
             }
+        // #249: Settings' Audio output row says playback stopped; the page itself gives the reason.
         composeRule.onNodeWithTag("vesqen.nav.settings").performClick()
+        composeRule.onNodeWithTag("vesqen.settings.audio-output")
+            .assertTextContains(context.getString(R.string.chain_strict_failed_title), substring = true)
+            .performClick()
         composeRule.onNodeWithText(context.getString(
             R.string.settings_strict_usb_failed, context.getString(R.string.usb_failure_no_device),
-        )).assertIsDisplayed()
+        )).performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -1605,10 +1610,10 @@ class VesqenAppTest {
 
         composeRule.onNodeWithTag("vesqen.library.sort").performClick()
 
-        composeRule.onNode(hasText(context.getString(R.string.sort_title)) and hasClickAction(), useUnmergedTree = false)
-            .assertIsSelected()
-        composeRule.onNode(hasText(context.getString(R.string.sort_artist)) and hasClickAction(), useUnmergedTree = false)
-            .assertIsNotSelected()
+        // In the menu's own popup: in Chinese its "艺术家" is also the Artists tab's name.
+        fun menuItem(label: Int) = hasText(context.getString(label)) and hasClickAction() and hasAnyAncestor(isPopup())
+        composeRule.onNode(menuItem(R.string.sort_title), useUnmergedTree = false).assertIsSelected()
+        composeRule.onNode(menuItem(R.string.sort_artist), useUnmergedTree = false).assertIsNotSelected()
     }
 
     @Test
@@ -3581,6 +3586,10 @@ class VesqenAppTest {
         composeRule.onNodeWithTag("vesqen.now.open-chain").performScrollTo().performClick()
         composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
         composeRule.onNodeWithTag("vesqen.now.back").assertIsDisplayed()
+        // Now is as Chain left it, notes open (#249), so Back closes them before it leaves Now.
+        assertLinerNotesState(R.string.now_notes_expanded)
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        assertLinerNotesState(R.string.now_notes_collapsed)
         composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
         composeRule.onNodeWithTag("vesqen.nav.library").assertIsSelected()
     }
@@ -4282,7 +4291,8 @@ class VesqenAppTest {
         if (lyricsBesideOpenNotes) {
             // The cover's open size (nowPortraitLayout.notesArtwork, 96–164 dp), not a weighted share.
             val pane = composeRule.onNodeWithTag("vesqen.now.lyrics").assertIsDisplayed().getUnclippedBoundsInRoot()
-            assertTrue("Lyrics beside open notes are ${pane.height}", pane.height >= 96.dp && pane.height <= 164.dp)
+            // Within a pixel: render() fits the width with a density of its own, which rounds the size.
+            assertTrue("Lyrics beside open notes are ${pane.height}", pane.height >= 95.dp && pane.height <= 165.dp)
         }
         composeRule.onNodeWithTag("vesqen.now.player-page").assert(
             SemanticsMatcher.keyNotDefined(SemanticsProperties.VerticalScrollAxisRange),
@@ -4723,9 +4733,11 @@ class VesqenAppTest {
             }
         }
         fun bounds(tag: String) = composeRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
-        // Whether Clear queue stays beside the title; null where it depends on the font.
+        // Whether Clear queue stays beside the title; null where it depends on the font. Shorter labels,
+        // such as the Chinese ones, still fit beside the title at 272 dp and twice the text size.
+        val englishLabels = context.resources.configuration.locales[0].language == "en"
         listOf(
-            Triple(272.dp, 2f, false),
+            Triple(272.dp, 2f, false.takeIf { englishLabels }),
             Triple(272.dp, 1f, true),
             Triple(363.dp, 1f, true),
             Triple(363.dp, 2f, null),
