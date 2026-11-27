@@ -32,6 +32,13 @@
     <plurals name="library_source_track_count">
         <item quantity="other">%1$d 曲</item>
     </plurals>
+    <string name="library_full_scan_source">ストレージ全体</string>
+    <string name="library_full_scan_needs_permission">すべてのファイルへのアクセスを再度許可する必要があります。</string>
+    <string name="library_full_scan_remove_title">これらの曲を削除しますか？</string>
+    <string name="library_full_scan_remove_body">GitHub 版のスキャンで見つかった曲を、お気に入り、再生回数、プレイリスト内の位置、インポートした歌詞とともにライブラリから削除します。システムのメディアライブラリにある曲は残ります。スマートフォン上のファイルは削除されません。</string>
+    <plurals name="library_full_scan_play_unavailable">
+        <item quantity="other">GitHub 版のスキャンで見つかった %1$d 曲は、このバージョンでは開けません。曲のあるフォルダを追加すると元に戻ります。</item>
+    </plurals>
     <string name="no_local_music">音楽が見つかりません</string>
     <string name="no_local_music_body">このスマートフォンに音楽ファイルが見つかりませんでした。音楽フォルダを追加するか、音楽をスマートフォンにコピーしてからもう一度スキャンしてください。</string>
     <string name="library_no_access_title">まだ音楽がありません</string>
@@ -164,6 +171,22 @@
     <string name="settings_usage_paused">一時停止中</string>
     <string name="settings_device_report">デバイスレポートを書き出す</string>
     <string name="settings_library">ライブラリ</string>
+    <string name="settings_full_scan">ストレージ全体をスキャン</string>
+    <string name="settings_full_scan_body">スマートフォンのストレージ、メモリーカード、USB ドライブから音楽を探します。フォルダを一つずつ追加する必要はありません。</string>
+    <string name="settings_full_scan_scanning">ストレージ全体をスキャン中…</string>
+    <string name="settings_full_scan_permission_off">すべてのファイルへのアクセスがオフになっています。再び許可するまで、このスキャンで見つかった曲は表示されません。</string>
+    <string name="settings_full_scan_allow_again">再度許可する</string>
+    <string name="settings_full_scan_unavailable">このスマートフォンの Android では、ストレージ全体をスキャンできません。「音楽フォルダを追加」をご利用ください。</string>
+    <string name="settings_full_scan_not_allowed">すべてのファイルへのアクセスが許可されなかったため、オフのままです。</string>
+    <string name="settings_full_scan_storage_not_allowed">ストレージへのアクセスが許可されなかったため、オフのままです。</string>
+    <string name="settings_full_scan_revoke">システム設定で権限を取り消す</string>
+    <string name="full_scan_intro_body">オンにすると、Vesqen はスマートフォンのストレージ、メモリーカード、USB ドライブから音楽を探します。フォルダを一つずつ追加する必要はありません。\n\nそのためには、システム設定で Vesqen に「すべてのファイルへのアクセス」を許可する必要があります。この権限により、アプリはストレージ内のすべてのファイルを読み取り、変更できるようになります。Vesqen が読み取るのは、対応する音声ファイルと、同じフォルダにあるカバー画像および同名の歌詞ファイル（.lrc）だけです。ファイルの変更、移動、削除は行いません。Android フォルダ、隠しフォルダ、.nomedia ファイルがあるフォルダはスキャンしません。スキャン結果はこのスマートフォンにのみ保存されます。\n\nこの機能はここでいつでもオフにできます。権限はシステム設定で取り消せます。</string>
+    <string name="full_scan_intro_body_legacy">オンにすると、Vesqen はスマートフォンのストレージ、メモリーカード、USB ドライブから音楽を探します。フォルダを一つずつ追加する必要はありません。\n\nこの機能は Android のストレージへのアクセス権限を使います。まだ許可していない場合は、オンにするときに許可を求められます。Vesqen が読み取るのは、対応する音声ファイルと、同じフォルダにあるカバー画像および同名の歌詞ファイル（.lrc）だけです。ファイルの変更、移動、削除は行いません。Android フォルダ、隠しフォルダ、.nomedia ファイルがあるフォルダはスキャンしません。スキャン結果はこのスマートフォンにのみ保存されます。\n\nこの機能はここでいつでもオフにできます。</string>
+    <string name="full_scan_turn_on">オンにする</string>
+    <string name="full_scan_off_title">ストレージ全体のスキャンをオフにする</string>
+    <string name="full_scan_off_body">このスキャンでのみ見つかった曲は、ライブラリに表示されなくなります。お気に入り、再生回数、プレイリスト内の位置は保持され、再びオンにすると元に戻ります。すべてのファイルへのアクセスの許可は取り消されません。不要になった場合は、システム設定で取り消せます。</string>
+    <string name="full_scan_turn_off">オフにする</string>
+    <string name="full_scan_settings_unavailable">システム設定を開けませんでした。</string>
     <string name="settings_artist_split">アーティストの分割</string>
     <string name="settings_artist_split_body">「アーティスト」ページで、複数のアーティストをまとめて記載したタグを分けて表示します。音楽ファイルのタグは変更しません。</string>
     <string name="settings_artist_separators">区切り文字</string>

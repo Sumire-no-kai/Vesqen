@@ -32,6 +32,13 @@
     <plurals name="library_source_track_count">
         <item quantity="other">%1$d 首曲目</item>
     </plurals>
+    <string name="library_full_scan_source">整个存储空间</string>
+    <string name="library_full_scan_needs_permission">需要重新允许所有文件访问。</string>
+    <string name="library_full_scan_remove_title">移除这些曲目？</string>
+    <string name="library_full_scan_remove_body">Vesqen 将从曲库中移除 GitHub 版扫描找到的曲目，以及它们的收藏、播放次数、在播放列表中的位置和导入的歌词。系统媒体库仍能读到的歌曲会保留。手机上的文件不会被删除。</string>
+    <plurals name="library_full_scan_play_unavailable">
+        <item quantity="other">GitHub 版扫描找到的 %1$d 首曲目在此版本中无法访问。添加它们所在的文件夹即可恢复。</item>
+    </plurals>
     <string name="no_local_music">没有找到音乐</string>
     <string name="no_local_music_body">这台手机上未找到音乐文件。请添加音乐文件夹，或将音乐复制到手机后重新扫描。</string>
     <string name="library_no_access_title">暂无可播放的音乐</string>
@@ -164,6 +171,22 @@
     <string name="settings_usage_paused">已暂停</string>
     <string name="settings_device_report">导出设备报告</string>
     <string name="settings_library">曲库</string>
+    <string name="settings_full_scan">扫描整个存储空间</string>
+    <string name="settings_full_scan_body">在手机存储空间、存储卡和 U 盘中查找音乐，不需要逐个添加文件夹。</string>
+    <string name="settings_full_scan_scanning">正在扫描整个存储空间…</string>
+    <string name="settings_full_scan_permission_off">所有文件访问权限已关闭。重新允许之前，扫描找到的曲目不会显示。</string>
+    <string name="settings_full_scan_allow_again">重新允许</string>
+    <string name="settings_full_scan_unavailable">这台手机的 Android 不允许 Vesqen 扫描整个存储空间。请改用“添加音乐文件夹”。</string>
+    <string name="settings_full_scan_not_allowed">未允许所有文件访问，这项功能保持关闭。</string>
+    <string name="settings_full_scan_storage_not_allowed">未获得存储权限，这项功能保持关闭。</string>
+    <string name="settings_full_scan_revoke">在系统设置中收回权限</string>
+    <string name="full_scan_intro_body">开启后，Vesqen 会在手机存储空间、存储卡和 U 盘中查找音乐，不需要逐个添加文件夹。\n\n为此需要在系统设置中为 Vesqen 允许“所有文件访问”。这项权限允许应用读取和修改存储空间中的所有文件。Vesqen 只读取支持的音频文件，以及同一文件夹中的封面图片和同名歌词文件（.lrc），不修改、移动或删除任何文件。Android 文件夹、隐藏文件夹和含有 .nomedia 文件的文件夹不会扫描。扫描结果只保存在这台手机上。\n\n可以随时在这里关闭这项功能，或在系统设置中收回这项权限。</string>
+    <string name="full_scan_intro_body_legacy">开启后，Vesqen 会在手机存储空间、存储卡和 U 盘中查找音乐，不需要逐个添加文件夹。\n\n这项功能使用 Android 的存储权限；尚未允许时，开启时会请求。Vesqen 只读取支持的音频文件，以及同一文件夹中的封面图片和同名歌词文件（.lrc），不修改、移动或删除任何文件。Android 文件夹、隐藏文件夹和含有 .nomedia 文件的文件夹不会扫描。扫描结果只保存在这台手机上。\n\n可以随时在这里关闭这项功能。</string>
+    <string name="full_scan_turn_on">开启</string>
+    <string name="full_scan_off_title">关闭“扫描整个存储空间”</string>
+    <string name="full_scan_off_body">只通过这项扫描找到的曲目会从曲库中隐藏，收藏、播放次数和歌单位置都会保留，重新开启后恢复。所有文件访问权限不会随之收回；如不再需要，可以在系统设置中收回。</string>
+    <string name="full_scan_turn_off">关闭</string>
+    <string name="full_scan_settings_unavailable">无法打开系统设置。</string>
     <string name="settings_artist_split">艺术家拆分</string>
     <string name="settings_artist_split_body">“艺术家”页将多位艺术家合写的标签分开显示。音乐文件中的标签不会更改。</string>
     <string name="settings_artist_separators">分隔符</string>

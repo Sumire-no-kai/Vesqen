@@ -128,7 +128,7 @@ class LibraryDuplicateLocationTest {
         val folder = addFolder(store, "primary:Music")
         val session = store.beginSourceScan(folder)
         val owners = store.readLocationOwners(folder) { _, _ -> true }
-        store.writeFolderTrack(session, "primary:Music/Dawn.flac", "primary:music/dawn.flac", owners) {
+        store.writeSourceTrack(session, "primary:Music/Dawn.flac", "primary:music/dawn.flac", owners) {
             folderSong(folder, "primary:Music/Dawn.flac", "Dawn")
         }
         store.completeSourceScan(session)
@@ -152,7 +152,7 @@ class LibraryDuplicateLocationTest {
         fun scanJazz(musicPlays: Boolean) {
             val session = store.beginSourceScan(jazz)
             val owners = store.readLocationOwners(jazz) { sourceId, _ -> musicPlays || sourceId != music }
-            store.writeFolderTrack(session, "primary:Music/Jazz/Blue.flac", "primary:music/jazz/blue.flac", owners) {
+            store.writeSourceTrack(session, "primary:Music/Jazz/Blue.flac", "primary:music/jazz/blue.flac", owners) {
                 read++
                 folderSong(jazz, "primary:Music/Jazz/Blue.flac", "Blue")
             }

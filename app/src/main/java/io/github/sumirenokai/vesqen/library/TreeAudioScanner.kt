@@ -255,10 +255,10 @@ internal fun knownUnsupportedAudioFormat(mimeType: String?, displayName: String)
 /** A provider explicitly returned no complete snapshot; it is not evidence that a folder is empty. */
 internal class IncompleteLibraryProviderException : IllegalStateException("Incomplete provider snapshot")
 
-private fun String.toTrackTitleFallback(): String = substringBeforeLast('.', missingDelimiterValue = this)
+internal fun String.toTrackTitleFallback(): String = substringBeforeLast('.', missingDelimiterValue = this)
     .ifBlank { this }
 
-private fun isSameDirectoryCover(mimeType: String, displayName: String): Boolean {
+internal fun isSameDirectoryCover(mimeType: String, displayName: String): Boolean {
     val extension = displayName.substringAfterLast('.', "").lowercase()
     if (!mimeType.startsWith("image/", ignoreCase = true) && extension !in COVER_EXTENSIONS) return false
     val baseName = displayName.substringBeforeLast('.', displayName).lowercase()

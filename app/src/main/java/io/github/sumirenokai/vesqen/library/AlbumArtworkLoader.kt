@@ -55,7 +55,8 @@ class AlbumArtworkLoader(context: Context) {
         return loadCachedArtwork(
             AlbumArtworkCacheKey.mediaThumbnail(track, requestedSize),
         ) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // #249: only a provider thumbnails; a file the whole-storage scan found has its embedded art.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !track.contentUri.startsWith(FILE_URI_PREFIX)) {
                 loadMediaStoreThumbnail(track.contentUri, requestedSize)
                     ?: loadEmbeddedArtwork(track, requestedSize)
             } else {
@@ -107,6 +108,10 @@ class AlbumArtworkLoader(context: Context) {
 
     private fun loadMediaStoreThumbnail(contentUri: String, targetPx: Int): Bitmap? {
         if (contentUri.isBlank()) return null
+        // #249: a cover beside a file the whole-storage scan found is itself a file, read directly.
+        if (contentUri.startsWith(FILE_URI_PREFIX)) {
+            return decodeLegacyArtwork(targetPx) { contentResolver.openInputStream(Uri.parse(contentUri)) }
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             return loadLegacyProviderArtwork(Uri.parse(contentUri), targetPx)
         }
@@ -500,3 +505,5 @@ internal object AlbumArtworkCacheKey {
         track.artworkRevision,
     ).joinToString(separator = "|")
 }
+
+private const val FILE_URI_PREFIX = "file://"

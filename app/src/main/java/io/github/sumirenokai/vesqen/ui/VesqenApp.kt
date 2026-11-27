@@ -104,6 +104,8 @@ import io.github.sumirenokai.vesqen.diagnostics.DiagnosticRecorder
 import io.github.sumirenokai.vesqen.diagnostics.exportTo
 import io.github.sumirenokai.vesqen.library.ArtistSplitSettings
 import io.github.sumirenokai.vesqen.library.AudioTrack
+import io.github.sumirenokai.vesqen.library.LibrarySourceId
+import io.github.sumirenokai.vesqen.library.LibrarySourceKind
 import io.github.sumirenokai.vesqen.lyrics.LyricsImportResult
 import io.github.sumirenokai.vesqen.lyrics.TrackLyrics
 import io.github.sumirenokai.vesqen.library.LibraryRebuildNotice
@@ -374,6 +376,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
         onRescan = viewModel::refreshLibrary,
         onAddLibraryFolder = { musicFolderLauncher.launch(null) },
         onRemoveLibraryFolder = viewModel::removeLibraryFolder,
+        onRemoveStorageSource = viewModel::removeStorageSource,
         onPauseLibraryScan = viewModel::pauseLibraryScan,
         onResumeLibraryScan = viewModel::resumeLibraryScan,
         onAssignUnmatchedRecord = viewModel::assignUnmatchedRecord,
@@ -498,6 +501,7 @@ fun VesqenAppContent(
     onAnswerUsbOutputConsent: (UsbOutputStatus, Boolean) -> Unit = { _, _ -> },
     onAddLibraryFolder: () -> Unit = {},
     onRemoveLibraryFolder: (String) -> Unit = {},
+    onRemoveStorageSource: () -> Unit = {},
     onPauseLibraryScan: () -> Unit = {},
     onResumeLibraryScan: () -> Unit = {},
     onAssignUnmatchedRecord: (Long, Long) -> Unit = { _, _ -> },
@@ -949,6 +953,7 @@ fun VesqenAppContent(
                 onRescan = onRescan,
                 onAddLibraryFolder = onAddLibraryFolder,
                 onRemoveLibraryFolder = onRemoveLibraryFolder,
+                onRemoveStorageSource = onRemoveStorageSource,
                 onPauseLibraryScan = onPauseLibraryScan,
                 onResumeLibraryScan = onResumeLibraryScan,
                 onAssignUnmatchedRecord = onAssignUnmatchedRecord,
@@ -1032,6 +1037,7 @@ fun VesqenAppContent(
             onRescan = onRescan,
             onAddLibraryFolder = onAddLibraryFolder,
             onRemoveLibraryFolder = onRemoveLibraryFolder,
+            onRemoveStorageSource = onRemoveStorageSource,
             onPauseLibraryScan = onPauseLibraryScan,
             onResumeLibraryScan = onResumeLibraryScan,
             onAssignUnmatchedRecord = onAssignUnmatchedRecord,
@@ -1311,6 +1317,7 @@ private fun VesqenDestinationFrame(
     onRescan: () -> Unit,
     onAddLibraryFolder: () -> Unit,
     onRemoveLibraryFolder: (String) -> Unit,
+    onRemoveStorageSource: () -> Unit,
     onPauseLibraryScan: () -> Unit,
     onResumeLibraryScan: () -> Unit,
     onAssignUnmatchedRecord: (Long, Long) -> Unit,
@@ -1495,6 +1502,7 @@ private fun VesqenDestinationFrame(
                             onRescan = onRescan,
                             onAddLibraryFolder = onAddLibraryFolder,
                             onRemoveLibraryFolder = onRemoveLibraryFolder,
+                            onRemoveStorageSource = onRemoveStorageSource,
                             onPauseLibraryScan = onPauseLibraryScan,
                             onResumeLibraryScan = onResumeLibraryScan,
                             onAssignUnmatchedRecord = onAssignUnmatchedRecord,
@@ -1584,6 +1592,9 @@ private fun VesqenDestinationFrame(
                             onOpenPremium = onOpenPremium,
                             artistSplit = artistSplit,
                             onArtistSplitChange = onArtistSplitChange,
+                            storageSource = state.library.sources.firstOrNull { it.kind == LibrarySourceKind.STORAGE },
+                            storageScanning = state.library.scanProgress?.sourceId == LibrarySourceId.forScan(LibrarySourceId.STORAGE),
+                            onRefreshLibrary = onRescan,
                         )
                     }
 

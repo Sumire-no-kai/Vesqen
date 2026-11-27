@@ -143,6 +143,7 @@ class PlaybackService : MediaSessionService() {
                 resumptionCatalog ?: AndroidLibraryCatalog(
                     this@PlaybackService,
                     (application as VesqenApplication).libraryCatalogStore,
+                    storageScan = (application as VesqenApplication).storageScan,
                 ).also { resumptionCatalog = it }
             }
             // The Library lists device music only while this permission is granted.

@@ -230,8 +230,9 @@ private class AlbumKeys {
         val album = track.album.trim()
         // Songs without an album tag stay one group, as before #170 P3.
         if (albumArtist.isNotEmpty() || album.isEmpty()) return collectionKey(AlbumNamespace, albumArtist, album)
-        val folder = folders.getOrPut(track.folderName) { albumFolder(track.folderName) }
-        return collectionKey(AlbumNamespace, "", album, folderStorageKey(track.contentUri), folder)
+        val path = track.folderPath()
+        val folder = folders.getOrPut(path) { albumFolder(path) }
+        return collectionKey(AlbumNamespace, "", album, track.folderStorage(), folder)
     }
 }
 
@@ -240,7 +241,7 @@ private fun List<LibraryCollection>.withStorageWhereNamesClash(): List<LibraryCo
     val shown = groupingBy { it.title to it.subtitle }.eachCount()
     return map { folder ->
         if (shown.getValue(folder.title to folder.subtitle) < 2) return@map folder
-        folder.copy(storageKey = folder.tracks.firstOrNull()?.let { folderStorageKey(it.contentUri) }?.ifEmpty { null })
+        folder.copy(storageKey = folder.tracks.firstOrNull()?.folderStorage()?.ifEmpty { null })
     }
 }
 
@@ -291,4 +292,16 @@ private const val AlbumNamespace = "album"
 
 /** Matches Library grouping across providers and storage volumes. */
 internal fun AudioTrack.folderCollectionKey(): String =
-    collectionKey("folder", folderStorageKey(contentUri), folderName)
+    collectionKey("folder", folderStorage(), folderPath())
+
+/**
+ * #249: where a track's folder lies. With a location ([AudioTrack.locationKey], #359) it is the
+ * volume, so one directory is one folder whichever source plays each of its files (MediaStore for
+ * a FLAC, the whole-storage scan for a DSF beside it); otherwise the source, as [folderStorageKey].
+ */
+private fun AudioTrack.folderStorage(): String =
+    locationKey?.let { "volume:" + it.substringBefore(':') } ?: folderStorageKey(contentUri)
+
+/** The folder's path on [folderStorage]: the location's folder where there is one, in lower case. */
+private fun AudioTrack.folderPath(): String =
+    locationKey?.substringAfter(':')?.substringBeforeLast('/', missingDelimiterValue = "") ?: folderName
