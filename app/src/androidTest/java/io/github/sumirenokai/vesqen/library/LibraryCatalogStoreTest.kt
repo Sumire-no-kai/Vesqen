@@ -144,7 +144,7 @@ class LibraryCatalogStoreTest {
                 assertNull(source.generation)
                 assertEquals("", track.codec)
                 assertEquals(0, track.playCount)
-                assertEquals(4, upgraded.readableDatabase.version)
+                assertEquals(5, upgraded.readableDatabase.version)
             }
             assertEquals("", readTrackFingerprint(context, databaseName))
         } finally {
@@ -168,7 +168,7 @@ class LibraryCatalogStoreTest {
                 assertEquals(4, track.playCount)
                 assertEquals(456_000, track.lastPlayedAtMs)
                 assertEquals(listOf(track.id), upgraded.readPlaylists().single().trackIds)
-                assertEquals(4, upgraded.readableDatabase.version)
+                assertEquals(5, upgraded.readableDatabase.version)
             }
             assertEquals("", readTrackFingerprint(context, databaseName))
         } finally {

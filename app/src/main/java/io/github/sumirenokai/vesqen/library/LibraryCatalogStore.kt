@@ -5,6 +5,9 @@ import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import android.net.Uri
+import android.os.Build
+import android.provider.DocumentsContract
 import androidx.core.database.sqlite.transaction
 import java.io.Closeable
 import kotlinx.coroutines.flow.StateFlow
@@ -117,6 +120,7 @@ internal class LibraryCatalogStore internal constructor(
                 $TRACK_FINGERPRINT TEXT NOT NULL,
                 $TRACK_ARTWORK_REVISION INTEGER NOT NULL DEFAULT 0,
                 $TRACK_SEEN_EPOCH INTEGER NOT NULL DEFAULT 0,
+                $TRACK_LOCATION_KEY TEXT,
                 UNIQUE ($TRACK_SOURCE_ID, $TRACK_REMOTE_ID),
                 FOREIGN KEY ($TRACK_SOURCE_ID) REFERENCES $SOURCES_TABLE($SOURCE_ID)
                     ON DELETE CASCADE
@@ -133,6 +137,7 @@ internal class LibraryCatalogStore internal constructor(
         db.execSQL("CREATE INDEX index_library_tracks_artist ON $TRACKS_TABLE($TRACK_ARTIST)")
         db.execSQL("CREATE INDEX index_library_tracks_folder ON $TRACKS_TABLE($TRACK_FOLDER_NAME)")
         db.execSQL("CREATE INDEX index_library_tracks_recent ON $TRACKS_TABLE($TRACK_LAST_PLAYED_AT_MS)")
+        db.execSQL("CREATE INDEX $LOCATION_INDEX ON $TRACKS_TABLE($TRACK_LOCATION_KEY)")
         createPlaylistTables(db)
         // A catalog that replaced a corrupt one has lost its folders, not their grants (#191 D20).
         folderRestore.markDue()
@@ -143,13 +148,48 @@ internal class LibraryCatalogStore internal constructor(
         if (oldVersion < 3) invalidateCatalogForMetadataReconciliation(db)
         if (oldVersion < 4) {
             db.execSQL("ALTER TABLE $TRACKS_TABLE ADD COLUMN $TRACK_FAVORITE_POSITION INTEGER")
-            val oldFavorites = db.query(TRACKS_TABLE, TRACK_COLUMNS, "$TRACK_IS_FAVORITE = 1", null, null, null, null).use { cursor ->
+            // The location column comes with version 5, after this step.
+            val columns = TRACK_COLUMNS.filter { it != TRACK_LOCATION_KEY }.toTypedArray()
+            val oldFavorites = db.query(TRACKS_TABLE, columns, "$TRACK_IS_FAVORITE = 1", null, null, null, null).use { cursor ->
                 buildList { while (cursor.moveToNext()) add(cursor.toAudioTrack()) }
             }
             val favorites = LibraryTitleIndex.build(oldFavorites).tracks
             favorites.forEachIndexed { index, track ->
                 db.execSQL("UPDATE $TRACKS_TABLE SET $TRACK_FAVORITE_POSITION = ? WHERE $TRACK_ID = ?", arrayOf<Any>(index, track.id))
             }
+        }
+        if (oldVersion < 5) addLocationKeys(db)
+    }
+
+    /**
+     * #359: version 5 stores where each file lies on its volume. Rows take their key from what they
+     * already hold, without a scan. An Android 9 device row stores only its folder's own name and
+     * gets its key from the next scan, which marks it seen.
+     */
+    private fun addLocationKeys(db: SQLiteDatabase) {
+        db.execSQL("ALTER TABLE $TRACKS_TABLE ADD COLUMN $TRACK_LOCATION_KEY TEXT")
+        db.execSQL("CREATE INDEX $LOCATION_INDEX ON $TRACKS_TABLE($TRACK_LOCATION_KEY)")
+        val keys = db.query(
+            TRACKS_TABLE,
+            arrayOf(TRACK_ID, TRACK_SOURCE_ID, TRACK_REMOTE_ID, TRACK_CONTENT_URI, TRACK_FOLDER_NAME, TRACK_FILE_NAME),
+            null, null, null, null, null,
+        ).use { cursor ->
+            buildMap {
+                while (cursor.moveToNext()) {
+                    val key = storedLocationKey(
+                        sourceId = cursor.getString(1),
+                        remoteId = cursor.getString(2),
+                        contentUri = cursor.getString(3),
+                        folderName = cursor.getString(4),
+                        fileName = cursor.getString(5),
+                        sdkInt = Build.VERSION.SDK_INT,
+                    ) ?: continue
+                    put(cursor.getLong(0), key)
+                }
+            }
+        }
+        keys.forEach { (trackId, key) ->
+            db.execSQL("UPDATE $TRACKS_TABLE SET $TRACK_LOCATION_KEY = ? WHERE $TRACK_ID = ?", arrayOf<Any>(key, trackId))
         }
     }
 
@@ -194,18 +234,129 @@ internal class LibraryCatalogStore internal constructor(
         )
     }
 
-    fun removeFolderSource(sourceId: String): String? {
+    /**
+     * Removes a folder and its rows. Since one file is one row (#359), no other source holds a row of
+     * its own for this folder's files: a row whose file lies inside another folder of
+     * [readableTreeUris] moves to that folder, and one whose file MediaStore lists
+     * ([listedDeviceFiles]) to the device library, each with its ID and data.
+     */
+    fun removeFolderSource(
+        sourceId: String,
+        readableTreeUris: Set<String> = emptySet(),
+        listedDeviceFiles: Collection<ListedMediaStoreFile> = emptyList(),
+    ): String? {
         val source = findSource(sourceId) ?: return null
         if (source.kind != LibrarySourceKind.FOLDER) return null
-        val database = writableDatabase
-        database.beginTransaction()
-        return try {
-            database.delete(TRACKS_TABLE, "$TRACK_SOURCE_ID = ?", arrayOf(sourceId))
-            database.delete(SOURCES_TABLE, "$SOURCE_ID = ?", arrayOf(sourceId))
-            database.setTransactionSuccessful()
-            source.treeUri
-        } finally {
-            database.endTransaction()
+        val receivers = readSources().mapNotNull { receiver ->
+            val treeUri = receiver.treeUri?.takeIf { receiver.id != sourceId && it in readableTreeUris } ?: return@mapNotNull null
+            val tree = Uri.parse(treeUri)
+            documentTreeLocationPrefix(tree)?.let { prefix -> Triple(receiver.id, tree, prefix) }
+        }
+        val listedByKey = listedDeviceFiles.filter { it.locationKey != null }.associateBy { it.locationKey }
+        withTrackMerges { merges ->
+            if (receivers.isNotEmpty()) handOverFolderTracks(this, sourceId, receivers, merges)
+            if (listedByKey.isNotEmpty() && findSource(LibrarySourceId.DEVICE) != null) {
+                handOverToDeviceLibrary(this, sourceId, listedByKey, merges)
+            }
+            delete(TRACKS_TABLE, "$TRACK_SOURCE_ID = ?", arrayOf(sourceId))
+            delete(SOURCES_TABLE, "$SOURCE_ID = ?", arrayOf(sourceId))
+        }
+        return source.treeUri
+    }
+
+    private fun handOverToDeviceLibrary(
+        database: SQLiteDatabase,
+        sourceId: String,
+        listedByKey: Map<String?, ListedMediaStoreFile>,
+        merges: TrackMerges,
+    ) {
+        val rows = database.query(
+            TRACKS_TABLE,
+            arrayOf(TRACK_ID, TRACK_LOCATION_KEY),
+            "$TRACK_SOURCE_ID = ? AND $TRACK_LOCATION_KEY IS NOT NULL AND $NOT_HIDDEN",
+            arrayOf(sourceId),
+            null,
+            null,
+            null,
+        ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.getLong(0) to cursor.getString(1)) } }
+        rows.forEach { (trackId, key) ->
+            val listed = listedByKey[key] ?: return@forEach
+            val deviceTrackId = database.query(
+                TRACKS_TABLE,
+                arrayOf(TRACK_ID),
+                "$TRACK_SOURCE_ID = ? AND $TRACK_REMOTE_ID = ?",
+                arrayOf(LibrarySourceId.DEVICE, listed.remoteId),
+                null,
+                null,
+                null,
+            ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else null }
+            if (deviceTrackId != null) {
+                merges.merge(from = trackId, into = deviceTrackId)
+                foldUserState(database, into = readTrackState(database, deviceTrackId), from = readTrackState(database, trackId))
+                check(database.delete(TRACKS_TABLE, "$TRACK_ID = ?", arrayOf(trackId.toString())) == 1)
+            } else {
+                // The tags were read from the same file; the next device scan that finds it changed reads it
+                // again. The folder's cover lies in a tree whose grant goes now, so the file's own is used.
+                database.update(
+                    TRACKS_TABLE,
+                    ContentValues().apply {
+                        put(TRACK_SOURCE_ID, LibrarySourceId.DEVICE)
+                        put(TRACK_REMOTE_ID, listed.remoteId)
+                        put(TRACK_CONTENT_URI, listed.contentUri)
+                        put(TRACK_FOLDER_NAME, listed.folderName)
+                        putNull(TRACK_ALBUM_ARTWORK_URI)
+                    },
+                    "$TRACK_ID = ?",
+                    arrayOf(trackId.toString()),
+                )
+            }
+        }
+    }
+
+    private fun handOverFolderTracks(
+        database: SQLiteDatabase,
+        sourceId: String,
+        receivers: List<Triple<String, Uri, String>>,
+        merges: TrackMerges,
+    ) {
+        val rows = database.query(
+            TRACKS_TABLE,
+            arrayOf(TRACK_ID, TRACK_REMOTE_ID, TRACK_LOCATION_KEY),
+            "$TRACK_SOURCE_ID = ? AND $TRACK_LOCATION_KEY IS NOT NULL AND $NOT_HIDDEN",
+            arrayOf(sourceId),
+            null,
+            null,
+            null,
+        ).use { cursor ->
+            buildList { while (cursor.moveToNext()) add(Triple(cursor.getLong(0), cursor.getString(1), cursor.getString(2))) }
+        }
+        rows.forEach { (trackId, documentId, key) ->
+            val (receiverId, tree) = receivers.firstOrNull { key.startsWith(it.third) } ?: return@forEach
+            val receiverTrackId = database.query(
+                TRACKS_TABLE,
+                arrayOf(TRACK_ID),
+                "$TRACK_SOURCE_ID = ? AND $TRACK_REMOTE_ID = ?",
+                arrayOf(receiverId, documentId),
+                null,
+                null,
+                null,
+            ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else null }
+            if (receiverTrackId != null) {
+                merges.merge(from = trackId, into = receiverTrackId)
+                foldUserState(database, into = readTrackState(database, receiverTrackId), from = readTrackState(database, trackId))
+                check(database.delete(TRACKS_TABLE, "$TRACK_ID = ?", arrayOf(trackId.toString())) == 1)
+            } else {
+                // The receiving folder's next scan finds the file under the same document ID and reads it again.
+                database.update(
+                    TRACKS_TABLE,
+                    ContentValues().apply {
+                        put(TRACK_SOURCE_ID, receiverId)
+                        put(TRACK_CONTENT_URI, DocumentsContract.buildDocumentUriUsingTree(tree, documentId).toString())
+                    },
+                    "$TRACK_ID = ?",
+                    arrayOf(trackId.toString()),
+                )
+            }
         }
     }
 
@@ -662,6 +813,7 @@ internal class LibraryCatalogStore internal constructor(
         volumesWithStableIds: Set<String> = emptySet(),
     ): MediaStoreScanSession {
         val session = beginSourceScan(LibrarySourceId.DEVICE)
+        val deviceLocationKeys = HashSet<String>()
         val identities = readableDatabase.query(
             TRACKS_TABLE,
             arrayOf(
@@ -673,6 +825,7 @@ internal class LibraryCatalogStore internal constructor(
                 TRACK_SIZE_BYTES,
                 TRACK_DURATION_MS,
                 TRACK_FINGERPRINT,
+                TRACK_LOCATION_KEY,
             ),
             "$TRACK_SOURCE_ID = ?",
             arrayOf(LibrarySourceId.DEVICE),
@@ -682,6 +835,7 @@ internal class LibraryCatalogStore internal constructor(
         ).use { cursor ->
             buildList {
                 while (cursor.moveToNext()) {
+                    if (!cursor.isNull(8)) deviceLocationKeys += cursor.getString(8)
                     add(
                         StoredTrackIdentity(
                             trackId = cursor.getLong(0),
@@ -700,6 +854,7 @@ internal class LibraryCatalogStore internal constructor(
         return MediaStoreScanSession(
             session,
             MediaStoreIdentityIndex(identities, listedFiles, pathIdentifiesFile, volumesWithStableIds),
+            deviceLocationKeys,
         )
     }
 
@@ -707,7 +862,11 @@ internal class LibraryCatalogStore internal constructor(
         val trackId = scan.identities.unchangedTrackId(candidate) ?: return false
         writableDatabase.update(
             TRACKS_TABLE,
-            ContentValues().apply { put(TRACK_SEEN_EPOCH, scan.session.epoch) },
+            ContentValues().apply {
+                put(TRACK_SEEN_EPOCH, scan.session.epoch)
+                // An Android 9 row stored before #359 gets its location here; the key is no cache validator.
+                candidate.locationKey?.let { put(TRACK_LOCATION_KEY, it) }
+            },
             "$TRACK_ID = ?",
             arrayOf(trackId.toString()),
         )
@@ -719,8 +878,36 @@ internal class LibraryCatalogStore internal constructor(
      * displaced row aside and reusing its `_ID` happen in one transaction, so an interrupted scan
      * leaves either both or neither.
      */
-    fun upsertMediaStoreTrack(scan: MediaStoreScanSession, candidate: LibraryTrackCandidate) {
+    /**
+     * A device scan's file that has no unchanged row (#359). An added folder holds its own files: one
+     * that plays a file MediaStore lists keeps it, and the file is not read; [enriched], which reads
+     * it, runs only for a write. A device row for the file, as catalogs before #359 have beside the
+     * folder's, is written as before until [mergeDuplicateLocations] makes them one.
+     */
+    fun writeMediaStoreTrack(
+        scan: MediaStoreScanSession,
+        candidate: LibraryTrackCandidate,
+        owners: Map<String, LocationOwner>,
+        enriched: () -> LibraryTrackCandidate,
+    ) {
+        val key = candidate.locationKey
+        if (key != null && owners[key]?.playable == true && key !in scan.deviceLocationKeys) return
+        upsertMediaStoreTrack(scan, enriched(), owners)
+    }
+
+    fun upsertMediaStoreTrack(
+        scan: MediaStoreScanSession,
+        candidate: LibraryTrackCandidate,
+        owners: Map<String, LocationOwner> = emptyMap(),
+    ) {
         val plan = scan.identities.plan(candidate)
+        // #359: a file whose row another source cannot play now keeps that row, its ID and the
+        // user's data, and MediaStore becomes its source.
+        val takenOverTrackId = if (plan.targetTrackId == null) {
+            candidate.locationKey?.let(owners::get)?.takeUnless(LocationOwner::playable)?.trackId
+        } else {
+            null
+        }
         val values = candidate.toContentValues(scan.session)
         writableDatabase.transaction {
             plan.displacedTrackId?.let { trackId ->
@@ -737,7 +924,12 @@ internal class LibraryCatalogStore internal constructor(
             val targetTrackId = plan.targetTrackId
             if (targetTrackId == null) {
                 values.put(TRACK_SOURCE_ID, scan.session.sourceId)
-                insertOrThrow(TRACKS_TABLE, null, values)
+                if (takenOverTrackId == null) {
+                    insertOrThrow(TRACKS_TABLE, null, values)
+                } else {
+                    val updated = update(TRACKS_TABLE, values, "$TRACK_ID = ?", arrayOf(takenOverTrackId.toString()))
+                    check(updated == 1) { "Cannot take over a missing catalog row" }
+                }
             } else {
                 val updated = update(TRACKS_TABLE, values, "$TRACK_ID = ?", arrayOf(targetTrackId.toString()))
                 check(updated == 1) { "Cannot update a missing catalog row" }
@@ -804,7 +996,74 @@ internal class LibraryCatalogStore internal constructor(
         }
     }
 
-    fun upsertTrack(session: SourceScanSession, candidate: LibraryTrackCandidate) {
+    /**
+     * A folder scan's file that has no unchanged row (#359). An added folder holds its own files, so
+     * it takes over MediaStore's row for one, with its ID and the user's data: its covers and same-name
+     * lyrics are read the folder's way, on every Android version. Another added folder that plays the
+     * file keeps it, and the file is not read: [candidate], which reads it, runs only for a write; one
+     * that cannot play it now gives its row up. A file the folder already has a row for keeps it, even
+     * beside another source's, until [mergeDuplicateLocations] makes them one.
+     */
+    fun writeFolderTrack(
+        session: SourceScanSession,
+        documentId: String,
+        locationKey: String?,
+        owners: Map<String, LocationOwner>,
+        candidate: () -> LibraryTrackCandidate,
+    ) {
+        val owner = locationKey?.let(owners::get)
+        if (owner != null && !hasTrack(session.sourceId, documentId)) {
+            if (owner.sourceId == LibrarySourceId.DEVICE || !owner.playable) {
+                upsertTrack(session, candidate(), takeOverTrackId = owner.trackId)
+            }
+            return
+        }
+        upsertTrack(session, candidate())
+    }
+
+    private fun hasTrack(sourceId: String, remoteId: String): Boolean = readableDatabase.query(
+        TRACKS_TABLE,
+        arrayOf(TRACK_ID),
+        "$TRACK_SOURCE_ID = ? AND $TRACK_REMOTE_ID = ?",
+        arrayOf(sourceId, remoteId),
+        null,
+        null,
+        null,
+    ).use { cursor -> cursor.moveToFirst() }
+
+    /**
+     * #359: the rows of other sources that hold a file's location. Hidden rows are left out: only
+     * their own source reattaches them, on more evidence than a path. [isPlayable] says whether a
+     * row's source can play it now; where two rows still hold one location, a playable one is named.
+     */
+    fun readLocationOwners(
+        scanningSourceId: String,
+        isPlayable: (sourceId: String, contentUri: String) -> Boolean,
+    ): Map<String, LocationOwner> = readableDatabase.query(
+        TRACKS_TABLE,
+        arrayOf(TRACK_ID, TRACK_SOURCE_ID, TRACK_CONTENT_URI, TRACK_LOCATION_KEY),
+        "$TRACK_LOCATION_KEY IS NOT NULL AND $TRACK_SOURCE_ID != ? AND $NOT_HIDDEN",
+        arrayOf(scanningSourceId),
+        null,
+        null,
+        null,
+    ).use { cursor ->
+        buildMap {
+            while (cursor.moveToNext()) {
+                val sourceId = cursor.getString(1)
+                val owner = LocationOwner(cursor.getLong(0), sourceId, isPlayable(sourceId, cursor.getString(2)))
+                val key = cursor.getString(3)
+                if (get(key)?.playable != true) put(key, owner)
+            }
+        }
+    }
+
+    /**
+     * Writes a source's file. A file the source has no row for may take over [takeOverTrackId], a row
+     * of another source with the same location (#359): it keeps its ID and the user's data, and this
+     * source becomes its source.
+     */
+    fun upsertTrack(session: SourceScanSession, candidate: LibraryTrackCandidate, takeOverTrackId: Long? = null) {
         val existing = readableDatabase.query(
             TRACKS_TABLE,
             arrayOf(TRACK_ID),
@@ -822,10 +1081,63 @@ internal class LibraryCatalogStore internal constructor(
                 "$TRACK_SOURCE_ID = ? AND $TRACK_REMOTE_ID = ?",
                 arrayOf(session.sourceId, candidate.remoteId),
             )
+        } else if (takeOverTrackId != null) {
+            values.put(TRACK_SOURCE_ID, session.sourceId)
+            val updated = writableDatabase.update(TRACKS_TABLE, values, "$TRACK_ID = ?", arrayOf(takeOverTrackId.toString()))
+            check(updated == 1) { "Cannot take over a missing catalog row" }
         } else {
             values.put(TRACK_SOURCE_ID, session.sourceId)
             session.insertedTrackIds += writableDatabase.insertOrThrow(TRACKS_TABLE, null, values)
         }
+    }
+
+    /**
+     * #359: rows of different sources that play the same file now become one, as catalogs before
+     * #359 stored the songs of an added folder that MediaStore lists as well. The row of the first
+     * source keeps its ID: folders before the device library, as a folder holds its own files
+     * ([writeFolderTrack]), and older folders before newer ones;
+     * the others' favorites, plays and playlist places fold into it ([foldUserState]) and they go,
+     * which [mergeFollower] passes on to the saved queue, listening history and imported lyrics.
+     * Rows their source cannot play now stay as they are. Returns how many rows went.
+     */
+    fun mergeDuplicateLocations(isPlayable: (sourceId: String, contentUri: String) -> Boolean): Int = withTrackMerges { merges ->
+        val precedence = rawQuery(
+            "SELECT $SOURCE_ID FROM $SOURCES_TABLE ORDER BY $SOURCE_ID = ?, rowid",
+            arrayOf(LibrarySourceId.DEVICE),
+        ).use { cursor ->
+            buildMap { while (cursor.moveToNext()) put(cursor.getString(0), size) }
+        }
+        val rows = query(
+            TRACKS_TABLE,
+            arrayOf(TRACK_ID, TRACK_SOURCE_ID, TRACK_CONTENT_URI, TRACK_LOCATION_KEY),
+            "$TRACK_LOCATION_KEY IN (SELECT $TRACK_LOCATION_KEY FROM $TRACKS_TABLE " +
+                "WHERE $TRACK_LOCATION_KEY IS NOT NULL AND $NOT_HIDDEN GROUP BY $TRACK_LOCATION_KEY " +
+                "HAVING COUNT(DISTINCT $TRACK_SOURCE_ID) > 1) AND $NOT_HIDDEN",
+            null,
+            null,
+            null,
+            null,
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    val sourceId = cursor.getString(1)
+                    if (isPlayable(sourceId, cursor.getString(2))) add(Triple(cursor.getLong(0), sourceId, cursor.getString(3)))
+                }
+            }
+        }
+        var merged = 0
+        rows.groupBy { it.third }.values.forEach { group ->
+            val (survivorId, survivorSource) = group.minWith(
+                compareBy<Triple<Long, String, String>> { precedence[it.second] ?: Int.MAX_VALUE }.thenBy { it.first },
+            )
+            group.filter { it.second != survivorSource }.forEach { (duplicateId) ->
+                merges.merge(from = duplicateId, into = survivorId)
+                foldUserState(this, into = readTrackState(this, survivorId), from = readTrackState(this, duplicateId))
+                check(delete(TRACKS_TABLE, "$TRACK_ID = ?", arrayOf(duplicateId.toString())) == 1)
+                merged++
+            }
+        }
+        merged
     }
 
     /**
@@ -1378,6 +1690,8 @@ internal class LibraryCatalogStore internal constructor(
         favoritePosition = getLongOrNull(TRACK_FAVORITE_POSITION),
         lastPlayedAtMs = getLong(getColumnIndexOrThrow(TRACK_LAST_PLAYED_AT_MS)),
         playCount = getInt(getColumnIndexOrThrow(TRACK_PLAY_COUNT)),
+        // The version 4 step reads rows before version 5 adds this column.
+        locationKey = getColumnIndex(TRACK_LOCATION_KEY).takeIf { it >= 0 && !isNull(it) }?.let(::getString),
     )
 
     /** Exactly the columns a scan writes, taken from [toContentValues], so a reattach copies all of them. */
@@ -1414,6 +1728,7 @@ internal class LibraryCatalogStore internal constructor(
         put(TRACK_FINGERPRINT, fingerprint)
         put(TRACK_ARTWORK_REVISION, session.epoch)
         put(TRACK_SEEN_EPOCH, session.epoch)
+        putNullableString(TRACK_LOCATION_KEY, locationKey)
     }
 
     private fun Cursor.getStringOrNull(column: String): String? {
@@ -1564,7 +1879,7 @@ internal class LibraryCatalogStore internal constructor(
 
     companion object {
         private const val DATABASE_NAME = "library-catalog.db"
-        private const val DATABASE_VERSION = 4
+        private const val DATABASE_VERSION = 5
         private const val DEVICE_SOURCE_NAME = "Device music"
 
         private const val SOURCES_TABLE = "library_sources"
@@ -1610,6 +1925,8 @@ internal class LibraryCatalogStore internal constructor(
         private const val TRACK_FINGERPRINT = "fingerprint"
         private const val TRACK_ARTWORK_REVISION = "artwork_revision"
         private const val TRACK_SEEN_EPOCH = "seen_epoch"
+        private const val TRACK_LOCATION_KEY = "location_key"
+        private const val LOCATION_INDEX = "index_library_tracks_location"
         private const val UNRESOLVED_LEGACY_MEDIASTORE_PREFIX = "legacy-unresolved:"
         private const val DISPLACED_MEDIASTORE_PREFIX = "mediastore-displaced:"
         private const val HIDDEN_FOLDER_PREFIX = "folder-hidden:"
@@ -1670,7 +1987,32 @@ internal class LibraryCatalogStore internal constructor(
             TRACK_FAVORITE_POSITION,
             TRACK_LAST_PLAYED_AT_MS,
             TRACK_PLAY_COUNT,
+            TRACK_LOCATION_KEY,
         )
+
+        /** Rows waiting for their own source to find their file again; none of them plays. */
+        private const val NOT_HIDDEN = "($TRACK_REMOTE_ID NOT GLOB '$HIDDEN_FOLDER_PREFIX*' AND " +
+            "$TRACK_REMOTE_ID NOT GLOB '$DISPLACED_MEDIASTORE_PREFIX*')"
+
+        /**
+         * The location of a row stored before #359, from what it holds: a folder row's document ID, or from
+         * Android 10 a device row's volume, relative path and file name. Null for hidden rows, whose remote
+         * ID no longer names their file, and for an Android 9 device row, whose folder is only its own name.
+         */
+        internal fun storedLocationKey(
+            sourceId: String,
+            remoteId: String,
+            contentUri: String,
+            folderName: String,
+            fileName: String,
+            sdkInt: Int,
+        ): String? {
+            if (remoteId.startsWith(HIDDEN_FOLDER_PREFIX) || remoteId.startsWith(DISPLACED_MEDIASTORE_PREFIX)) return null
+            if (sourceId != LibrarySourceId.DEVICE) return documentLocationKey(Uri.parse(contentUri).authority, remoteId)
+            if (sdkInt < Build.VERSION_CODES.Q) return null
+            val volume = mediaStoreVolumeName(contentUri) ?: return null
+            return mediaStoreLocationKey(volume, folderName, fileName)
+        }
     }
 }
 
@@ -1824,6 +2166,8 @@ internal data class SourceScanSession(
 internal class MediaStoreScanSession(
     val session: SourceScanSession,
     val identities: MediaStoreIdentityIndex,
+    /** The locations the device library had rows for when the scan began (#359). */
+    val deviceLocationKeys: Set<String> = emptySet(),
 ) {
     private val offeredRemoteIds = HashSet<String>()
 
@@ -1842,3 +2186,6 @@ private data class TrackMigrationState(
     val lastPlayedAtMs: Long,
     val playCount: Int,
 )
+
+/** A row of another source that holds a file's location; [playable] while its source can play it now (#359). */
+internal data class LocationOwner(val trackId: Long, val sourceId: String, val playable: Boolean)

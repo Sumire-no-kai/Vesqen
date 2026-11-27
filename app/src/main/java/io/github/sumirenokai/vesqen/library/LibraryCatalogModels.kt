@@ -177,6 +177,8 @@ internal data class LibraryTrackCandidate(
     val sampleRateHz: Int? = null,
     val bitrate: Int? = null,
     val fingerprint: String,
+    /** See [fileLocationKey]; null where the source cannot place the file on a volume. */
+    val locationKey: String? = null,
 )
 
 internal object LibrarySourceId {

@@ -42,6 +42,8 @@ data class AudioTrack(
     val lastPlayedAtMs: Long = 0,
     val playCount: Int = 0,
     val favoritePosition: Long? = null,
+    /** Where the file lies on its volume ([fileLocationKey]), or null where its source cannot tell (#359). */
+    val locationKey: String? = null,
 ) {
     fun displaySubtitle(): String =
         listOf(artist, album)

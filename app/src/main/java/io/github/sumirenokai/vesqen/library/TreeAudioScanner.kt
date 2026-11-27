@@ -205,6 +205,9 @@ internal data class TreeAudioDocument(
         albumArtworkFingerprint,
         *dsdFingerprintFields(displayName, mimeType),
     )
+
+    /** Where the file lies on its volume, for the documents of Android's own storage provider (#359). */
+    val locationKey: String? get() = documentLocationKey(contentUri.authority, documentId)
 }
 
 internal fun TreeAudioDocument.toTrackCandidate(): LibraryTrackCandidate = LibraryTrackCandidate(
@@ -221,6 +224,7 @@ internal fun TreeAudioDocument.toTrackCandidate(): LibraryTrackCandidate = Libra
     fileName = displayName,
     folderName = folderName,
     fingerprint = fingerprint,
+    locationKey = locationKey,
 )
 
 /** A loading or failed directory cursor is not a complete snapshot and cannot authorize pruning. */

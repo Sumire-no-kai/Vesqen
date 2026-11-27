@@ -32,6 +32,8 @@ internal data class ListedMediaStoreFile(
     val folderName: String,
     val fileName: String,
     val sizeBytes: Long,
+    /** See [fileLocationKey]; a removed folder's rows find their MediaStore row by it (#359). */
+    val locationKey: String? = null,
 )
 
 /**
