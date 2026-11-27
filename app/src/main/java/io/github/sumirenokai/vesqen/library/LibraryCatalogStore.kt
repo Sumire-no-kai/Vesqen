@@ -281,15 +281,37 @@ internal class LibraryCatalogStore internal constructor(
         ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.getLong(0) to cursor.getString(1)) } }
         rows.forEach { (trackId, key) ->
             val listed = listedByKey[key] ?: return@forEach
-            val deviceTrackId = database.query(
+            // MediaStore renumbers its `_ID`s when its database is rebuilt, so the row stored under this
+            // one may describe another file; only the same file's row takes this folder's data.
+            val stored = database.query(
                 TRACKS_TABLE,
-                arrayOf(TRACK_ID),
+                arrayOf(TRACK_ID, TRACK_LOCATION_KEY, TRACK_FOLDER_NAME, TRACK_FILE_NAME, TRACK_SIZE_BYTES),
                 "$TRACK_SOURCE_ID = ? AND $TRACK_REMOTE_ID = ?",
                 arrayOf(LibrarySourceId.DEVICE, listed.remoteId),
                 null,
                 null,
                 null,
-            ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else null }
+            ).use { cursor ->
+                if (!cursor.moveToFirst()) return@use null
+                val storedKey = if (cursor.isNull(1)) null else cursor.getString(1)
+                val sameFile = storedKey?.let { it == key } ?: (
+                    cursor.getString(2) == listed.folderName && cursor.getString(3) == listed.fileName &&
+                        cursor.getLong(4) == listed.sizeBytes
+                    )
+                cursor.getLong(0) to sameFile
+            }
+            val deviceTrackId = stored?.first?.takeIf { stored.second }
+            if (stored != null && !stored.second) {
+                // As a scan does: the other file's row gives up the `_ID` and waits for its own file.
+                check(
+                    database.update(
+                        TRACKS_TABLE,
+                        ContentValues().apply { put(TRACK_REMOTE_ID, "$DISPLACED_MEDIASTORE_PREFIX${stored.first}") },
+                        "$TRACK_ID = ?",
+                        arrayOf(stored.first.toString()),
+                    ) == 1,
+                )
+            }
             if (deviceTrackId != null) {
                 merges.merge(from = trackId, into = deviceTrackId)
                 foldUserState(database, into = readTrackState(database, deviceTrackId), from = readTrackState(database, trackId))
@@ -881,8 +903,10 @@ internal class LibraryCatalogStore internal constructor(
     /**
      * A device scan's file that has no unchanged row (#359). An added folder holds its own files: one
      * that plays a file MediaStore lists keeps it, and the file is not read; [enriched], which reads
-     * it, runs only for a write. A device row for the file, as catalogs before #359 have beside the
-     * folder's, is written as before until [mergeDuplicateLocations] makes them one.
+     * it, runs only for a write. A device row that may be the file is written as before, even beside
+     * the folder's, until [mergeDuplicateLocations] makes them one: skipping it would leave it unseen,
+     * and its data on a hidden row. Its key may be missing (an Android 9 row from before #359) or
+     * name the file's old place, so the row is looked for as MediaStore's scan does.
      */
     fun writeMediaStoreTrack(
         scan: MediaStoreScanSession,
@@ -891,7 +915,12 @@ internal class LibraryCatalogStore internal constructor(
         enriched: () -> LibraryTrackCandidate,
     ) {
         val key = candidate.locationKey
-        if (key != null && owners[key]?.playable == true && key !in scan.deviceLocationKeys) return
+        if (
+            key != null && owners[key]?.playable == true &&
+            key !in scan.deviceLocationKeys && !scan.identities.hasRowFor(candidate)
+        ) {
+            return
+        }
         upsertMediaStoreTrack(scan, enriched(), owners)
     }
 

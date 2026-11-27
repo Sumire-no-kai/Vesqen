@@ -4,8 +4,10 @@ import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -231,6 +233,58 @@ class LibraryDuplicateLocationTest {
     }
 
     @Test
+    fun `removing a folder gives no data to another song MediaStore stored under the same ID`() = withStore { store ->
+        // MediaStore's rebuilt database lists the folder's song under the `_ID` an older song had.
+        scanDevice(store, deviceSong(5, "Other"))
+        val other = store.allTracks().single()
+        store.recordPlayback(other.id, playedAtMs = 100)
+        val folder = addFolder(store, "primary:Music")
+        val session = store.beginSourceScan(folder)
+        store.upsertTrack(session, folderSong(folder, "primary:Music/Dawn.flac", "Dawn"))
+        store.completeSourceScan(session)
+        val dawn = store.readTracks(listOf(folder)).single()
+        store.setFavorite(dawn.id, true)
+        val renumbered = deviceSong(5, "Dawn")
+
+        store.removeFolderSource(folder, listedDeviceFiles = listOf(renumbered.listed()))
+
+        val rows = store.readTracks(listOf(LibrarySourceId.DEVICE)).associateBy(AudioTrack::id)
+        assertEquals(renumbered.contentUri, rows.getValue(dawn.id).contentUri)
+        assertTrue(rows.getValue(dawn.id).isFavorite)
+        assertEquals(0, rows.getValue(dawn.id).playCount)
+        // The other song keeps its own data and waits, hidden, for its own file.
+        assertEquals(1, rows.getValue(other.id).playCount)
+        assertEquals(setOf(other.id), store.readDisplacedTrackIds())
+        assertTrue(merges.isEmpty())
+    }
+
+    @Test
+    fun `MediaStore still writes its row for a file a folder holds when that row has no key yet`() =
+        assertDeviceRowKeepsItsData(stored = deviceSong(1, "Dawn").copy(folderName = "Music/New", locationKey = null))
+
+    @Test
+    fun `MediaStore still writes its row for a file a folder holds when that row's key names its old place`() =
+        assertDeviceRowKeepsItsData(
+            stored = deviceSong(1, "Dawn").copy(folderName = "Music/Old", locationKey = mediaStoreLocationKey(VOLUME, "Music/Old", "Dawn.flac")),
+        )
+
+    @Test
+    fun `an unchanged MediaStore is listed only while a row waits for it to take over`() = runBlocking {
+        var listings = 0
+        val listed = listOf(deviceSong(1, "Dawn").listed())
+        val listFiles: suspend () -> List<ListedMediaStoreFile> = { listings++; listed }
+        val folderPlays = mapOf("primary:music/dawn.flac" to LocationOwner(1, "tree:a", playable = true))
+        assertFalse(mediaStoreListsUnplayableRow(folderPlays, listFiles))
+        assertEquals(0, listings)
+
+        // The folder's grant went: MediaStore lists the file, so the device scan must run.
+        assertTrue(mediaStoreListsUnplayableRow(mapOf("primary:music/dawn.flac" to LocationOwner(1, "tree:a", playable = false)), listFiles))
+        // A DSD file MediaStore does not list leaves the unchanged scan as it is.
+        assertFalse(mediaStoreListsUnplayableRow(mapOf("primary:music/dusk.dsf" to LocationOwner(2, "tree:a", playable = false)), listFiles))
+        assertEquals(2, listings)
+    }
+
+    @Test
     fun `an unchanged MediaStore row without a key gets one from the next scan`() = withStore { store ->
         // An Android 9 row upgraded to version 5 stores no key; the scan cache still finds it unchanged.
         scanDevice(store, deviceSong(1, "Dawn").copy(locationKey = null))
@@ -308,6 +362,31 @@ class LibraryDuplicateLocationTest {
             assertEquals(listOf("primary:music/dawn.flac", "primary:music/dawn.flac"), store.allTracks().map(AudioTrack::locationKey))
             assertEquals(1, store.mergeDuplicateLocations { _, _ -> true })
         }
+    }
+
+    /**
+     * A device row whose key does not show it holds the file (an Android 9 row from before #359, or a
+     * file moved under the same `_ID`) beside a folder's row for that file: the scan must still write
+     * the device row, so that its data joins the folder's instead of staying on a hidden row.
+     */
+    private fun assertDeviceRowKeepsItsData(stored: LibraryTrackCandidate) = withStore { store ->
+        scanDevice(store, stored)
+        store.setFavorite(store.allTracks().single().id, true)
+        val folder = addFolder(store, "primary:Music/New")
+        val session = store.beginSourceScan(folder)
+        store.upsertTrack(session, folderSong(folder, "primary:Music/New/Dawn.flac", "Dawn"))
+        store.completeSourceScan(session)
+        val now = deviceSong(1, "Dawn").copy(
+            folderName = "Music/New",
+            locationKey = mediaStoreLocationKey(VOLUME, "Music/New", "Dawn.flac"),
+            fingerprint = "media-1-edited",
+        )
+
+        scanDevice(store, now, owners = store.readLocationOwners(LibrarySourceId.DEVICE) { _, _ -> true })
+        store.mergeDuplicateLocations { _, _ -> true }
+
+        assertTrue(store.allTracks().single().isFavorite)
+        assertTrue(store.readDisplacedTrackIds().isEmpty())
     }
 
     private fun withStore(block: (LibraryCatalogStore) -> Unit) {

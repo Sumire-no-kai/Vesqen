@@ -419,7 +419,11 @@ internal class AndroidLibraryCatalog(
             report.failureReason = LibraryScanFailureReason.PERMISSION_REQUIRED
             return LibrarySourceScanStatus.UNAVAILABLE
         }
-        if (scanScope.generation != null && source.generation == scanScope.generation) {
+        val owners = store.readLocationOwners(LibrarySourceId.DEVICE, isPlayable)
+        if (
+            scanScope.generation != null && source.generation == scanScope.generation &&
+            !mediaStoreListsUnplayableRow(owners) { mediaStore.listFiles(scanScope) }
+        ) {
             store.finishSourceScan(source.id, generation = scanScope.generation)
             return LibrarySourceScanStatus.UNCHANGED
         }
@@ -434,7 +438,6 @@ internal class AndroidLibraryCatalog(
             pathIdentifiesFile = mediaStore.pathIdentifiesFile,
             volumesWithStableIds = mediaStoreVolumesWithStableIds(source.generation, scanScope),
         )
-        val owners = store.readLocationOwners(LibrarySourceId.DEVICE, isPlayable)
         onProgress(report.progress())
         val iteration = mediaStore.scanTracks(
             scope = scanScope,
@@ -816,6 +819,20 @@ private class LibraryScanGate(
     fun pausedByUser(): Boolean = paused
 
     fun isPaused(): Boolean = paused || catalogRebuilt() || editWaiting()
+}
+
+/**
+ * #359: whether a row its own source cannot play now lies where MediaStore lists a file. A folder
+ * whose grant went leaves such rows; an unchanged MediaStore generation would end the device scan
+ * before it takes them over. MediaStore's files are listed only while there are such rows.
+ */
+internal suspend fun mediaStoreListsUnplayableRow(
+    owners: Map<String, LocationOwner>,
+    listFiles: suspend () -> List<ListedMediaStoreFile>,
+): Boolean {
+    val waiting = owners.filterValues { !it.playable }.keys
+    if (waiting.isEmpty()) return false
+    return listFiles().any { it.locationKey in waiting }
 }
 
 /**
