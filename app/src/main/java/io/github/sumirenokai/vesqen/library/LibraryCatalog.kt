@@ -652,13 +652,6 @@ internal class AndroidLibraryCatalog(
         if (scanGate.isPaused()) {
             return stopBeforeCommit(source, report, LibraryScanStage.RECONCILING, onProgress)
         }
-        if (storageVolumes != null && storageScan?.volumes()?.containsAll(storageVolumes) != true) {
-            // Mount state can change during the scan or while reporting progress. A missing drive
-            // cannot authorize reattaching or pruning the tracks that were on it.
-            store.markSourceInterrupted(source.id)
-            report.failureReason = LibraryScanFailureReason.SOURCE_CHANGED
-            return LibrarySourceScanStatus.INTERRUPTED
-        }
         if (mediaStoreScope != null) {
             var finalScope = mediaStore.currentScanScope()
             if (mediaStoreScanCanCommit(iteration, mediaStoreScope, finalScope) &&
@@ -680,17 +673,24 @@ internal class AndroidLibraryCatalog(
                 return if (permissionRevoked) LibrarySourceScanStatus.UNAVAILABLE else LibrarySourceScanStatus.INTERRUPTED
             }
         }
+        val excludedTrackIds = storageVolumes?.let { store.readStorageExclusionIds(session, it) }.orEmpty()
         // The re-list can suspend too; a pause, edit or catalog rebuild must still prevent pruning.
         if (scanGate.catalogRebuilt()) return LibrarySourceScanStatus.REBUILT
         if (scanGate.isPaused()) {
             return stopBeforeCommit(source, report, LibraryScanStage.RECONCILING, onProgress)
         }
         if (storageVolumes != null) {
-            if (storageScanEnabled?.invoke() != true) {
+            if (storageScanEnabled?.invoke() != true || activeStorageScan() == null) {
                 store.markSourceInterrupted(source.id)
                 return LibrarySourceScanStatus.UNAVAILABLE
             }
-            store.completeStorageScan(session, storageVolumes.map(StorageVolumeRoot::id))
+            if (storageScan?.volumes()?.containsAll(storageVolumes) != true) {
+                // A missing drive cannot authorize reattaching or pruning the tracks that were on it.
+                store.markSourceInterrupted(source.id)
+                report.failureReason = LibraryScanFailureReason.SOURCE_CHANGED
+                return LibrarySourceScanStatus.INTERRUPTED
+            }
+            store.completeStorageScan(session, storageVolumes.map(StorageVolumeRoot::id), excludedTrackIds)
         } else if (mediaStoreScope == null) {
             store.completeSourceScan(session, generation)
         } else {

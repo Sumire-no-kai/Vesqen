@@ -161,6 +161,13 @@ internal fun File.isStorageScanEntry(root: File): Boolean =
     !name.startsWith('.') &&
         !(parentFile == root && (name == ANDROID_FOLDER || name.lowercase(Locale.ROOT) in SYSTEM_SOUND_FOLDERS))
 
+/** A previously indexed file in a system sound folder that still exists on the mounted volume. */
+internal fun File.isRetainedStorageExclusion(root: File): Boolean {
+    val relative = relativeToOrNull(root)?.path ?: return false
+    val topFolder = relative.substringBefore(File.separatorChar, missingDelimiterValue = "")
+    return topFolder.lowercase(Locale.ROOT) in SYSTEM_SOUND_FOLDERS && isFile
+}
+
 private fun File.hasNoMediaMarker(): Boolean = File(this, NO_MEDIA).isFile
 
 /** Checking a single file's directory also needs the exclusions on its ancestors. */
