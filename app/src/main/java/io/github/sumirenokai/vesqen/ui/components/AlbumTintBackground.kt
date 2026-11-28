@@ -6,6 +6,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,7 +30,7 @@ private const val TINT_SAMPLE_PX = 64
 /** A cached result, including "achromatic", so covers without colour are not decoded again. */
 private class CoverHue(val hue: AlbumHue?)
 
-private val coverHueCache = LruCache<String, CoverHue>(128)
+private val coverHueCache = LruCache<Pair<String, Long>, CoverHue>(128)
 
 private fun AudioTrack.tintKey(): String =
     "${albumId ?: contentUri}:$artworkRevision:$dateModifiedSeconds"
@@ -46,7 +47,8 @@ internal fun rememberAlbumBackground(
     motionPolicy: VesqenMotionPolicy,
 ): Color {
     val context = LocalContext.current.applicationContext
-    val key = track?.tintKey()
+    val artworkCacheRevision by AlbumArtworkLoader.memoryCacheRevision.collectAsState()
+    val key = track?.let { it.tintKey() to artworkCacheRevision }
     var hue by remember { mutableStateOf(key?.let(coverHueCache::get)) }
     LaunchedEffect(key) {
         if (track == null || key == null) {
@@ -55,7 +57,7 @@ internal fun rememberAlbumBackground(
         }
         hue = coverHueCache.get(key) ?: withContext(Dispatchers.IO) {
             CoverHue(AlbumArtworkLoader(context).load(track, TINT_SAMPLE_PX * 2)?.let { cover ->
-                dominantAlbumHue(cover.samplePixels())
+                cover.samplePixels()?.let(::dominantAlbumHue)
             })
         }.also { coverHueCache.put(key, it) }
     }
@@ -68,10 +70,10 @@ internal fun rememberAlbumBackground(
 }
 
 /** Scales the cover so its longest side is at most 64 px and returns its ARGB pixels. */
-private fun Bitmap.samplePixels(): IntArray {
+private fun Bitmap.samplePixels(): IntArray? {
     // Platform thumbnails may be hardware bitmaps, whose pixels cannot be read directly.
     val readable = if (config == Bitmap.Config.HARDWARE) {
-        copy(Bitmap.Config.ARGB_8888, false)
+        copy(Bitmap.Config.ARGB_8888, false) ?: return null
     } else {
         this
     }
