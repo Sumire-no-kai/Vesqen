@@ -113,7 +113,14 @@ internal class PlayOrderSessionPlayer(
     private val mergedTrackId: (Long) -> Long = { it },
     /** #344: marks Next and Previous from every controller, so only they count as moving through the queue. */
     private val navigating: (backward: Boolean, command: () -> Unit) -> Unit = { _, command -> command() },
+    private val onStop: () -> Unit = {},
 ) : ForwardingPlayer(exoPlayer) {
+    override fun stop() {
+        // Stop may have no state change to report after the USB output has already been returned.
+        onStop()
+        super.stop()
+    }
+
     override fun seekToNext() = navigating(false) { super.seekToNext() }
 
     override fun seekToNextMediaItem() = navigating(false) { super.seekToNextMediaItem() }

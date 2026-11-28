@@ -61,6 +61,7 @@ internal class UsbOutputCoordinator(
      * device. Null when the build leaves it off (`vesqen.directUsb`).
      */
     private val directRoute: DirectUsbRoute? = null,
+    private val onPlayerStopping: (forOutputReturn: Boolean) -> Unit = {},
 ) : ForwardingAudioOutputProvider(
     AudioTrackAudioOutputProvider.Builder(context.applicationContext).build(),
 ), Player.Listener {
@@ -102,7 +103,8 @@ internal class UsbOutputCoordinator(
     /** #344: the official path rebuilt the AudioTrack for a Play that only [getAudioOutput] resumes. */
     private var playAwaitsAudioOutput = false
     private var internalPauseInProgress = false
-    private var reconfigurePosted = false
+    // Identifies the queued callback. Coalesced requests advance configurationGeneration without replacing it.
+    private var queuedReconfigureGeneration: Long? = null
     private var closed = false
     // Main-thread only. A controller answers the displayed attempt, never supplies a USB identity.
     private data class OutputConsent(val device: UsbDeviceIdentity, val period: Any, val generation: Long, val introduction: Boolean = false)
@@ -159,7 +161,7 @@ internal class UsbOutputCoordinator(
                 if (attached == null || !attached.isUsbAudioDevice()) return
             }
             synchronized(lock) { awaitingReattach = false }
-            if (!reconfigurePosted) {
+            if (queuedReconfigureGeneration == null) {
                 scheduleReconfigure(resume = player?.playWhenReady == true, origin = UsbOutputFailureOrigin.ROUTE_CHANGE)
             }
         }
@@ -178,7 +180,7 @@ internal class UsbOutputCoordinator(
                     returnDirectForOfficial(route)
                 }
             } else {
-                if (reconfigurePosted || (isGenerationCurrent(directAttemptGeneration) && !officialMixerOffered(usbDevices))) return
+                if (queuedReconfigureGeneration != null || (isGenerationCurrent(directAttemptGeneration) && !officialMixerOffered(usbDevices))) return
                 scheduleReconfigure(resume = player?.playWhenReady == true, origin = UsbOutputFailureOrigin.ROUTE_CHANGE)
             }
         }
@@ -336,6 +338,7 @@ internal class UsbOutputCoordinator(
             val previousMode = synchronized(lock) {
                 val previous = mode
                 configurationGeneration += 1
+                queuedReconfigureGeneration = null
                 previous
             }
             restoreSystemOutput(rebuild = previousMode != UsbOutputMode.SYSTEM)
@@ -364,7 +367,7 @@ internal class UsbOutputCoordinator(
         }
         val active = player ?: return false
         val timeline = active.currentTimeline
-        if (closed || reconfigurePosted || currentMode() != UsbOutputMode.STRICT_BIT_PERFECT ||
+        if (closed || queuedReconfigureGeneration != null || currentMode() != UsbOutputMode.STRICT_BIT_PERFECT ||
             interrupted || focusSuppressed || communicationActive || timeline.isEmpty ||
             timeline.getUidOfPeriod(active.currentPeriodIndex) != request.period) return false
         val confirmed = try {
@@ -650,7 +653,7 @@ internal class UsbOutputCoordinator(
             playAwaitsAudioOutput = false
             configurationGeneration += 1
             // Coalesced queue callbacks must not erase a Play command already received in this attempt.
-            if (!(reconfigurePosted && configurationOrigin == UsbOutputFailureOrigin.USER_PLAYBACK &&
+            if (!(queuedReconfigureGeneration != null && configurationOrigin == UsbOutputFailureOrigin.USER_PLAYBACK &&
                     origin == UsbOutputFailureOrigin.QUEUE_RESTORE)) {
                 configurationOrigin = origin
             }
@@ -662,8 +665,8 @@ internal class UsbOutputCoordinator(
             selectedAudioAttributes = null
             selectedPlanGeneration = NO_GENERATION
             resumeAfterConfiguration = resumeAfterConfiguration || resume || wasPlaying
-            val shouldPost = !reconfigurePosted
-            if (shouldPost) reconfigurePosted = true
+            val shouldPost = queuedReconfigureGeneration == null
+            if (shouldPost) queuedReconfigureGeneration = configurationGeneration
             ReconfigurationSchedule(
                 device = previousDevice,
                 sink = previousSink,
@@ -695,7 +698,10 @@ internal class UsbOutputCoordinator(
         }
         if (scheduled.shouldPost) {
             mainHandler.post {
-                synchronized(lock) { reconfigurePosted = false }
+                synchronized(lock) {
+                    if (queuedReconfigureGeneration != scheduled.generation) return@post
+                    queuedReconfigureGeneration = null
+                }
                 if (stateRepository.snapshot().phase != UsbOutputPhase.FAILED) {
                     reconfigureStrictOutput()
                 }
@@ -1375,7 +1381,7 @@ internal class UsbOutputCoordinator(
             selectedAudioAttributes = null
             resumeAfterConfiguration = false
             playAwaitsAudioOutput = false
-            reconfigurePosted = false
+            queuedReconfigureGeneration = null
             if (directPath) awaitingReattach = true
             directPath = false
             directOutputOpened = false
@@ -1404,6 +1410,7 @@ internal class UsbOutputCoordinator(
         )
         if (currentMode() == UsbOutputMode.STRICT_BIT_PERFECT) {
             player?.run {
+                onPlayerStopping(false)
                 pause()
                 stop()
                 setPreferredAudioDevice(null)
@@ -1591,7 +1598,10 @@ internal class UsbOutputCoordinator(
         // stop() abandons Media3's focus request, so an interruption keeps the renderer
         // suppressed or backpressured until the existing focus owner can report a gain.
         if (stopPlayer) {
-            player?.stop()
+            player?.let {
+                onPlayerStopping(true)
+                it.stop()
+            }
             publishReturning(target)
         } else {
             publishDirect(UsbOutputPhase.APPLYING, "direct_usb.interrupted")
@@ -1949,6 +1959,7 @@ internal class UsbOutputCoordinator(
             val state = ClosingOutputState(mode, selectedDevice, selectedMixerFormat, selectedAudioAttributes)
             closed = true
             configurationGeneration += 1
+            queuedReconfigureGeneration = null
             selectedPlanGeneration = NO_GENERATION
             selectedDevice = null
             selectedProfiles = null

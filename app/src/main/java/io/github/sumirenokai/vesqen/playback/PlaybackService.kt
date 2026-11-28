@@ -377,6 +377,7 @@ class PlaybackService : MediaSessionService() {
             outputStateRepository,
             strictOutputAllowed = (application as VesqenApplication).premiumAccess::strictOutputAllowed,
             directRoute = directRoute,
+            onPlayerStopping = { sleepTimer?.onPlayerStopping(it) },
         ).also {
             usbOutputCoordinator = it
         }
@@ -463,7 +464,10 @@ class PlaybackService : MediaSessionService() {
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val trackMerges = (application as VesqenApplication).playbackTrackMerges
-        val orderedPlayer = PlayOrderSessionPlayer(player, trackMerges::mergedTrackId, guard::navigating)
+        val orderedPlayer = PlayOrderSessionPlayer(
+            player, trackMerges::mergedTrackId, guard::navigating,
+            onStop = { sleepTimer?.onPlayerStopping(forOutputReturn = false) },
+        )
         // With the own USB output, the session also reports the DAC's hardware volume (D4).
         val sessionPlayer = if (directRoute != null) {
             DeviceVolumeSessionPlayer(orderedPlayer, (application as VesqenApplication).directUsbVolume)

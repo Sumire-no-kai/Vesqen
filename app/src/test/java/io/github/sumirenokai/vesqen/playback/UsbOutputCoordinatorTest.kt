@@ -108,6 +108,7 @@ class UsbOutputCoordinatorTest {
     private val dac = audioDevice(id = 11)
     private var strictAllowed = true
     private lateinit var coordinator: UsbOutputCoordinator
+    private var sleepTimer: PlaybackSleepTimer? = null
 
     private fun start(modifyAudioSettingsGranted: Boolean = true, usbHost: Boolean = true, direct: DirectUsbRoute? = null) {
         if (modifyAudioSettingsGranted) {
@@ -121,12 +122,14 @@ class UsbOutputCoordinatorTest {
             mixerAdapter = mixer,
             strictOutputAllowed = { strictAllowed },
             directRoute = direct,
+            onPlayerStopping = { sleepTimer?.onPlayerStopping(it) },
         )
         coordinator.attachPlayer(player)
     }
 
     @After
     fun tearDown() {
+        sleepTimer?.close()
         if (::coordinator.isInitialized) coordinator.close()
         realPlayer.release()
         RoutableAudioTrackShadow.accepted = true
@@ -2159,6 +2162,188 @@ class UsbOutputCoordinatorTest {
         checkNotNull(direct.listener).onOutputOpened(uid)
         checkNotNull(direct.listener).onOutputActive(uid, active = true)
     }
+
+    @Test
+    fun `a retry after failure starts one takeover even when the old task is still queued`() {
+        connect(dac)
+        start(direct = direct)
+        loadTrack()
+        coordinator.requestMode(UsbOutputMode.STRICT_BIT_PERFECT)
+        assertEquals(UsbOutputPhase.APPLYING, status().phase)
+        player.volume = 0.5f
+        assertEquals(UsbOutputPhase.FAILED, status().phase)
+        player.volume = 1f
+        direct.deferTakeover = true
+        player.play()
+        assertEquals(UsbOutputPhase.APPLYING, status().phase)
+        direct.calls.clear()
+
+        idle()
+
+        assertEquals(direct.calls.toString(), 1, direct.calls.count { it == "takeOver" })
+    }
+
+    @Test
+    fun `queued strict requests use the latest track and rebuild only once`() {
+        connectDacWithMixer()
+        start()
+        loadTrack(sampleRateHz = 44_100)
+        coordinator.requestMode(UsbOutputMode.STRICT_BIT_PERFECT)
+        player.setMediaItem(mediaItem(sampleRateHz = 48_000))
+        player.play()
+        playerCalls.clear()
+        mixer.calls.clear()
+
+        idle()
+
+        assertEquals(1, playerCalls.count { it == "prepare" })
+        assertEquals(1, mixer.calls.count { it == "profiles(${dac.id})" })
+        strictOutput()
+        idle()
+        assertTrue(player.playWhenReady)
+    }
+
+    @Test
+    fun `returning direct USB to system output keeps the countdown across the rebuild`() {
+        reachDirectActive()
+        val timer = startCountdown()
+        val countdown = timer.state
+        val entry = player.currentMediaItem?.queueEntryId()
+        direct.deferTakeover = true
+
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        idle()
+
+        val done = checkNotNull(direct.pendingRelease)
+        assertEquals(androidx.media3.common.Player.STATE_IDLE, player.playbackState)
+        assertEquals(entry, player.currentMediaItem?.queueEntryId())
+        assertEquals(countdown, timer.state)
+
+        done(RELEASED)
+        idle()
+        assertEquals(UsbOutputPhase.SYSTEM, status().phase)
+        assertTrue("prepare" in playerCalls)
+        assertEquals(countdown, timer.state)
+
+        player.stop()
+        idle()
+        assertEquals(SleepTimerMode.OFF, timer.state.mode)
+    }
+
+    @Test
+    fun `a paused direct USB session can return the device without losing its countdown`() {
+        reachDirectActive()
+        val timer = startCountdown()
+        val countdown = timer.state
+        val returned = returnPausedDirectDevice()
+        assertEquals(countdown, timer.state)
+
+        returned(RELEASED)
+        idle()
+
+        assertEquals(UsbOutputPhase.AVAILABLE, status().phase)
+        assertEquals(androidx.media3.common.Player.STATE_IDLE, player.playbackState)
+        assertEquals(countdown, timer.state)
+
+        player.clearMediaItems()
+        idle()
+        assertEquals(SleepTimerMode.OFF, timer.state.mode)
+    }
+
+    @Test
+    fun `a countdown expiring during USB cleanup cancels the pending resume`() {
+        reachDirectActive()
+        var now = 0L
+        lateinit var expire: () -> Unit
+        val scheduler = SleepTimerScheduler { _, callback ->
+            expire = callback
+            {}
+        }
+        val timer = startCountdown(scheduler, clock = { now })
+        direct.deferTakeover = true
+
+        coordinator.requestMode(UsbOutputMode.SYSTEM)
+        idle()
+        val returned = checkNotNull(direct.pendingRelease)
+        assertTrue(player.playWhenReady)
+
+        now = checkNotNull(timer.state.deadlineElapsedRealtimeMs)
+        expire()
+        assertEquals(SleepTimerMode.OFF, timer.state.mode)
+        assertFalse(player.playWhenReady)
+
+        returned(RELEASED)
+        idle()
+        assertEquals(UsbOutputPhase.SYSTEM, status().phase)
+        assertFalse(player.playWhenReady)
+    }
+
+    @Test
+    fun `a failed USB return cancels the countdown even when the player is already paused and idle`() {
+        reachDirectActive()
+        val timer = startCountdown()
+        val returned = returnPausedDirectDevice()
+        assertEquals(SleepTimerMode.COUNTDOWN, timer.state.mode)
+
+        returned(CLEANUP_FAILED)
+        idle()
+
+        assertEquals(UsbOutputPhase.FAILED, status().phase)
+        assertEquals(SleepTimerMode.OFF, timer.state.mode)
+    }
+
+    @Test
+    fun `a controller Stop after a paused USB return still cancels the countdown`() {
+        reachDirectActive()
+        val timer = startCountdown()
+        returnPausedDirectDevice()(RELEASED)
+        idle()
+        assertEquals(SleepTimerMode.COUNTDOWN, timer.state.mode)
+        val controllerPlayer = PlayOrderSessionPlayer(player, onStop = { timer.onPlayerStopping(forOutputReturn = false) })
+
+        controllerPlayer.stop()
+        idle()
+
+        assertEquals(SleepTimerMode.OFF, timer.state.mode)
+        assertFalse(timer.apply(SleepTimerRequest.Countdown(120_000, false)))
+    }
+
+    @Test
+    fun `a paused USB return keeps an end-of-track request on the same queue entry`() {
+        reachDirectActive(listOf(mediaItem(mediaId = "first"), mediaItem(mediaId = "second")))
+        val timer = PlaybackSleepTimer(player, SleepTimerScheduler { _, _ -> {} }) {}
+        sleepTimer = timer
+        assertTrue(timer.apply(SleepTimerRequest.EndOfTrack(checkNotNull(player.currentMediaItem).queueEntryId())))
+        val endOfTrack = timer.state
+
+        returnPausedDirectDevice()(RELEASED)
+        idle()
+        assertEquals(endOfTrack, timer.state)
+        assertTrue(player.pauseAtEndOfMediaItems)
+
+        player.seekToNextMediaItem()
+        idle()
+        assertEquals(SleepTimerMode.OFF, timer.state.mode)
+        assertFalse(player.pauseAtEndOfMediaItems)
+    }
+
+    private fun returnPausedDirectDevice(): (DirectUsbReleaseResult) -> Unit {
+        direct.deferTakeover = true
+        player.pause()
+        idle()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(30))
+        assertEquals(androidx.media3.common.Player.STATE_IDLE, player.playbackState)
+        return checkNotNull(direct.pendingRelease)
+    }
+
+    private fun startCountdown(
+        scheduler: SleepTimerScheduler = SleepTimerScheduler { _, _ -> {} },
+        clock: () -> Long = android.os.SystemClock::elapsedRealtime,
+    ): PlaybackSleepTimer = PlaybackSleepTimer(player, scheduler, clock) {}
+        .also {
+            sleepTimer = it
+            assertTrue(it.apply(SleepTimerRequest.Countdown(120_000, false)))
+        }
 
     private val direct = FakeDirectRoute()
 

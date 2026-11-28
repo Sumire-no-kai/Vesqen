@@ -57,6 +57,9 @@ internal class PlaybackSleepTimer(
     elapsedRealtimeMs: () -> Long = SystemClock::elapsedRealtime,
     onChanged: (SleepTimerState) -> Unit,
 ) : Player.Listener {
+    // A Direct USB return stops the sink but keeps a paused or rebuilding queue, possibly in IDLE
+    // until the next Play. Clear this distinction when Media3 prepares again or playback really ends.
+    private var idleForOutputReturn = false
     private val timer = SleepTimer(
         elapsedRealtimeMs = elapsedRealtimeMs,
         scheduler = scheduler,
@@ -64,7 +67,8 @@ internal class PlaybackSleepTimer(
             SleepTimerPlayback(
                 queueEntryId = player.currentMediaItem?.queueEntryId(),
                 playWhenReady = player.playWhenReady,
-                terminal = player.playerError != null || player.playbackState in setOf(Player.STATE_IDLE, Player.STATE_ENDED),
+                terminal = player.playerError != null || player.playbackState == Player.STATE_ENDED ||
+                    (player.playbackState == Player.STATE_IDLE && !idleForOutputReturn),
             )
         },
         setPauseAtTrackEnd = { player.pauseAtEndOfMediaItems = it },
@@ -82,6 +86,20 @@ internal class PlaybackSleepTimer(
         is SleepTimerRequest.EndOfTrack -> timer.pauseAfterCurrentTrack(request.queueEntryId)
     }
 
+    fun onPlayerStopping(forOutputReturn: Boolean) {
+        if (forOutputReturn) {
+            val state = player.playbackState
+            if (state == Player.STATE_READY || state == Player.STATE_BUFFERING) idleForOutputReturn = true
+        } else {
+            idleForOutputReturn = false
+            timer.cancel()
+        }
+    }
+
+    override fun onPlaybackStateChanged(playbackState: Int) {
+        if (playbackState != Player.STATE_IDLE && playbackState == player.playbackState) idleForOutputReturn = false
+    }
+
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
         if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) timer.onTrackEnded()
         timer.onPlaybackChanged()
@@ -95,7 +113,10 @@ internal class PlaybackSleepTimer(
         timer.onPlaybackChanged()
     }
 
-    override fun onEvents(player: Player, events: Player.Events) { timer.onPlaybackChanged() }
+    override fun onEvents(player: Player, events: Player.Events) {
+        if (player.currentMediaItem == null || player.playerError != null) idleForOutputReturn = false
+        timer.onPlaybackChanged()
+    }
 
     fun close() {
         player.removeListener(this)
