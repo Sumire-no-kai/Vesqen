@@ -1,6 +1,8 @@
 package io.github.sumirenokai.vesqen.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -48,6 +50,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 import io.github.sumirenokai.vesqen.library.AudioTrack
 import io.github.sumirenokai.vesqen.library.TrackFullInfo
 import io.github.sumirenokai.vesqen.library.TrackInfoReader
@@ -339,7 +342,12 @@ private fun TrackFacts(track: AudioTrack, lyrics: TrackLyrics?) {
 private fun FullInfoSection(track: AudioTrack, load: suspend (AudioTrack) -> TrackFullInfo) {
     var expanded by rememberSaveable(track.id) { mutableStateOf(false) }
     val stateText = stringResource(if (expanded) R.string.now_notes_expanded else R.string.now_notes_collapsed)
-    val turn by animateFloatAsState(if (expanded) 180f else 0f, label = "vesqen.track-details.full-info-turn")
+    val reduceMotion = rememberVesqenMotionPolicy().reduceMotion
+    val turn by animateFloatAsState(
+        if (expanded) 180f else 0f,
+        animationSpec = if (reduceMotion) snap() else spring(),
+        label = "vesqen.track-details.full-info-turn",
+    )
     Column(verticalArrangement = Arrangement.spacedBy(VesqenSpacing.xs)) {
         PaperCard {
             Row(

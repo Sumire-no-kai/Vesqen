@@ -6,6 +6,8 @@ import android.os.Environment
 import android.os.Process
 import android.os.storage.StorageManager
 import android.provider.DocumentsContract
+import io.github.sumirenokai.vesqen.lyrics.LyricsImportResult
+import io.github.sumirenokai.vesqen.lyrics.LyricsStore
 import io.github.sumirenokai.vesqen.playback.PcmFiles
 import io.github.sumirenokai.vesqen.ui.components.folderStorageLabel
 import java.io.File
@@ -281,6 +283,41 @@ class StorageScanCatalogTest {
                 assertEquals("files visible after removing the only eligible source", 0, catalog.snapshot(false).tracks.size)
             }
         }
+    }
+
+    @Test
+    fun `an excluded recording can recover its imported lyrics by adding the folder`() = withStore { store ->
+        val root = temporary.newFolder("mounted")
+        val recording = File(root, "Recordings/Custom.wav").apply {
+            parentFile.mkdirs()
+            writeBytes(PcmFiles.wavBytes(IntArray(882), 44_100, 16, 2))
+        }
+        val old = storageSong("Recordings/Custom.wav", root = root.path).copy(
+            lastModifiedMs = recording.lastModified(), sizeBytes = recording.length(),
+        )
+        scanStorage(store, old, isPlayable = { _, _ -> true })
+        val trackId = store.readTracks(listOf(LibrarySourceId.STORAGE)).single().id
+        val lyrics = LyricsStore(temporary.newFolder("imports"))
+        val text = "[00:01.00]An imported line".toByteArray()
+        assertEquals(LyricsImportResult.IMPORTED, lyrics.import(trackId, text, lyrics.generation()))
+        val scan = storageScan(root).apply { setEnabled(true) }
+        AndroidLibraryCatalog(context, store, folderGrants = { emptyList() }, storageScan = scan).use { catalog ->
+            val result = runBlocking { catalog.refresh(includeDeviceLibrary = false) {} }
+            assertEquals(LibrarySourceScanStatus.COMPLETED, result.sourceResults.single().status)
+            assertTrue(result.snapshot.tracks.isEmpty())
+            assertEquals(0, store.readSources().single { it.id == LibrarySourceId.STORAGE }.trackCount)
+            lyrics.sweep(runBlocking { catalog.readTrackIdsForSweep() }, lyrics.generation())
+            assertTrue(text.contentEquals(lyrics.read(trackId)))
+        }
+        val folder = addFolder(store, "primary:Recordings")
+        val source = store.beginSourceScan(folder)
+        val documentId = "primary:Recordings/Custom.wav"
+        store.writeSourceTrack(source, documentId, old.locationKey, store.readLocationOwners(folder) { _, _ -> true }) {
+            folderSong(folder, documentId, "Custom")
+        }
+        store.completeSourceScan(source)
+        assertEquals(trackId, store.readTracks(listOf(folder)).single().id)
+        assertTrue(text.contentEquals(lyrics.read(trackId)))
     }
 
     private fun storageScan(root: File) = StorageScan(

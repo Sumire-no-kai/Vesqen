@@ -1201,8 +1201,9 @@ internal class LibraryCatalogStore internal constructor(
     ).use { cursor -> cursor.moveToFirst() }
 
     /**
-     * #359: the rows of other sources that hold a file's location. Hidden rows are left out: only
-     * their own source reattaches them, on more evidence than a path. [isPlayable] says whether a
+     * #359: the rows of other sources that hold a file's location. Hidden missing files are left
+     * out. A storage exclusion was verified to exist when it was hidden and can transfer its ID
+     * to the explicitly added source at that location (#409). [isPlayable] says whether a
      * row's source can play it now; where two rows still hold one location, a playable one is named.
      */
     fun readLocationOwners(
@@ -1210,8 +1211,12 @@ internal class LibraryCatalogStore internal constructor(
         isPlayable: (sourceId: String, contentUri: String) -> Boolean,
     ): Map<String, LocationOwner> = readableDatabase.query(
         TRACKS_TABLE,
-        arrayOf(TRACK_ID, TRACK_SOURCE_ID, TRACK_CONTENT_URI, TRACK_LOCATION_KEY),
-        "$TRACK_LOCATION_KEY IS NOT NULL AND $TRACK_SOURCE_ID != ? AND $NOT_HIDDEN",
+        arrayOf(
+            TRACK_ID, TRACK_SOURCE_ID, TRACK_CONTENT_URI, TRACK_LOCATION_KEY, TRACK_REMOTE_ID,
+            TRACK_SIZE_BYTES, TRACK_DATE_MODIFIED_SECONDS,
+        ),
+        "$TRACK_LOCATION_KEY IS NOT NULL AND $TRACK_SOURCE_ID != ? AND " +
+            "($NOT_HIDDEN OR $TRACK_REMOTE_ID GLOB '$STORAGE_EXCLUDED_PREFIX*')",
         arrayOf(scanningSourceId),
         null,
         null,
@@ -1220,7 +1225,14 @@ internal class LibraryCatalogStore internal constructor(
         buildMap {
             while (cursor.moveToNext()) {
                 val sourceId = cursor.getString(1)
-                val owner = LocationOwner(cursor.getLong(0), sourceId, isPlayable(sourceId, cursor.getString(2)))
+                val excluded = cursor.getString(4).startsWith(STORAGE_EXCLUDED_PREFIX)
+                val contentUri = cursor.getString(2)
+                if (excluded) {
+                    val file = Uri.parse(contentUri).path?.let(::File) ?: continue
+                    if (!file.isFile || file.length() != cursor.getLong(5) ||
+                        file.lastModified() / 1_000 != cursor.getLong(6)) continue
+                }
+                val owner = LocationOwner(cursor.getLong(0), sourceId, !excluded && isPlayable(sourceId, contentUri))
                 val key = cursor.getString(3)
                 if (get(key)?.playable != true) put(key, owner)
             }
@@ -1344,7 +1356,11 @@ internal class LibraryCatalogStore internal constructor(
      * ([scannedVolumeIds]): the rows of a card or USB drive that is not mounted stay, hidden, until
      * it is back.
      */
-    fun completeStorageScan(session: SourceScanSession, scannedVolumeIds: Collection<String>) {
+    fun completeStorageScan(
+        session: SourceScanSession,
+        scannedVolumeIds: Collection<String>,
+        excludedTrackIds: List<Long> = emptyList(),
+    ) {
         require(session.sourceId == LibrarySourceId.STORAGE)
         require(scannedVolumeIds.isNotEmpty())
         completeSourceScan(
@@ -1352,7 +1368,28 @@ internal class LibraryCatalogStore internal constructor(
             generation = null,
             prunableMediaStoreVolumes = null,
             prunableStorageVolumes = scannedVolumeIds.toSet(),
+            excludedTrackIds = excludedTrackIds,
         )
+    }
+
+    /** Only already indexed files can keep a row in a whole-storage exclusion. */
+    fun readStorageExclusionIds(session: SourceScanSession, volumes: List<StorageVolumeRoot>): List<Long> {
+        val rootsById = volumes.associate { it.id to it.root }
+        return readableDatabase.query(
+            TRACKS_TABLE,
+            arrayOf(TRACK_ID, TRACK_LOCATION_KEY, TRACK_CONTENT_URI),
+            "$TRACK_SOURCE_ID = ? AND $TRACK_SEEN_EPOCH != ? AND $TRACK_LOCATION_KEY IS NOT NULL",
+            arrayOf(session.sourceId, session.epoch.toString()),
+            null, null, null,
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    val root = rootsById[cursor.getString(1).substringBefore(':')] ?: continue
+                    val path = Uri.parse(cursor.getString(2)).path ?: continue
+                    if (File(path).isRetainedStorageExclusion(root)) add(cursor.getLong(0))
+                }
+            }
+        }
     }
 
     private fun completeSourceScan(
@@ -1360,9 +1397,18 @@ internal class LibraryCatalogStore internal constructor(
         generation: String?,
         prunableMediaStoreVolumes: Set<String>?,
         prunableStorageVolumes: Set<String>? = null,
+        excludedTrackIds: List<Long> = emptyList(),
     ) {
         withTrackMerges { merges ->
             val database = this
+            for (ids in excludedTrackIds.chunked(SQL_ARGUMENT_CHUNK)) {
+                val placeholders = ids.joinToString(",") { "?" }
+                database.execSQL(
+                    "UPDATE $TRACKS_TABLE SET $TRACK_REMOTE_ID = '$STORAGE_EXCLUDED_PREFIX' || $TRACK_ID, " +
+                        "$TRACK_SEEN_EPOCH = ? WHERE $TRACK_SOURCE_ID = ? AND $TRACK_ID IN ($placeholders)",
+                    (listOf(session.epoch.toString(), session.sourceId) + ids.map(Long::toString)).toTypedArray(),
+                )
+            }
             val prunePatterns = prunableMediaStoreVolumes?.map { volumeName -> "content://media/$volumeName/*" }
                 ?: prunableStorageVolumes?.map { volumeId -> "$volumeId:*" }
             val prunedColumn = if (prunableMediaStoreVolumes != null) TRACK_CONTENT_URI else TRACK_LOCATION_KEY
@@ -2124,6 +2170,7 @@ internal class LibraryCatalogStore internal constructor(
         private const val UNRESOLVED_LEGACY_MEDIASTORE_PREFIX = "legacy-unresolved:"
         private const val DISPLACED_MEDIASTORE_PREFIX = "mediastore-displaced:"
         private const val HIDDEN_FOLDER_PREFIX = "folder-hidden:"
+        private const val STORAGE_EXCLUDED_PREFIX = "${HIDDEN_FOLDER_PREFIX}storage-excluded:"
 
         /** Below SQLite's oldest limit of 999 arguments per statement. */
         private const val SQL_ARGUMENT_CHUNK = 500

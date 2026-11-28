@@ -188,11 +188,14 @@ internal fun projectLibrary(
             emptyList()
         }
     // An index built for other tracks has other positions, so its letters would jump to the wrong rows.
-    val alphabetSections = input.title
-        ?.takeIf { input.query.isBlank() && input.rootSortOrder == LibrarySortOrder.TITLE }
-        ?.takeIf { it.keys == libraryTitleKeys(input.tracks) }
-        ?.index?.sections
-        .orEmpty()
+    val alphabetSections = when {
+        input.title == null || input.query.isNotBlank() || input.rootSortOrder != LibrarySortOrder.TITLE -> emptyMap()
+        previous != null && previous.input.tracks === input.tracks && previous.input.title === input.title &&
+            previous.input.query.isBlank() && previous.input.rootSortOrder == LibrarySortOrder.TITLE ->
+            previous.alphabetSections
+        input.title.keys == libraryTitleKeys(input.tracks) -> input.title.index.sections
+        else -> emptyMap()
+    }
     return LibraryProjection(
         input = input,
         searchedTracks = searchedTracks,

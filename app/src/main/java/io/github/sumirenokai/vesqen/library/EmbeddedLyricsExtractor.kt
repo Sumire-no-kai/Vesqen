@@ -41,7 +41,7 @@ internal fun extractBoundedEmbeddedLyrics(
             declaredLength?.takeIf { it >= MP4_ATOM_HEADER_BYTES }?.let { length ->
                 collectMp4Lyrics(buffered, length, depth = 0, insideLyrics = false, Mp4AtomBudget(), candidates)
             }
-        startsLikeDsd(header) -> if (buffered.skipToDsdId3(declaredLength)) collectId3Lyrics(buffered, candidates)
+        startsLikeDsd(header) -> buffered.openDsdId3(declaredLength)?.let { collectId3Lyrics(it, candidates) }
     }
     return candidates.result()
 }

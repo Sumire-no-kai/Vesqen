@@ -119,7 +119,9 @@ async function signed(payload, header, secret, now) {
   if (!header) return false;
   const fields = header.split(',').map(part => part.split('='));
   const timestamp = Number(fields.find(([name]) => name === 't')?.[1]);
-  const candidates = fields.filter(([name]) => name === 'v1').map(([, value]) => value);
+  const candidates = fields
+    .filter(([name, value]) => name === 'v1' && typeof value === 'string')
+    .map(([, value]) => value);
   if (!Number.isInteger(timestamp) || Math.abs(now / 1000 - timestamp) > SIGNATURE_TOLERANCE_SECONDS || !candidates.length) return false;
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), {name:'HMAC', hash:'SHA-256'}, false, ['sign']);
   const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${payload}`)));

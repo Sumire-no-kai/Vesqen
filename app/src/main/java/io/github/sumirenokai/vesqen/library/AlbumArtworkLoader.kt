@@ -15,6 +15,9 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.FutureTask
 import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * Reads artwork only through a provider-owned content URI.
@@ -288,6 +291,8 @@ class AlbumArtworkLoader(context: Context) {
         private val inFlightLoads = ConcurrentHashMap<String, FutureTask<Bitmap?>>()
         private val blockedLegacyAlbumVolumes = ConcurrentHashMap.newKeySet<String>()
         private val cacheEpoch = AtomicLong()
+        private val mutableMemoryCacheRevision = MutableStateFlow(0L)
+        internal val memoryCacheRevision = mutableMemoryCacheRevision.asStateFlow()
 
         /** Clears only process memory; original artwork remains owned by MediaStore or the file. */
         fun clearMemoryCache() {
@@ -299,6 +304,7 @@ class AlbumArtworkLoader(context: Context) {
             // subsequent generation start an independent request; the epoch prevents the old one
             // from storing an obsolete positive or negative result when it eventually completes.
             inFlightLoads.clear()
+            mutableMemoryCacheRevision.update { it + 1 }
         }
     }
 }
