@@ -7,6 +7,7 @@ import java.nio.file.Files
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -293,6 +294,49 @@ class LyricsAdjustmentStoreTest {
         reopened.recoverMerges { it == 10L || it == 20L }
         assertEquals(500L, reopened.userAdvance(10, content))
         assertEquals(0L, reopened.userAdvance(20, content))
+    }
+
+    @Test
+    fun cleanupIoFailureLeavesAdjustmentRecoveryAvailableAfterCommitOrRollback() {
+        for (committed in listOf(true, false)) {
+            adjust(10, LyricsAdjustmentAction.ADVANCE)
+            store.prepareMerge(10, 20)
+            val journal = directory.listFiles()!!.single { it.name.endsWith(".merge") }
+            val source = File(directory, "10.$content.adjustment")
+            val destination = File(directory, "20.$content.adjustment")
+            val unavailable = File(directory, "offline")
+            assertTrue(source.renameTo(unavailable))
+            assertTrue(destination.delete())
+
+            if (committed) store.mergeCommitted(10, 20) else store.mergeRolledBack(10, 20)
+
+            assertTrue(journal.exists())
+            val failure = assertThrows(IOException::class.java) { store.prepareMerge(20, 30) }
+            assertTrue(failure.cause is IOException)
+            store.prepareMerge(30, 40)
+            store.mergeRolledBack(30, 40)
+            assertTrue(unavailable.renameTo(source))
+            val reopened = LyricsStore(directory)
+            reopened.recoverMerges { !committed || it == 20L }
+            val owner = if (committed) 20L else 10L
+            assertEquals(500L, reopened.userAdvance(owner, content))
+            assertFalse(journal.exists())
+            assertEquals(LyricsAdjustmentResult.APPLIED, adjust(owner, LyricsAdjustmentAction.RESET))
+        }
+    }
+
+    @Test
+    fun unreadableJournalPreventsUnsafeOffsetSweepButStillPublishesImportCleanup() {
+        store.import(10, "[00:01.00]one".toByteArray(), store.generation())
+        adjust(10, LyricsAdjustmentAction.ADVANCE)
+        val journal = File(directory, ".adjustment-merge-00000000000000000001-10-20.merge")
+        journal.createNewFile()
+
+        store.sweep(CatalogTrackIds(setOf(20), 20), store.generation())
+
+        assertTrue(store.importedLyrics.value.trackIds.isEmpty())
+        assertEquals(500L, store.userAdvance(10, content))
+        assertTrue(journal.exists())
     }
 
     @Test

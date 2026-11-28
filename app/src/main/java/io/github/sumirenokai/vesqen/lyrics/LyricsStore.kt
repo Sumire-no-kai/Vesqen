@@ -53,6 +53,7 @@ internal class LyricsStore(
 
     /** What [prepareMerge] did for each `(from, into)` of the open merging transaction. */
     private val preparedMerges = HashMap<Pair<Long, Long>, MergePreparation>()
+    private var deferredAdjustmentRecovery: IOException? = null
     private val adjustmentMerges = LyricsAdjustmentMerges(
         directory,
         write = { target, bytes -> writeAtomically(target) { it.write(bytes) } },
@@ -180,6 +181,7 @@ internal class LyricsStore(
             directory.listFiles()?.forEach(File::delete)
             loadedTrackIds = HashSet()
             adjustmentMerges.clear()
+            deferredAdjustmentRecovery = null
             publish()
         }
     }
@@ -196,7 +198,11 @@ internal class LyricsStore(
             gone.forEach { trackId -> fileFor(trackId).delete() }
             gone.forEach { contentChanged(it) }
             trackIds().removeAll(gone.toSet())
-            val mergeProtected = adjustmentMerges.protectedTrackIds()
+            val mergeProtected = withAdjustmentJournal { adjustmentMerges.protectedTrackIds() }
+            if (mergeProtected == null) {
+                if (gone.isNotEmpty()) publish()
+                return
+            }
             val staleAdjustments = adjustmentFiles().filter { file ->
                 val id = adjustmentTrackId(file)
                 id !in mergeProtected && id !in catalog.trackIds && id <= catalog.largestAssignedId
@@ -208,6 +214,12 @@ internal class LyricsStore(
 
     override fun prepareMerge(from: Long, into: Long) {
         synchronized(lock) {
+            deferredAdjustmentRecovery?.let { failure ->
+                val protected = adjustmentMerges.protectedTrackIds()
+                if (from in protected || into in protected) {
+                    throw IOException("An earlier lyric adjustment merge still needs recovery", failure)
+                }
+            }
             // The journal must be durable before either sidecar or imported-file preparation.
             val transfersAdjustments = adjustmentMerges.prepare(from, into)
             preparedMerges[from to into] = when {
@@ -246,7 +258,8 @@ internal class LyricsStore(
 
     override fun recoverMerges(trackExists: (Long) -> Boolean) {
         synchronized(lock) {
-            adjustmentMerges.recover(trackExists)
+            deferredAdjustmentRecovery = null
+            withAdjustmentJournal { adjustmentMerges.recover(trackExists) }
         }
     }
 
@@ -256,7 +269,7 @@ internal class LyricsStore(
                 MergePreparation.MOVED, MergePreparation.KEPT -> Unit
                 MergePreparation.NOTHING, MergePreparation.DUPLICATED, null -> if (removeImport(from)) publish()
             }
-            adjustmentMerges.committed()
+            withAdjustmentJournal { adjustmentMerges.committed() }
         }
     }
 
@@ -275,9 +288,20 @@ internal class LyricsStore(
                 }
                 MergePreparation.NOTHING, MergePreparation.KEPT, null -> Unit
             }
-            adjustmentMerges.rolledBack()
+            withAdjustmentJournal { adjustmentMerges.rolledBack() }
             publish()
         }
+    }
+
+    /**
+     * Defer an I/O failure to the next catalog open. Keep the journal and the cause so a later merge
+     * cannot change IDs still needed by recovery, while the playback follower can continue.
+     */
+    private inline fun <T> withAdjustmentJournal(action: () -> T): T? = try {
+        action()
+    } catch (failure: IOException) {
+        deferredAdjustmentRecovery = failure
+        null
     }
 
     /**

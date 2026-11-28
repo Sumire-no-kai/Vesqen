@@ -83,7 +83,7 @@ internal data class StorageAudioFile(
  * "._" copies macOS leaves beside music), and a folder holding a ".nomedia" file with all below it. It
  * reads only the names it is given and the audio files it reports; no other file is opened.
  *
- * A folder that cannot be listed makes the walk incomplete: [IncompleteLibraryProviderException] is
+ * A folder that cannot be resolved or listed makes the walk incomplete: [IncompleteLibraryProviderException] is
  * thrown at its end, after every other file was reported, so the scan prunes nothing it could not see.
  */
 internal class StorageAudioScanner {
@@ -103,8 +103,14 @@ internal class StorageAudioScanner {
                 scanContext.ensureActive()
                 if (shouldPause()) return ScanIterationResult(completed = false, processedTrackCount = processedTrackCount)
                 val directory = pending.removeFirst()
+                val path = try {
+                    directory.canonicalPath
+                } catch (_: IOException) {
+                    incomplete = true
+                    continue
+                }
                 // A link back to a folder above would otherwise be walked without end.
-                if (!visited.add(canonicalPath(directory) ?: continue)) continue
+                if (!visited.add(path)) continue
                 val entries = directory.listFiles()
                 if (entries == null) {
                     incomplete = true
@@ -142,12 +148,6 @@ internal class StorageAudioScanner {
         }
         if (incomplete) throw IncompleteLibraryProviderException()
         return ScanIterationResult(completed = true, processedTrackCount = processedTrackCount)
-    }
-
-    private fun canonicalPath(directory: File): String? = try {
-        directory.canonicalPath
-    } catch (_: IOException) {
-        null
     }
 
     private fun relativeFolder(root: File, directory: File): String =
