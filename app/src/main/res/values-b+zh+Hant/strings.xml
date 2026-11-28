@@ -182,8 +182,8 @@
     <string name="settings_full_scan_not_allowed">未允許所有檔案存取，此功能保持關閉。</string>
     <string name="settings_full_scan_storage_not_allowed">未取得儲存空間存取權限，此功能保持關閉。</string>
     <string name="settings_full_scan_revoke">在系統設定中撤銷權限</string>
-    <string name="full_scan_intro_body">開啟後，Vesqen 會在手機儲存空間、記憶卡和 USB 隨身碟中尋找音樂，不需要逐一加入資料夾。\n\n為此需要在系統設定中允許 Vesqen 取得「所有檔案存取權」。這項權限允許應用程式讀取和修改儲存空間中的所有檔案。Vesqen 只讀取支援的音訊檔案，以及同一資料夾中的封面圖片和同名歌詞檔案（.lrc），不會修改、移動或刪除任何檔案。Android 資料夾、隱藏資料夾和含有 .nomedia 檔案的資料夾不會掃描。掃描結果只儲存在這支手機上。\n\n可以隨時在這裡關閉此功能，或在系統設定中撤銷這項權限。</string>
-    <string name="full_scan_intro_body_legacy">開啟後，Vesqen 會在手機儲存空間、記憶卡和 USB 隨身碟中尋找音樂，不需要逐一加入資料夾。\n\n此功能使用 Android 的儲存空間存取權限；尚未允許時，開啟時會提出請求。Vesqen 只讀取支援的音訊檔案，以及同一資料夾中的封面圖片和同名歌詞檔案（.lrc），不會修改、移動或刪除任何檔案。Android 資料夾、隱藏資料夾和含有 .nomedia 檔案的資料夾不會掃描。掃描結果只儲存在這支手機上。\n\n可以隨時在這裡關閉此功能。</string>
+    <string name="full_scan_intro_body">開啟後，Vesqen 會在手機儲存空間、記憶卡和 USB 隨身碟中尋找音樂，不需要逐一加入資料夾。\n\n為此需要在系統設定中允許 Vesqen 取得「所有檔案存取權」。這項權限允許應用程式讀取和修改儲存空間中的所有檔案。Vesqen 只讀取支援的音訊檔案，以及同一資料夾中的封面圖片和同名歌詞檔案（.lrc），不會修改、移動或刪除任何檔案。Android 資料夾，鈴聲、通知音、鬧鐘和錄音資料夾，隱藏資料夾，以及含有 .nomedia 檔案的資料夾不會掃描。掃描結果只儲存在這支手機上。\n\n可以隨時在這裡關閉此功能，或在系統設定中撤銷這項權限。</string>
+    <string name="full_scan_intro_body_legacy">開啟後，Vesqen 會在手機儲存空間、記憶卡和 USB 隨身碟中尋找音樂，不需要逐一加入資料夾。\n\n此功能使用 Android 的儲存空間存取權限；尚未允許時，開啟時會提出請求。Vesqen 只讀取支援的音訊檔案，以及同一資料夾中的封面圖片和同名歌詞檔案（.lrc），不會修改、移動或刪除任何檔案。Android 資料夾，鈴聲、通知音、鬧鐘和錄音資料夾，隱藏資料夾，以及含有 .nomedia 檔案的資料夾不會掃描。掃描結果只儲存在這支手機上。\n\n可以隨時在這裡關閉此功能。</string>
     <string name="full_scan_turn_on">開啟</string>
     <string name="full_scan_off_title">關閉「掃描整個儲存空間」</string>
     <string name="full_scan_off_body">只透過這項掃描找到的曲目會從音樂庫中隱藏，收藏、播放次數和播放清單中的位置都會保留，重新開啟後恢復。所有檔案存取權不會隨之撤銷；如不再需要，可以在系統設定中撤銷。</string>

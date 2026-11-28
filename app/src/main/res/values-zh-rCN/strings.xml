@@ -182,8 +182,8 @@
     <string name="settings_full_scan_not_allowed">未允许所有文件访问，这项功能保持关闭。</string>
     <string name="settings_full_scan_storage_not_allowed">未获得存储权限，这项功能保持关闭。</string>
     <string name="settings_full_scan_revoke">在系统设置中收回权限</string>
-    <string name="full_scan_intro_body">开启后，Vesqen 会在手机存储空间、存储卡和 U 盘中查找音乐，不需要逐个添加文件夹。\n\n为此需要在系统设置中为 Vesqen 允许“所有文件访问”。这项权限允许应用读取和修改存储空间中的所有文件。Vesqen 只读取支持的音频文件，以及同一文件夹中的封面图片和同名歌词文件（.lrc），不修改、移动或删除任何文件。Android 文件夹、隐藏文件夹和含有 .nomedia 文件的文件夹不会扫描。扫描结果只保存在这台手机上。\n\n可以随时在这里关闭这项功能，或在系统设置中收回这项权限。</string>
-    <string name="full_scan_intro_body_legacy">开启后，Vesqen 会在手机存储空间、存储卡和 U 盘中查找音乐，不需要逐个添加文件夹。\n\n这项功能使用 Android 的存储权限；尚未允许时，开启时会请求。Vesqen 只读取支持的音频文件，以及同一文件夹中的封面图片和同名歌词文件（.lrc），不修改、移动或删除任何文件。Android 文件夹、隐藏文件夹和含有 .nomedia 文件的文件夹不会扫描。扫描结果只保存在这台手机上。\n\n可以随时在这里关闭这项功能。</string>
+    <string name="full_scan_intro_body">开启后，Vesqen 会在手机存储空间、存储卡和 U 盘中查找音乐，不需要逐个添加文件夹。\n\n为此需要在系统设置中为 Vesqen 允许“所有文件访问”。这项权限允许应用读取和修改存储空间中的所有文件。Vesqen 只读取支持的音频文件，以及同一文件夹中的封面图片和同名歌词文件（.lrc），不修改、移动或删除任何文件。Android 文件夹，铃声、通知音、闹钟和录音文件夹，隐藏文件夹，以及含有 .nomedia 文件的文件夹不会扫描。扫描结果只保存在这台手机上。\n\n可以随时在这里关闭这项功能，或在系统设置中收回这项权限。</string>
+    <string name="full_scan_intro_body_legacy">开启后，Vesqen 会在手机存储空间、存储卡和 U 盘中查找音乐，不需要逐个添加文件夹。\n\n这项功能使用 Android 的存储权限；尚未允许时，开启时会请求。Vesqen 只读取支持的音频文件，以及同一文件夹中的封面图片和同名歌词文件（.lrc），不修改、移动或删除任何文件。Android 文件夹，铃声、通知音、闹钟和录音文件夹，隐藏文件夹，以及含有 .nomedia 文件的文件夹不会扫描。扫描结果只保存在这台手机上。\n\n可以随时在这里关闭这项功能。</string>
     <string name="full_scan_turn_on">开启</string>
     <string name="full_scan_off_title">关闭“扫描整个存储空间”</string>
     <string name="full_scan_off_body">只通过这项扫描找到的曲目会从曲库中隐藏，收藏、播放次数和歌单位置都会保留，重新开启后恢复。所有文件访问权限不会随之收回；如不再需要，可以在系统设置中收回。</string>

@@ -7,6 +7,7 @@ import android.os.Environment
 import android.os.storage.StorageManager
 import java.io.File
 import java.io.IOException
+import java.util.Locale
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
@@ -79,7 +80,8 @@ internal data class StorageAudioFile(
 
 /**
  * #249: walks the shared storage volumes for the whole-storage scan. It leaves out the Android folder
- * at a volume's root, hidden folders and files (a name that starts with a dot, which also covers the
+ * and the system's ringtone, notification, alarm and recording folders at a volume's root (#363 S1),
+ * hidden folders and files (a name that starts with a dot, which also covers the
  * "._" copies macOS leaves beside music), and a folder holding a ".nomedia" file with all below it. It
  * reads only the names it is given and the audio files it reports; no other file is opened.
  *
@@ -156,7 +158,8 @@ internal class StorageAudioScanner {
 
 /** The names skipped by the storage walk, also checked before transferring a removed folder's tracks. */
 internal fun File.isStorageScanEntry(root: File): Boolean =
-    !name.startsWith('.') && !(parentFile == root && name == ANDROID_FOLDER)
+    !name.startsWith('.') &&
+        !(parentFile == root && (name == ANDROID_FOLDER || name.lowercase(Locale.ROOT) in SYSTEM_SOUND_FOLDERS))
 
 private fun File.hasNoMediaMarker(): Boolean = File(this, NO_MEDIA).isFile
 
@@ -173,3 +176,13 @@ internal fun File.isStorageScanDirectory(root: File): Boolean {
 private const val STORAGE_MOUNT_ROOT = "/storage"
 private const val NO_MEDIA = ".nomedia"
 private const val ANDROID_FOLDER = "Android"
+
+/**
+ * #363 S1 (owner, 2026-11-28): Android's own folders for ringtones, notification sounds, alarms and
+ * recordings at a volume's root. MediaStore does not count their files as music, so without this the
+ * scan would add sounds the device library leaves out. Podcasts and Audiobooks, which MediaStore leaves
+ * out as well, are scanned: the owner chose to keep them in the library. The same names further down,
+ * such as Music/Alarms, are scanned, as MediaStore still counts those files as music. Shared storage
+ * looks names up without regard to case, so this does too.
+ */
+private val SYSTEM_SOUND_FOLDERS = setOf("ringtones", "notifications", "alarms", "recordings")
