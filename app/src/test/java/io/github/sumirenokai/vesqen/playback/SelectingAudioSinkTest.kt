@@ -4,6 +4,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
+import androidx.media3.exoplayer.audio.AudioOffloadSupport
 import androidx.media3.exoplayer.audio.AudioSink
 import java.lang.reflect.Proxy
 import java.nio.ByteBuffer
@@ -19,6 +20,7 @@ class SelectingAudioSinkTest {
                 Boolean::class.javaPrimitiveType -> true
                 Long::class.javaPrimitiveType -> 0L
                 Int::class.javaPrimitiveType -> AudioSink.SINK_FORMAT_SUPPORTED_DIRECTLY
+                AudioOffloadSupport::class.java -> AudioOffloadSupport.DEFAULT_UNSUPPORTED
                 else -> null
             }
         } as AudioSink
@@ -66,6 +68,32 @@ class SelectingAudioSinkTest {
         sink.configure(AudioSink.AudioSinkConfig.Builder(format).build())
         assertEquals(listOf("handleBuffer", "reset"), normal.calls)
         assertEquals(listOf("configure"), strict.calls)
+    }
+
+    @Test
+    fun `format queries follow the next route without moving the active stream`() {
+        val sink = sink()
+        val queries = listOf("supportsFormat", "getFormatSupport", "getFormatOffloadSupport")
+        fun queryFormats() {
+            sink.supportsFormat(format)
+            sink.getFormatSupport(format)
+            sink.getFormatOffloadSupport(format)
+        }
+
+        useStrict = true
+        queryFormats()
+        sink.handleBuffer(ByteBuffer.allocate(4), 0, 1)
+        assertEquals(queries, strict.calls)
+        assertEquals(listOf("handleBuffer"), normal.calls)
+
+        sink.reset()
+        normal.calls.clear()
+        strict.calls.clear()
+        useStrict = false
+        queryFormats()
+        sink.handleBuffer(ByteBuffer.allocate(4), 0, 1)
+        assertEquals(queries, normal.calls)
+        assertEquals(listOf("handleBuffer"), strict.calls)
     }
 
     @Test

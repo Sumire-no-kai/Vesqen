@@ -21,13 +21,14 @@ import java.nio.ByteBuffer
  * which is where a stream starts after the coordinator rebuilds the player with `stop()` and
  * `prepare()`: Media3 resets the sink only for a renderer that was enabled, so a rebuild that came
  * before the renderer was enabled reaches the sink as a plain configure. Between those calls a
- * stream stays on its sink. Settings reach both sinks, so the next one starts as the last one ended.
+ * stream stays on its sink. Format queries use the selected route for the next stream. Settings
+ * reach both sinks, so the next one starts as the last one ended.
  */
 @UnstableApi
 internal class SelectingAudioSink(
     private val normal: AudioSink,
     private val strict: AudioSink,
-    /** Read on the playback thread whenever the sink is reset. */
+    /** Read on the playback thread for format queries and stream setup. */
     private val useStrict: () -> Boolean,
 ) : AudioSink {
     private var active: AudioSink = choose()
@@ -45,11 +46,11 @@ internal class SelectingAudioSink(
 
     override fun setClock(clock: Clock) = both { it.setClock(clock) }
 
-    override fun supportsFormat(format: Format) = active.supportsFormat(format)
+    override fun supportsFormat(format: Format) = choose().supportsFormat(format)
 
-    override fun getFormatSupport(format: Format) = active.getFormatSupport(format)
+    override fun getFormatSupport(format: Format) = choose().getFormatSupport(format)
 
-    override fun getFormatOffloadSupport(format: Format): AudioOffloadSupport = active.getFormatOffloadSupport(format)
+    override fun getFormatOffloadSupport(format: Format): AudioOffloadSupport = choose().getFormatOffloadSupport(format)
 
     override fun getCurrentPositionUs(sourceEnded: Boolean) = active.getCurrentPositionUs(sourceEnded)
 

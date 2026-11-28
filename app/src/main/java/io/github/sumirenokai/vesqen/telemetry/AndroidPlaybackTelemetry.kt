@@ -1847,8 +1847,15 @@ class AndroidPlaybackTelemetry internal constructor(
                 decoderVendor = null
                 decoderObservedAt = null
                 decoderFlagsObservedAt = null
-                inputFormat = null
-                inputFormatObservedAt = null
+                val format = inputFormat
+                // The renderer can report the next period's raw PCM before the old codec has
+                // retired, even before the first bypass buffer. Keep that independent input.
+                val independentRawInput = format?.sampleMimeType == MimeTypes.AUDIO_RAW &&
+                    decoderOutputs.none { it.input === format && it.output.fromCodec }
+                if (!independentRawInput) {
+                    inputFormat = null
+                    inputFormatObservedAt = null
+                }
             }
         }
     }
