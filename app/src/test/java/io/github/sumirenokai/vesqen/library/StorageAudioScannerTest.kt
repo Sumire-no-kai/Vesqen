@@ -46,6 +46,33 @@ class StorageAudioScannerTest {
     }
 
     @Test
+    fun `the system's ringtone, notification, alarm and recording folders are skipped, podcasts and audiobooks are not`() = runBlocking {
+        // #363 S1 (owner, 2026-11-28): MediaStore counts none of these as music; podcasts and audiobooks stay.
+        val phone = temporary.newFolder("primary")
+        phone.write("Ringtones/a.flac", "Notifications/b.flac", "Alarms/c.flac", "Recordings/d.flac", "Recordings/Call/e.flac")
+        phone.write("Podcasts/f.flac", "Audiobooks/g.flac", "Music/Alarms/h.flac", "Music/Recordings/i.flac")
+        // Shared storage ignores case, and a memory card may spell the folder in capitals.
+        val card = temporary.newFolder("1a2b-3c4d")
+        card.write("RECORDINGS/j.flac", "Music/k.flac")
+        val found = mutableListOf<String>()
+
+        val result = StorageAudioScanner().scan(
+            listOf(StorageVolumeRoot("primary", phone), StorageVolumeRoot("1a2b-3c4d", card)),
+            shouldPause = { false },
+        ) { found += it.file.path }
+
+        assertTrue(result.completed)
+        assertEquals(
+            (listOf("Audiobooks/g.flac", "Music/Alarms/h.flac", "Music/Recordings/i.flac", "Podcasts/f.flac").map { File(phone, it).path } +
+                File(card, "Music/k.flac").path).sorted(),
+            found.sorted(),
+        )
+        // A removed folder's songs are handed to the scan by the same rule.
+        assertFalse(File(phone, "Recordings/Call").isStorageScanDirectory(phone))
+        assertTrue(File(phone, "Music/Recordings").isStorageScanDirectory(phone))
+    }
+
+    @Test
     fun `a folder it cannot list keeps the scan from completing, after the others were read`() = runBlocking {
         val root = temporary.newFolder("primary")
         root.write("Music/a.flac", "Locked/b.flac")
