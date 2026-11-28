@@ -5,24 +5,33 @@ import android.os.Build
 import android.os.storage.StorageManager
 import android.os.storage.StorageVolume
 import io.github.sumirenokai.vesqen.R
+import io.github.sumirenokai.vesqen.library.FOLDER_STORAGE_VOLUME_PREFIX
+import io.github.sumirenokai.vesqen.library.PRIMARY_STORAGE_VOLUME
 import java.util.Locale
 
 /**
- * Names the storage of a folder row whose name and path another row shares (#218). A media library
- * volume takes Android's own name for it, such as "SanDisk SD card". An added folder is labelled as
- * one: apps cannot ask a documents provider which volume a granted folder is on.
+ * Names the storage of a folder row whose name and path another row shares (#218, #368).
+ * A known volume takes Android's name for it, such as "SanDisk SD card". Other added folders use
+ * the generic label because their document provider may not expose a volume.
  */
 internal fun folderStorageLabel(context: Context, storageKey: String): String? = when {
-    storageKey.startsWith(MEDIA_PREFIX) -> context.getSystemService(StorageManager::class.java)
-        ?.storageVolumes
-        ?.firstOrNull { it.isMediaStoreVolume(storageKey.removePrefix(MEDIA_PREFIX)) }
-        ?.getDescription(context)
-        ?.takeIf(String::isNotBlank)
+    storageKey.startsWith(FOLDER_STORAGE_VOLUME_PREFIX) -> {
+        val volumeId = storageKey.removePrefix(FOLDER_STORAGE_VOLUME_PREFIX)
+        context.storageVolumeLabel { volume ->
+            if (volumeId == PRIMARY_STORAGE_VOLUME) volume.isPrimary else volume.uuid.equals(volumeId, ignoreCase = true)
+        } ?: if (volumeId == PRIMARY_STORAGE_VOLUME) context.getString(R.string.library_storage_device_music) else volumeId
+    }
+    storageKey.startsWith(MEDIA_PREFIX) ->
+        context.storageVolumeLabel { it.isMediaStoreVolume(storageKey.removePrefix(MEDIA_PREFIX)) }
         // Android 9 names every volume "external", so its music cannot be placed on one.
         ?: context.getString(R.string.library_storage_device_music)
     storageKey.startsWith(TREE_PREFIX) -> context.getString(R.string.library_storage_added_folder)
     else -> null
 }
+
+private fun Context.storageVolumeLabel(matches: (StorageVolume) -> Boolean): String? =
+    getSystemService(StorageManager::class.java)?.storageVolumes?.firstOrNull(matches)
+        ?.getDescription(this)?.takeIf(String::isNotBlank)
 
 private fun StorageVolume.isMediaStoreVolume(volumeName: String): Boolean =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

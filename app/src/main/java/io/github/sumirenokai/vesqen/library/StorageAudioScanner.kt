@@ -101,6 +101,7 @@ internal class StorageAudioScanner {
             val pending = ArrayDeque<File>().apply { add(volume.root) }
             while (pending.isNotEmpty()) {
                 scanContext.ensureActive()
+                if (shouldPause()) return ScanIterationResult(completed = false, processedTrackCount = processedTrackCount)
                 val directory = pending.removeFirst()
                 // A link back to a folder above would otherwise be walked without end.
                 if (!visited.add(canonicalPath(directory) ?: continue)) continue
@@ -109,7 +110,7 @@ internal class StorageAudioScanner {
                     incomplete = true
                     continue
                 }
-                if (entries.any { it.name == NO_MEDIA && it.isFile }) continue
+                if (directory.hasNoMediaMarker()) continue
                 val folderName = relativeFolder(volume.root, directory)
                 val cover = entries.filter(File::isFile).sortedBy(File::getName).firstOrNull { isSameDirectoryCover("", it.name) }
                 val coverFingerprint = cover?.let { libraryFingerprint(it.path, it.lastModified(), it.length()) }.orEmpty()
@@ -117,9 +118,8 @@ internal class StorageAudioScanner {
                     scanContext.ensureActive()
                     if (shouldPause()) return ScanIterationResult(completed = false, processedTrackCount = processedTrackCount)
                     val name = entry.name
-                    if (name.startsWith('.')) continue
+                    if (!entry.isStorageScanEntry(volume.root)) continue
                     if (entry.isDirectory) {
-                        if (directory == volume.root && name == ANDROID_FOLDER) continue
                         pending.add(entry)
                     } else if (isSupportedAudioDocument(null, name)) {
                         onAudioFile(
@@ -152,6 +152,22 @@ internal class StorageAudioScanner {
 
     private fun relativeFolder(root: File, directory: File): String =
         directory.path.removePrefix(root.path).trim('/')
+}
+
+/** The names skipped by the storage walk, also checked before transferring a removed folder's tracks. */
+internal fun File.isStorageScanEntry(root: File): Boolean =
+    !name.startsWith('.') && !(parentFile == root && name == ANDROID_FOLDER)
+
+private fun File.hasNoMediaMarker(): Boolean = File(this, NO_MEDIA).isFile
+
+/** Checking a single file's directory also needs the exclusions on its ancestors. */
+internal fun File.isStorageScanDirectory(root: File): Boolean {
+    var directory = this
+    while (directory != root) {
+        if (!directory.isStorageScanEntry(root) || directory.hasNoMediaMarker()) return false
+        directory = directory.parentFile ?: return false
+    }
+    return !root.hasNoMediaMarker()
 }
 
 private const val STORAGE_MOUNT_ROOT = "/storage"

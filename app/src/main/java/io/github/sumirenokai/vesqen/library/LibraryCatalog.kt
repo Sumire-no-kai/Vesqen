@@ -375,13 +375,16 @@ internal class AndroidLibraryCatalog(
 
         // #249: the whole-storage scan reads last, as it holds only the files no other source has.
         val storage = activeStorageScan()
-        if (!scanPaused && storage != null) {
+        val storageScanEnabled = storage?.enabledForScan()
+        if (!scanPaused && storage != null && storageScanEnabled != null) {
             val source = store.ensureStorageSource()
             val report = SourceScanReport(source)
             if (source.scanState == LibraryScanState.PAUSED) {
                 sourceResults += report.result(LibrarySourceScanStatus.PAUSED)
             } else {
-                val outcome = scanStorageSource(source, report, onProgress, playableSources(includeDeviceLibrary), storage)
+                val outcome = scanStorageSource(
+                    source, report, onProgress, playableSources(includeDeviceLibrary), storage, storageScanEnabled,
+                )
                 sourceResults += report.result(outcome)
                 when (outcome) {
                     LibrarySourceScanStatus.FAILED,
@@ -562,6 +565,7 @@ internal class AndroidLibraryCatalog(
         onProgress: suspend (LibraryScanProgress) -> Unit,
         isPlayable: (sourceId: String, contentUri: String) -> Boolean,
         storage: StorageScan,
+        storageScanEnabled: () -> Boolean,
     ): LibrarySourceScanStatus = try {
         val volumes = storage.volumes()
         // No mounted volume is no evidence that the files are gone, so nothing is scanned or pruned.
@@ -571,15 +575,20 @@ internal class AndroidLibraryCatalog(
         onProgress(report.progress())
         val iteration = storageScanner.scan(
             volumes = volumes,
-            shouldPause = scanGate::isPaused,
+            shouldPause = { !storageScanEnabled() || scanGate.isPaused() },
             onSkippedAudio = { format ->
                 report.skippedAudio(format)
                 if (report.shouldPublish()) onProgress(report.progress())
             },
         ) { file ->
+            if (!storageScanEnabled()) return@scan
             if (!store.markSeenIfFingerprintMatches(session, file.path, file.fingerprint)) {
                 store.writeSourceTrack(session, file.path, file.locationKey, owners) {
-                    metadataReader.enrich(file.toTrackCandidate())
+                    if (storageScanEnabled()) {
+                        metadataReader.enrich(file.toTrackCandidate()).takeIf { storageScanEnabled() }
+                    } else {
+                        null
+                    }
                 }
             }
             report.checkedTrack()
@@ -590,7 +599,8 @@ internal class AndroidLibraryCatalog(
             session = session,
             iteration = iteration,
             generation = null,
-            storageVolumeIds = volumes.map(StorageVolumeRoot::id),
+            storageVolumes = volumes,
+            storageScanEnabled = storageScanEnabled,
             report = report,
             onProgress = onProgress,
         )
@@ -610,18 +620,27 @@ internal class AndroidLibraryCatalog(
         generation: String?,
         mediaStoreScan: MediaStoreScanSession? = null,
         mediaStoreScope: MediaStoreScanScope? = null,
-        storageVolumeIds: Collection<String>? = null,
+        storageVolumes: List<StorageVolumeRoot>? = null,
+        storageScanEnabled: (() -> Boolean)? = null,
         report: SourceScanReport,
         onProgress: suspend (LibraryScanProgress) -> Unit,
     ): LibrarySourceScanStatus {
         // The session and the rows it saw belong to the catalog that was set aside (#165 U5).
         if (scanGate.catalogRebuilt()) return LibrarySourceScanStatus.REBUILT
+        if (storageScanEnabled?.invoke() == false) {
+            store.markSourceInterrupted(source.id)
+            return LibrarySourceScanStatus.UNAVAILABLE
+        }
         if (!iteration.completed || scanGate.isPaused()) {
             return stopBeforeCommit(source, report, LibraryScanStage.READING, onProgress)
         }
         onProgress(report.progress(stage = LibraryScanStage.RECONCILING))
         // Reporting can suspend while permissions, pause requests or the catalog itself change.
         if (scanGate.catalogRebuilt()) return LibrarySourceScanStatus.REBUILT
+        if (storageScanEnabled?.invoke() == false) {
+            store.markSourceInterrupted(source.id)
+            return LibrarySourceScanStatus.UNAVAILABLE
+        }
         if (
             source.kind == LibrarySourceKind.FOLDER && source.treeUri !in readableTreeUris() ||
             source.kind == LibrarySourceKind.STORAGE && activeStorageScan() == null
@@ -632,6 +651,13 @@ internal class AndroidLibraryCatalog(
         }
         if (scanGate.isPaused()) {
             return stopBeforeCommit(source, report, LibraryScanStage.RECONCILING, onProgress)
+        }
+        if (storageVolumes != null && storageScan?.volumes()?.containsAll(storageVolumes) != true) {
+            // Mount state can change during the scan or while reporting progress. A missing drive
+            // cannot authorize reattaching or pruning the tracks that were on it.
+            store.markSourceInterrupted(source.id)
+            report.failureReason = LibraryScanFailureReason.SOURCE_CHANGED
+            return LibrarySourceScanStatus.INTERRUPTED
         }
         if (mediaStoreScope != null) {
             var finalScope = mediaStore.currentScanScope()
@@ -659,8 +685,12 @@ internal class AndroidLibraryCatalog(
         if (scanGate.isPaused()) {
             return stopBeforeCommit(source, report, LibraryScanStage.RECONCILING, onProgress)
         }
-        if (storageVolumeIds != null) {
-            store.completeStorageScan(session, storageVolumeIds)
+        if (storageVolumes != null) {
+            if (storageScanEnabled?.invoke() != true) {
+                store.markSourceInterrupted(source.id)
+                return LibrarySourceScanStatus.UNAVAILABLE
+            }
+            store.completeStorageScan(session, storageVolumes.map(StorageVolumeRoot::id))
         } else if (mediaStoreScope == null) {
             store.completeSourceScan(session, generation)
         } else {
