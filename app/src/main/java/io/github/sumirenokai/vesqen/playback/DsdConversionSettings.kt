@@ -3,6 +3,7 @@ package io.github.sumirenokai.vesqen.playback
 import android.content.Context
 import androidx.core.content.edit
 import androidx.media3.common.C
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import io.github.sumirenokai.vesqen.library.DSD_CODEC_LABEL
@@ -77,9 +78,9 @@ internal fun dsdGainStep(gainDb: Float): Float {
 }
 
 /**
- * Media3 opens the next track up to about 50 seconds before it plays, so a DSD track next in line may
- * already hold the old settings. Re-creating it makes it open again with the current ones; the
- * playing track is left alone, and the replacement keeps its place in the play order (PlayOrder).
+ * Media3 can open several tracks ahead. Replacing the first upcoming DSD source discards its buffered
+ * period and the periods queued after it. Follow playback order past any PCM tracks and leave the
+ * current source in place. PlayOrder keeps the replacement in its original shuffle slot.
  *
  * Media3 only re-creates an item whose cache key changed, so each settings change brings a new
  * [generation] for the key. The key records which change re-created the item, never which settings
@@ -87,12 +88,20 @@ internal fun dsdGainStep(gainDb: Float): Float {
  * from the settings could match a change the track never saw (#356 review).
  */
 @androidx.annotation.OptIn(UnstableApi::class)
-internal fun ExoPlayer.reopenNextDsdItem(generation: Long) {
-    val next = nextMediaItemIndex
-    if (next == C.INDEX_UNSET || next == currentMediaItemIndex) return
-    val item = getMediaItemAt(next)
-    if (TelemetryMediaItemExtras.read(item.mediaMetadata.extras).codecLabel != DSD_CODEC_LABEL) return
+internal fun ExoPlayer.reopenUpcomingDsd(generation: Long) {
+    val timeline = currentTimeline
+    if (timeline.isEmpty || repeatMode == Player.REPEAT_MODE_ONE) return
+    val current = currentMediaItemIndex
     val key = "vesqen-dsd:$generation"
-    if (item.localConfiguration?.customCacheKey == key) return
-    replaceMediaItem(next, item.buildUpon().setCustomCacheKey(key).build())
+    var next = timeline.getNextWindowIndex(current, repeatMode, shuffleModeEnabled)
+    while (next != C.INDEX_UNSET && next != current) {
+        val item = getMediaItemAt(next)
+        if (TelemetryMediaItemExtras.read(item.mediaMetadata.extras).codecLabel == DSD_CODEC_LABEL) {
+            if (item.localConfiguration?.customCacheKey != key) {
+                replaceMediaItem(next, item.buildUpon().setCustomCacheKey(key).build())
+            }
+            return
+        }
+        next = timeline.getNextWindowIndex(next, repeatMode, shuffleModeEnabled)
+    }
 }
