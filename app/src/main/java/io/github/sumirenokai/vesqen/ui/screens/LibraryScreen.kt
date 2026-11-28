@@ -30,6 +30,7 @@ import io.github.sumirenokai.vesqen.library.LibrarySourceId
 import io.github.sumirenokai.vesqen.library.StorageScanAccess
 import io.github.sumirenokai.vesqen.ui.LocalStorageScan
 import io.github.sumirenokai.vesqen.ui.StorageScanDialogs
+import io.github.sumirenokai.vesqen.ui.storageScanNeedsPermissionText
 import io.github.sumirenokai.vesqen.ui.components.underSheetHandle
 import io.github.sumirenokai.vesqen.ui.components.AlbumArtwork
 import io.github.sumirenokai.vesqen.ui.components.folderStorageLabel
@@ -2191,7 +2192,7 @@ private fun StorageSourceSheetRow(row: StorageSourceRow, enabled: Boolean, onTur
             Text(
                 text = when (row) {
                     is StorageSourceRow.Scan -> when {
-                        row.needsPermission -> stringResource(R.string.library_full_scan_needs_permission)
+                        row.needsPermission -> stringResource(storageScanNeedsPermissionText())
                         row.source == null -> pluralStringResource(R.plurals.library_source_track_count, 0, 0)
                         else -> sourceStatusText(row.source)
                     }

@@ -41,6 +41,7 @@ import io.github.sumirenokai.vesqen.library.StorageScanAccess
 import io.github.sumirenokai.vesqen.library.parseArtistSeparators
 import io.github.sumirenokai.vesqen.library.parseKeptArtistNames
 import io.github.sumirenokai.vesqen.ui.StorageScanFlow
+import io.github.sumirenokai.vesqen.ui.storageScanPermissionOffText
 import io.github.sumirenokai.vesqen.ui.components.PaperDivider
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
 import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
@@ -116,7 +117,7 @@ private fun StorageScanRows(flow: StorageScanFlow, source: LibrarySource?, scann
     val permissionOff = enabled && access == StorageScanAccess.NEEDS_PERMISSION
     val description = when {
         unavailable -> stringResource(R.string.settings_full_scan_unavailable)
-        permissionOff -> stringResource(R.string.settings_full_scan_permission_off)
+        permissionOff -> stringResource(storageScanPermissionOffText())
         enabled && scanning -> stringResource(R.string.settings_full_scan_scanning)
         enabled && source?.scanState == LibraryScanState.PAUSED -> stringResource(R.string.library_source_paused)
         enabled && source != null -> pluralStringResource(R.plurals.library_source_track_count, source.trackCount, source.trackCount)

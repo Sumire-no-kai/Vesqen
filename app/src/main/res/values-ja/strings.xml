@@ -34,6 +34,7 @@
     </plurals>
     <string name="library_full_scan_source">ストレージ全体</string>
     <string name="library_full_scan_needs_permission">すべてのファイルへのアクセスを再度許可する必要があります。</string>
+    <string name="library_full_scan_needs_storage_permission">ストレージへのアクセスを再度許可する必要があります。</string>
     <string name="library_full_scan_remove_title">これらの曲を削除しますか？</string>
     <string name="library_full_scan_remove_body">GitHub 版のスキャンで見つかった曲を、お気に入り、再生回数、プレイリスト内の位置、インポートした歌詞とともにライブラリから削除します。システムのメディアライブラリにある曲は残ります。スマートフォン上のファイルは削除されません。</string>
     <plurals name="library_full_scan_play_unavailable">
@@ -175,6 +176,7 @@
     <string name="settings_full_scan_body">スマートフォンのストレージ、メモリーカード、USB ドライブから音楽を探します。フォルダを一つずつ追加する必要はありません。</string>
     <string name="settings_full_scan_scanning">ストレージ全体をスキャン中…</string>
     <string name="settings_full_scan_permission_off">すべてのファイルへのアクセスがオフになっています。再び許可するまで、このスキャンで見つかった曲は表示されません。</string>
+    <string name="settings_full_scan_storage_permission_off">ストレージへのアクセスがオフになっています。再び許可するまで、このスキャンで見つかった曲は表示されません。</string>
     <string name="settings_full_scan_allow_again">再度許可する</string>
     <string name="settings_full_scan_unavailable">このスマートフォンの Android では、ストレージ全体をスキャンできません。「音楽フォルダを追加」をご利用ください。</string>
     <string name="settings_full_scan_not_allowed">すべてのファイルへのアクセスが許可されなかったため、オフのままです。</string>

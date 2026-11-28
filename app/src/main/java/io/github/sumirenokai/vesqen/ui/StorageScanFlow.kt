@@ -233,6 +233,19 @@ private fun StorageScanDialogFrame(
 }
 
 /**
+ * What a withdrawn permission is called (#363 S5). Android 9 and 10 have no "All files access": the
+ * scan reads shared storage with the storage permission there.
+ */
+@StringRes
+internal fun storageScanPermissionOffText(sdkInt: Int = Build.VERSION.SDK_INT): Int =
+    if (sdkInt >= Build.VERSION_CODES.R) R.string.settings_full_scan_permission_off else R.string.settings_full_scan_storage_permission_off
+
+/** The music sources sheet's line for the same state; see [storageScanPermissionOffText]. */
+@StringRes
+internal fun storageScanNeedsPermissionText(sdkInt: Int = Build.VERSION.SDK_INT): Int =
+    if (sdkInt >= Build.VERSION_CODES.R) R.string.library_full_scan_needs_permission else R.string.library_full_scan_needs_storage_permission
+
+/**
  * Android 11 and later: Vesqen's own switch for "All files access", or the list of apps where a phone
  * has no such page.
  */
