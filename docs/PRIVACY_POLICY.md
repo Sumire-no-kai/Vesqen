@@ -1,7 +1,7 @@
 # Vesqen Privacy Policy
 
 - Effective date: September 26, 2026
-- Last updated: November 19, 2026
+- Last updated: November 28, 2026
 
 This policy explains what information the Vesqen Android app handles, where that information stays, what the app sends over the network, and what we receive when you contact us or join a test. It applies to every build of Vesqen we distribute, including Google Play and GitHub Releases, and to the Vesqen website.
 
@@ -53,6 +53,7 @@ Vesqen never modifies or deletes your music files.
 | --- | --- |
 | Read audio files (`READ_MEDIA_AUDIO` on Android 13 and later; `READ_EXTERNAL_STORAGE` on Android 12L and earlier) | To find and play the music on your device. |
 | Folder access you grant in the system picker | To read music from the folders you choose. This access is read-only, and you can remove a folder at any time. |
+| All files access (`MANAGE_EXTERNAL_STORAGE`, Android 11 and later, GitHub version only) | Used only for the optional Scan all storage setting. On Android 9, and on Android 10 when legacy storage access is available, this setting uses `READ_EXTERNAL_STORAGE` instead. The Google Play version provides no whole-storage scan and does not request All files access. |
 | Notifications (`POST_NOTIFICATIONS`) | To show playback controls while music is playing. |
 | Foreground service for media playback, and wake lock | To keep playing when the screen is off or Vesqen is in the background. |
 | Modify audio settings (`MODIFY_AUDIO_SETTINGS`) | To request Android's bit-perfect USB output mode when you turn on strict USB output. |
@@ -63,6 +64,8 @@ Vesqen never modifies or deletes your music files.
 | USB host (optional hardware feature) | To recognize USB audio devices. Vesqen still installs on phones without USB host support. |
 
 Only reading your music is essential. If you refuse notifications, folder access or Nearby devices, Vesqen still plays the music it can read. Vesqen does not request location, contacts, phone, camera or microphone permissions.
+
+When you turn on Scan all storage and grant the required access, Vesqen looks for music in shared phone storage, on memory cards and on USB drives. The switch is off by default. Vesqen reads supported audio, cover images in the same folder and same-name lyrics files (`.lrc`). The scan keeps its results on your device, sends nothing over the network, and never changes, moves or deletes files. You can turn the scan off in Vesqen or revoke access in Android settings.
 
 ## When information leaves the app
 
