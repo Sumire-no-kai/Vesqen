@@ -20,7 +20,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 
 /** What Now shows for a track (#169). */
@@ -79,21 +78,27 @@ internal class LocalLyricsResolver(
     /** The same file inside an added folder, for a track that has no folder URI of its own (#208). */
     private val coveringDocumentUri: (Uri) -> Uri? = { null },
 ) {
+    private val cacheLock = Any()
     private val results = LruCache<LyricsTrackKey, TrackLyrics>(RESULT_CACHE_SIZE)
     private val folderLyricsFiles = LruCache<String, List<LyricsFileCandidate>>(FOLDER_CACHE_SIZE)
     private val dispatcher = Dispatchers.IO.limitedParallelism(1)
-    private val forgottenListings = MutableStateFlow(0L)
+    private val cacheRevision = MutableStateFlow(0L)
 
     /** Grows when same-name files may have changed, so a shown pane reads its lyrics again. */
-    val sourcesRevision: StateFlow<Long> = forgottenListings.asStateFlow()
+    val sourcesRevision: StateFlow<Long> = cacheRevision.asStateFlow()
 
     suspend fun load(track: AudioTrack): TrackLyrics = withContext(dispatcher) {
         val key = track.lyricsKey(store.importedLyrics.value.revision)
-        results[key] ?: resolve(track, store.generation()).let { resolved ->
-            // A source that failed for now is read again on the next load (#191 D13, B2).
-            if (resolved.complete) results.put(key, resolved.lyrics)
-            resolved.lyrics
+        val revision = synchronized(cacheLock) {
+            results[key]?.let { return@withContext it }
+            cacheRevision.value
         }
+        val resolved = resolve(track, store.generation(), revision)
+        // A source that failed for now is read again on the next load (#191 D13, B2).
+        synchronized(cacheLock) {
+            if (resolved.complete && revision == cacheRevision.value) results.put(key, resolved.lyrics)
+        }
+        resolved.lyrics
     }
 
     /**
@@ -116,8 +121,11 @@ internal class LocalLyricsResolver(
         }
         val contentEpoch = store.contentEpoch(track.id)
         // An explicit action must check the current sidecar, not a retained folder listing.
-        folderLyricsFiles.evictAll()
-        val current = resolve(track, generation)
+        val revision = synchronized(cacheLock) {
+            folderLyricsFiles.evictAll()
+            cacheRevision.value
+        }
+        val current = resolve(track, generation, revision)
         val found = current.lyrics as? TrackLyrics.Found
         val result = when {
             found == null || !current.complete -> LyricsAdjustmentResult.UNAVAILABLE
@@ -125,19 +133,24 @@ internal class LocalLyricsResolver(
                 LyricsAdjustmentResult.LYRICS_CHANGED
             else -> commit { store.adjust(track.id, found.contentRevision, action, generation, contentEpoch) }
         }
-        when (result) {
-            LyricsAdjustmentResult.APPLIED -> results.evictAll()
-            LyricsAdjustmentResult.LYRICS_CHANGED, LyricsAdjustmentResult.UNAVAILABLE ->
-                results.remove(track.lyricsKey(store.importedLyrics.value.revision))
-            else -> return@withContext result
+        synchronized(cacheLock) {
+            when (result) {
+                LyricsAdjustmentResult.APPLIED -> results.evictAll()
+                LyricsAdjustmentResult.LYRICS_CHANGED, LyricsAdjustmentResult.UNAVAILABLE ->
+                    results.remove(track.lyricsKey(store.importedLyrics.value.revision))
+                else -> return@withContext result
+            }
+            cacheRevision.value += 1
         }
-        forgottenListings.update { it + 1 }
         result
     }
 
     fun clearCache() {
-        results.evictAll()
-        folderLyricsFiles.evictAll()
+        synchronized(cacheLock) {
+            results.evictAll()
+            folderLyricsFiles.evictAll()
+            cacheRevision.value += 1
+        }
     }
 
     /**
@@ -146,29 +159,35 @@ internal class LocalLyricsResolver(
      * were found stay cached until the next completed refresh.
      */
     fun forgetFolderListings() {
-        folderLyricsFiles.evictAll()
-        results.snapshot().forEach { (key, lyrics) -> if (lyrics is TrackLyrics.None) results.remove(key) }
-        forgottenListings.update { it + 1 }
+        synchronized(cacheLock) {
+            folderLyricsFiles.evictAll()
+            results.snapshot().forEach { (key, lyrics) -> if (lyrics is TrackLyrics.None) results.remove(key) }
+            cacheRevision.value += 1
+        }
     }
 
-    private fun resolve(track: AudioTrack, generation: Long): ResolvedLyrics {
+    private fun resolve(track: AudioTrack, generation: Long, revision: Long): ResolvedLyrics {
         val uri = track.contentUri.toUri()
         // A source that should be there but failed for now leaves the result uncached. Kept, the
         // result of a lower-priority source would hide that source until the next completed refresh.
         var complete = true
         // Asked only when the sources before it had nothing, so imported lyrics need no lookup.
         // #249: a file the whole-storage scan found has its folder at hand.
-        val localFile = uri.takeIf { it.scheme == ContentResolver.SCHEME_FILE }?.path?.let(::File)
+        val isLocalFile = uri.scheme == ContentResolver.SCHEME_FILE
         val folderUri by lazy(LazyThreadSafetyMode.NONE) {
-            if (localFile != null || DocumentsContract.isTreeUri(uri)) uri else coveringFolderUri(uri, onFailure = { complete = false })
+            if (isLocalFile || DocumentsContract.isTreeUri(uri)) uri else coveringFolderUri(uri, onFailure = { complete = false })
         }
         val picked = pickLyrics { source ->
             val read = when (source) {
                 LyricsSource.Imported -> readImported(track.id) ?: SourceLyrics.Unreadable(UnreadableReason.ReadFailed)
-                LyricsSource.SameNameFile -> when (val folder = folderUri) {
-                    null -> SourceLyrics.Absent
-                    else -> (localFile?.let(::readSameNameLocalFile) ?: readSameNameFile(folder, track.fileName))
-                        ?: SourceLyrics.Absent.also { complete = false }
+                LyricsSource.SameNameFile -> {
+                    val sameName = if (isLocalFile) {
+                        uri.path?.let { readSameNameLocalFile(File(it), revision) }
+                    } else {
+                        val folder = folderUri
+                        if (folder == null) SourceLyrics.Absent else readSameNameFile(folder, track.fileName, revision)
+                    }
+                    sameName ?: SourceLyrics.Absent.also { complete = false }
                 }
                 LyricsSource.Embedded -> readEmbedded(uri, track.fileSizeBytes)
             }
@@ -230,7 +249,7 @@ internal class LocalLyricsResolver(
      * providers give; a file deleted since the listing reads as absent once the listing is forgotten
      * on the next return to the foreground.
      */
-    private fun readSameNameFile(trackUri: Uri, fileName: String): SourceLyrics? {
+    private fun readSameNameFile(trackUri: Uri, fileName: String, revision: Long): SourceLyrics? {
         // Document IDs are opaque, so the provider is asked for the folder holding the track.
         val path = try {
             DocumentsContract.findDocumentPath(contentResolver, trackUri)?.path
@@ -245,9 +264,7 @@ internal class LocalLyricsResolver(
         val parentId = path?.getOrNull(path.size - 2) ?: return SourceLyrics.Absent
         // One listing serves every track of the folder.
         val folderUri = DocumentsContract.buildChildDocumentsUriUsingTree(trackUri, parentId)
-        val folderKey = folderUri.toString()
-        val candidates = folderLyricsFiles[folderKey] ?: (listLyricsFiles(folderUri) ?: return null)
-            .also { folderLyricsFiles.put(folderKey, it) }
+        val candidates = folderCandidates(folderUri.toString(), revision) { listLyricsFiles(folderUri) } ?: return null
         val documentId = sameNameLyricsDocumentId(fileName, candidates) ?: return SourceLyrics.Absent
         val documentUri = DocumentsContract.buildDocumentUriUsingTree(trackUri, documentId)
         val bytes = readProviderLyrics { contentResolver.openInputStream(documentUri) }
@@ -259,17 +276,30 @@ internal class LocalLyricsResolver(
      * #249: the same-name `.lrc` beside a file the whole-storage scan found, matched as in a folder.
      * Null when the folder could not be listed now.
      */
-    private fun readSameNameLocalFile(audio: File): SourceLyrics? {
+    private fun readSameNameLocalFile(audio: File, revision: Long): SourceLyrics? {
         val folder = audio.parentFile ?: return SourceLyrics.Absent
-        val candidates = folderLyricsFiles[folder.path] ?: (
+        val candidates = folderCandidates(folder.path, revision) {
             folder.listFiles()
                 ?.filter { it.isFile && it.name.endsWith(LRC_EXTENSION, ignoreCase = true) }
                 ?.map { LyricsFileCandidate(it.path, it.name) }
-                ?: return null
-            ).also { folderLyricsFiles.put(folder.path, it) }
+        } ?: return null
         val path = sameNameLyricsDocumentId(audio.name, candidates) ?: return SourceLyrics.Absent
         val bytes = readProviderLyrics { FileInputStream(path) } ?: return SourceLyrics.Unreadable(UnreadableReason.ReadFailed)
         return if (bytes.size > MAX_LYRICS_TEXT_BYTES) SourceLyrics.Unreadable(UnreadableReason.TooLarge) else readLyricsFile(bytes)
+    }
+
+    private fun folderCandidates(
+        key: String,
+        revision: Long,
+        list: () -> List<LyricsFileCandidate>?,
+    ): List<LyricsFileCandidate>? {
+        folderLyricsFiles[key]?.let { return it }
+        val candidates = list() ?: return null
+        // Provider and filesystem work stay outside the lock while invalidation takes effect.
+        synchronized(cacheLock) {
+            if (revision == cacheRevision.value) folderLyricsFiles.put(key, candidates)
+        }
+        return candidates
     }
 
     /**
