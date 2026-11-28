@@ -84,6 +84,8 @@ There are no dates, and the order may change with feedback. Details and progress
 
 ## Privacy
 
+Starting with 2.0, the GitHub version can optionally scan shared storage for music and related cover images and lyrics. The scan is off by default and keeps its results on your device. See the [privacy policy](docs/PRIVACY_POLICY.md) for the permissions and how to turn it off.
+
 Playback and your library never use the network, and your library, playlists and play counts stay in the app's private storage on your phone. Since 1.0.0-beta.2 the app uses the network for three things, each of which you can turn off: usage statistics at most once a day with no ID attached (in the EU, EEA, UK, mainland China and South Korea, only if you agree), device reports you choose to upload, and, in the GitHub version, update checks. The [privacy policy](https://vesqen.sumirenokai.com/privacy/) ([中文](https://vesqen.sumirenokai.com/zh/privacy/)) lists what each one sends and how long it is kept. It is also inside the app, under Settings → Privacy policy.
 
 ## Known limitations

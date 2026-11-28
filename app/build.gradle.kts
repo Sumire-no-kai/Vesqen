@@ -222,7 +222,7 @@ abstract class PackagePrivacyPolicyTask : DefaultTask() {
     }
 }
 
-/** Blocks store bundles while the policy is a draft or the app has no web address to link to. */
+/** Blocks releases while the bundled policy or its web link is incomplete. */
 abstract class CheckPrivacyPolicyFinalTask : DefaultTask() {
     @get:InputFiles
     @get:PathSensitive(PathSensitivity.RELATIVE)
@@ -232,15 +232,25 @@ abstract class CheckPrivacyPolicyFinalTask : DefaultTask() {
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val stringResources: ConfigurableFileCollection
 
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val githubManifest: RegularFileProperty
+
     @TaskAction
     fun verifyPolicy() {
         val draftMarkers = listOf("TBD", "待定", "Draft", "草案")
         val urlPattern = Regex("""<string name="privacy_policy_url">([^<]*)</string>""")
+        val allFilesAccess = "MANAGE_EXTERNAL_STORAGE"
+        val githubUsesAllFilesAccess = Regex("""<uses-permission\s+[^>]*android:name="android\.permission\.$allFilesAccess"""")
+            .containsMatchIn(githubManifest.get().asFile.readText())
         val problems = mutableListOf<String>()
         policies.files.forEach { policy ->
             val text = policy.readText()
             draftMarkers.filter(text::contains).forEach { marker ->
                 problems += "${policy.name} still contains \"$marker\""
+            }
+            if (githubUsesAllFilesAccess && "`$allFilesAccess`" !in text) {
+                problems += "${policy.name} does not disclose $allFilesAccess for the GitHub build"
             }
         }
         stringResources.files.forEach { strings ->
@@ -252,7 +262,7 @@ abstract class CheckPrivacyPolicyFinalTask : DefaultTask() {
             }
         }
         check(problems.isEmpty()) {
-            "The privacy policy is not ready for a release bundle:\n" + problems.joinToString("\n") { "- $it" }
+            "The privacy policy is not ready for release:\n" + problems.joinToString("\n") { "- $it" }
         }
     }
 }
@@ -266,8 +276,9 @@ val privacyPolicyFiles = listOf(
 
 val checkPrivacyPolicyFinal by tasks.registering(CheckPrivacyPolicyFinalTask::class) {
     group = "verification"
-    description = "Reject release bundles whose privacy policy is a draft or has no web address."
+    description = "Verify release privacy policies, including their web addresses and all-files access disclosure."
     policies.from(privacyPolicyFiles)
+    githubManifest.set(layout.projectDirectory.file("src/github/AndroidManifest.xml"))
     // Every language: Japanese and Traditional Chinese override the address too.
     stringResources.from(fileTree("src/main/res") { include("values*/strings.xml") })
 }
