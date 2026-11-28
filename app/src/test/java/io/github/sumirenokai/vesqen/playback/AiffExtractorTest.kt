@@ -142,6 +142,26 @@ class AiffExtractorTest {
         )
     }
 
+    @Test fun `a seek timestamps samples from the selected frame even when the requested time differs`() {
+        val rate = 44_100
+        val file = aiff(frames = rate, pcm = ByteArray(rate * 4))
+        val extractor = AiffExtractor()
+        val output = FakeOutput()
+        extractor.init(output)
+        extractor.drain(file, 0, maxRead = Int.MAX_VALUE)
+
+        for (request in listOf(500_013L, 1_100_000L)) {
+            val before = output.track.samples.size
+            val point = checkNotNull(output.seekMap).getSeekPoints(request).first
+            assertTrue(request > point.timeUs)
+            extractor.seek(point.position, request)
+            extractor.drain(file, point.position, maxRead = Int.MAX_VALUE)
+            val actual = output.track.samples.drop(before)
+            assertEquals(point.timeUs, actual.first().timeUs)
+            actual.zipWithNext().forEach { (previous, next) -> assertEquals(previous.timeUs + 100_000L, next.timeUs) }
+        }
+    }
+
     @Test fun `seek points stay inside the audio`() {
         val seekMap = extract(aiff()).seekMap
         assertEquals(DATA_OFFSET, seekMap.getSeekPoints(0).first.position)
@@ -157,9 +177,11 @@ class AiffExtractorTest {
         extractor.init(output)
         extractor.drain(file, 0, maxRead = Int.MAX_VALUE)
         val first = output.track.pcm.size()
-        extractor.seek(0, 0)
+        val samplesBefore = output.track.samples.size
+        extractor.seek(0, 500_013)
         extractor.drain(file, 0, maxRead = Int.MAX_VALUE)
         assertEquals(first * 2, output.track.pcm.size())
+        assertEquals(0L, output.track.samples[samplesBefore].timeUs)
     }
 
     @Test fun `audio stops at the shorter of what COMM says and what SSND holds`() {

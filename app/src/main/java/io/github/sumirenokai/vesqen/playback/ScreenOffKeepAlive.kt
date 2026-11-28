@@ -66,6 +66,7 @@ internal class ScreenOffKeepAlive(private val startTrack: () -> AutoCloseable?) 
     private var enabled = false
     private var delivering = false
     private var screenOn = true
+    private var closed = false
     private var track: AutoCloseable? = null
 
     /** A track that could not start is not retried until one of the conditions changes. */
@@ -74,6 +75,7 @@ internal class ScreenOffKeepAlive(private val startTrack: () -> AutoCloseable?) 
     val running: Boolean get() = track != null
 
     fun update(enabled: Boolean = this.enabled, delivering: Boolean = this.delivering, screenOn: Boolean = this.screenOn) {
+        if (closed) return
         if (enabled == this.enabled && delivering == this.delivering && screenOn == this.screenOn) return
         this.enabled = enabled
         this.delivering = delivering
@@ -83,7 +85,8 @@ internal class ScreenOffKeepAlive(private val startTrack: () -> AutoCloseable?) 
     }
 
     fun close() {
-        enabled = false
+        // Updates posted by the controller before service teardown can still reach this instance.
+        closed = true
         stop()
     }
 

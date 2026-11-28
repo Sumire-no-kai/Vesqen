@@ -139,6 +139,21 @@ class ScreenOffKeepAliveTest {
         assertEquals(0, started)
     }
 
+    @Test fun aClosedControllerCannotStartATrackFromQueuedUpdates() {
+        power.setIsInteractive(false)
+        val control = ScreenOffKeepAliveController(context, Handler(main), keepAlive)
+        control.setEnabled(true)
+        control.statusListener(direct(UsbOutputPhase.ACTIVE, "direct_usb.active"))
+        control.close()
+        try {
+            shadowOf(main).idle()
+            assertEquals(0, started)
+            assertFalse(keepAlive.running)
+        } finally {
+            keepAlive.close()
+        }
+    }
+
     @Test fun theSwitchIsOffByDefaultAndPersists() {
         val settings = ScreenOffKeepAliveSettings(context, vivoFamily = false)
         assertFalse(settings.enabled.value)

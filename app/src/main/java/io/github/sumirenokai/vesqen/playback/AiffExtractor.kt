@@ -67,8 +67,7 @@ internal class AiffExtractor : Extractor {
 
     private var buffer = ParsableByteArray()
     private var bufferedBytes = 0
-    private var startTimeUs = 0L
-    private var framesWritten = 0L
+    private var nextFrame = 0L
 
     override fun sniff(input: ExtractorInput): Boolean {
         val header = ByteArray(FILE_HEADER_SIZE)
@@ -98,8 +97,8 @@ internal class AiffExtractor : Extractor {
             ready = false
         }
         bufferedBytes = 0
-        startTimeUs = timeUs
-        framesWritten = 0
+        // Media3 passes the requested time even when the seek point is at a different frame.
+        nextFrame = if (ready) (position - dataStart).coerceAtLeast(0) / checkNotNull(format).bytesPerFrame else 0
     }
 
     override fun release() = Unit
@@ -211,9 +210,9 @@ internal class AiffExtractor : Extractor {
             if (!pcm.littleEndian) reverseSamples(data, size, pcm.bytesPerSample)
             buffer.setPosition(0)
             trackOutput.sampleData(buffer, size)
-            val timeUs = startTimeUs + Util.scaleLargeTimestamp(framesWritten, C.MICROS_PER_SECOND, pcm.sampleRate.toLong())
+            val timeUs = Util.scaleLargeTimestamp(nextFrame, C.MICROS_PER_SECOND, pcm.sampleRate.toLong())
             trackOutput.sampleMetadata(timeUs, C.BUFFER_FLAG_KEY_FRAME, size, 0, null)
-            framesWritten += frames
+            nextFrame += frames
             // A full buffer always holds whole frames; a partial frame is left only at the end.
             bufferedBytes -= size
         }
