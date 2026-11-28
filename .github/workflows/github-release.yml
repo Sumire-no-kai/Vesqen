@@ -117,8 +117,18 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-      - name: Install fixed Android build tools
-        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;36.0.0"'
+      - name: Install fixed Android build tools, NDK and CMake
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            "build-tools;36.0.0" "ndk;30.0.16248370" "cmake;4.1.2"
+      - name: Verify the USB stream core
+        working-directory: source
+        run: |
+          # Match the Android CI runner configuration for ThreadSanitizer's shadow memory.
+          sudo sysctl -w vm.mmap_rnd_bits=28
+          cmake -S usb-engine/src/main/cpp -B build/usb-core-test -DVESQEN_SANITIZE=thread
+          cmake --build build/usb-core-test
+          ctest --test-dir build/usb-core-test --output-on-failure
       - name: Verify tools and release prerequisites
         working-directory: source
         env:
@@ -130,7 +140,7 @@ jobs:
           python3 -m unittest discover -s tools/tests -v
           # Shared unit tests run once, on the GitHub flavor; the Play flavor compiles them and runs
           # only its license catalog test, as in Android CI.
-          ./gradlew :app:checkPrivacyPolicyFinal :app:testGithubDebugUnitTest \
+          ./gradlew :app:checkPrivacyPolicyFinal :app:testGithubDebugUnitTest :usb-engine:testDebugUnitTest \
             :app:testPlayDebugUnitTest --tests 'io.github.sumirenokai.vesqen.licenses.ThirdPartyLicensesTest' \
             :app:lintDebug :app:assembleDebug :app:assembleDeviceTest :app:assembleDeviceTestAndroidTest :app:assembleGithubRelease :app:bundlePlayRelease \
             -Pvesqen.usageEndpoint="$VESQEN_USAGE_ENDPOINT" --no-daemon
