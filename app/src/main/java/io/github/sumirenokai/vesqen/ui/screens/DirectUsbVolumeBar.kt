@@ -2,6 +2,7 @@ package io.github.sumirenokai.vesqen.ui.screens
 
 import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
@@ -54,6 +55,7 @@ import io.github.sumirenokai.vesqen.ui.theme.LocalVesqenColors
 import io.github.sumirenokai.vesqen.ui.theme.VesqenDataStyle
 import io.github.sumirenokai.vesqen.ui.theme.VesqenRadii
 import io.github.sumirenokai.vesqen.ui.theme.VesqenSpacing
+import io.github.sumirenokai.vesqen.ui.theme.rememberVesqenMotionPolicy
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -191,10 +193,11 @@ internal fun DirectUsbVolumeKeyOverlay(control: DirectUsbVolumeControl, modifier
         }
     }
     val current = volume
+    val motion = rememberVesqenMotionPolicy()
     AnimatedVisibility(
         visible = visible && current != null,
-        enter = fadeIn(),
-        exit = fadeOut(),
+        enter = if (motion.reduceMotion) fadeIn(tween(motion.stateChangeMillis)) else fadeIn(),
+        exit = if (motion.reduceMotion) fadeOut(tween(motion.stateChangeMillis)) else fadeOut(),
         modifier = modifier.statusBarsPadding().padding(horizontal = VesqenSpacing.lg, vertical = VesqenSpacing.sm),
     ) {
         if (current != null) {

@@ -4,6 +4,8 @@ import android.animation.ValueAnimator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.MotionDurationScale
 
 @Immutable
 data class VesqenMotionPolicy(
@@ -49,6 +51,9 @@ data class VesqenMotionPolicy(
  * disabled, navigation falls back to the short crossfade defined by the product system.
  */
 @Composable
-fun rememberVesqenMotionPolicy(): VesqenMotionPolicy = remember {
-    VesqenMotionPolicy(reduceMotion = !ValueAnimator.areAnimatorsEnabled())
+fun rememberVesqenMotionPolicy(): VesqenMotionPolicy {
+    // The window recomposer observes Android's animator scale for all Compose animations.
+    val scale = rememberCoroutineScope().coroutineContext[MotionDurationScale]?.scaleFactor
+    val reduceMotion = scale?.let { it == 0f } ?: !ValueAnimator.areAnimatorsEnabled()
+    return remember(reduceMotion) { VesqenMotionPolicy(reduceMotion) }
 }
