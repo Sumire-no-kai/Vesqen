@@ -62,7 +62,7 @@ internal fun extractBoundedTrackTags(input: InputStream, declaredLength: Long?):
         }
         startsLikeDsd(header) -> {
             tags.container = if (header.hasAsciiPrefix("DSD ")) "DSF" else "DSDIFF"
-            if (buffered.skipToDsdId3(declaredLength)) collectId3Tags(buffered, tags)
+            buffered.openDsdId3(declaredLength)?.let { collectId3Tags(it, tags) }
         }
         else -> tags.container = frameSyncContainer(header)
     }
@@ -85,7 +85,7 @@ internal data class BasicTrackTags(
 internal fun extractDsdBasicTags(input: InputStream, declaredLength: Long?): BasicTrackTags {
     val buffered = if (input is BufferedInputStream) input else BufferedInputStream(input, ARTWORK_BUFFER_BYTES)
     val tags = TagCollector()
-    if (buffered.skipToDsdId3(declaredLength)) collectId3Tags(buffered, tags)
+    buffered.openDsdId3(declaredLength)?.let { collectId3Tags(it, tags) }
     return tags.basic
 }
 

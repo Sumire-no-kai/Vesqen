@@ -88,7 +88,7 @@ internal fun readDsdHeader(source: DsdHeaderSource, fileLength: Long?): DsdHeade
     val start = source.read(16) ?: return DsdHeaderResult.Unreadable
     return when {
         start.hasAscii("DSD ", 0) -> readDsf(start, source, fileLength)
-        start.hasAscii("FRM8", 0) && start.hasAscii("DSD ", 12) -> readDff(source, fileLength)
+        start.hasAscii("FRM8", 0) && start.hasAscii("DSD ", 12) -> readDff(start, source, fileLength)
         else -> DsdHeaderResult.Unreadable
     }
 }
@@ -117,11 +117,17 @@ private const val DSF_FOUR_WITH_LFE = 5L
 private fun readDsf(start: ByteArray, source: DsdHeaderSource, fileLength: Long?): DsdHeaderResult {
     // DSD chunk (28 bytes), fmt chunk (usually 52), data chunk header (12); little-endian throughout.
     val dsd = start + (source.read(12) ?: return DsdHeaderResult.Unreadable)
-    if (dsd.le64(4) != 28L) return DsdHeaderResult.Unreadable
+    val declaredEnd = dsd.le64(12)
+    val metadataStart = dsd.le64(20)
+    if (dsd.le64(4) != 28L || declaredEnd < 40 ||
+        metadataStart != 0L && metadataStart !in 40 until declaredEnd
+    ) return DsdHeaderResult.Unreadable
+    val containerDataEnd = if (metadataStart == 0L) declaredEnd else metadataStart
+    val readableDataEnd = minOf(containerDataEnd, fileLength?.takeIf { it >= 0 } ?: containerDataEnd)
     val fmtHeader = source.read(12) ?: return DsdHeaderResult.Unreadable
     if (!fmtHeader.hasAscii("fmt ", 0)) return DsdHeaderResult.Unreadable
     val fmtSize = fmtHeader.le64(4)
-    if (fmtSize !in 52..1024) return DsdHeaderResult.Unreadable
+    if (fmtSize !in 52..1024 || fmtSize > readableDataEnd - 40) return DsdHeaderResult.Unreadable
     val fmt = fmtHeader + (source.read(fmtSize.toInt() - 12) ?: return DsdHeaderResult.Unreadable)
     val version = fmt.le32(12)
     val formatId = fmt.le32(16)
@@ -140,15 +146,16 @@ private fun readDsf(start: ByteArray, source: DsdHeaderSource, fileLength: Long?
     if (block !in 1..65_536L || samples <= 0) return DsdHeaderResult.Unreadable
     val data = source.read(12) ?: return DsdHeaderResult.Unreadable
     if (!data.hasAscii("data", 0)) return DsdHeaderResult.Unreadable
-    val dataSize = data.le64(4) - 12
-    if (dataSize <= 0) return DsdHeaderResult.Unreadable
+    val chunkSize = data.le64(4)
     val dataStart = 28 + fmtSize + 12
+    if (chunkSize <= 12 || chunkSize - 12 > containerDataEnd - dataStart) return DsdHeaderResult.Unreadable
+    val dataSize = chunkSize - 12
     val groupBytes = block * channels
     // Each channel's block follows the last; the final group is padded, so the data is whole groups.
     val neededBytes = ceilDiv(ceilDiv(samples, 8), block) * groupBytes
     // A file cut short, or a data chunk shorter than its count, plays the whole groups it holds,
     // as AIFF does.
-    val availableBytes = minOf(neededBytes, dataSize, fileLength?.let { it - dataStart } ?: Long.MAX_VALUE)
+    val availableBytes = minOf(neededBytes, dataSize, readableDataEnd - dataStart)
     val groups = availableBytes / groupBytes
     if (groups <= 0) return DsdHeaderResult.Unreadable
     return DsdHeaderResult.Stream(
@@ -169,25 +176,27 @@ private fun readDsf(start: ByteArray, source: DsdHeaderSource, fileLength: Long?
  * length. FVER comes first and PROP before the sound data; any other chunk may come before the
  * sound data too and is skipped, whatever its size, as the specification requires.
  */
-private fun readDff(source: DsdHeaderSource, fileLength: Long?): DsdHeaderResult {
+private fun readDff(start: ByteArray, source: DsdHeaderSource, fileLength: Long?): DsdHeaderResult {
+    val formEnd = dffFormEnd(start) ?: return DsdHeaderResult.Unreadable
+    val readableEnd = minOf(formEnd, fileLength?.takeIf { it >= 0 } ?: formEnd)
     var position = 16L
     var property: DffProperty? = null
     repeat(MAX_DFF_CHUNKS) {
+        if (position > readableEnd - 12) return DsdHeaderResult.Unreadable
         val header = source.read(12) ?: return DsdHeaderResult.Unreadable
         position += 12
         val size = header.be64(4)
         val id = String(header, 0, 4, Charsets.US_ASCII)
-        // Only the sound data of a file cut short may reach past its end.
-        if (size < 0 || size == Long.MAX_VALUE) return DsdHeaderResult.Unreadable
-        if (id != "DSD " && fileLength != null && size > fileLength - position) return DsdHeaderResult.Unreadable
-        val padded = size + (size and 1)
+        // A truncated file may still play audio within the form's declared sound chunk.
+        val end = if (id == "DSD ") formEnd else readableEnd
+        val padded = dffPaddedSize(size, end - position) ?: return DsdHeaderResult.Unreadable
         when (id) {
             "PROP" -> {
                 if (size > MAX_DFF_PROPERTY_BYTES) return DsdHeaderResult.Unreadable
                 val body = source.read(size.toInt()) ?: return DsdHeaderResult.Unreadable
                 if (padded > size && !source.skip(1)) return DsdHeaderResult.Unreadable
                 property = readDffProperty(body) ?: return DsdHeaderResult.Unreadable
-                if (property?.compressed == true) return DsdHeaderResult.Unsupported(DsdUnsupported.COMPRESSED)
+                if (property.compressed) return DsdHeaderResult.Unsupported(DsdUnsupported.COMPRESSED)
             }
             "DST " -> return DsdHeaderResult.Unsupported(DsdUnsupported.COMPRESSED)
             "DSD " -> {
@@ -199,7 +208,7 @@ private fun readDff(source: DsdHeaderSource, fileLength: Long?): DsdHeaderResult
                     return DsdHeaderResult.Unsupported(DsdUnsupported.SAMPLE_RATE)
                 }
                 // A file cut short plays the whole frames it holds, as AIFF does.
-                val frames = minOf(size, fileLength?.let { it - position } ?: Long.MAX_VALUE) / channels
+                val frames = minOf(size, readableEnd - position) / channels
                 if (frames <= 0 || frames > Long.MAX_VALUE / 8) return DsdHeaderResult.Unreadable
                 return DsdHeaderResult.Stream(
                     DsdStreamInfo(
@@ -233,21 +242,19 @@ private fun readDffProperty(body: ByteArray): DffProperty? {
     while (sub + 12 <= body.size) {
         val subSize = body.be64(sub + 4)
         val subBody = sub + 12
-        if (subSize < 0 || subBody + subSize > body.size) return null
+        val padded = dffPaddedSize(subSize, (body.size - subBody).toLong()) ?: return null
         when (String(body, sub, 4, Charsets.US_ASCII)) {
             "FS  " -> if (subSize >= 4) rate = body.be32(subBody)
             "CHNL" -> if (subSize >= 2) {
                 val count = body.be16(subBody)
-                // An ID missing from a short chunk names no speaker, like a numbered one.
-                ids = List(count) { index ->
-                    val at = subBody + 2 + index * 4
-                    if (at + 4 <= subBody + subSize) String(body, at, 4, Charsets.US_ASCII) else ""
-                }
+                if (count * 4L > subSize - 2) return null
+                ids = List(count) { index -> String(body, subBody + 2 + index * 4, 4, Charsets.US_ASCII) }
             }
             "CMPR" -> if (subSize >= 4) compressed = !body.hasAscii("DSD ", subBody)
         }
-        sub = subBody + (subSize + (subSize and 1)).toInt()
+        sub = subBody + padded.toInt()
     }
+    if (sub != body.size) return null
     return DffProperty(rate, ids, compressed)
 }
 
@@ -294,7 +301,16 @@ private const val MAX_DFF_CHUNKS = 256
 /** A PROP chunk holds a few short properties; anything larger is not one. */
 private const val MAX_DFF_PROPERTY_BYTES = 64 * 1024L
 
-private fun ceilDiv(a: Long, b: Long): Long = (a + b - 1) / b
+private fun ceilDiv(a: Long, b: Long): Long = a / b + if (a % b == 0L) 0 else 1
+
+private fun dffFormEnd(header: ByteArray): Long? =
+    header.be64(4).takeIf { it in 4..Long.MAX_VALUE - 12 }?.plus(12)
+
+private fun dffPaddedSize(size: Long, remaining: Long): Long? {
+    if (size < 0 || size > remaining) return null
+    val padding = size and 1
+    return if (padding <= remaining - size) size + padding else null
+}
 
 private fun ByteArray.hasAscii(text: String, at: Int): Boolean =
     at + text.length <= size && text.indices.all { this[at + it] == text[it].code.toByte() }
@@ -313,30 +329,46 @@ private fun ByteArray.be64(at: Int): Long = (0..7).fold(0L) { n, i -> (n shl 8) 
 internal fun startsLikeDsd(prefix: ByteArray): Boolean = prefix.hasAscii("DSD ", 0) || prefix.hasAscii("FRM8", 0)
 
 /**
- * Moves [this], at the start of a DSF or DFF file, to the start of its ID3v2 tag and says whether
- * there is one. DSF points to it from its header. DFF has no standard tag, but common tools write
- * an "ID3 " chunk, usually after the audio, which is skipped rather than read.
+ * Finds the ID3v2 tag and bounds reads to its container region. DSF points to it from its header.
+ * DFF has no standard tag, but common tools write an "ID3 " chunk, usually after the audio.
  */
-internal fun InputStream.skipToDsdId3(declaredLength: Long?): Boolean {
-    val start = readArtworkExact(16) ?: return false
+internal fun InputStream.openDsdId3(declaredLength: Long?): InputStream? {
+    val start = readArtworkExact(16) ?: return null
     if (start.hasAscii("DSD ", 0)) {
-        val rest = readArtworkExact(12) ?: return false
-        val pointer = (start + rest).le64(20)
-        if (pointer < 28 || (declaredLength != null && pointer >= declaredLength)) return false
-        return skipArtworkExactly(pointer - 28)
+        val rest = readArtworkExact(12) ?: return null
+        val header = start + rest
+        if (header.le64(4) != 28L) return null
+        val declaredEnd = header.le64(12)
+        val pointer = header.le64(20)
+        val readableEnd = minOf(declaredEnd, declaredLength?.takeIf { it >= 0 } ?: declaredEnd)
+        if (pointer < 28 || pointer > readableEnd || readableEnd - pointer < 10) return null
+        val fmt = readArtworkExact(12) ?: return null
+        val fmtSize = fmt.le64(4)
+        if (!fmt.hasAscii("fmt ", 0) || fmtSize !in 52..1024 || fmtSize > pointer - 40) return null
+        if (!skipArtworkExactly(fmtSize - 12)) return null
+        val data = readArtworkExact(12) ?: return null
+        val dataChunkStart = 28 + fmtSize
+        val dataChunkSize = data.le64(4)
+        if (!data.hasAscii("data", 0) || dataChunkSize <= 12 || dataChunkSize > pointer - dataChunkStart) return null
+        if (!skipArtworkExactly(pointer - dataChunkStart - 12)) return null
+        return BoundedArtworkInputStream(this, readableEnd - pointer)
     }
-    if (!start.hasAscii("FRM8", 0) || !start.hasAscii("DSD ", 12)) return false
+    if (!start.hasAscii("FRM8", 0) || !start.hasAscii("DSD ", 12)) return null
+    val formEnd = dffFormEnd(start) ?: return null
+    val readableEnd = minOf(formEnd, declaredLength?.takeIf { it >= 0 } ?: formEnd)
     var position = 16L
     repeat(MAX_DFF_CHUNKS) {
-        val header = readArtworkExact(12) ?: return false
+        if (position > readableEnd - 12) return null
+        val header = readArtworkExact(12) ?: return null
         position += 12
         val size = header.be64(4)
-        if (size < 0 || (declaredLength != null && position + size > declaredLength)) return false
+        val next = dffPaddedSize(size, readableEnd - position) ?: return null
         // Writers differ in the ID's case, as they do for AIFF's ID3 chunk.
-        if (String(header, 0, 4, Charsets.US_ASCII).equals("ID3 ", ignoreCase = true)) return true
-        val next = size + (size and 1)
-        if (!skipArtworkExactly(next)) return false
+        if (String(header, 0, 4, Charsets.US_ASCII).equals("ID3 ", ignoreCase = true)) {
+            return if (size >= 10) BoundedArtworkInputStream(this, size) else null
+        }
+        if (!skipArtworkExactly(next)) return null
         position += next
     }
-    return false
+    return null
 }

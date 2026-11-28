@@ -32,7 +32,7 @@ internal fun extractBoundedEmbeddedArtwork(
             declaredLength?.takeIf { it >= MP4_ATOM_HEADER_BYTES }?.let { length ->
                 extractBoundedMp4Cover(buffered, length)
             }
-        startsLikeDsd(header) -> if (buffered.skipToDsdId3(declaredLength)) extractBoundedId3Picture(buffered) else null
+        startsLikeDsd(header) -> buffered.openDsdId3(declaredLength)?.let(::extractBoundedId3Picture)
         else -> null
     }
 }
