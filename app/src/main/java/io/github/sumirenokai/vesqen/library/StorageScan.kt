@@ -33,16 +33,28 @@ internal class StorageScan(
     val access: () -> StorageScanAccess,
     val volumes: () -> List<StorageVolumeRoot>,
 ) {
-    private val enabledState = MutableStateFlow(preferences.getBoolean(KEY_ENABLED, false))
+    // Each activation has its own token so turning the switch back on cannot revive a stopped scan.
+    @Volatile
+    private var activation = if (preferences.getBoolean(KEY_ENABLED, false)) Any() else null
+    private val enabledState = MutableStateFlow(activation != null)
     val enabled: StateFlow<Boolean> = enabledState.asStateFlow()
 
+    @Synchronized
     fun setEnabled(enabled: Boolean) {
+        if (enabled == (activation != null)) return
+        activation = if (enabled) Any() else null
         preferences.edit { putBoolean(KEY_ENABLED, enabled) }
         enabledState.value = enabled
     }
 
     /** The scan runs, and the rows it found play, only while the switch is on and Android allows it. */
-    fun isActive(): Boolean = enabledState.value && access() == StorageScanAccess.GRANTED
+    fun isActive(): Boolean = activation != null && access() == StorageScanAccess.GRANTED
+
+    /** A check for one traversal, cheap enough to run before every file. */
+    fun enabledForScan(): (() -> Boolean)? {
+        val token = activation ?: return null
+        return { activation === token }
+    }
 
     companion object {
         const val PREFERENCES = "storage_scan"

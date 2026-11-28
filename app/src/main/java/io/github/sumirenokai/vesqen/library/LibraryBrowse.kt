@@ -300,7 +300,9 @@ internal fun AudioTrack.folderCollectionKey(): String =
  * a FLAC, the whole-storage scan for a DSF beside it); otherwise the source, as [folderStorageKey].
  */
 private fun AudioTrack.folderStorage(): String =
-    locationKey?.let { "volume:" + it.substringBefore(':') } ?: folderStorageKey(contentUri)
+    locationKey?.let { FOLDER_STORAGE_VOLUME_PREFIX + it.substringBefore(':') } ?: folderStorageKey(contentUri)
+
+internal const val FOLDER_STORAGE_VOLUME_PREFIX = "volume:"
 
 /** The folder's path on [folderStorage]: the location's folder where there is one, in lower case. */
 private fun AudioTrack.folderPath(): String =

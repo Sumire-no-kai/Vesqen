@@ -256,7 +256,7 @@ internal class LibraryCatalogStore internal constructor(
      * its own for this folder's files: a row whose file lies inside another folder of
      * [readableTreeUris] moves to that folder, one whose file MediaStore lists ([listedDeviceFiles])
      * to the device library, and, while the whole-storage scan runs ([storageRoots], #249), any other
-     * file still on its volume to that scan, each with its ID and data.
+     * file eligible for that scan to it, each with its ID and data.
      */
     fun removeFolderSource(
         sourceId: String,
@@ -305,7 +305,7 @@ internal class LibraryCatalogStore internal constructor(
     }
 
     /**
-     * A removed folder's row moves to the whole-storage scan while its file is still on its volume.
+     * A removed folder's row moves to the whole-storage scan if it can discover the file itself.
      * The document ID of Android's storage provider names the volume and the path, in their case.
      */
     private fun handOverToStorageScan(
@@ -327,8 +327,13 @@ internal class LibraryCatalogStore internal constructor(
                 while (cursor.moveToNext()) add(Triple(cursor.getLong(0), cursor.getString(1), cursor.getStringOrNull(TRACK_ALBUM_ARTWORK_URI)))
             }
         }
+        val scannableDirectories = mutableMapOf<File, Boolean>()
         rows.forEach { (trackId, documentId, artworkUri) ->
-            val file = storageFile(documentId, storageRoots)?.takeIf(File::isFile) ?: return@forEach
+            val (root, file) = resolveStorageDocument(documentId, storageRoots) ?: return@forEach
+            val directory = file.parentFile ?: return@forEach
+            if (!file.isStorageScanEntry(root) || !isSupportedAudioDocument(null, file.name)) return@forEach
+            if (!scannableDirectories.getOrPut(directory) { directory.isStorageScanDirectory(root) }) return@forEach
+            if (!file.isFile) return@forEach
             val storageTrackId = database.query(
                 TRACKS_TABLE,
                 arrayOf(TRACK_ID),
@@ -345,7 +350,8 @@ internal class LibraryCatalogStore internal constructor(
             } else {
                 // The next scan finds the file under this path and reads it again.
                 val cover = artworkUri?.let { uri ->
-                    runCatching { DocumentsContract.getDocumentId(Uri.parse(uri)) }.getOrNull()?.let { storageFile(it, storageRoots) }
+                    runCatching { DocumentsContract.getDocumentId(Uri.parse(uri)) }.getOrNull()
+                        ?.let { resolveStorageDocument(it, storageRoots)?.second }
                 }
                 database.update(
                     TRACKS_TABLE,
@@ -362,12 +368,15 @@ internal class LibraryCatalogStore internal constructor(
         }
     }
 
-    /** The file a document of Android's storage provider names, on one of [storageRoots]. */
-    private fun storageFile(documentId: String, storageRoots: Map<String, File>): File? {
+    /** The volume root and file a document of Android's storage provider names. */
+    private fun resolveStorageDocument(documentId: String, storageRoots: Map<String, File>): Pair<File, File>? {
         val volume = documentId.substringBefore(':', missingDelimiterValue = "").lowercase()
         val root = storageRoots[volume] ?: return null
         val path = documentId.substringAfter(':').trim('/').takeIf(String::isNotEmpty) ?: return null
-        return File(root, path)
+        val file = File(root, path)
+        val filePath = file.toPath()
+        if (filePath != filePath.normalize() || !filePath.startsWith(root.toPath())) return null
+        return root to file
     }
 
     private fun handOverToDeviceLibrary(
@@ -1161,23 +1170,24 @@ internal class LibraryCatalogStore internal constructor(
      * every Android version. A file that a source of the same or a higher rank plays stays its row and
      * is not read: [candidate], which reads it, runs only for a write. A row whose source cannot play
      * it now is given up to any source. A file the source already has a row for keeps it, even beside
-     * another source's, until [mergeDuplicateLocations] makes them one.
+     * another source's, until [mergeDuplicateLocations] makes them one. A null [candidate] result
+     * means the storage scan was disabled and leaves the row untouched.
      */
     fun writeSourceTrack(
         session: SourceScanSession,
         remoteId: String,
         locationKey: String?,
         owners: Map<String, LocationOwner>,
-        candidate: () -> LibraryTrackCandidate,
+        candidate: () -> LibraryTrackCandidate?,
     ) {
         val owner = locationKey?.let(owners::get)
         if (owner != null && !hasTrack(session.sourceId, remoteId)) {
             if (sourceRank(session.sourceId) < sourceRank(owner.sourceId) || !owner.playable) {
-                upsertTrack(session, candidate(), takeOverTrackId = owner.trackId)
+                candidate()?.let { upsertTrack(session, it, takeOverTrackId = owner.trackId) }
             }
             return
         }
-        upsertTrack(session, candidate())
+        candidate()?.let { upsertTrack(session, it) }
     }
 
     private fun hasTrack(sourceId: String, remoteId: String): Boolean = readableDatabase.query(
@@ -1391,7 +1401,7 @@ internal class LibraryCatalogStore internal constructor(
                 // ID, so a scan wrote it as a new row. Its old row, with the user's data, takes that
                 // file over; rows still unmatched are hidden until their file is listed again, like
                 // MediaStore's (#164).
-                reattachFolderTracks(database, session, merges)
+                reattachFolderTracks(database, session, pruneSelection, pruneArguments, merges)
                 database.execSQL(
                     "UPDATE $TRACKS_TABLE SET $TRACK_REMOTE_ID = '$HIDDEN_FOLDER_PREFIX' || $TRACK_ID " +
                         "WHERE $pruneSelection AND $TRACK_REMOTE_ID NOT GLOB '$HIDDEN_FOLDER_PREFIX*' " +
@@ -1416,16 +1426,22 @@ internal class LibraryCatalogStore internal constructor(
      * plays and playlist places stay; it takes the listed file's columns and any data the listed row
      * gathered, and the listed row goes. Runs inside the completing transaction.
      */
-    private fun reattachFolderTracks(database: SQLiteDatabase, session: SourceScanSession, merges: TrackMerges) {
-        fun identities(selection: String): List<FolderTrackIdentity> = database.query(
+    private fun reattachFolderTracks(
+        database: SQLiteDatabase,
+        session: SourceScanSession,
+        missingSelection: String,
+        missingArguments: Array<String>,
+        merges: TrackMerges,
+    ) {
+        fun identities(selection: String, arguments: Array<String>): List<FolderTrackIdentity> = database.query(
             TRACKS_TABLE,
             arrayOf(
                 TRACK_ID, TRACK_FILE_NAME, TRACK_SIZE_BYTES, TRACK_DATE_MODIFIED_SECONDS,
                 "CASE WHEN $HOLDS_USER_STATE THEN 1 ELSE 0 END", TRACK_SEEN_EPOCH, TRACK_ARTWORK_REVISION,
                 "CASE WHEN $TRACK_REMOTE_ID GLOB '$HIDDEN_FOLDER_PREFIX*' THEN 1 ELSE 0 END",
             ),
-            "$TRACK_SOURCE_ID = ? AND $selection",
-            arrayOf(session.sourceId, session.epoch.toString()),
+            selection,
+            arguments,
             null,
             null,
             null,
@@ -1449,9 +1465,10 @@ internal class LibraryCatalogStore internal constructor(
                 }
             }
         }
-        val missing = identities("$TRACK_SEEN_EPOCH != ?")
+        // For a whole-storage scan, an unmounted volume supplies no evidence of a missing file.
+        val missing = identities(missingSelection, missingArguments)
         if (missing.none(FolderTrackIdentity::holdsUserState)) return
-        val listed = identities("$TRACK_SEEN_EPOCH = ?")
+        val listed = identities("$TRACK_SOURCE_ID = ? AND $TRACK_SEEN_EPOCH = ?", arrayOf(session.sourceId, session.epoch.toString()))
         for ((oldTrackId, listedTrackId) in planFolderReattachments(missing, listed, session.epoch)) {
             takeOverListedRow(database, oldTrackId, listedTrackId, merges)
         }
