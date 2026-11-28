@@ -34,6 +34,7 @@
     </plurals>
     <string name="library_full_scan_source">整个存储空间</string>
     <string name="library_full_scan_needs_permission">需要重新允许所有文件访问。</string>
+    <string name="library_full_scan_needs_storage_permission">需要重新允许存储权限。</string>
     <string name="library_full_scan_remove_title">移除这些曲目？</string>
     <string name="library_full_scan_remove_body">Vesqen 将从曲库中移除 GitHub 版扫描找到的曲目，以及它们的收藏、播放次数、在播放列表中的位置和导入的歌词。系统媒体库仍能读到的歌曲会保留。手机上的文件不会被删除。</string>
     <plurals name="library_full_scan_play_unavailable">
@@ -175,6 +176,7 @@
     <string name="settings_full_scan_body">在手机存储空间、存储卡和 U 盘中查找音乐，不需要逐个添加文件夹。</string>
     <string name="settings_full_scan_scanning">正在扫描整个存储空间…</string>
     <string name="settings_full_scan_permission_off">所有文件访问权限已关闭。重新允许之前，扫描找到的曲目不会显示。</string>
+    <string name="settings_full_scan_storage_permission_off">存储权限已关闭。重新允许之前，扫描找到的曲目不会显示。</string>
     <string name="settings_full_scan_allow_again">重新允许</string>
     <string name="settings_full_scan_unavailable">这台手机的 Android 不允许 Vesqen 扫描整个存储空间。请改用“添加音乐文件夹”。</string>
     <string name="settings_full_scan_not_allowed">未允许所有文件访问，这项功能保持关闭。</string>

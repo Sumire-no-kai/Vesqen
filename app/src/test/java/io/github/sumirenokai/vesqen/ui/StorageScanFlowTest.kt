@@ -92,4 +92,13 @@ class StorageScanFlowTest {
         assertFalse(flow.storageRefused)
         assertEquals(1, changes)
     }
+
+    @Test
+    fun `a withdrawn permission is named as the storage permission on Android 9 and 10`() {
+        // #363 S5: Android 9 and 10 have no "All files access"; the scan uses the storage permission there.
+        assertEquals(R.string.settings_full_scan_storage_permission_off, storageScanPermissionOffText(sdkInt = 29))
+        assertEquals(R.string.library_full_scan_needs_storage_permission, storageScanNeedsPermissionText(sdkInt = 28))
+        assertEquals(R.string.settings_full_scan_permission_off, storageScanPermissionOffText(sdkInt = 30))
+        assertEquals(R.string.library_full_scan_needs_permission, storageScanNeedsPermissionText(sdkInt = 30))
+    }
 }
