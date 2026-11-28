@@ -6,6 +6,8 @@ import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
@@ -224,13 +226,18 @@ class DsdConversionSettingsTest {
         assertEquals("vesqen-dsd:1", created.getMediaItemAt(1).localConfiguration?.customCacheKey)
         assertEquals(null, created.getMediaItemAt(2).localConfiguration?.customCacheKey)
         assertEquals(null, created.getMediaItemAt(3).localConfiguration?.customCacheKey)
-        created.play()
-        for (index in listOf(1, 2)) {
-            runUntil("DSD item ${index + 1} ready") {
-                created.currentMediaItemIndex == index && created.playbackState == ExoPlayer.STATE_READY && !created.currentTracks.isEmpty
+        // Short tracks can start and end between two polls of the main looper (#406).
+        val ratesByIndex = mutableMapOf<Int, Int>()
+        created.addListener(object : Player.Listener {
+            override fun onTracksChanged(tracks: Tracks) {
+                val rate = tracks.groups.singleOrNull()?.getTrackFormat(0)?.sampleRate ?: return
+                ratesByIndex.putIfAbsent(created.currentMediaItemIndex, rate)
             }
-            assertEquals(176_400, created.currentTracks.groups.single().getTrackFormat(0).sampleRate)
-        }
+        })
+        created.play()
+        runUntil("selected formats for both upcoming DSD items") { ratesByIndex.keys.containsAll(listOf(1, 2)) }
+        assertEquals(176_400, ratesByIndex[1])
+        assertEquals(176_400, ratesByIndex[2])
     }
 
     private fun wavItem(id: String): MediaItem {
