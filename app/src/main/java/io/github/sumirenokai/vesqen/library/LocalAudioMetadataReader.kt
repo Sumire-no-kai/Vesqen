@@ -8,6 +8,8 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import androidx.core.net.toUri
 import java.io.IOException
+import java.io.InputStream
+import kotlinx.coroutines.CancellationException
 
 /**
  * Reads bounded textual and technical metadata for a new or changed local item.
@@ -21,30 +23,27 @@ internal class LocalAudioMetadataReader(private val context: Context) {
         val uri = runCatching { candidate.contentUri.toUri() }.getOrNull() ?: return candidate
         val tagMetadata = readTags(uri)
         val streamMetadata = readStream(uri)
-        val sourceHeader = try {
-            context.contentResolver.openInputStream(uri)?.use { readSourceAudioHeader(it, candidate.sizeBytes.takeIf { size -> size > 0 }) }
-        } catch (_: IOException) {
-            null
-        } catch (_: SecurityException) {
-            null
-        }
+        val fileLength = candidate.sizeBytes.takeIf { it > 0 }
+        val sourceHeader = readOptionalMetadata(uri) { readSourceAudioHeader(it, fileLength) }
         val resolvedMime = streamMetadata.mimeType.ifBlank {
             tagMetadata.mimeType.ifBlank { candidate.mimeType }
         }
         val codec = codecLabel(mimeType = resolvedMime, fileName = candidate.fileName)
         // #249: Android cannot read DSD files, so their ID3 tag fills in what it left blank.
-        val dsd = if (codec == DSD_CODEC_LABEL) readDsdTags(uri, candidate.sizeBytes) else BasicTrackTags()
+        val dsd = if (codec == DSD_CODEC_LABEL) {
+            readOptionalMetadata(uri) { extractDsdBasicTags(it, fileLength) }
+        } else null
         return candidate.copy(
-            title = tagMetadata.title.ifBlank { dsd.title ?: candidate.title },
-            artist = tagMetadata.artist.ifBlank { dsd.artist ?: candidate.artist },
-            album = tagMetadata.album.ifBlank { dsd.album ?: candidate.album },
+            title = tagMetadata.title.ifBlank { dsd?.title ?: candidate.title },
+            artist = tagMetadata.artist.ifBlank { dsd?.artist ?: candidate.artist },
+            album = tagMetadata.album.ifBlank { dsd?.album ?: candidate.album },
             durationMs = tagMetadata.durationMs.takeIf { it > 0 } ?: sourceHeader?.durationMs ?: candidate.durationMs,
             mimeType = resolvedMime,
-            albumArtist = tagMetadata.albumArtist.ifBlank { dsd.albumArtist ?: candidate.albumArtist },
-            trackNumber = tagMetadata.trackNumber ?: dsd.trackNumber ?: candidate.trackNumber,
-            discNumber = tagMetadata.discNumber ?: dsd.discNumber ?: candidate.discNumber,
-            year = tagMetadata.year ?: dsd.year ?: candidate.year,
-            genre = tagMetadata.genre.ifBlank { dsd.genre ?: candidate.genre },
+            albumArtist = tagMetadata.albumArtist.ifBlank { dsd?.albumArtist ?: candidate.albumArtist },
+            trackNumber = tagMetadata.trackNumber ?: dsd?.trackNumber ?: candidate.trackNumber,
+            discNumber = tagMetadata.discNumber ?: dsd?.discNumber ?: candidate.discNumber,
+            year = tagMetadata.year ?: dsd?.year ?: candidate.year,
+            genre = tagMetadata.genre.ifBlank { dsd?.genre ?: candidate.genre },
             codec = codec,
             channelCount = sourceHeader?.channels ?: streamMetadata.channelCount ?: candidate.channelCount,
             bitDepth = sourceHeader?.bitDepth ?: streamMetadata.bitDepth,
@@ -86,13 +85,15 @@ internal class LocalAudioMetadataReader(private val context: Context) {
         }
     }
 
-    private fun readDsdTags(uri: Uri, sizeBytes: Long): BasicTrackTags = try {
-        context.contentResolver.openInputStream(uri)?.use { extractDsdBasicTags(it, sizeBytes.takeIf { size -> size > 0 }) }
-            ?: BasicTrackTags()
+    private fun <T> readOptionalMetadata(uri: Uri, read: (InputStream) -> T): T? = try {
+        context.contentResolver.openInputStream(uri)?.use(read)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
     } catch (_: IOException) {
-        BasicTrackTags()
-    } catch (_: SecurityException) {
-        BasicTrackTags()
+        null
+    } catch (_: RuntimeException) {
+        // Documents providers can rethrow their own failures. Keep the listed file and its known metadata.
+        null
     }
 
     private fun readStream(uri: Uri): StreamMetadata {
