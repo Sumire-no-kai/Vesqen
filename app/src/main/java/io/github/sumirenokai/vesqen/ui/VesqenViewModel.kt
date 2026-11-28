@@ -37,6 +37,7 @@ import io.github.sumirenokai.vesqen.playback.PlaybackHistoryUpdate
 import io.github.sumirenokai.vesqen.playback.PlaybackSnapshot
 import io.github.sumirenokai.vesqen.playback.UsbOutputStatus
 import io.github.sumirenokai.vesqen.playback.UsbOutputMode
+import io.github.sumirenokai.vesqen.ui.screens.LibraryProjections
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -100,6 +101,7 @@ internal data class LyricsImportTarget(
 data class LyricsImportNotice(val id: Long, val trackId: Long, val result: LyricsImportResult)
 
 class VesqenViewModel(application: Application) : AndroidViewModel(application) {
+    internal val libraryProjections = LibraryProjections()
     private val catalog: LibraryCatalog =
         (application as VesqenApplication).let { app ->
             AndroidLibraryCatalog(app, app.libraryCatalogStore, storageScan = app.storageScan)

@@ -344,6 +344,7 @@ fun VesqenApp(viewModel: VesqenViewModel = viewModel(), openPremiumRequest: Int 
         return
     }
     VesqenAppContent(
+        libraryProjections = viewModel.libraryProjections,
         state = state,
         playbackTelemetry = application.playbackTelemetry,
         chainPreferencesRepository = chainPreferencesRepository,
@@ -540,6 +541,7 @@ fun VesqenAppContent(
     onImportLyrics: (AudioTrack) -> Unit = {},
     onRemoveLyrics: (Long) -> Unit = {},
     onLyricsImportNoticeShown: (Long) -> Unit = {},
+    libraryProjections: LibraryProjections = remember { LibraryProjections() },
 ) {
     val appliedMotionPolicy = motionPolicy ?: rememberVesqenMotionPolicy()
     // One host for the cleared-queue and lyrics notices, which sit at the same place: a notice waits
@@ -581,7 +583,6 @@ fun VesqenAppContent(
         InMemoryChainDashboardPreferencesRepository()
     }
     val destinationStateHolder = rememberSaveableStateHolder()
-    val libraryProjections = remember { LibraryProjections() }
     var destinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
     var returnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
     var playerReturnDestinationName by rememberSaveable { mutableStateOf(VesqenDestination.LIBRARY.name) }
@@ -900,8 +901,9 @@ fun VesqenAppContent(
         navigateBack()
     }
 
-    if (useNavigationRail) {
-        Row(modifier = modifier.fillMaxSize()) {
+    // Keep the destination at the same composition position when the rail appears or disappears.
+    Row(modifier = modifier.fillMaxSize()) {
+        if (useNavigationRail) {
             AnimatedVisibility(
                 visible = !hasFocusedPlayer,
                 enter = fadeIn(tween(appliedMotionPolicy.stateChangeMillis)) +
@@ -919,96 +921,13 @@ fun VesqenAppContent(
                         .width(NavigationRailWidth),
                 )
             }
-            VesqenDestinationFrame(
-                state = state,
-                destination = destination,
-                destinationStateHolder = destinationStateHolder,
-                libraryProjections = libraryProjections,
-                showNavigation = false,
-                chainOpenedInContext = chainOpenedInContext,
-                settingsUnderneath = settingsUnderneath,
-                motionPolicy = appliedMotionPolicy,
-                playbackTelemetry = playbackTelemetry,
-                chainPreferencesRepository = appliedChainPreferencesRepository,
-                diagnosticRecorder = diagnosticRecorder,
-                diagnosticExportFeedback = diagnosticExportFeedback,
-                onRequestDiagnosticExport = onRequestDiagnosticExport,
-                onClearDiagnosticExportFeedback = onClearDiagnosticExportFeedback,
-                onDestinationSelected = ::selectTopLevel,
-                onOpenChain = ::openChain,
-                onOpenAbout = ::openAbout,
-                onOpenPrivacyPolicy = ::openPrivacyPolicy,
-                onOpenLicenses = ::openLicenses,
-                appUpdater = appUpdater,
-                onOpenUsageStatistics = ::openUsageStatistics,
-                onOpenDeviceReport = ::openDeviceReport,
-                onOpenAudioOutput = ::openAudioOutput,
-                usageStatistics = usageStatistics,
-                deviceReporter = deviceReporter,
-                reportUploadAvailable = reportUploadAvailable,
-                onNavigateBack = ::navigateBack,
-                onRequestMusicAccess = onRequestMusicAccess,
-                onOpenAppSettings = onOpenAppSettings,
-                onOpenNotificationSettings = onOpenNotificationSettings,
-                onRescan = onRescan,
-                onAddLibraryFolder = onAddLibraryFolder,
-                onRemoveLibraryFolder = onRemoveLibraryFolder,
-                onRemoveStorageSource = onRemoveStorageSource,
-                onPauseLibraryScan = onPauseLibraryScan,
-                onResumeLibraryScan = onResumeLibraryScan,
-                onAssignUnmatchedRecord = onAssignUnmatchedRecord,
-                onDiscardUnmatchedRecord = onDiscardUnmatchedRecord,
-                onDismissUnmatchedRecords = onDismissUnmatchedRecords,
-                onTrackSelected = onTrackSelected,
-                onPlayQueue = onPlayQueue,
-                onToggleFavorite = onToggleFavorite,
-                onPlayNext = onPlayNext,
-                onAddToQueue = onAddToQueue,
-                onCreatePlaylist = onCreatePlaylist,
-                onRenamePlaylist = onRenamePlaylist,
-                onDeletePlaylist = onDeletePlaylist,
-                onAddTrackToPlaylist = onAddTrackToPlaylist,
-                onRemoveTrackFromPlaylist = onRemoveTrackFromPlaylist,
-                onMovePlaylistTrack = onMovePlaylistTrack,
-                onSaveTrackOrder = onSaveTrackOrder,
-                onPlayQueueIndex = onPlayQueueIndex,
-                onRemoveQueueItem = onRemoveQueueItem,
-                onMoveQueueItem = onMoveQueueItem,
-                onClearQueue = onClearQueue,
-                noticeHostState = noticeHostState,
-                onPrevious = onPrevious,
-                onPlayPause = onPlayPause,
-                onNext = onNext,
-                onPreviousFolder = onPreviousFolder,
-                onNextFolder = onNextFolder,
-                onSeek = onSeek,
-                onCyclePlaybackOrder = onCyclePlaybackOrder,
-                onSetUsbOutputMode = setUsbOutputMode,
-                onExplainStrictUsbUnavailable = { showStrictUsbUnavailable = true },
-                premiumAccess = premiumAccess,
-                activationCodes = activationCodes,
-                onOpenPremium = ::openPremium,
-                artistSplit = artistSplit,
-                onArtistSplitChange = onArtistSplitChange,
-                lyricsHooks = lyricsHooks,
-                verificationRegistryState = verificationRegistryState,
-                verificationImportResult = verificationImportResult,
-                onImportVerificationRegistry = onImportVerificationRegistry,
-                onTogglePlayerOrientation = ::togglePlayerOrientation,
-                showOrientationToggle = isPhone,
-                isLandscape = isLandscape,
-                versionName = versionName,
-                versionCode = versionCode,
-                modifier = Modifier.weight(1f),
-            )
         }
-    } else {
         VesqenDestinationFrame(
             state = state,
             destination = destination,
             destinationStateHolder = destinationStateHolder,
             libraryProjections = libraryProjections,
-            showNavigation = true,
+            showNavigation = !useNavigationRail,
             chainOpenedInContext = chainOpenedInContext,
             settingsUnderneath = settingsUnderneath,
             motionPolicy = appliedMotionPolicy,
@@ -1083,7 +1002,7 @@ fun VesqenAppContent(
             isLandscape = isLandscape,
             versionName = versionName,
             versionCode = versionCode,
-            modifier = modifier,
+            modifier = Modifier.weight(1f),
         )
     }
 }

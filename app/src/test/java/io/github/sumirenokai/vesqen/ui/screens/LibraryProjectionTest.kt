@@ -42,6 +42,24 @@ class LibraryProjectionTest {
         LibraryTitleIndex(tracks.sortedBy(AudioTrack::title), mapOf("A" to 0, "B" to 1, "C" to 2)),
     )
 
+    @Test fun `retained title sections avoid rechecking every track for a favorite order change`() {
+        var reads = 0
+        val countedTracks = object : AbstractList<AudioTrack>() {
+            override val size get() = tracks.size
+            override fun get(index: Int): AudioTrack {
+                reads++
+                return tracks[index]
+            }
+        }
+        val titledInput = input.copy(tracks = countedTracks, title = titled(tracks))
+        val before = project(titledInput)
+        assertTrue(before.alphabetSections.isNotEmpty())
+        reads = 0
+        val after = project(titledInput.copy(favoriteCustomOrder = false), before)
+        assertSame(before.alphabetSections, after.alphabetSections)
+        assertEquals(0, reads)
+    }
+
     @Test fun `a blank query keeps the library in its own order until a title order exists`() {
         val untitled = project(input)
         assertSame(tracks, untitled.searchedTracks)
