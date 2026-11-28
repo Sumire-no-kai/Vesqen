@@ -99,7 +99,7 @@ class AndroidPlaybackTelemetry internal constructor(
     private var samplerJob: Job? = null
     private var samplerIntervalMs: Long? = null
     private var samplerGeneration = 0L
-    @Volatile private var samplingDemand = TelemetrySamplingDemand.NONE
+    private var samplingDemand = TelemetrySamplingDemand.NONE
     private var player: ExoPlayer? = null
     private var sessionId: String? = null
     private var activeMediaPeriodId: MediaSource.MediaPeriodId? = null
@@ -165,11 +165,16 @@ class AndroidPlaybackTelemetry internal constructor(
             observations[observationId] = observation
             reconcileSamplerLocked()
         }
+        val demand = TelemetrySamplingDemand.from(listOf(observation))
         val rateTracker = TelemetryRateTracker(observation.derivedWindowMs)
         // A UI collector must not inherit the snapshot/rate calculation work onto Main.
         val forwarding = launch(Dispatchers.Default) {
             var lastEmissionElapsedMs: Long? = null
             rawSamples.filterNotNull().collect { raw ->
+                // A replay from a narrower observation must not consume this observer's interval.
+                if (demand.includeOutput && !raw.outputRequested || demand.includeSystem && !raw.systemRequested) {
+                    return@collect
+                }
                 val due = lastEmissionElapsedMs?.let { previous ->
                     raw.instant.elapsedRealtimeMs - previous >= observation.effectiveIntervalMs()
                 } ?: true
@@ -226,7 +231,7 @@ class AndroidPlaybackTelemetry internal constructor(
         samplerJob = scope.launch {
             while (isActive) {
                 val captured = try {
-                    captureMutex.withLock { captureRaw() }
+                    captureMutex.withLock { captureRaw(requestedDemand) }
                 } catch (cancellation: kotlinx.coroutines.CancellationException) {
                     throw cancellation
                 } catch (failure: Exception) {
@@ -253,7 +258,7 @@ class AndroidPlaybackTelemetry internal constructor(
         }
     }
 
-    private fun captureRaw(): RawTelemetrySample {
+    private fun captureRaw(demand: TelemetrySamplingDemand): RawTelemetrySample {
         val (_, media) = synchronized(stateLock) {
             // Take the clock sample while holding the same lock as the event copy. Otherwise a
             // callback can append a newer event after the timestamp but before recentEvents is
@@ -297,7 +302,6 @@ class AndroidPlaybackTelemetry internal constructor(
                 recentEvents = recentEvents.toList(),
             )
         }
-        val demand = samplingDemand
         val system = if (demand.includeSystem) {
             runCatching { systemProbe.capture() }.getOrNull()
         } else {
