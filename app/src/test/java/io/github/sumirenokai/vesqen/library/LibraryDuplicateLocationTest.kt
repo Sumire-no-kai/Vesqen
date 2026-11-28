@@ -4,13 +4,27 @@ import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
+import io.github.sumirenokai.vesqen.lyrics.Lyrics
+import io.github.sumirenokai.vesqen.lyrics.LyricsAdjustmentAction
+import io.github.sumirenokai.vesqen.lyrics.LyricsAdjustmentResult
+import io.github.sumirenokai.vesqen.lyrics.LyricsSource
+import io.github.sumirenokai.vesqen.lyrics.LyricsStore
+import io.github.sumirenokai.vesqen.lyrics.contentRevision
+import io.github.sumirenokai.vesqen.lyrics.parseLyrics
+import io.github.sumirenokai.vesqen.playback.PersistedPlaybackState
+import io.github.sumirenokai.vesqen.playback.PlaybackRepeatMode
+import io.github.sumirenokai.vesqen.playback.PlaybackStateStore
+import io.github.sumirenokai.vesqen.playback.PlaybackTrackMerges
+import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
@@ -23,6 +37,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class LibraryDuplicateLocationTest {
+    @get:Rule
+    val temporary = TemporaryFolder()
+
     private val context = RuntimeEnvironment.getApplication()
     private val databaseName = "duplicate-location-${System.nanoTime()}.db"
     private val merges = mutableListOf<Pair<Long, Long>>()
@@ -106,6 +123,56 @@ class LibraryDuplicateLocationTest {
         // The saved queue, listening history and imported lyrics follow the merge.
         assertEquals(listOf(device.id to copy.id), merges)
         assertEquals(0, store.mergeDuplicateLocations { _, _ -> true })
+    }
+
+    @Test
+    fun `unavailable lyric adjustment recovery leaves the catalog and saved queue usable`() {
+        val (merged, survivor) = LibraryCatalogStore(context, databaseName).use { store ->
+            store.ensureDeviceSource()
+            scanDevice(store, deviceSong(1, "Dawn"))
+            val original = store.allTracks().single().id
+            val folder = addFolder(store, "primary:Music")
+            val session = store.beginSourceScan(folder)
+            store.upsertTrack(session, folderSong(folder, "primary:Music/Dawn.flac", "Dawn"))
+            store.completeSourceScan(session)
+            assertEquals(1, store.mergeDuplicateLocations { _, _ -> true })
+            original to store.allTracks().single().id
+        }
+        val directory = temporary.newFolder("lyrics")
+        val lyrics = LyricsStore(directory)
+        val content = (parseLyrics("[00:01.00]one") as Lyrics.Synced).contentRevision(LyricsSource.Imported)
+        assertEquals(LyricsAdjustmentResult.APPLIED, lyrics.adjust(merged, content, LyricsAdjustmentAction.ADVANCE, 0L, 0L))
+        lyrics.prepareMerge(merged, survivor)
+        val journal = directory.listFiles()!!.single { it.name.endsWith(".merge") }
+        val source = File(directory, "$merged.$content.adjustment")
+        val destination = File(directory, "$survivor.$content.adjustment")
+        val offline = File(directory, "offline")
+        assertTrue(source.renameTo(offline))
+        assertTrue(destination.delete())
+
+        val checkpoint = PlaybackStateStore(context)
+        checkpoint.save(PersistedPlaybackState(listOf(merged), merged, 123L, false, PlaybackRepeatMode.OFF))
+        val playback = PlaybackTrackMerges(context)
+        playback.prepareMerge(merged, survivor)
+        playback.prepareCommit(listOf(merged to survivor))
+
+        repeat(2) {
+            val followers = TrackMergeFollowers(LyricsStore(directory), PlaybackTrackMerges(context))
+            LibraryCatalogStore(context, databaseName, mergeFollower = followers).use { reopened ->
+                assertEquals(survivor, reopened.allTracks().single().id)
+                assertEquals(listOf(survivor), checkpoint.load()!!.queueTrackIds)
+                assertEquals(123L, checkpoint.load()!!.positionMs)
+                assertTrue(journal.exists())
+            }
+        }
+
+        assertTrue(offline.renameTo(source))
+        val recovered = LyricsStore(directory)
+        LibraryCatalogStore(context, databaseName, mergeFollower = recovered).use { reopened ->
+            assertEquals(survivor, reopened.allTracks().single().id)
+            assertEquals(500L, recovered.userAdvance(survivor, content))
+            assertFalse(journal.exists())
+        }
     }
 
     @Test

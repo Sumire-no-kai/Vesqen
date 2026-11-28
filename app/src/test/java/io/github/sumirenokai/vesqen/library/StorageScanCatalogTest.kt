@@ -9,6 +9,7 @@ import android.provider.DocumentsContract
 import io.github.sumirenokai.vesqen.playback.PcmFiles
 import io.github.sumirenokai.vesqen.ui.components.folderStorageLabel
 import java.io.File
+import java.io.IOException
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -280,6 +281,102 @@ class StorageScanCatalogTest {
                 catalog.removeFolder(folder)
                 assertEquals("files visible after removing the only eligible source", 0, catalog.snapshot(false).tracks.size)
             }
+        }
+    }
+
+    @Test
+    fun `a failed canonical path leaves previously indexed tracks intact`() = withStore { store ->
+        val root = temporary.newFolder("mounted")
+        val media = File(root, "Dawn.flac").apply { writeBytes(byteArrayOf(1)) }
+        scanStorage(store, storageSong(media.name, root = root.path), isPlayable = { _, _ -> true })
+        val original = store.readTracks(listOf(LibrarySourceId.STORAGE)).single()
+        store.setFavorite(original.id, true)
+
+        val inaccessible = object : File(root.path) {
+            override fun getCanonicalPath(): String = throw IOException("temporary volume lookup failure")
+        }
+        val storage = storageScan(inaccessible).apply { setEnabled(true) }
+        AndroidLibraryCatalog(context, store, folderGrants = { emptyList() }, storageScan = storage).use { catalog ->
+            val result = runBlocking { catalog.refresh(includeDeviceLibrary = false) {} }
+
+            assertEquals(LibrarySourceScanStatus.FAILED, result.sourceResults.single().status)
+            assertEquals(LibraryScanFailureReason.PROVIDER_NOT_READY, result.sourceResults.single().failureReason)
+            val kept = store.readTracks(listOf(LibrarySourceId.STORAGE)).single()
+            assertEquals(original.id, kept.id)
+            assertTrue(kept.isFavorite)
+        }
+    }
+
+    @Test
+    fun `removing whole storage before the first device scan transfers the existing track`() {
+        LibraryCatalogStore(context, databaseName).use { store ->
+            scanStorage(store, storageSong("Music/Dawn.flac"), isPlayable = { _, _ -> true })
+            val original = store.readTracks(listOf(LibrarySourceId.STORAGE)).single()
+            store.setFavorite(original.id, true)
+            store.recordPlayback(original.id, playedAtMs = 123L)
+            val playlist = requireNotNull(store.createPlaylist("Example"))
+            store.addTrackToPlaylist(playlist, original.id)
+            assertEquals(listOf(LibrarySourceId.STORAGE), store.readSources().map { it.id })
+            val listed = deviceSong(1, "Dawn").listed()
+
+            assertTrue(store.removeStorageSource(listOf(listed)))
+
+            val kept = store.readTracks(listOf(LibrarySourceId.DEVICE)).single()
+            assertEquals(original.id, kept.id)
+            assertEquals(listed.contentUri, kept.contentUri)
+            assertTrue(kept.isFavorite)
+            assertEquals(1, kept.playCount)
+            assertEquals(123L, kept.lastPlayedAtMs)
+            assertEquals(listOf(original.id), store.readPlaylists().single().trackIds)
+            assertEquals(listOf(LibrarySourceId.DEVICE), store.readSources().map { it.id })
+        }
+    }
+
+    @Test
+    fun `removing a folder before the first device or storage scan transfers each eligible track`() {
+        LibraryCatalogStore(context, databaseName).use { store ->
+            val root = temporary.newFolder("primary")
+            val music = File(root, "Music").apply { mkdirs() }
+            File(music, "Dawn.flac").writeBytes(byteArrayOf(1))
+            val localOnly = File(music, "Dusk.flac").apply { writeBytes(byteArrayOf(1)) }
+            val folder = addFolder(store, "primary:Music")
+            val session = store.beginSourceScan(folder)
+            for (title in listOf("Dawn", "Dusk")) {
+                store.upsertTrack(session, folderSong(folder, "primary:Music/$title.flac", title))
+            }
+            store.completeSourceScan(session)
+            val original = store.readTracks(listOf(folder)).associateBy(AudioTrack::title)
+            original.values.forEach { store.setFavorite(it.id, true) }
+            assertEquals(listOf(folder), store.readSources().map { it.id })
+            val listed = deviceSong(1, "Dawn").listed()
+
+            store.removeFolderSource(folder, listedDeviceFiles = listOf(listed), storageRoots = mapOf("primary" to root))
+
+            val device = store.readTracks(listOf(LibrarySourceId.DEVICE)).single()
+            assertEquals(original.getValue("Dawn").id, device.id)
+            assertEquals(listed.contentUri, device.contentUri)
+            assertTrue(device.isFavorite)
+            val storage = store.readTracks(listOf(LibrarySourceId.STORAGE)).single()
+            assertEquals(original.getValue("Dusk").id, storage.id)
+            assertEquals(Uri.fromFile(localOnly).toString(), storage.contentUri)
+            assertTrue(storage.isFavorite)
+            assertEquals(setOf(LibrarySourceId.DEVICE, LibrarySourceId.STORAGE), store.readSources().map { it.id }.toSet())
+        }
+    }
+
+    @Test
+    fun `removal with no eligible track does not create an empty receiving source`() {
+        LibraryCatalogStore(context, databaseName).use { store ->
+            val root = temporary.newFolder("primary")
+            val folder = addFolder(store, "primary:Music")
+            val session = store.beginSourceScan(folder)
+            store.upsertTrack(session, folderSong(folder, "primary:Music/Missing.flac", "Missing"))
+            store.completeSourceScan(session)
+            val unrelated = deviceSong(1, "Dawn").listed()
+
+            store.removeFolderSource(folder, listedDeviceFiles = listOf(unrelated), storageRoots = mapOf("primary" to root))
+
+            assertTrue(store.readSources().isEmpty())
         }
     }
 

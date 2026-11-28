@@ -274,10 +274,10 @@ internal class LibraryCatalogStore internal constructor(
         val listedByKey = listedDeviceFiles.filter { it.locationKey != null }.associateBy { it.locationKey }
         withTrackMerges { merges ->
             if (receivers.isNotEmpty()) handOverFolderTracks(this, sourceId, receivers, merges)
-            if (listedByKey.isNotEmpty() && findSource(LibrarySourceId.DEVICE) != null) {
+            if (listedByKey.isNotEmpty()) {
                 handOverToDeviceLibrary(this, sourceId, listedByKey, merges)
             }
-            if (storageRoots.isNotEmpty() && findSource(LibrarySourceId.STORAGE) != null) {
+            if (storageRoots.isNotEmpty()) {
                 handOverToStorageScan(this, sourceId, storageRoots, merges)
             }
             delete(TRACKS_TABLE, "$TRACK_SOURCE_ID = ?", arrayOf(sourceId))
@@ -295,7 +295,7 @@ internal class LibraryCatalogStore internal constructor(
         findSource(LibrarySourceId.STORAGE) ?: return false
         val listedByKey = listedDeviceFiles.filter { it.locationKey != null }.associateBy { it.locationKey }
         withTrackMerges { merges ->
-            if (listedByKey.isNotEmpty() && findSource(LibrarySourceId.DEVICE) != null) {
+            if (listedByKey.isNotEmpty()) {
                 handOverToDeviceLibrary(this, LibrarySourceId.STORAGE, listedByKey, merges)
             }
             delete(TRACKS_TABLE, "$TRACK_SOURCE_ID = ?", arrayOf(LibrarySourceId.STORAGE))
@@ -327,6 +327,8 @@ internal class LibraryCatalogStore internal constructor(
                 while (cursor.moveToNext()) add(Triple(cursor.getLong(0), cursor.getString(1), cursor.getStringOrNull(TRACK_ALBUM_ARTWORK_URI)))
             }
         }
+        // The receiver may not have scanned yet. Create it in this transaction only if a file can move.
+        val receiver by lazy(LazyThreadSafetyMode.NONE, ::ensureStorageSource)
         val scannableDirectories = mutableMapOf<File, Boolean>()
         rows.forEach { (trackId, documentId, artworkUri) ->
             val (root, file) = resolveStorageDocument(documentId, storageRoots) ?: return@forEach
@@ -338,7 +340,7 @@ internal class LibraryCatalogStore internal constructor(
                 TRACKS_TABLE,
                 arrayOf(TRACK_ID),
                 "$TRACK_SOURCE_ID = ? AND $TRACK_REMOTE_ID = ?",
-                arrayOf(LibrarySourceId.STORAGE, file.path),
+                arrayOf(receiver.id, file.path),
                 null,
                 null,
                 null,
@@ -356,7 +358,7 @@ internal class LibraryCatalogStore internal constructor(
                 database.update(
                     TRACKS_TABLE,
                     ContentValues().apply {
-                        put(TRACK_SOURCE_ID, LibrarySourceId.STORAGE)
+                        put(TRACK_SOURCE_ID, receiver.id)
                         put(TRACK_REMOTE_ID, file.path)
                         put(TRACK_CONTENT_URI, Uri.fromFile(file).toString())
                         putNullableString(TRACK_ALBUM_ARTWORK_URI, cover?.let { Uri.fromFile(it).toString() })
@@ -394,6 +396,7 @@ internal class LibraryCatalogStore internal constructor(
             null,
             null,
         ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.getLong(0) to cursor.getString(1)) } }
+        val receiver by lazy(LazyThreadSafetyMode.NONE, ::ensureDeviceSource)
         rows.forEach { (trackId, key) ->
             val listed = listedByKey[key] ?: return@forEach
             // MediaStore renumbers its `_ID`s when its database is rebuilt, so the row stored under this
@@ -402,7 +405,7 @@ internal class LibraryCatalogStore internal constructor(
                 TRACKS_TABLE,
                 arrayOf(TRACK_ID, TRACK_LOCATION_KEY, TRACK_FOLDER_NAME, TRACK_FILE_NAME, TRACK_SIZE_BYTES),
                 "$TRACK_SOURCE_ID = ? AND $TRACK_REMOTE_ID = ?",
-                arrayOf(LibrarySourceId.DEVICE, listed.remoteId),
+                arrayOf(receiver.id, listed.remoteId),
                 null,
                 null,
                 null,
@@ -437,7 +440,7 @@ internal class LibraryCatalogStore internal constructor(
                 database.update(
                     TRACKS_TABLE,
                     ContentValues().apply {
-                        put(TRACK_SOURCE_ID, LibrarySourceId.DEVICE)
+                        put(TRACK_SOURCE_ID, receiver.id)
                         put(TRACK_REMOTE_ID, listed.remoteId)
                         put(TRACK_CONTENT_URI, listed.contentUri)
                         put(TRACK_FOLDER_NAME, listed.folderName)
